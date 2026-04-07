@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import InstallPrompt from "@/app/components/InstallPrompt"; // ✅ ADDED
 
 export const metadata: Metadata = {
   title: "Dr. Fonseca | Portal Médico",
@@ -23,20 +22,14 @@ export default function RootLayout({
         <meta name="theme-color" content="#1C1C1E" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
+        <script dangerouslySetInnerHTML={{ __html: `
           document.addEventListener('touchstart', function(e) {
             if (e.touches.length > 1) { e.preventDefault(); }
           }, { passive: false });
           document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
           document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
           document.addEventListener('gestureend', function(e) { e.preventDefault(); });
-        `,
-          }}
-        />
-
+        `}} />
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
           *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -48,10 +41,8 @@ export default function RootLayout({
           scrollbar-width: none;
         `}</style>
       </head>
-
       <body>
         {children}
-        <InstallPrompt /> {/* ✅ ADDED */}
       </body>
     </html>
   );
