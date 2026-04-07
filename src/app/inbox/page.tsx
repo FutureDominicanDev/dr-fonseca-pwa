@@ -27,8 +27,8 @@ const T = {
     cancel: "Cancelar", roomCreated: "¡Sala Creada!", shareLink: "Comparte este enlace con",
     copyLink: "📋 Copiar Enlace", copied: "✅ ¡Copiado!", whatsapp: "💬 Enviar por WhatsApp",
     done: "Listo", required: "Nombre y procedimiento son obligatorios.",
-    logout: "Cerrar Sesión", settings: "Ajustes", myProfile: "Mi Perfil",
-    displayName: "Nombre a Mostrar", uploadPhoto: "Subir Foto de Perfil",
+    settings: "Ajustes", myProfile: "Mi Perfil",
+    displayName: "Nombre a Mostrar",
     darkMode: "Modo Oscuro", fontSize: "Tamaño de Texto",
     role: "Rol", fileCategory: "¿Cómo clasificar este archivo?",
     general: "💬 General", medication: "💊 Medicamento", beforePhoto: "📸 Foto Pre-Op",
@@ -36,7 +36,7 @@ const T = {
     beforeSub: "Carpeta Pre-Op", back: "← Atrás",
     quickReplies: "Respuestas Rápidas", edit: "Editar",
     shortcut: "Atajo (ej: hola)", message: "Mensaje completo",
-    addReply: "Agregar Respuesta", save: "Guardar", delete: "Eliminar",
+    addReply: "Agregar Respuesta", save: "Guardar",
     noReplies: "Sin respuestas rápidas aún. Toca + para agregar.",
     typeSlash: "Escribe / para ver tus respuestas rápidas",
     saving: "Guardando...", saved: "✅ Guardado",
@@ -65,8 +65,8 @@ const T = {
     cancel: "Cancel", roomCreated: "Room Created!", shareLink: "Share this link with",
     copyLink: "📋 Copy Link", copied: "✅ Copied!", whatsapp: "💬 Send via WhatsApp",
     done: "Done", required: "Name and procedure are required.",
-    logout: "Log Out", settings: "Settings", myProfile: "My Profile",
-    displayName: "Display Name", uploadPhoto: "Upload Profile Photo",
+    settings: "Settings", myProfile: "My Profile",
+    displayName: "Display Name",
     darkMode: "Dark Mode", fontSize: "Font Size",
     role: "Role", fileCategory: "How to classify this file?",
     general: "💬 General", medication: "💊 Medication", beforePhoto: "📸 Pre-Op Photo",
@@ -74,7 +74,7 @@ const T = {
     beforeSub: "Pre-Op folder", back: "← Back",
     quickReplies: "Quick Replies", edit: "Edit",
     shortcut: "Shortcut (e.g. hello)", message: "Full message",
-    addReply: "Add Reply", save: "Save", delete: "Delete",
+    addReply: "Add Reply", save: "Save",
     noReplies: "No quick replies yet. Tap + to add one.",
     typeSlash: "Type / to see your quick replies",
     saving: "Saving...", saved: "✅ Saved",
@@ -222,7 +222,11 @@ export default function InboxPage() {
             if (prev.some(x=>x.id===m.id)) return prev;
             return [...prev,m];
           });
-        } else if (m.sender_type==="patient") { setUnreadRooms(p=>{const n=new Set(p);n.add(m.room_id);return n;}); setTotalUnread(p=>p+1); pushNotif("Dr. Fonseca Portal",lang==="es"?"Nuevo mensaje de un paciente":"New message from a patient"); }
+        } else if (m.sender_type==="patient") {
+          setUnreadRooms(p=>{const n=new Set(p);n.add(m.room_id);return n;});
+          setTotalUnread(p=>p+1);
+          pushNotif("Dr. Fonseca Portal",lang==="es"?"Nuevo mensaje de un paciente":"New message from a patient");
+        }
       })
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},({new:m})=>{ if (selectedRoomRef.current?.id===m.room_id) setMessages(p=>p.map(x=>x.id===m.id?m:x)); })
       .subscribe();
@@ -322,7 +326,6 @@ export default function InboxPage() {
     } catch {alert("No se pudo acceder al micrófono.");}
   };
   const stopRec = () => { if (mediaRecorderRef.current&&recording){mediaRecorderRef.current.stop();setRecording(false);clearInterval(recordingTimerRef.current);setRecordingSeconds(0);} };
-  const handleLogout = async () => { await supabase.auth.signOut(); window.location.href="/login"; };
 
   const filtPts = patients.filter(p=>{const q=searchQuery.toLowerCase();return p.full_name?.toLowerCase().includes(q)||p.rooms.some((r:any)=>r.procedures?.procedure_name?.toLowerCase().includes(q));});
   const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
@@ -407,74 +410,53 @@ export default function InboxPage() {
   };
 
   const QREditor = () => (
-    <div style={{position:"absolute",top:0,right:0,width:"min(400px,100%)",height:"100%",background:sidebarBg,zIndex:60,boxShadow:"-4px 0 20px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column"}}>
-      {/* Header */}
-      <div style={{background:headerBg,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
-        <button onClick={()=>setShowQREditor(false)} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",padding:"8px 14px",borderRadius:20,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>← {t.back}</button>
-        <span style={{color:"white",fontSize:17,fontWeight:700,flex:1}}>⚡ {t.quickReplies}</span>
-        {savingQR&&<span style={{color:"rgba(255,255,255,0.6)",fontSize:13}}>{t.saving}</span>}
-        {savedQR&&<span style={{color:"#25D366",fontSize:13,fontWeight:700}}>{t.saved}</span>}
-      </div>
-
-      {/* List */}
-      <div style={{flex:1,overflowY:"auto",padding:16}}>
-        <p style={{fontSize:13,color:subTextColor,marginBottom:14}}>{t.typeSlash}</p>
-        {quickReplies.length===0&&<p style={{color:subTextColor,fontSize:14,textAlign:"center",padding:"30px 0"}}>{t.noReplies}</p>}
-        {quickReplies.map((qr,i)=>(
-          <div key={i}>
-            {editingQRIndex===i?(
-              /* EDIT MODE */
-              <div style={{background:darkMode?"#2C2C2E":"#EBF5FF",borderRadius:14,padding:14,marginBottom:10,border:"2px solid #007AFF"}}>
-                <p style={{fontSize:12,fontWeight:700,color:"#007AFF",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>✏️ {t.editReply}</p>
-                <input
-                  value={editingShortcut}
-                  onChange={e=>setEditingShortcut(e.target.value.toLowerCase().replace(/\s/g,""))}
-                  placeholder={t.shortcut}
-                  style={{width:"100%",padding:"9px 12px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:9,fontSize:14,fontFamily:"inherit",color:textColor,outline:"none",marginBottom:8}}
-                />
-                <textarea
-                  value={editingMessage}
-                  onChange={e=>setEditingMessage(e.target.value)}
-                  placeholder={t.message}
-                  rows={3}
-                  style={{width:"100%",padding:"9px 12px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:9,fontSize:14,fontFamily:"inherit",color:textColor,outline:"none",resize:"none",marginBottom:10}}
-                />
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>{
-                    if (!editingShortcut.trim()||!editingMessage.trim()) return;
-                    const updated=[...quickReplies];
-                    updated[i]={shortcut:editingShortcut.trim(),message:editingMessage.trim()};
-                    saveQuickReplies(updated);
-                    setEditingQRIndex(null);
-                  }} style={{flex:1,padding:"10px 0",background:"#007AFF",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✅ {t.save}</button>
-                  <button onClick={()=>setEditingQRIndex(null)} style={{flex:1,padding:"10px 0",background:cardBg,border:`1px solid ${borderColor}`,borderRadius:10,color:textColor,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✕ {t.cancel}</button>
-                </div>
-              </div>
-            ):(
-              /* VIEW MODE */
-              <div style={{background:cardBg,borderRadius:14,padding:14,marginBottom:10,border:`1px solid ${borderColor}`}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <span style={{background:"#007AFF",color:"white",fontSize:12,fontWeight:700,padding:"2px 10px",borderRadius:99}}>/{qr.shortcut}</span>
-                  <div style={{marginLeft:"auto",display:"flex",gap:6}}>
-                    <button onClick={()=>{setEditingQRIndex(i);setEditingShortcut(qr.shortcut);setEditingMessage(qr.message);}} style={{background:"#EBF5FF",border:"none",color:"#007AFF",padding:"5px 11px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✏️ {t.edit}</button>
-                    <button onClick={()=>{if(confirm(t.deleteConfirm)){saveQuickReplies(quickReplies.filter((_,j)=>j!==i));}}} style={{background:"#FFF0EE",border:"none",color:"#FF3B30",padding:"5px 11px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🗑️</button>
+    <>
+      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.35)",zIndex:59}} onClick={()=>setShowQREditor(false)}/>
+      <div style={{position:"absolute",top:0,right:0,width:"min(400px,100%)",height:"100%",background:sidebarBg,zIndex:60,boxShadow:"-4px 0 20px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column"}}>
+        <div style={{background:headerBg,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <button onClick={()=>setShowQREditor(false)} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",padding:"8px 14px",borderRadius:20,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>← {t.back}</button>
+          <span style={{color:"white",fontSize:17,fontWeight:700,flex:1}}>⚡ {t.quickReplies}</span>
+          {savingQR&&<span style={{color:"rgba(255,255,255,0.6)",fontSize:13}}>{t.saving}</span>}
+          {savedQR&&<span style={{color:"#25D366",fontSize:13,fontWeight:700}}>{t.saved}</span>}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:16}}>
+          <p style={{fontSize:13,color:subTextColor,marginBottom:14}}>{t.typeSlash}</p>
+          {quickReplies.length===0&&<p style={{color:subTextColor,fontSize:14,textAlign:"center",padding:"30px 0"}}>{t.noReplies}</p>}
+          {quickReplies.map((qr,i)=>(
+            <div key={i}>
+              {editingQRIndex===i?(
+                <div style={{background:darkMode?"#2C2C2E":"#EBF5FF",borderRadius:14,padding:14,marginBottom:10,border:"2px solid #007AFF"}}>
+                  <p style={{fontSize:12,fontWeight:700,color:"#007AFF",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>✏️ {t.editReply}</p>
+                  <input value={editingShortcut} onChange={e=>setEditingShortcut(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder={t.shortcut} style={{width:"100%",padding:"9px 12px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:9,fontSize:14,fontFamily:"inherit",color:textColor,outline:"none",marginBottom:8}}/>
+                  <textarea value={editingMessage} onChange={e=>setEditingMessage(e.target.value)} placeholder={t.message} rows={3} style={{width:"100%",padding:"9px 12px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:9,fontSize:14,fontFamily:"inherit",color:textColor,outline:"none",resize:"none",marginBottom:10}}/>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>{if(!editingShortcut.trim()||!editingMessage.trim())return;const updated=[...quickReplies];updated[i]={shortcut:editingShortcut.trim(),message:editingMessage.trim()};saveQuickReplies(updated);setEditingQRIndex(null);}} style={{flex:1,padding:"10px 0",background:"#007AFF",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✅ {t.save}</button>
+                    <button onClick={()=>setEditingQRIndex(null)} style={{flex:1,padding:"10px 0",background:cardBg,border:`1px solid ${borderColor}`,borderRadius:10,color:textColor,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✕ {t.cancel}</button>
                   </div>
                 </div>
-                <p style={{fontSize:14,color:textColor,lineHeight:1.5}}>{qr.message}</p>
-              </div>
-            )}
-          </div>
-        ))}
+              ):(
+                <div style={{background:cardBg,borderRadius:14,padding:14,marginBottom:10,border:`1px solid ${borderColor}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <span style={{background:"#007AFF",color:"white",fontSize:12,fontWeight:700,padding:"2px 10px",borderRadius:99}}>/{qr.shortcut}</span>
+                    <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+                      <button onClick={()=>{setEditingQRIndex(i);setEditingShortcut(qr.shortcut);setEditingMessage(qr.message);}} style={{background:"#EBF5FF",border:"none",color:"#007AFF",padding:"5px 11px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✏️ {t.edit}</button>
+                      <button onClick={()=>{if(confirm(t.deleteConfirm)){saveQuickReplies(quickReplies.filter((_,j)=>j!==i));}}} style={{background:"#FFF0EE",border:"none",color:"#FF3B30",padding:"5px 11px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🗑️</button>
+                    </div>
+                  </div>
+                  <p style={{fontSize:14,color:textColor,lineHeight:1.5}}>{qr.message}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{padding:16,borderTop:`1px solid ${borderColor}`,background:darkMode?"#2C2C2E":"#F6F6F6",flexShrink:0}}>
+          <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>➕ {t.addReply}</p>
+          <input value={newShortcut} onChange={e=>setNewShortcut(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder={t.shortcut} style={{width:"100%",padding:"10px 14px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none",marginBottom:8}}/>
+          <textarea value={newQRMessage} onChange={e=>setNewQRMessage(e.target.value)} placeholder={t.message} rows={3} style={{width:"100%",padding:"10px 14px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none",resize:"none",marginBottom:8}}/>
+          <button onClick={()=>{if(!newShortcut.trim()||!newQRMessage.trim())return;saveQuickReplies([...quickReplies,{shortcut:newShortcut.trim(),message:newQRMessage.trim()}]);setNewShortcut("");setNewQRMessage("");}} style={{width:"100%",padding:12,background:"#007AFF",border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ {t.addReply}</button>
+        </div>
       </div>
-
-      {/* Add new */}
-      <div style={{padding:16,borderTop:`1px solid ${borderColor}`,background:darkMode?"#2C2C2E":"#F6F6F6",flexShrink:0}}>
-        <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>➕ {t.addReply}</p>
-        <input value={newShortcut} onChange={e=>setNewShortcut(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder={t.shortcut} style={{width:"100%",padding:"10px 14px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none",marginBottom:8}}/>
-        <textarea value={newQRMessage} onChange={e=>setNewQRMessage(e.target.value)} placeholder={t.message} rows={3} style={{width:"100%",padding:"10px 14px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none",resize:"none",marginBottom:8}}/>
-        <button onClick={()=>{if(!newShortcut.trim()||!newQRMessage.trim())return;saveQuickReplies([...quickReplies,{shortcut:newShortcut.trim(),message:newQRMessage.trim()}]);setNewShortcut("");setNewQRMessage("");}} style={{width:"100%",padding:12,background:"#007AFF",border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ {t.addReply}</button>
-      </div>
-    </div>
+    </>
   );
 
   const SettingsPanel = () => (
@@ -502,11 +484,11 @@ export default function InboxPage() {
           <p style={{fontSize:13,fontWeight:700,color:subTextColor,marginBottom:6}}>{t.displayName}</p>
           <div style={{display:"flex",gap:8}}>
             <input value={displayNameEdit} onChange={e=>setDisplayNameEdit(e.target.value)} style={{flex:1,padding:"11px 14px",background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none"}}/>
-            <button onClick={saveDisplayName} disabled={savingName} style={{padding:"11px 16px",background:savedName?"#34C759":"#007AFF",border:"none",borderRadius:10,color:"white",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14,transition:"background 0.2s"}}>{savedName?"✅":savingName?"...":t.save}</button>
+            <button onClick={saveDisplayName} disabled={savingName} style={{padding:"11px 16px",background:savedName?"#34C759":"#007AFF",border:"none",borderRadius:10,color:"white",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14}}>{savedName?"✅":savingName?"...":t.save}</button>
           </div>
         </div>
 
-        {/* Quick Replies shortcut */}
+        {/* Quick Replies */}
         <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
@@ -544,8 +526,6 @@ export default function InboxPage() {
             <button onClick={()=>setLang("en")} style={{flex:1,padding:12,borderRadius:10,border:lang==="en"?"2px solid #007AFF":`2px solid ${borderColor}`,background:lang==="en"?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:lang==="en"?"#007AFF":textColor,fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:15}}>🇺🇸 English</button>
           </div>
         </div>
-
-        <button onClick={handleLogout} style={{width:"100%",padding:14,background:"#FFF0EE",border:"none",borderRadius:14,color:"#FF3B30",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🚪 {t.logout}</button>
       </div>
     </div>
   );
@@ -580,8 +560,9 @@ export default function InboxPage() {
         .date-sep { display: flex; justify-content: center; margin: 14px 0; }
         .date-sep-pill { background: ${darkMode?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.92)"}; border-radius: 99px; padding: 5px 16px; font-size: 13px; color: ${darkMode?"white":"#555"}; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
         .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px 14px; display: flex; align-items: center; gap: 10px; z-index: 50; }
-        .back-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 22px; font-weight: 700; }
+        .back-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 22px; font-weight: 700; transition: background 0.15s; }
         .back-btn:hover { background: rgba(255,255,255,0.25); }
+        .back-btn-hidden { display: none; }
         .chat-av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
         .chat-head-name { font-size: 17px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chat-head-sub { font-size: 13px; color: rgba(255,255,255,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -619,6 +600,7 @@ export default function InboxPage() {
           .main-area { position: absolute; inset: 0; z-index: 20; transition: transform 0.25s ease; }
           .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
           .main-area.hidden { transform: translateX(100%); pointer-events: none; }
+          .back-btn-hidden { display: flex !important; }
         }
       `}</style>
 
@@ -626,7 +608,6 @@ export default function InboxPage() {
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
 
-      {/* UPLOAD CATEGORY MODAL */}
       {showUploadMenu&&pendingFile&&(
         <div className="modal-overlay" onClick={()=>{setShowUploadMenu(false);setPendingFile(null);}}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxHeight:"50vh"}}>
@@ -643,7 +624,6 @@ export default function InboxPage() {
         </div>
       )}
 
-      {/* NEW ROOM MODAL */}
       {showNewRoom&&(
         <div className="modal-overlay" onClick={()=>setShowNewRoom(false)}>
           <div className="modal-scroll" onClick={e=>e.stopPropagation()}>
@@ -678,7 +658,6 @@ export default function InboxPage() {
         </div>
       )}
 
-      {/* SUCCESS MODAL */}
       {createdRoomLink&&(
         <div className="modal-overlay" onClick={()=>setCreatedRoomLink(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -775,7 +754,8 @@ export default function InboxPage() {
             ):(
               <>
                 <div className="chat-head">
-                  <button className="back-btn" onClick={()=>{setMobileView("list");setSelectedRoom(null);setShowQREditor(false);}}>←</button>
+                  {/* Back button — hidden on desktop, always visible on mobile */}
+                  <button className="back-btn back-btn-hidden" onClick={()=>{setMobileView("list");setSelectedRoom(null);setShowQREditor(false);}}>←</button>
                   <div className="chat-av">
                     {selectedRoom.procedures?.patients?.profile_picture_url
                       ?<img src={selectedRoom.procedures.patients.profile_picture_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
