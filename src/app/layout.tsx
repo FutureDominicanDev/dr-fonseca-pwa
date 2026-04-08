@@ -14,7 +14,7 @@ export default function RootLayout({
   return (
     <html lang="es" style={{ height: "100%" }}>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Dr. Fonseca" />
@@ -22,14 +22,6 @@ export default function RootLayout({
         <meta name="theme-color" content="#1C1C1E" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        <script dangerouslySetInnerHTML={{ __html: `
-          document.addEventListener('touchstart', function(e) {
-            if (e.touches.length > 1) { e.preventDefault(); }
-          }, { passive: false });
-          document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
-          document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
-          document.addEventListener('gestureend', function(e) { e.preventDefault(); });
-        `}} />
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
           *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }

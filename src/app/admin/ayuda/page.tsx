@@ -58,8 +58,9 @@ export default function AdminHelpPage() {
               <p className="section-title">Qué puedes hacer</p>
               <h2>Acciones principales</h2>
               <ul>
-                <li>Exportar un expediente individual de cualquier paciente.</li>
-                <li>Exportar una lista completa filtrada por sede.</li>
+                <li>Buscar un expediente por nombre, teléfono, correo, procedimiento o sede.</li>
+                <li>Abrir la ficha de un paciente y revisar su historial completo antes de exportar.</li>
+                <li>Descargar una lista filtrada cuando necesites varios resultados a la vez.</li>
                 <li>Ver rápidamente cuántos procedimientos hay en Guadalajara y Tijuana.</li>
                 <li>Asignar la sede correcta a cada miembro del equipo.</li>
                 <li>Dar o quitar acceso administrativo al equipo.</li>
@@ -90,7 +91,7 @@ export default function AdminHelpPage() {
               <div className="step-number">1</div>
               <div>
                 <h3>Filtra por sede</h3>
-                <p>Usa los botones de Guadalajara, Tijuana o Todas para ver solo los pacientes que te interesan en ese momento.</p>
+                <p>Usa los botones de Guadalajara, Tijuana o Todas para empezar a reducir los resultados.</p>
               </div>
             </div>
 
@@ -98,20 +99,28 @@ export default function AdminHelpPage() {
               <div className="step-number">2</div>
               <div>
                 <h3>Busca al paciente</h3>
-                <p>Puedes escribir nombre, procedimiento, teléfono o sede para encontrarlo más rápido.</p>
+                <p>Puedes escribir nombre, procedimiento, teléfono, correo o sede para encontrarlo más rápido.</p>
               </div>
             </div>
 
             <div className="step">
               <div className="step-number">3</div>
               <div>
-                <h3>Exporta el expediente</h3>
-                <p>Usa el botón de un paciente para sacar solo ese expediente, o el botón general para descargar todos los pacientes visibles con el filtro actual.</p>
+                <h3>Abre y revisa el expediente</h3>
+                <p>Entra a la ficha del paciente para revisar procedimientos, medios y cronología completa antes de exportar.</p>
               </div>
             </div>
 
             <div className="step">
               <div className="step-number">4</div>
+              <div>
+                <h3>Exporta si lo necesitas</h3>
+                <p>Después de revisar el expediente, puedes exportar solo ese caso o descargar los resultados filtrados.</p>
+              </div>
+            </div>
+
+            <div className="step">
+              <div className="step-number">5</div>
               <div>
                 <h3>Revisa tu equipo</h3>
                 <p>En la sección del equipo puedes poner a cada persona en la sede correcta y decidir si tiene acceso administrativo o no.</p>
@@ -119,7 +128,7 @@ export default function AdminHelpPage() {
             </div>
 
             <div className="step">
-              <div className="step-number">5</div>
+              <div className="step-number">6</div>
               <div>
                 <h3>Cambia el código cuando haga falta</h3>
                 <p>Si quieres evitar nuevos registros con el código actual, solo cámbialo y comparte el nuevo con las personas correctas.</p>
