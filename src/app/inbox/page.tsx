@@ -477,8 +477,8 @@ export default function InboxPage() {
 
   const SettingsPanel = () => (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setShowSettings(false)}>
-      <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:540,maxHeight:"90vh",overflowY:"auto",padding:"0 0 40px"}} onClick={e=>e.stopPropagation()}>
-        <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) 20px 16px",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:540,maxHeight:"90vh",overflowY:"auto",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`}} onClick={e=>e.stopPropagation()}>
+        <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) max(20px, env(safe-area-inset-right)) 16px max(20px, env(safe-area-inset-left))",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <p style={{fontSize:22,fontWeight:700,color:textColor}}>⚙️ {t.settings}</p>
           <button onClick={()=>setShowSettings(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit",minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
@@ -546,8 +546,8 @@ export default function InboxPage() {
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
-        .topbar { flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 100; height: calc(66px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
-        .body { display: flex; flex: 1; overflow: hidden; }
+        .topbar { flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); z-index: 100; height: calc(66px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+        .body { display: flex; flex: 1; overflow: hidden; position: relative; }
         .sidebar { width: 340px; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid ${borderColor}; }
         .sidebar-head { padding: 14px 16px; background: ${darkMode?"#2A2A2C":"#F6F6F6"}; border-bottom: 1px solid ${borderColor}; }
         .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -569,13 +569,13 @@ export default function InboxPage() {
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 14px 0; }
         .date-sep-pill { background: ${darkMode?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.92)"}; border-radius: 99px; padding: 5px 16px; font-size: 13px; color: ${darkMode?"white":"#555"}; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-        .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px 14px; display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 66px; }
+        .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 66px; }
         .back-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 22px; font-weight: 700; transition: background 0.15s; }
         .back-btn:hover { background: rgba(255,255,255,0.25); }
         .chat-av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
         .chat-head-name { font-size: 17px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chat-head-sub { font-size: 13px; color: rgba(255,255,255,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .input-area { flex-shrink: 0; background: ${inputBg}; padding: 10px 12px; display: flex; align-items: flex-end; gap: 8px; border-top: 1px solid ${borderColor}; }
+        .input-area { flex-shrink: 0; background: ${inputBg}; padding: 10px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); display: flex; align-items: flex-end; gap: 8px; border-top: 1px solid ${borderColor}; }
         .msg-input { flex: 1; padding: 11px 16px; background: ${darkMode?"#3A3A3C":"white"}; border: none; border-radius: 24px; font-size: ${fontSize}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 120px; resize: none; line-height: 1.5; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .msg-input::placeholder { color: #AEAEB2; }
         .icon-btn { width: 46px; height: 46px; border-radius: 50%; background: ${darkMode?"#3A3A3C":"#1C1C1E"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 20px; transition: background 0.15s; }
@@ -589,8 +589,8 @@ export default function InboxPage() {
         .slash-shortcut { background: #007AFF; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; flex-shrink: 0; }
         .slash-msg { font-size: 15px; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(4px); }
-        .modal { background: ${sidebarBg}; border-radius: 20px 20px 0 0; width: 100%; max-width: 540px; max-height: 92vh; overflow-y: auto; padding: 24px 20px 40px; }
-        .modal-scroll { background: ${sidebarBg}; border-radius: 20px 20px 0 0; width: 100%; max-width: 540px; position: fixed; top: 8vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px 20px 60px; z-index: 201; }
+        .modal { background: ${sidebarBg}; border-radius: 20px 20px 0 0; width: 100%; max-width: 540px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+        .modal-scroll { background: ${sidebarBg}; border-radius: 20px 20px 0 0; width: 100%; max-width: 540px; position: fixed; top: 8vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; }
         .modal-title { font-size: 20px; font-weight: 700; color: ${textColor}; margin-bottom: 20px; }
         .flabel { font-size: 13px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
         .finput { width: 100%; padding: 13px 16px; background: ${darkMode?"#3A3A3C":"#F2F2F7"}; border: none; border-radius: 12px; font-size: 16px; font-family: inherit; color: ${textColor}; outline: none; margin-bottom: 14px; }
