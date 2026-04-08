@@ -101,8 +101,8 @@ export default function AdminPatientRecordPage() {
     recordSubtitle: isSpanish ? "Revisión completa antes de exportar" : "Full review before export",
     backToCenter: isSpanish ? "← Volver al centro" : "← Back to control center",
     goToPortal: isSpanish ? "Ir al portal" : "Go to portal",
-    exporting: isSpanish ? "Exportando..." : "Exporting...",
-    exportRecord: isSpanish ? "📦 Exportar expediente" : "📦 Export record",
+    exporting: isSpanish ? "Preparando..." : "Preparing...",
+    exportRecord: isSpanish ? "📤 Compartir expediente" : "📤 Share record",
     unavailableTitle: isSpanish ? "Expediente no disponible" : "Record unavailable",
     unavailableCopy: isSpanish
       ? "Vuelve al centro de control para buscarlo de nuevo o intenta recargar la página."
@@ -180,6 +180,9 @@ export default function AdminPatientRecordPage() {
     fieldSetupError: isSpanish
       ? "Falta correr la configuración de Supabase para guardar esta información nueva."
       : "The Supabase setup still needs to be run before this new information can be saved.",
+    shareOpened: isSpanish ? "Se abrió el menú para compartir el expediente." : "The share menu opened for this record.",
+    sharePreview: isSpanish ? "Abrí una vista previa del expediente para que puedas compartirlo desde el navegador." : "I opened a record preview so you can share it from the browser.",
+    recordDownloaded: isSpanish ? "El expediente se descargó en este dispositivo." : "The record was downloaded to this device.",
   };
 
   const formatDateLocal = (value?: string | null) => {
@@ -536,16 +539,50 @@ export default function AdminPatientRecordPage() {
         generatedBy: viewerProfile?.full_name || viewerEmail,
       });
 
-      downloadFile(
-        `expediente-${sanitizeFileName(patient.full_name || "patient")}.html`,
-        html,
-        "text/html;charset=utf-8"
-      );
-      updateSuccess(
-        isSpanish
-          ? `Expediente de ${patient.full_name || t.unnamedPatient} descargado.`
-          : `${patient.full_name || t.unnamedPatient}'s record downloaded.`
-      );
+      const fileName = `expediente-${sanitizeFileName(patient.full_name || "patient")}.html`;
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const exportFile = new File([blob], fileName, { type: "text/html" });
+      const nav = navigator as Navigator & {
+        canShare?: (data?: ShareData) => boolean;
+      };
+      const isTouchDevice =
+        /iPhone|iPad|Android/i.test(window.navigator.userAgent) ||
+        window.matchMedia("(max-width: 900px)").matches;
+
+      if (typeof nav.share === "function") {
+        const shareData: ShareData = {
+          title: patient.full_name || t.unnamedPatient,
+          text: isSpanish
+            ? `Expediente de ${patient.full_name || t.unnamedPatient}`
+            : `${patient.full_name || t.unnamedPatient} record`,
+        };
+
+        if (typeof nav.canShare === "function" && nav.canShare({ files: [exportFile] })) {
+          shareData.files = [exportFile];
+        }
+
+        try {
+          await nav.share(shareData);
+          updateSuccess(t.shareOpened);
+          return;
+        } catch (shareError: any) {
+          if (shareError?.name === "AbortError") {
+            setExporting(false);
+            return;
+          }
+        }
+      }
+
+      if (isTouchDevice) {
+        const previewUrl = URL.createObjectURL(blob);
+        window.open(previewUrl, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60_000);
+        updateSuccess(t.sharePreview);
+        return;
+      }
+
+      downloadFile(fileName, html, "text/html;charset=utf-8");
+      updateSuccess(t.recordDownloaded);
     } catch (error: any) {
       setPageError(error?.message || (isSpanish ? "No pude exportar este expediente." : "I could not export this record."));
     } finally {
