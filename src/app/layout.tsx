@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import BackToTopButton from "./BackToTopButton";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        <BackToTopButton />
       </body>
     </html>
   );
