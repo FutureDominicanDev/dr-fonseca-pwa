@@ -2,6 +2,13 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
+const OWNER_EMAIL = "mrdiazsr@icloud.com";
+
+const isMissingColumnError = (error: any) => {
+  const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+  return message.includes("column") || message.includes("schema cache");
+};
+
 export default function RegisterPage() {
   const [step, setStep] = useState<"code" | "details">("code");
   const [inviteCode, setInviteCode] = useState("");
@@ -12,30 +19,113 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [role, setRole] = useState("staff");
+  const [officeLocation, setOfficeLocation] = useState<"Guadalajara" | "Tijuana">("Guadalajara");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const checkCode = async () => {
-    if (!inviteCode.trim()) { setError("Por favor ingresa el código de invitación."); return; }
-    setLoading(true); setError("");
+    if (!inviteCode.trim()) {
+      setError("Por favor ingresa el código de invitación.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
     const { data, error: err } = await supabase.from("app_settings").select("value").eq("key", "invite_code").single();
-    if (err || !data) { setError("Error verificando el código."); setLoading(false); return; }
-    if (data.value.trim().toUpperCase() !== inviteCode.trim().toUpperCase()) { setError("Código de invitación incorrecto."); setLoading(false); return; }
+
+    if (err || !data) {
+      setError("Error verificando el código.");
+      setLoading(false);
+      return;
+    }
+
+    if (data.value.trim().toUpperCase() !== inviteCode.trim().toUpperCase()) {
+      setError("Código de invitación incorrecto.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(false);
     setStep("details");
   };
 
   const handleRegister = async () => {
-    if (!fullName.trim()) { setError("Por favor ingresa tu nombre completo."); return; }
-    if (!email.trim()) { setError("Por favor ingresa tu correo."); return; }
-    if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return; }
-    if (password !== confirmPassword) { setError("Las contraseñas no coinciden."); return; }
-    setLoading(true); setError("");
-    const { data: authData, error: authErr } = await supabase.auth.signUp({ email: email.trim(), password });
-    if (authErr) { setError(authErr.message); setLoading(false); return; }
-    if (authData.user) {
-      await supabase.from("profiles").upsert({ id: authData.user.id, full_name: fullName.trim(), role, display_name: fullName.trim() });
+    if (!fullName.trim()) {
+      setError("Por favor ingresa tu nombre completo.");
+      return;
     }
+    if (!email.trim()) {
+      setError("Por favor ingresa tu correo.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const baseProfile = {
+      full_name: fullName.trim(),
+      role,
+      display_name: fullName.trim(),
+    };
+
+    const { data: authData, error: authErr } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: {
+          full_name: fullName.trim(),
+          role,
+          office_location: officeLocation,
+        },
+      },
+    });
+
+    if (authErr) {
+      setError(authErr.message);
+      setLoading(false);
+      return;
+    }
+
+    if (authData.user) {
+      const extendedProfile = {
+        id: authData.user.id,
+        ...baseProfile,
+        office_location: officeLocation,
+        admin_level: normalizedEmail === OWNER_EMAIL ? "owner" : "none",
+      };
+
+      const { error: profileErr } = await supabase.from("profiles").upsert(extendedProfile);
+
+      if (profileErr) {
+        if (!isMissingColumnError(profileErr)) {
+          setError(profileErr.message || "No pude guardar el perfil.");
+          setLoading(false);
+          return;
+        }
+
+        const { error: fallbackErr } = await supabase.from("profiles").upsert({
+          id: authData.user.id,
+          ...baseProfile,
+        });
+
+        if (fallbackErr) {
+          setError(fallbackErr.message || "No pude guardar el perfil.");
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
     setLoading(false);
     window.location.href = "/inbox";
   };
@@ -130,7 +220,7 @@ export default function RegisterPage() {
               <div style={{ textAlign: "center", marginBottom: 24 }}>
                 <div style={{ fontSize: 52, marginBottom: 10 }}>👤</div>
                 <p className="reg-title2">Crear tu Cuenta</p>
-                <p className="reg-sub2">Completa tu información de staff</p>
+                <p className="reg-sub2">Completa tu información de staff y selecciona tu sede</p>
               </div>
               {error && <div className="err2">⚠️ {error}</div>}
               <label className="flabel2">Nombre Completo</label>
@@ -145,6 +235,17 @@ export default function RegisterPage() {
                   { id: "staff", label: "👤 Staff" },
                 ].map(r => (
                   <div key={r.id} className={`ropt${role === r.id ? " sel" : ""}`} onClick={() => setRole(r.id)}>{r.label}</div>
+                ))}
+              </div>
+              <label className="flabel2">Tu Sede</label>
+              <div className="rgroup">
+                {[
+                  { id: "Guadalajara", label: "🏙️ Guadalajara" },
+                  { id: "Tijuana", label: "🌊 Tijuana" },
+                ].map((office) => (
+                  <div key={office.id} className={`ropt${officeLocation === office.id ? " sel" : ""}`} onClick={() => setOfficeLocation(office.id as "Guadalajara" | "Tijuana")}>
+                    {office.label}
+                  </div>
                 ))}
               </div>
               <label className="flabel2">Correo Electrónico</label>
