@@ -154,6 +154,7 @@ function QREditor({ show, onClose, quickReplies, onSave, savingQR, savedQR, dark
 }
 
 export default function InboxPage() {
+  const OWNER_EMAIL = "mrdiazsr@icloud.com";
   const [lang, setLang] = useState<Lang>("es");
   const t = T[lang];
   const [darkMode, setDarkMode] = useState(false);
@@ -214,6 +215,7 @@ export default function InboxPage() {
   const [displayNameEdit, setDisplayNameEdit] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [savedName, setSavedName] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedRoomRef = useRef<any>(null);
@@ -234,11 +236,12 @@ export default function InboxPage() {
   const fmtRec = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
   const isImageUrl = (url: string) => { if (!url) return false; const u=url.toLowerCase(); return u.includes("supabase")&&(u.endsWith(".jpg")||u.endsWith(".jpeg")||u.endsWith(".png")||u.endsWith(".gif")||u.endsWith(".webp")||u.includes("before")||u.includes("patient-photo")); };
   const senderColor = (type: string, role: string) => type==="patient"?"#1A6B3C":({doctor:"#0050A0",post_quirofano:"#6B3A9E",enfermeria:"#007A7A",coordinacion:"#B35A00",staff:"#444"} as any)[role]||"#444";
+  const canOpenAdmin = currentUserEmail.toLowerCase()===OWNER_EMAIL || ["owner","super_admin","admin"].includes(userProfile?.admin_level||"");
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) { window.location.href = "/login"; return; }
-      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { fetchRooms(); fetchProfile(session.user.id); }
+      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); fetchRooms(); fetchProfile(session.user.id); }
     });
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
     if ("Notification" in window) Notification.requestPermission().then(p=>{notifRef.current=p;});
@@ -712,6 +715,7 @@ export default function InboxPage() {
               <div style={{width:8,height:8,borderRadius:"50%",background:"#25D366"}}/>
               <span style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)"}}>{t.online}</span>
             </div>
+            {canOpenAdmin&&<button onClick={()=>window.location.href="/admin"} style={{padding:"0 14px",height:42,borderRadius:99,background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>Admin</button>}
             <button onClick={()=>setShowSettings(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>⚙️</button>
           </div>
         </div>

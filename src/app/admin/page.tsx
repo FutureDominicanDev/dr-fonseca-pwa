@@ -75,8 +75,8 @@ const OWNER_EMAIL = "mrdiazsr@icloud.com";
 
 const adminLabel = (level: AdminLevel) => (
   {
-    owner: "👑 Owner",
-    super_admin: "⭐ Super Admin",
+    owner: "👑 Acceso total",
+    super_admin: "⭐ Admin avanzado",
     admin: "🛡️ Admin",
     none: "Sin admin",
   } as const
@@ -527,7 +527,7 @@ export default function AdminPage() {
 
     if (error) {
       if (isMissingColumnError(error)) {
-        setPageError("Falta correr el archivo docs/supabase-admin-setup.sql en Supabase para habilitar oficinas y permisos avanzados.");
+        setPageError("Falta completar la configuración inicial del portal para guardar sedes y permisos avanzados.");
         return;
       }
       setPageError(error.message || "No pude guardar el cambio.");
@@ -717,7 +717,7 @@ export default function AdminPage() {
           <div className="blocked-card">
             <div style={{ fontSize: 56, marginBottom: 10 }}>⛔</div>
             <p style={{ fontSize: 28, fontWeight: 800, color: "#111827", marginBottom: 8 }}>Tu cuenta no tiene acceso</p>
-            <p style={{ fontSize: 15, color: "#6B7280", lineHeight: 1.7 }}>Esta cuenta puede usar el portal, pero todavía no tiene permisos administrativos. Para esta primera etapa, el acceso principal está reservado al owner del proyecto.</p>
+            <p style={{ fontSize: 15, color: "#6B7280", lineHeight: 1.7 }}>Esta cuenta puede usar el portal, pero todavía no tiene permisos para entrar a esta sección administrativa.</p>
             <button className="main-btn" onClick={() => (window.location.href = "/inbox")}>Volver al inbox</button>
           </div>
         </div>
@@ -730,7 +730,7 @@ export default function AdminPage() {
       <style>{`
         * { box-sizing: border-box; }
         body { background: #F5F7FB; }
-        .admin-shell { min-height: 100dvh; background: radial-gradient(circle at top, rgba(59,130,246,0.10), transparent 26%), #F5F7FB; }
+        .admin-shell { position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: radial-gradient(circle at top, rgba(59,130,246,0.10), transparent 26%), #F5F7FB; }
         .admin-topbar { background: rgba(15,23,42,0.96); backdrop-filter: blur(18px); padding: 0 max(18px, env(safe-area-inset-right)) 0 max(18px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 14px; min-height: calc(74px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); position: sticky; top: 0; z-index: 100; }
         .admin-body { width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
         .hero { background: linear-gradient(135deg, #111827 0%, #1D4ED8 100%); color: white; border-radius: 28px; padding: 24px; margin-bottom: 18px; box-shadow: 0 18px 45px rgba(29,78,216,0.18); }
@@ -779,12 +779,15 @@ export default function AdminPage() {
 
       <div className="admin-shell">
         <div className="admin-topbar">
-          <img src="/fonseca_clear.png" style={{ height: 50, width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)", flexShrink: 0 }} alt="Dr. Fonseca" />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 16, fontWeight: 800, color: "white", margin: 0 }}>Panel Administrativo</p>
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.62)", margin: 0 }}>Control simple para exportaciones, permisos y staff</p>
+            <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>Centro de control</p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>Expedientes, equipo y accesos del portal</p>
           </div>
-          <button className="ghost-btn" onClick={() => supabase.auth.signOut().then(() => (window.location.href = "/login"))}>Salir</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button className="ghost-btn" onClick={() => (window.location.href = "/admin/ayuda")}>Ayuda</button>
+            <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>Volver al portal</button>
+            <button className="ghost-btn" onClick={() => supabase.auth.signOut().then(() => (window.location.href = "/login"))}>Salir</button>
+          </div>
         </div>
 
         <div className="admin-body">
@@ -794,14 +797,14 @@ export default function AdminPage() {
           <section className="hero">
             <div className="hero-grid">
               <div>
-                <p style={{ fontSize: 13, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10, opacity: 0.8 }}>Dr. Fonseca · Control central</p>
                 <h1 className="big-title">Todo en una sola pantalla</h1>
                 <p className="subtle">
-                  Aquí el doctor puede ver el equipo, filtrar por sede, y descargar un expediente claro con qué pasó, quién escribió, cuándo ocurrió, desde qué sede y con qué procedimiento está relacionado.
+                  Desde aquí puedes exportar expedientes, filtrar por sede, revisar tu equipo y mantener el portal organizado sin pasos complicados.
                 </p>
                 <div className="pill-row" style={{ marginTop: 18 }}>
-                  <span className="pill-btn" style={{ cursor: "default", background: "rgba(255,255,255,0.12)", color: "white", borderColor: "rgba(255,255,255,0.18)" }}>{adminLabel(viewerAdminLevel)}</span>
-                  <span className="pill-btn" style={{ cursor: "default", background: "rgba(255,255,255,0.12)", color: "white", borderColor: "rgba(255,255,255,0.18)" }}>{viewerProfile?.full_name || viewerEmail}</span>
+                  <span className="pill-btn" style={{ cursor: "default", background: "rgba(255,255,255,0.12)", color: "white", borderColor: "rgba(255,255,255,0.18)" }}>📦 Exportar</span>
+                  <span className="pill-btn" style={{ cursor: "default", background: "rgba(255,255,255,0.12)", color: "white", borderColor: "rgba(255,255,255,0.18)" }}>🏥 Filtrar por sede</span>
+                  <span className="pill-btn" style={{ cursor: "default", background: "rgba(255,255,255,0.12)", color: "white", borderColor: "rgba(255,255,255,0.18)" }}>👥 Equipo y permisos</span>
                 </div>
               </div>
 
@@ -811,8 +814,8 @@ export default function AdminPage() {
                   <button className="main-btn" onClick={() => exportPatients("filtered")} disabled={exportingKey === "all-patients"}>
                     {exportingKey === "all-patients" ? "Exportando…" : "📦 Exportar pacientes filtrados"}
                   </button>
-                  <button className="ghost-btn" style={{ background: "rgba(255,255,255,0.14)", color: "white" }} onClick={() => (window.location.href = "/inbox")}>
-                    💬 Abrir inbox
+                  <button className="ghost-btn" style={{ background: "rgba(255,255,255,0.14)", color: "white" }} onClick={() => (window.location.href = "/admin/ayuda")}>
+                    ❓ Abrir ayuda
                   </button>
                   <button className="ghost-btn" style={{ background: "rgba(255,255,255,0.14)", color: "white" }} onClick={fetchData}>
                     🔄 Actualizar datos
@@ -946,18 +949,30 @@ export default function AdminPage() {
               <section className="card">
                 <div className="header-row">
                   <div>
-                    <p className="card-title">Supabase</p>
-                    <p className="muted">Para oficinas y permisos avanzados, este push también incluye un archivo SQL listo para correr en Supabase.</p>
+                    <p className="card-title">Guía rápida</p>
+                    <p className="muted">Un recordatorio corto para usar esta pantalla sin complicaciones.</p>
                   </div>
                 </div>
                 <div className="export-card">
-                  <p style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 6 }}>Archivo incluido</p>
-                  <p className="muted" style={{ marginBottom: 12 }}>
-                    <code>/Users/rmd/Documents/dr-fonseca-pwa/pwa/docs/supabase-admin-setup.sql</code>
-                  </p>
-                  <p className="muted">
-                    Ese archivo agrega <strong>admin_level</strong>, <strong>office_location</strong> y <strong>sender_office</strong>. El panel funciona con fallback, pero para que quede bien amarrado sí conviene correrlo en tu proyecto de Supabase.
-                  </p>
+                  <p style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 8 }}>Lo más usado</p>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ background: "white", borderRadius: 14, padding: "12px 14px" }}>
+                      <p style={{ fontSize: 14, fontWeight: 800, color: "#111827", marginBottom: 4 }}>1. Filtra por sede</p>
+                      <p className="muted">Usa Guadalajara, Tijuana o Todas para ver solo los pacientes que necesitas.</p>
+                    </div>
+                    <div style={{ background: "white", borderRadius: 14, padding: "12px 14px" }}>
+                      <p style={{ fontSize: 14, fontWeight: 800, color: "#111827", marginBottom: 4 }}>2. Exporta el expediente</p>
+                      <p className="muted">Puedes sacar un expediente individual o una lista completa con el filtro actual.</p>
+                    </div>
+                    <div style={{ background: "white", borderRadius: 14, padding: "12px 14px" }}>
+                      <p style={{ fontSize: 14, fontWeight: 800, color: "#111827", marginBottom: 4 }}>3. Revisa el equipo</p>
+                      <p className="muted">Asigna la sede correcta y define quién necesita acceso administrativo.</p>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+                    <button className="main-btn" onClick={() => (window.location.href = "/admin/ayuda")}>Abrir ayuda</button>
+                    <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>Ir al portal</button>
+                  </div>
                 </div>
               </section>
             </div>
@@ -1035,7 +1050,7 @@ export default function AdminPage() {
                         ))}
                         {level === "owner" && (
                           <span className="meta-badge" style={{ color: adminColor("owner"), background: `${adminColor("owner")}18` }}>
-                            Cuenta protegida
+                            Acceso protegido
                           </span>
                         )}
                       </div>
