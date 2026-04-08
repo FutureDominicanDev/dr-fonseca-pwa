@@ -7,9 +7,6 @@ import {
   OWNER_EMAIL,
   adminColor,
   adminLabel,
-  buildExportHtml,
-  buildPatientBundles,
-  downloadFile,
   formatDate,
   initials,
   isMissingColumnError,
@@ -21,9 +18,7 @@ import {
   recordStatusLabel,
   roleColor,
   roleLabel,
-  sanitizeFileName,
   type AdminLevel,
-  type MessageRecord,
   type Office,
   type OfficeFilter,
   type PatientRecord,
@@ -64,7 +59,6 @@ export default function AdminPage() {
   const [savingCode, setSavingCode] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [exportingKey, setExportingKey] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
   const [officeFilter, setOfficeFilter] = useState<OfficeFilter>("Todas");
   const [recordFilter, setRecordFilter] = useState<PatientRecordStatus>("active");
@@ -121,8 +115,6 @@ export default function AdminPage() {
             trash: "🗑️ Trash",
           } as const
         )[value];
-
-  const staffById = useMemo(() => new Map(staff.map((member) => [member.id, member])), [staff]);
 
   const patientCards = useMemo<PatientCard[]>(() => {
     const normalizedSearch = patientSearch.trim().toLowerCase();
@@ -334,72 +326,6 @@ export default function AdminPage() {
     updateSuccess(`Cuenta de ${name} eliminada.`);
   };
 
-  const exportPatients = async (mode: "filtered" | "single", patientId?: string) => {
-    const selectedPatientIds = mode === "single" && patientId ? [patientId] : patientCards.map((card) => card.patient.id);
-
-    if (selectedPatientIds.length === 0) {
-      setPageError("No hay pacientes para exportar con ese filtro.");
-      return;
-    }
-
-    const exportKey = mode === "single" && patientId ? `patient-${patientId}` : "filtered";
-    setExportingKey(exportKey);
-
-    try {
-      const selectedProcedures = procedures.filter((procedure) => selectedPatientIds.includes(procedure.patient_id || ""));
-      const selectedProcedureIds = new Set(selectedProcedures.map((procedure) => procedure.id));
-      const selectedRooms = rooms.filter((room) => selectedProcedureIds.has(room.procedure_id || ""));
-      const roomIds = selectedRooms.map((room) => room.id);
-
-      let messages: MessageRecord[] = [];
-      if (roomIds.length > 0) {
-        const { data, error } = await supabase
-          .from("messages")
-          .select("*")
-          .in("room_id", roomIds)
-          .order("created_at", { ascending: true });
-
-        if (error) throw error;
-        messages = (data || []) as MessageRecord[];
-      }
-
-      const bundles = buildPatientBundles({
-        patientIds: selectedPatientIds,
-        patients,
-        procedures,
-        rooms,
-        messages,
-      });
-
-      const firstPatient = bundles[0]?.patient.full_name || "paciente";
-      const title =
-        mode === "single" && patientId
-          ? `Expediente exportado · ${firstPatient}`
-          : `Exportación filtrada de pacientes (${bundles.length})`;
-      const subtitle =
-        mode === "single" && patientId
-          ? "Incluye procedimientos, sedes, salas, mensajes y archivos relacionados."
-          : `Filtro aplicado: ${officeFilter}${patientSearch.trim() ? ` · Búsqueda: ${patientSearch.trim()}` : ""}`;
-      const html = buildExportHtml({
-        title,
-        subtitle,
-        bundles,
-        staffById,
-        generatedBy: viewerProfile?.full_name || viewerEmail,
-      });
-      const filename =
-        mode === "single" && patientId
-          ? `expediente-${sanitizeFileName(firstPatient || "paciente")}.html`
-          : `pacientes-filtrados-${sanitizeFileName(officeFilter === "Todas" ? "todas-las-sedes" : officeFilter)}-${new Date().toISOString().slice(0, 10)}.html`;
-      downloadFile(filename, html, "text/html;charset=utf-8");
-      updateSuccess(mode === "single" ? `Expediente de ${firstPatient} descargado.` : "Resultados descargados.");
-    } catch (error: any) {
-      setPageError(error?.message || "No pude exportar los pacientes.");
-    } finally {
-      setExportingKey("");
-    }
-  };
-
   if (!sessionChecked || loading) {
     return (
       <>
@@ -487,7 +413,7 @@ export default function AdminPage() {
         .subtle { color: rgba(255,255,255,0.84); line-height: 1.6; font-size: 15px; }
         .quick-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
         .hero-link { padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.12); color: white; font-size: 14px; font-weight: 800; cursor: pointer; font-family: inherit; }
-        .hero-search-card { background: rgba(255,255,255,0.12); color: white; box-shadow: none; display: grid; gap: 12px; }
+        .hero-search-card { background: rgba(255,255,255,0.12); color: white; box-shadow: none; display: grid; gap: 12px; align-content: start; }
         .hero-search-input { width: 100%; padding: 13px 15px; background: rgba(255,255,255,0.96); border: 1px solid transparent; border-radius: 14px; font-size: 15px; font-family: inherit; color: #111827; outline: none; font-weight: 700; }
         .hero-search-input:focus { border-color: rgba(255,255,255,0.42); }
         .hero-pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -495,6 +421,7 @@ export default function AdminPage() {
         .hero-filter-btn.active { background: white; color: #111827; border-color: white; }
         .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .hero-secondary-btn { padding: 12px 14px; border-radius: 14px; border: none; background: rgba(255,255,255,0.14); color: white; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; }
+        .hero-result-note { padding: 12px 14px; border-radius: 16px; background: rgba(15,23,42,0.24); border: 1px solid rgba(255,255,255,0.1); font-size: 13px; font-weight: 700; line-height: 1.5; color: rgba(255,255,255,0.9); }
         .main-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #007AFF; color: white; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
         .main-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .ghost-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
@@ -548,7 +475,6 @@ export default function AdminPage() {
           .hero-link { width: 100%; text-align: center; padding: 10px 12px; font-size: 13px; }
           .hero-pill-row { display: grid; grid-template-columns: 1fr 1fr; }
           .hero-actions { display: grid; grid-template-columns: 1fr 1fr; }
-          .hero-actions .main-btn { grid-column: 1 / -1; }
           .hero-secondary-btn { width: 100%; text-align: center; padding: 12px 12px; }
           .patient-row, .staff-row { flex-direction: column; }
           .toast-stack { right: 12px; left: 12px; width: auto; }
@@ -606,11 +532,11 @@ export default function AdminPage() {
                   {isSpanish ? "Primero encuentra el expediente correcto. Después abre la ficha del paciente, revisa su historia completa y decide si quieres exportarla." : "First find the right record. Then open the patient file, review the full history, and decide whether to export it."}
                 </p>
                 <div className="quick-links">
-                  <button className="hero-link" onClick={() => scrollToSection("equipo")}>{isSpanish ? "👥 Equipo" : "👥 Team"}</button>
-                  <button className="hero-link" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "❓ Ayuda" : "❓ Help"}</button>
                   <button className="hero-link" onClick={handleRefresh} disabled={refreshing}>
                     {refreshing ? (isSpanish ? "Actualizando..." : "Refreshing...") : (isSpanish ? "🔄 Actualizar datos" : "🔄 Refresh data")}
                   </button>
+                  <button className="hero-link" onClick={() => scrollToSection("equipo")}>{isSpanish ? "👥 Equipo" : "👥 Team"}</button>
+                  <button className="hero-link" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "❓ Ayuda" : "❓ Help"}</button>
                 </div>
               </div>
 
@@ -665,15 +591,39 @@ export default function AdminPage() {
                   >
                     {isSpanish ? "Borrar filtros" : "Clear filters"}
                   </button>
-                  <button className="hero-secondary-btn" onClick={() => scrollToSection("equipo")}>
-                    {isSpanish ? "👥 Ir al equipo" : "👥 Go to team"}
-                  </button>
                   <button
-                    className="main-btn"
-                    onClick={() => exportPatients("filtered")}
-                    disabled={!hasActiveSearch || patientCards.length === 0 || exportingKey === "filtered"}
+                    className="hero-secondary-btn"
+                    onClick={() => {
+                      if (patientCards.length > 0) scrollToSection("expedientes");
+                    }}
+                    disabled={!hasActiveSearch || patientCards.length === 0}
                   >
-                    {exportingKey === "filtered" ? (isSpanish ? "Exportando..." : "Exporting...") : (isSpanish ? "Descargar resultados" : "Download results")}
+                    {isSpanish ? "📂 Ver resultados" : "📂 View results"}
+                  </button>
+                </div>
+                <div className="hero-result-note">
+                  {hasActiveSearch ? (
+                    patientCards.length > 0 ? (
+                      isSpanish
+                        ? `Encontré ${patientCards.length} expediente(s). Abre la ficha correcta para revisar la historia completa antes de exportar.`
+                        : `I found ${patientCards.length} record(s). Open the right file to review the full history before exporting.`
+                    ) : (
+                      isSpanish
+                        ? "No encontré coincidencias con ese filtro. Prueba con menos palabras o cambia la sede."
+                        : "No matches found for that filter. Try fewer words or change the office."
+                    )
+                  ) : (
+                    isSpanish
+                      ? "No se descarga nada desde aquí. Primero encuentra al paciente y abre su expediente."
+                      : "Nothing downloads from here. First find the patient and open the record."
+                  )}
+                </div>
+                <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,0.72)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {isSpanish ? "Siguiente paso" : "Next step"}
+                  </span>
+                  <button className="hero-link" onClick={() => scrollToSection("equipo")}>
+                    {isSpanish ? "👥 Ir al equipo" : "👥 Go to team"}
                   </button>
                 </div>
               </div>
@@ -708,7 +658,7 @@ export default function AdminPage() {
               <div className="header-row">
                 <div>
                   <p className="card-title">{isSpanish ? "Resultados de búsqueda" : "Search results"}</p>
-                  <p className="muted">{isSpanish ? "Abre el expediente correcto para revisarlo con calma antes de exportar." : "Open the correct record and review it before exporting."}</p>
+                  <p className="muted">{isSpanish ? "Aquí solo eliges al paciente correcto. La revisión completa y la exportación viven dentro del expediente." : "This is only for choosing the right patient. Full review and export live inside the record."}</p>
                 </div>
                 <div className="inline-actions">
                   {hasActiveSearch && (
@@ -720,10 +670,9 @@ export default function AdminPage() {
               </div>
 
               {!hasActiveSearch ? (
-                <div className="empty-state">
-                  <div style={{ fontSize: 40, marginBottom: 8 }}>🔎</div>
-                  <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "Empieza con una búsqueda" : "Start with a search"}</p>
-                  <p className="muted">{isSpanish ? "Busca por nombre, teléfono o sede. Si quieres revisar archivo o papelera, solo cambia el filtro de estado." : "Search by name, phone number, or office. If you want archived or trash records, just change the status filter."}</p>
+                <div className="empty-state" style={{ padding: "24px 18px" }}>
+                  <p style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "La búsqueda principal está arriba" : "The main search lives above"}</p>
+                  <p className="muted">{isSpanish ? "Escribe un nombre, teléfono, correo, procedimiento o sede para empezar." : "Type a name, phone number, email, procedure, or office to begin."}</p>
                 </div>
               ) : patientCards.length === 0 ? (
                 <div className="empty-state">
