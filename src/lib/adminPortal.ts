@@ -63,6 +63,16 @@ export type ProcedureRecord = {
   surgery_date?: string | null;
 };
 
+export const PROCEDURE_STATUS_OPTIONS = [
+  { value: "scheduled", es: "Programado", en: "Scheduled" },
+  { value: "confirmed", es: "Confirmado", en: "Confirmed" },
+  { value: "pre_op", es: "Preoperatorio", en: "Pre-op" },
+  { value: "in_surgery", es: "En cirugía", en: "In surgery" },
+  { value: "post_op", es: "Postoperatorio", en: "Post-op" },
+  { value: "completed", es: "Completado", en: "Completed" },
+  { value: "cancelled", es: "Cancelado", en: "Cancelled" },
+] as const;
+
 export type RoomRecord = {
   id: string;
   procedure_id?: string | null;
@@ -156,6 +166,13 @@ export const officeLabel = (office: string | null | undefined) => {
   if (office === "Guadalajara") return "📍 Guadalajara";
   if (office === "Tijuana") return "📍 Tijuana";
   return "📍 Sin sede";
+};
+
+export const procedureStatusLabel = (status: string | null | undefined, lang: "es" | "en" = "es") => {
+  const normalized = (status || "").trim();
+  const found = PROCEDURE_STATUS_OPTIONS.find((option) => option.value === normalized);
+  if (found) return lang === "es" ? found.es : found.en;
+  return normalized || (lang === "es" ? "Sin estatus" : "No status");
 };
 
 export const normalizeAdminLevel = (value: unknown, email = ""): AdminLevel => {
@@ -434,7 +451,7 @@ export const buildExportHtml = ({
                   <h3>${escapeHtml(procedure.procedure_name || "Procedimiento sin nombre")}</h3>
                   <p>${escapeHtml(procedure.office_location || "Sin sede")} · Cirugía: ${escapeHtml(formatDate(procedure.surgery_date))}</p>
                 </div>
-                <span>${escapeHtml(procedure.status || "Sin estatus")}</span>
+                <span>${escapeHtml(procedureStatusLabel(procedure.status, "es"))}</span>
               </div>
               ${roomSections || `<p class="empty">Sin salas relacionadas.</p>`}
             </section>

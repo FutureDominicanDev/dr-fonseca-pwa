@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
   OWNER_EMAIL,
+  PROCEDURE_STATUS_OPTIONS,
   buildExportHtml,
   buildPatientBundles,
   downloadFile,
@@ -19,6 +20,7 @@ import {
   openPrintPreview,
   normalizeRecordStatus,
   officeLabel,
+  procedureStatusLabel,
   recordStatusColor,
   recordStatusLabel,
   roleColor,
@@ -151,6 +153,7 @@ export default function AdminPatientRecordPage() {
     proceduresCopy: isSpanish
       ? "Aquí puedes corregir procedimiento, sede, fecha de cirugía y estatus."
       : "Here you can correct procedure, office, surgery date, and status.",
+    selectStatus: isSpanish ? "Selecciona estatus" : "Select status",
     saveProcedure: isSpanish ? "Guardar procedimiento" : "Save procedure",
     savingProcedure: isSpanish ? "Guardando..." : "Saving...",
     noProcedures: isSpanish ? "No hay procedimientos registrados para este paciente." : "There are no procedures registered for this patient.",
@@ -466,7 +469,7 @@ export default function AdminPatientRecordPage() {
     const payload = {
       procedure_name: draft.procedure_name.trim() || null,
       office_location: draft.office_location || null,
-      status: draft.status.trim() || null,
+      status: draft.status || null,
       surgery_date: draft.surgery_date || null,
     };
 
@@ -1206,7 +1209,7 @@ export default function AdminPatientRecordPage() {
                             </div>
                             <div>
                               <label className="field-label">{isSpanish ? "Estatus" : "Status"}</label>
-                              <input
+                              <select
                                 className="line-input"
                                 value={draft.status}
                                 onChange={(event) =>
@@ -1215,7 +1218,17 @@ export default function AdminPatientRecordPage() {
                                     [procedure.id]: { ...draft, status: event.target.value },
                                   }))
                                 }
-                              />
+                              >
+                                <option value="">{t.selectStatus}</option>
+                                {PROCEDURE_STATUS_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {isSpanish ? option.es : option.en}
+                                  </option>
+                                ))}
+                                {draft.status && !PROCEDURE_STATUS_OPTIONS.some((option) => option.value === draft.status) ? (
+                                  <option value={draft.status}>{procedureStatusLabel(draft.status, lang)}</option>
+                                ) : null}
+                              </select>
                             </div>
                             <div>
                               <label className="field-label">{isSpanish ? "Fecha de cirugía" : "Surgery date"}</label>
