@@ -824,32 +824,6 @@ export default function AdminPage() {
                 </div>
               </section>
 
-              <section className="card">
-                <div className="header-row">
-                  <div>
-                    <p className="card-title">{isSpanish ? "Guía rápida" : "Quick guide"}</p>
-                    <p className="muted">{isSpanish ? "Solo lo esencial para moverte rápido y sin dudas." : "Only the essentials so you can move quickly without guessing."}</p>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div className="export-card">
-                    <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 4 }}>{isSpanish ? "1. Busca" : "1. Search"}</p>
-                    <p className="muted">{isSpanish ? "Filtra por sede o escribe nombre, teléfono, correo o procedimiento." : "Filter by office or type a name, phone number, email, or procedure."}</p>
-                  </div>
-                  <div className="export-card">
-                    <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 4 }}>{isSpanish ? "2. Revisa" : "2. Review"}</p>
-                    <p className="muted">{isSpanish ? "Abre el expediente del paciente y revisa historia, medios y cronología completa." : "Open the patient record and review the history, media, and full timeline."}</p>
-                  </div>
-                  <div className="export-card">
-                    <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 4 }}>3. Decide</p>
-                    <p className="muted">{isSpanish ? "Si todo está correcto, exporta ese expediente o los resultados filtrados." : "If everything looks correct, export that record or the filtered results."}</p>
-                  </div>
-                </div>
-                <div className="inline-actions" style={{ marginTop: 14 }}>
-                  <button className="main-btn" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "Abrir ayuda" : "Open help"}</button>
-                  <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>{isSpanish ? "Ir al portal" : "Go to portal"}</button>
-                </div>
-              </section>
             </div>
           </div>
 
