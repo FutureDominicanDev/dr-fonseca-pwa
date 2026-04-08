@@ -70,6 +70,7 @@ export default function AdminPage() {
   const [recordFilter, setRecordFilter] = useState<PatientRecordStatus>("active");
   const [successMsg, setSuccessMsg] = useState("");
   const [pageError, setPageError] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
   const hasAdminAccess = viewerEmail.toLowerCase() === OWNER_EMAIL || ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
@@ -194,6 +195,11 @@ export default function AdminPage() {
     setSuccessMsg(message);
     window.clearTimeout((window as any).__adminToastTimer);
     (window as any).__adminToastTimer = window.setTimeout(() => setSuccessMsg(""), 3200);
+  };
+
+  const goTo = (path: string) => {
+    setMobileMenuOpen(false);
+    window.location.href = path;
   };
 
   const fetchData = async () => {
@@ -462,13 +468,15 @@ export default function AdminPage() {
         * { box-sizing: border-box; }
         body { background: #F5F7FB; }
         .admin-shell { position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: radial-gradient(circle at top, rgba(59,130,246,0.10), transparent 26%), #F5F7FB; }
-        .admin-topbar { background: rgba(15,23,42,0.96); backdrop-filter: blur(18px); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 14px; position: sticky; top: 0; z-index: 100; }
+        .admin-topbar { background: rgba(15,23,42,0.96); backdrop-filter: blur(18px); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 14px; position: sticky; top: 0; z-index: 100; }
         .admin-body { width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
         .topbar-title { min-width: 0; }
-        .topbar-lang { display: flex; justify-content: flex-end; }
+        .topbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
         .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-        .topbar-btn { padding: 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; }
-        .topbar-select { appearance: none; -webkit-appearance: none; width: 160px; padding: 12px 38px 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px); background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+        .topbar-btn { padding: 10px 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+        .topbar-select { appearance: none; -webkit-appearance: none; width: 152px; padding: 10px 36px 10px 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px); background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+        .menu-btn { display: none; width: 44px; height: 44px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; cursor: pointer; align-items: center; justify-content: center; padding: 0; }
+        .menu-panel { display: none; }
         .hero { background: linear-gradient(135deg, #111827 0%, #1D4ED8 100%); color: white; border-radius: 28px; padding: 24px; margin-bottom: 18px; box-shadow: 0 18px 45px rgba(29,78,216,0.18); }
         .hero-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 18px; align-items: center; }
         .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 18px 0; }
@@ -517,12 +525,13 @@ export default function AdminPage() {
         }
         @media (max-width: 560px) {
           .stats-grid { grid-template-columns: 1fr 1fr; }
-          .admin-topbar { grid-template-columns: 1fr; align-items: stretch; gap: 10px; }
-          .topbar-lang { display: block; }
-          .topbar-actions { display: grid; grid-template-columns: 1fr 1fr; }
-          .topbar-actions .topbar-btn:last-child { grid-column: 1 / -1; }
-          .topbar-select { width: 100%; }
-          .topbar-btn { width: 100%; text-align: center; padding: 11px 12px; font-size: 13px; }
+          .admin-topbar { position: relative; padding-bottom: 10px; align-items: center; }
+          .topbar-right { display: none; }
+          .menu-btn { display: inline-flex; }
+          .menu-panel { display: grid; gap: 10px; background: rgba(15,23,42,0.98); border-top: 1px solid rgba(255,255,255,0.08); padding: 0 max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); }
+          .menu-panel .topbar-select,
+          .menu-panel .topbar-btn { width: 100%; }
+          .topbar-btn { text-align: center; padding: 12px 12px; font-size: 13px; }
           .hero { padding: 18px; border-radius: 24px; }
           .big-title { font-size: 24px; line-height: 1.08; }
           .subtle { font-size: 14px; }
@@ -541,18 +550,40 @@ export default function AdminPage() {
             <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>{isSpanish ? "Centro de control" : "Control center"}</p>
             <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>{isSpanish ? "Expedientes, equipo y accesos del portal" : "Records, team, and portal access"}</p>
           </div>
-          <div className="topbar-lang">
+          <div className="topbar-right">
             <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
               <option value="es">🇲🇽 Español</option>
               <option value="en">🇺🇸 English</option>
             </select>
+            <div className="topbar-actions">
+              <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
+              <button className="topbar-btn" onClick={() => goTo("/inbox")}>{isSpanish ? "Volver al portal" : "Back to portal"}</button>
+              <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Sign out"}</button>
+            </div>
           </div>
-          <div className="topbar-actions">
-            <button className="topbar-btn" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
-            <button className="topbar-btn" onClick={() => (window.location.href = "/inbox")}>{isSpanish ? "Volver al portal" : "Back to portal"}</button>
-            <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => (window.location.href = "/login"))}>{isSpanish ? "Salir" : "Sign out"}</button>
-          </div>
+          <button
+            className="menu-btn"
+            aria-label={mobileMenuOpen ? (isSpanish ? "Cerrar menú" : "Close menu") : (isSpanish ? "Abrir menú" : "Open menu")}
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+          </button>
         </div>
+        {mobileMenuOpen && (
+          <div className="menu-panel">
+            <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
+              <option value="es">🇲🇽 Español</option>
+              <option value="en">🇺🇸 English</option>
+            </select>
+            <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
+            <button className="topbar-btn" onClick={() => goTo("/inbox")}>{isSpanish ? "Volver al portal" : "Back to portal"}</button>
+            <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Sign out"}</button>
+          </div>
+        )}
 
         <div className="admin-body">
           <section className="hero">
