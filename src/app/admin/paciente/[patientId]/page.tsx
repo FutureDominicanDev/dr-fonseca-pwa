@@ -696,6 +696,7 @@ export default function AdminPatientRecordPage() {
         .record-shell { position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: linear-gradient(180deg, #EEF4FF 0%, #F8FAFC 28%, #F5F7FB 100%); }
         .record-topbar { position: sticky; top: 0; z-index: 50; min-height: calc(74px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; background: rgba(15,23,42,0.96); backdrop-filter: blur(18px); }
         .record-body { width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+        .topbar-select { appearance: none; -webkit-appearance: none; width: 160px; padding: 12px 38px 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px); background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
         .hero { background: linear-gradient(135deg, #111827, #1D4ED8); color: white; border-radius: 28px; padding: 24px; box-shadow: 0 18px 45px rgba(29,78,216,0.16); margin-bottom: 18px; }
         .hero-grid, .grid-2, .grid-4 { display: grid; gap: 16px; }
         .hero-grid { grid-template-columns: 1.1fr 0.9fr; align-items: center; }
@@ -748,6 +749,7 @@ export default function AdminPatientRecordPage() {
         }
         @media (max-width: 560px) {
           .record-topbar { align-items: flex-start; }
+          .topbar-select { width: 100%; }
           .toast-stack { right: 12px; left: 12px; width: auto; }
           .timeline-top, .section-head, .media-item { flex-direction: column; }
         }
@@ -772,8 +774,10 @@ export default function AdminPatientRecordPage() {
             <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>{t.recordSubtitle}</p>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button className="ghost-btn" style={{ background: lang === "es" ? "white" : "#EFF3F8" }} onClick={() => setLang("es")}>🇲🇽 Español</button>
-            <button className="ghost-btn" style={{ background: lang === "en" ? "white" : "#EFF3F8" }} onClick={() => setLang("en")}>🇺🇸 English</button>
+            <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
+              <option value="es">🇲🇽 Español</option>
+              <option value="en">🇺🇸 English</option>
+            </select>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="ghost-btn" onClick={() => (window.location.href = "/admin")}>{t.backToCenter}</button>
