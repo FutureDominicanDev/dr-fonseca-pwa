@@ -562,7 +562,7 @@ export default function InboxPage() {
         .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px 14px; display: flex; align-items: center; gap: 10px; z-index: 50; }
         .back-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 22px; font-weight: 700; transition: background 0.15s; }
         .back-btn:hover { background: rgba(255,255,255,0.25); }
-        .back-btn-hidden { display: none; }
+        .back-btn-hidden { display: flex; }
         .chat-av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
         .chat-head-name { font-size: 17px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chat-head-sub { font-size: 13px; color: rgba(255,255,255,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
