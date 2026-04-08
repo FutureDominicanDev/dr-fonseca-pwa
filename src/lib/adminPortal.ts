@@ -1,6 +1,7 @@
+import { supabase } from "@/lib/supabaseClient";
+
 export type AdminLevel = "owner" | "super_admin" | "admin" | "none";
 export type Office = "Guadalajara" | "Tijuana" | "";
-export type OfficeFilter = "Todas" | "Guadalajara" | "Tijuana";
 export type PatientRecordStatus = "active" | "archived" | "trash";
 
 export type StaffProfile = {
@@ -35,6 +36,21 @@ export type PatientRecordEvent = {
   actor_name?: string | null;
   actor_email?: string | null;
   notes?: string | null;
+  created_at?: string | null;
+};
+
+export type AdminAuditEvent = {
+  id: string;
+  action?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  entity_name?: string | null;
+  patient_id?: string | null;
+  actor_id?: string | null;
+  actor_name?: string | null;
+  actor_email?: string | null;
+  notes?: string | null;
+  metadata?: Record<string, any> | null;
   created_at?: string | null;
 };
 
@@ -218,7 +234,7 @@ export const escapeHtml = (value?: string | null) =>
 
 export const isMissingColumnError = (error: any) => {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
-  return message.includes("column") || message.includes("schema cache");
+  return message.includes("column") || message.includes("schema cache") || message.includes("relation");
 };
 
 export const downloadFile = (filename: string, content: string, type: string) => {
@@ -485,4 +501,60 @@ export const buildExportHtml = ({
       </body>
     </html>
   `;
+};
+
+export const openPrintPreview = ({ title, html }: { title: string; html: string }) => {
+  const printWindow = window.open("", "_blank", "noopener,noreferrer");
+  if (!printWindow) return false;
+
+  printWindow.document.open();
+  printWindow.document.write(html.replace("</head>", `<style>@page { margin: 14mm; }</style></head>`));
+  printWindow.document.close();
+  printWindow.document.title = title;
+  printWindow.focus();
+  window.setTimeout(() => {
+    printWindow.print();
+  }, 450);
+  return true;
+};
+
+export const logAdminEvent = async ({
+  action,
+  entityType,
+  entityId,
+  entityName,
+  patientId,
+  actorId,
+  actorName,
+  actorEmail,
+  notes,
+  metadata,
+}: {
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  entityName?: string | null;
+  patientId?: string | null;
+  actorId?: string | null;
+  actorName?: string | null;
+  actorEmail?: string | null;
+  notes?: string | null;
+  metadata?: Record<string, any> | null;
+}) => {
+  const { error } = await supabase.from("admin_audit_events").insert({
+    action,
+    entity_type: entityType,
+    entity_id: entityId || null,
+    entity_name: entityName || null,
+    patient_id: patientId || null,
+    actor_id: actorId || null,
+    actor_name: actorName || null,
+    actor_email: actorEmail || null,
+    notes: notes || null,
+    metadata: metadata || null,
+  });
+
+  if (error && !isMissingColumnError(error)) {
+    throw error;
+  }
 };

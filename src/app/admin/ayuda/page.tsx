@@ -56,6 +56,8 @@ export default function AdminHelpPage() {
           </div>
           <div className="topbar-actions">
             <button className="topbar-btn" onClick={() => goTo("/admin")}>← Volver al panel</button>
+            <button className="topbar-btn" onClick={() => goTo("/admin/auditoria")}>Auditoría</button>
+            <button className="topbar-btn" onClick={() => goTo("/admin/papelera")}>Papelera</button>
             <button className="topbar-btn" onClick={() => goTo("/inbox")}>Ir al portal</button>
           </div>
           <button
@@ -73,6 +75,8 @@ export default function AdminHelpPage() {
         {mobileMenuOpen && (
           <div className="menu-panel">
             <button className="topbar-btn" onClick={() => goTo("/admin")}>← Volver al panel</button>
+            <button className="topbar-btn" onClick={() => goTo("/admin/auditoria")}>Auditoría</button>
+            <button className="topbar-btn" onClick={() => goTo("/admin/papelera")}>Papelera</button>
             <button className="topbar-btn" onClick={() => goTo("/inbox")}>Ir al portal</button>
           </div>
         )}
@@ -83,7 +87,7 @@ export default function AdminHelpPage() {
             <h1>Todo lo importante, explicado fácil</h1>
             <p>
               Esta pantalla está hecha para que puedas encontrar lo que necesitas sin pensar en temas técnicos.
-              Aquí puedes exportar expedientes, revisar pacientes por sede, cambiar permisos del equipo y actualizar el código de invitación.
+              Aquí puedes buscar pacientes, abrir expedientes, compartir o imprimir registros, cambiar permisos del personal y enviar enlaces de invitación.
             </p>
           </section>
 
@@ -94,11 +98,11 @@ export default function AdminHelpPage() {
               <ul>
                 <li>Buscar un expediente por nombre, teléfono, correo, procedimiento o sede.</li>
                 <li>Abrir la ficha de un paciente y revisar su historial completo antes de exportar.</li>
-                <li>Descargar una lista filtrada cuando necesites varios resultados a la vez.</li>
-                <li>Ver rápidamente cuántos procedimientos hay en Guadalajara y Tijuana.</li>
+                <li>Compartir o imprimir el expediente cuando ya revisaste el caso.</li>
                 <li>Asignar la sede correcta a cada miembro del equipo.</li>
                 <li>Dar o quitar acceso administrativo al equipo.</li>
-                <li>Cambiar el código de invitación para nuevos registros.</li>
+                <li>Enviar un enlace de invitación para que el personal se registre con menos pasos.</li>
+                <li>Revisar la auditoría y recuperar expedientes desde papelera o archivo.</li>
               </ul>
             </section>
 
@@ -112,6 +116,7 @@ export default function AdminHelpPage() {
                 <li>Mensajes completos con quién escribió y cuándo.</li>
                 <li>Archivos, imágenes, audios y videos con sus enlaces.</li>
                 <li>Contexto para entender por qué se compartió cada cosa.</li>
+                <li>Opciones para compartirlo o llevarlo a PDF / impresión.</li>
               </ul>
               <div className="note">Piensa en la exportación como un expediente claro para revisar la historia completa del paciente.</div>
             </section>
@@ -124,21 +129,13 @@ export default function AdminHelpPage() {
             <div className="step">
               <div className="step-number">1</div>
               <div>
-                <h3>Filtra por sede</h3>
-                <p>Usa los botones de Guadalajara, Tijuana o Todas para empezar a reducir los resultados.</p>
+                <h3>Busca al paciente</h3>
+                <p>Escribe nombre, teléfono, correo o procedimiento para encontrar el expediente correcto.</p>
               </div>
             </div>
 
             <div className="step">
               <div className="step-number">2</div>
-              <div>
-                <h3>Busca al paciente</h3>
-                <p>Puedes escribir nombre, procedimiento, teléfono, correo o sede para encontrarlo más rápido.</p>
-              </div>
-            </div>
-
-            <div className="step">
-              <div className="step-number">3</div>
               <div>
                 <h3>Abre y revisa el expediente</h3>
                 <p>Entra a la ficha del paciente para revisar procedimientos, medios y cronología completa antes de exportar.</p>
@@ -146,26 +143,34 @@ export default function AdminHelpPage() {
             </div>
 
             <div className="step">
+              <div className="step-number">3</div>
+              <div>
+                <h3>Comparte o imprime si hace falta</h3>
+                <p>Dentro del expediente puedes compartir el caso o abrir la versión lista para PDF / impresión.</p>
+              </div>
+            </div>
+
+            <div className="step">
               <div className="step-number">4</div>
               <div>
-                <h3>Exporta si lo necesitas</h3>
-                <p>Después de revisar el expediente, puedes exportar solo ese caso o descargar los resultados filtrados.</p>
+                <h3>Revisa la auditoría</h3>
+                <p>Si necesitas saber quién cambió algo y cuándo lo hizo, entra a la página de auditoría.</p>
               </div>
             </div>
 
             <div className="step">
               <div className="step-number">5</div>
               <div>
-                <h3>Revisa tu equipo</h3>
-                <p>En la sección del equipo puedes poner a cada persona en la sede correcta y decidir si tiene acceso administrativo o no.</p>
+                <h3>Revisa papelera y archivo</h3>
+                <p>Ahí puedes recuperar expedientes archivados o enviados a papelera sin perder el control.</p>
               </div>
             </div>
 
             <div className="step">
               <div className="step-number">6</div>
               <div>
-                <h3>Cambia el código cuando haga falta</h3>
-                <p>Si quieres evitar nuevos registros con el código actual, solo cámbialo y comparte el nuevo con las personas correctas.</p>
+                <h3>Administra al personal</h3>
+                <p>En la sección del personal puedes corregir sedes, accesos administrativos y enlaces de invitación.</p>
               </div>
             </div>
           </section>

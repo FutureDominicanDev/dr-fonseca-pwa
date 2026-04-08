@@ -10,6 +10,7 @@ import {
   formatDate,
   initials,
   isMissingColumnError,
+  logAdminEvent,
   normalizeAdminLevel,
   normalizeOffice,
   normalizeRecordStatus,
@@ -69,33 +70,6 @@ export default function AdminPage() {
     if (office === "Tijuana") return "📍 Tijuana";
     return isSpanish ? "📍 Sin sede" : "📍 No office";
   };
-
-  const roleText = (role: string | null | undefined) =>
-    isSpanish
-      ? roleLabel(role)
-      : (
-          {
-            doctor: "👨‍⚕️ Doctor",
-            enfermeria: "💉 Nursing",
-            coordinacion: "📋 Coordination",
-            post_quirofano: "🏥 Post-Op",
-            staff: "👤 Staff",
-            patient: "🧑 Patient",
-            system: "⚙️ System",
-          } as Record<string, string>
-        )[role || ""] || "👤 Staff";
-
-  const adminText = (level: AdminLevel) =>
-    isSpanish
-      ? adminLabel(level)
-      : (
-          {
-            owner: "👑 Full access",
-            super_admin: "⭐ Advanced admin",
-            admin: "🛡️ Admin",
-            none: "No admin",
-          } as const
-        )[level];
 
   const recordText = (value: PatientRecordStatus) =>
     isSpanish
@@ -259,6 +233,17 @@ export default function AdminPage() {
     }
 
     setStaff((previous) => previous.map((item) => (item.id === member.id ? { ...item, ...payload } : item)));
+    await logAdminEvent({
+      action: Object.prototype.hasOwnProperty.call(payload, "admin_level") ? "staff_admin_updated" : "staff_office_updated",
+      entityType: "staff_profile",
+      entityId: member.id,
+      entityName: member.full_name || member.display_name || "Personal",
+      actorId: viewerId,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: success,
+      metadata: payload,
+    });
     updateSuccess(success);
   };
 
@@ -279,6 +264,17 @@ export default function AdminPage() {
 
     setInviteCode(nextCode);
     setNewInviteCode("");
+    await logAdminEvent({
+      action: "invite_code_updated",
+      entityType: "app_setting",
+      entityId: "invite_code",
+      entityName: "Código de invitación",
+      actorId: viewerId,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: `Código actualizado a ${nextCode}.`,
+      metadata: { invite_code: nextCode },
+    });
     updateSuccess(isSpanish ? "Código de invitación actualizado." : "Invitation code updated.");
   };
 
@@ -322,6 +318,16 @@ export default function AdminPage() {
     }
 
     setStaff((previous) => previous.filter((item) => item.id !== member.id));
+    await logAdminEvent({
+      action: "staff_profile_deleted",
+      entityType: "staff_profile",
+      entityId: member.id,
+      entityName: member.full_name || member.display_name || "Personal",
+      actorId: viewerId,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: `Se eliminó el perfil visible de ${name}.`,
+    });
     updateSuccess(`Cuenta de ${name} eliminada.`);
   };
 
@@ -709,6 +715,23 @@ export default function AdminPage() {
             </div>
 
             <div className="stack">
+              <section className="card">
+                <div className="header-row">
+                  <div>
+                    <p className="card-title">{isSpanish ? "Herramientas del expediente" : "Record tools"}</p>
+                    <p className="muted">{isSpanish ? "Cuando necesites revisar cambios o recuperar expedientes, entra aquí." : "When you need to review changes or recover records, start here."}</p>
+                  </div>
+                </div>
+                <div className="inline-actions">
+                  <button className="ghost-btn" onClick={() => goTo("/admin/auditoria")}>
+                    {isSpanish ? "🕓 Auditoría" : "🕓 Audit log"}
+                  </button>
+                  <button className="ghost-btn" onClick={() => goTo("/admin/papelera")}>
+                    {isSpanish ? "🗂️ Papelera y archivo" : "🗂️ Trash and archive"}
+                  </button>
+                </div>
+              </section>
+
               <section className="card">
                 <div className="header-row">
                   <div>

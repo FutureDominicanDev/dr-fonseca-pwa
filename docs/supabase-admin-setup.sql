@@ -23,7 +23,23 @@ alter table public.patients
 alter table public.messages
   add column if not exists sender_office text;
 
--- 4) Constraints suaves para mantener consistencia
+-- 4) Tabla de auditoria para cambios administrativos
+create table if not exists public.admin_audit_events (
+  id uuid primary key default gen_random_uuid(),
+  action text not null,
+  entity_type text not null,
+  entity_id text,
+  entity_name text,
+  patient_id uuid references public.patients(id) on delete set null,
+  actor_id uuid references public.profiles(id) on delete set null,
+  actor_name text,
+  actor_email text,
+  notes text,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+-- 5) Constraints suaves para mantener consistencia
 do $$
 begin
   if not exists (
@@ -76,7 +92,7 @@ begin
   end if;
 end $$;
 
--- 5) Indices utiles para panel y exportaciones
+-- 6) Indices utiles para panel y exportaciones
 create index if not exists profiles_admin_level_idx on public.profiles(admin_level);
 create index if not exists profiles_office_location_idx on public.profiles(office_location);
 create index if not exists patients_record_status_idx on public.patients(record_status);
@@ -84,8 +100,11 @@ create index if not exists messages_sender_office_idx on public.messages(sender_
 create index if not exists procedures_patient_id_idx on public.procedures(patient_id);
 create index if not exists rooms_procedure_id_idx on public.rooms(procedure_id);
 create index if not exists messages_room_id_idx on public.messages(room_id);
+create index if not exists admin_audit_events_created_at_idx on public.admin_audit_events(created_at desc);
+create index if not exists admin_audit_events_patient_id_idx on public.admin_audit_events(patient_id);
+create index if not exists admin_audit_events_entity_type_idx on public.admin_audit_events(entity_type);
 
--- 6) Bootstrap owner actual del proyecto
+-- 7) Bootstrap owner actual del proyecto
 update public.profiles
 set admin_level = 'owner'
 where id in (
@@ -94,7 +113,7 @@ where id in (
   where lower(email) = 'mrdiazsr@icloud.com'
 );
 
--- 7) Normalizar valores vacios si ya existen usuarios y expedientes
+-- 8) Normalizar valores vacios si ya existen usuarios y expedientes
 update public.profiles
 set admin_level = 'none'
 where admin_level is null or trim(admin_level) = '';
@@ -103,7 +122,42 @@ update public.patients
 set record_status = 'active'
 where record_status is null or trim(record_status) = '';
 
--- 8) Nota importante
+-- 9) RLS minima para la auditoria (ajustala si luego endureces politicas)
+alter table public.admin_audit_events enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'admin_audit_events'
+      and policyname = 'authenticated users can read audit events'
+  ) then
+    create policy "authenticated users can read audit events"
+      on public.admin_audit_events
+      for select
+      to authenticated
+      using (true);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'admin_audit_events'
+      and policyname = 'authenticated users can insert audit events'
+  ) then
+    create policy "authenticated users can insert audit events"
+      on public.admin_audit_events
+      for insert
+      to authenticated
+      with check (true);
+  end if;
+end $$;
+
+-- 10) Nota importante
 -- Este archivo NO cambia tus politicas RLS todavia.
 -- Recomendacion:
 --   Primero valida el nuevo panel admin y el registro con sedes.

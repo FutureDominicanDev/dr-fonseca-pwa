@@ -13,8 +13,10 @@ import {
   getTimelineEntries,
   initials,
   isMissingColumnError,
+  logAdminEvent,
   normalizeAdminLevel,
   normalizeOffice,
+  openPrintPreview,
   normalizeRecordStatus,
   officeLabel,
   recordStatusColor,
@@ -103,6 +105,7 @@ export default function AdminPatientRecordPage() {
     goToPortal: isSpanish ? "Ir al portal" : "Go to portal",
     exporting: isSpanish ? "Preparando..." : "Preparing...",
     exportRecord: isSpanish ? "📤 Compartir expediente" : "📤 Share record",
+    printRecord: isSpanish ? "🖨️ PDF / Imprimir" : "🖨️ PDF / Print",
     unavailableTitle: isSpanish ? "Expediente no disponible" : "Record unavailable",
     unavailableCopy: isSpanish
       ? "Vuelve al centro de control para buscarlo de nuevo o intenta recargar la página."
@@ -183,6 +186,7 @@ export default function AdminPatientRecordPage() {
     shareOpened: isSpanish ? "Se abrió el menú para compartir el expediente." : "The share menu opened for this record.",
     sharePreview: isSpanish ? "Abrí una vista previa del expediente para que puedas compartirlo desde el navegador." : "I opened a record preview so you can share it from the browser.",
     recordDownloaded: isSpanish ? "El expediente se descargó en este dispositivo." : "The record was downloaded to this device.",
+    pdfOpened: isSpanish ? "Se abrió la versión lista para imprimir o guardar en PDF." : "The print-ready version opened.",
   };
 
   const formatDateLocal = (value?: string | null) => {
@@ -256,6 +260,12 @@ export default function AdminPatientRecordPage() {
     if (message.message_type === "audio") return isSpanish ? "Audio compartido en el chat" : "Audio shared in chat";
     if (message.message_type === "file") return isSpanish ? "Archivo compartido en el chat" : "File shared in chat";
     return procedure.procedure_name || (isSpanish ? "Seguimiento general del paciente" : "General patient follow-up");
+  };
+
+  const payloadFieldChanged = (previousValue: string | null | undefined, nextValue: string | null | undefined, field: string) => {
+    const before = previousValue || "";
+    const after = nextValue || "";
+    return before === after ? null : field;
   };
 
   const bundle = useMemo(() => {
@@ -417,6 +427,13 @@ export default function AdminPatientRecordPage() {
       birthdate: patientDraft.birthdate || null,
     };
 
+    const changedFields = [
+      payloadFieldChanged(patient.full_name, patientDraft.full_name.trim(), "full_name"),
+      payloadFieldChanged(patient.phone, patientDraft.phone.trim(), "phone"),
+      payloadFieldChanged(patient.email, patientDraft.email.trim(), "email"),
+      payloadFieldChanged(patient.birthdate, patientDraft.birthdate, "birthdate"),
+    ].filter(Boolean) as string[];
+
     const { data, error } = await supabase.from("patients").update(payload).eq("id", patient.id).select().single();
     setSavingPatient(false);
 
@@ -426,6 +443,18 @@ export default function AdminPatientRecordPage() {
     }
 
     setPatient(data as PatientRecord);
+    await logAdminEvent({
+      action: "patient_details_updated",
+      entityType: "patient",
+      entityId: patient.id,
+      entityName: patientDraft.full_name.trim() || patient.full_name || t.unnamedPatient,
+      patientId: patient.id,
+      actorId: viewerProfile?.id || null,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: `Se actualizaron datos del paciente: ${changedFields.join(", ") || "sin cambios detectados"}.`,
+      metadata: payload,
+    });
     updateSuccess(t.patientSaved);
   };
 
@@ -450,6 +479,18 @@ export default function AdminPatientRecordPage() {
     }
 
     setProcedures((previous) => previous.map((procedure) => (procedure.id === procedureId ? (data as ProcedureRecord) : procedure)));
+    await logAdminEvent({
+      action: "procedure_updated",
+      entityType: "procedure",
+      entityId: procedureId,
+      entityName: draft.procedure_name.trim() || "Procedimiento",
+      patientId: patient?.id || null,
+      actorId: viewerProfile?.id || null,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: `Se actualizó el procedimiento ${draft.procedure_name.trim() || procedureId}.`,
+      metadata: payload,
+    });
     updateSuccess(isSpanish ? "Procedimiento guardado." : "Procedure saved.");
   };
 
@@ -476,6 +517,21 @@ export default function AdminPatientRecordPage() {
     }
 
     setPatient(data as PatientRecord);
+    await logAdminEvent({
+      action: "record_status_changed",
+      entityType: "patient",
+      entityId: patient.id,
+      entityName: patient.full_name || t.unnamedPatient,
+      patientId: patient.id,
+      actorId: viewerProfile?.id || null,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: `Estado del expediente cambiado de ${patientStatus} a ${nextStatus}.`,
+      metadata: {
+        previous_status: patientStatus,
+        next_status: nextStatus,
+      },
+    });
     updateSuccess(
       nextStatus === "active"
         ? isSpanish
@@ -521,6 +577,18 @@ export default function AdminPatientRecordPage() {
     }
 
     setPatient(data as PatientRecord);
+    await logAdminEvent({
+      action: "patient_photo_updated",
+      entityType: "patient",
+      entityId: patient.id,
+      entityName: patient.full_name || t.unnamedPatient,
+      patientId: patient.id,
+      actorId: viewerProfile?.id || null,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: "Se actualizó la foto del paciente.",
+      metadata: { profile_picture_url: publicUrl.publicUrl },
+    });
     updateSuccess(t.photoSaved);
   };
 
@@ -563,6 +631,17 @@ export default function AdminPatientRecordPage() {
 
         try {
           await nav.share(shareData);
+          await logAdminEvent({
+            action: "record_shared",
+            entityType: "patient",
+            entityId: patient.id,
+            entityName: patient.full_name || t.unnamedPatient,
+            patientId: patient.id,
+            actorId: viewerProfile?.id || null,
+            actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+            actorEmail: viewerEmail,
+            notes: "Se abrió el menú para compartir el expediente.",
+          });
           updateSuccess(t.shareOpened);
           return;
         } catch (shareError: any) {
@@ -577,16 +656,72 @@ export default function AdminPatientRecordPage() {
         const previewUrl = URL.createObjectURL(blob);
         window.open(previewUrl, "_blank", "noopener,noreferrer");
         window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60_000);
+        await logAdminEvent({
+          action: "record_preview_opened",
+          entityType: "patient",
+          entityId: patient.id,
+          entityName: patient.full_name || t.unnamedPatient,
+          patientId: patient.id,
+          actorId: viewerProfile?.id || null,
+          actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+          actorEmail: viewerEmail,
+          notes: "Se abrió la vista previa del expediente para compartirlo.",
+        });
         updateSuccess(t.sharePreview);
         return;
       }
 
       downloadFile(fileName, html, "text/html;charset=utf-8");
+      await logAdminEvent({
+        action: "record_downloaded",
+        entityType: "patient",
+        entityId: patient.id,
+        entityName: patient.full_name || t.unnamedPatient,
+        patientId: patient.id,
+        actorId: viewerProfile?.id || null,
+        actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+        actorEmail: viewerEmail,
+        notes: "Se descargó el expediente en el dispositivo.",
+      });
       updateSuccess(t.recordDownloaded);
     } catch (error: any) {
       setPageError(error?.message || (isSpanish ? "No pude exportar este expediente." : "I could not export this record."));
     } finally {
       setExporting(false);
+    }
+  };
+
+  const printRecord = async () => {
+    if (!bundle || !patient) return;
+
+    const html = buildExportHtml({
+      title: `${isSpanish ? "Expediente PDF" : "PDF record"} · ${patient.full_name || t.unnamedPatient}`,
+      subtitle: isSpanish
+        ? "Versión preparada para imprimir, guardar como PDF o compartir."
+        : "Version prepared for printing, saving as PDF, or sharing.",
+      bundles: [bundle],
+      staffById,
+      generatedBy: viewerProfile?.full_name || viewerEmail,
+    });
+
+    const opened = openPrintPreview({
+      title: patient.full_name || t.unnamedPatient,
+      html,
+    });
+
+    if (opened) {
+      await logAdminEvent({
+        action: "record_pdf_opened",
+        entityType: "patient",
+        entityId: patient.id,
+        entityName: patient.full_name || t.unnamedPatient,
+        patientId: patient.id,
+        actorId: viewerProfile?.id || null,
+        actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+        actorEmail: viewerEmail,
+        notes: "Se abrió la versión preparada para PDF / impresión.",
+      });
+      updateSuccess(t.pdfOpened);
     }
   };
 
@@ -833,6 +968,7 @@ export default function AdminPatientRecordPage() {
             </select>
             <div className="topbar-actions">
               <button className="topbar-btn" onClick={() => goTo("/admin")}>{t.backToCenter}</button>
+              <button className="topbar-btn" onClick={printRecord} disabled={!bundle || exporting}>{t.printRecord}</button>
               <button className="topbar-btn" onClick={() => goTo("/inbox")}>{t.goToPortal}</button>
               <button className="topbar-btn" style={{ background: "#007AFF", color: "white" }} onClick={exportRecord} disabled={!bundle || exporting}>
                 {exporting ? t.exporting : t.exportRecord}
@@ -858,6 +994,7 @@ export default function AdminPatientRecordPage() {
               <option value="en">🇺🇸 English</option>
             </select>
             <button className="topbar-btn" onClick={() => goTo("/admin")}>{t.backToCenter}</button>
+            <button className="topbar-btn" onClick={printRecord} disabled={!bundle || exporting}>{t.printRecord}</button>
             <button className="topbar-btn" onClick={() => goTo("/inbox")}>{t.goToPortal}</button>
             <button className="topbar-btn" style={{ background: "#007AFF", color: "white" }} onClick={exportRecord} disabled={!bundle || exporting}>
               {exporting ? t.exporting : t.exportRecord}
