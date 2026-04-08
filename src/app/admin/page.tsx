@@ -525,7 +525,7 @@ export default function AdminPage() {
         }
         @media (max-width: 560px) {
           .stats-grid { grid-template-columns: 1fr 1fr; }
-          .admin-topbar { position: relative; padding-bottom: 10px; align-items: center; }
+          .admin-topbar { position: static; padding-bottom: 10px; align-items: center; }
           .topbar-right { display: none; }
           .menu-btn { display: inline-flex; }
           .menu-panel { display: grid; gap: 10px; background: rgba(15,23,42,0.98); border-top: 1px solid rgba(255,255,255,0.08); padding: 0 max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); }

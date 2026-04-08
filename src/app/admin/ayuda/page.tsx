@@ -1,14 +1,27 @@
 "use client";
 
+import { useState } from "react";
+
 export default function AdminHelpPage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const goTo = (path: string) => {
+    setMobileMenuOpen(false);
+    window.location.href = path;
+  };
+
   return (
     <>
       <style>{`
         * { box-sizing: border-box; }
         body { background: #F5F7FB; }
         .help-shell { position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: linear-gradient(180deg, #EEF4FF 0%, #F8FAFC 35%, #F5F7FB 100%); }
-        .help-topbar { position: sticky; top: 0; z-index: 50; min-height: calc(72px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; background: rgba(15,23,42,0.96); backdrop-filter: blur(18px); }
+        .help-topbar { position: sticky; top: 0; z-index: 50; min-height: calc(72px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 12px; background: rgba(15,23,42,0.96); backdrop-filter: blur(18px); }
         .help-body { width: 100%; max-width: 980px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+        .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .topbar-btn { padding: 10px 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+        .menu-btn { display: none; width: 44px; height: 44px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; cursor: pointer; align-items: center; justify-content: center; padding: 0; }
+        .menu-panel { display: none; }
         .hero { background: linear-gradient(135deg, #111827, #2563EB); color: white; border-radius: 28px; padding: 24px; margin-bottom: 18px; box-shadow: 0 18px 45px rgba(37,99,235,0.16); }
         .card { background: white; border-radius: 20px; padding: 22px; box-shadow: 0 8px 28px rgba(15,23,42,0.06); margin-bottom: 16px; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -27,7 +40,11 @@ export default function AdminHelpPage() {
         @media (max-width: 760px) {
           .grid-2 { grid-template-columns: 1fr; }
           .hero h1 { font-size: 30px; }
-          .help-topbar { align-items: flex-start; }
+          .help-topbar { position: static; }
+          .topbar-actions { display: none; }
+          .menu-btn { display: inline-flex; }
+          .menu-panel { display: grid; gap: 10px; background: rgba(15,23,42,0.98); border-top: 1px solid rgba(255,255,255,0.08); padding: 0 max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); }
+          .menu-panel .topbar-btn { width: 100%; text-align: center; padding: 12px 12px; font-size: 13px; }
         }
       `}</style>
 
@@ -37,11 +54,28 @@ export default function AdminHelpPage() {
             <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>Ayuda del panel</p>
             <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>Guía rápida para saber qué hace cada parte</p>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="ghost-btn" onClick={() => (window.location.href = "/admin")}>← Volver al panel</button>
-            <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>Ir al portal</button>
+          <div className="topbar-actions">
+            <button className="topbar-btn" onClick={() => goTo("/admin")}>← Volver al panel</button>
+            <button className="topbar-btn" onClick={() => goTo("/inbox")}>Ir al portal</button>
           </div>
+          <button
+            className="menu-btn"
+            aria-label={mobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+          </button>
         </div>
+        {mobileMenuOpen && (
+          <div className="menu-panel">
+            <button className="topbar-btn" onClick={() => goTo("/admin")}>← Volver al panel</button>
+            <button className="topbar-btn" onClick={() => goTo("/inbox")}>Ir al portal</button>
+          </div>
+        )}
 
         <div className="help-body">
           <section className="hero">

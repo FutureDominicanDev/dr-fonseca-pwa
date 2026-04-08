@@ -71,6 +71,7 @@ export default function AdminPatientRecordPage() {
   const [savingProcedureId, setSavingProcedureId] = useState("");
   const [statusSaving, setStatusSaving] = useState<PatientRecordStatus | "">("");
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pageError, setPageError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
@@ -300,6 +301,11 @@ export default function AdminPatientRecordPage() {
     setSuccessMsg(message);
     window.clearTimeout((window as any).__adminPatientToastTimer);
     (window as any).__adminPatientToastTimer = window.setTimeout(() => setSuccessMsg(""), 3200);
+  };
+
+  const goTo = (path: string) => {
+    setMobileMenuOpen(false);
+    window.location.href = path;
   };
 
   const fetchRecord = async () => {
@@ -694,9 +700,14 @@ export default function AdminPatientRecordPage() {
         * { box-sizing: border-box; }
         body { background: #F5F7FB; }
         .record-shell { position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: linear-gradient(180deg, #EEF4FF 0%, #F8FAFC 28%, #F5F7FB 100%); }
-        .record-topbar { position: sticky; top: 0; z-index: 50; min-height: calc(74px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; background: rgba(15,23,42,0.96); backdrop-filter: blur(18px); }
+        .record-topbar { position: sticky; top: 0; z-index: 50; min-height: calc(74px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 12px; background: rgba(15,23,42,0.96); backdrop-filter: blur(18px); }
         .record-body { width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-        .topbar-select { appearance: none; -webkit-appearance: none; width: 160px; padding: 12px 38px 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px); background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+        .topbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+        .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .topbar-btn { padding: 10px 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+        .topbar-select { appearance: none; -webkit-appearance: none; width: 152px; padding: 10px 36px 10px 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px); background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+        .menu-btn { display: none; width: 44px; height: 44px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; cursor: pointer; align-items: center; justify-content: center; padding: 0; }
+        .menu-panel { display: none; }
         .hero { background: linear-gradient(135deg, #111827, #1D4ED8); color: white; border-radius: 28px; padding: 24px; box-shadow: 0 18px 45px rgba(29,78,216,0.16); margin-bottom: 18px; }
         .hero-grid, .grid-2, .grid-4 { display: grid; gap: 16px; }
         .hero-grid { grid-template-columns: 1.1fr 0.9fr; align-items: center; }
@@ -748,8 +759,13 @@ export default function AdminPatientRecordPage() {
           .form-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 560px) {
-          .record-topbar { align-items: flex-start; }
-          .topbar-select { width: 100%; }
+          .record-topbar { position: static; }
+          .topbar-right { display: none; }
+          .menu-btn { display: inline-flex; }
+          .menu-panel { display: grid; gap: 10px; background: rgba(15,23,42,0.98); border-top: 1px solid rgba(255,255,255,0.08); padding: 0 max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); }
+          .menu-panel .topbar-select,
+          .menu-panel .topbar-btn { width: 100%; }
+          .topbar-btn { text-align: center; padding: 12px 12px; font-size: 13px; }
           .toast-stack { right: 12px; left: 12px; width: auto; }
           .timeline-top, .section-head, .media-item { flex-direction: column; }
         }
@@ -773,20 +789,44 @@ export default function AdminPatientRecordPage() {
             <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>{t.recordTitle}</p>
             <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>{t.recordSubtitle}</p>
           </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div className="topbar-right">
             <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
               <option value="es">🇲🇽 Español</option>
               <option value="en">🇺🇸 English</option>
             </select>
+            <div className="topbar-actions">
+              <button className="topbar-btn" onClick={() => goTo("/admin")}>{t.backToCenter}</button>
+              <button className="topbar-btn" onClick={() => goTo("/inbox")}>{t.goToPortal}</button>
+              <button className="topbar-btn" style={{ background: "#007AFF", color: "white" }} onClick={exportRecord} disabled={!bundle || exporting}>
+                {exporting ? t.exporting : t.exportRecord}
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="ghost-btn" onClick={() => (window.location.href = "/admin")}>{t.backToCenter}</button>
-            <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>{t.goToPortal}</button>
-            <button className="main-btn" onClick={exportRecord} disabled={!bundle || exporting}>
+          <button
+            className="menu-btn"
+            aria-label={mobileMenuOpen ? (isSpanish ? "Cerrar menú" : "Close menu") : (isSpanish ? "Abrir menú" : "Open menu")}
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+          </button>
+        </div>
+        {mobileMenuOpen && (
+          <div className="menu-panel">
+            <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
+              <option value="es">🇲🇽 Español</option>
+              <option value="en">🇺🇸 English</option>
+            </select>
+            <button className="topbar-btn" onClick={() => goTo("/admin")}>{t.backToCenter}</button>
+            <button className="topbar-btn" onClick={() => goTo("/inbox")}>{t.goToPortal}</button>
+            <button className="topbar-btn" style={{ background: "#007AFF", color: "white" }} onClick={exportRecord} disabled={!bundle || exporting}>
               {exporting ? t.exporting : t.exportRecord}
             </button>
           </div>
-        </div>
+        )}
 
         <div className="record-body">
           {!patient ? (
