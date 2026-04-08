@@ -86,7 +86,6 @@ const T = {
 
 interface QuickReply { shortcut: string; message: string; }
 
-// ✅ QREditor moved OUTSIDE the main component to fix focus bug
 interface QREditorProps {
   show: boolean;
   onClose: () => void;
@@ -118,7 +117,7 @@ function QREditor({ show, onClose, quickReplies, onSave, savingQR, savedQR, dark
     <>
       <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.35)",zIndex:59}} onClick={onClose}/>
       <div style={{position:"absolute",top:0,right:0,width:"min(400px,100%)",height:"100%",background:sidebarBg,zIndex:60,boxShadow:"-4px 0 20px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column"}}>
-        <div style={{background:headerBg,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+        <div style={{background:headerBg,padding:"14px 16px",paddingTop:"max(14px, env(safe-area-inset-top))",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",padding:"8px 14px",borderRadius:20,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>← {t.back}</button>
           <span style={{color:"white",fontSize:17,fontWeight:700,flex:1}}>⚡ {t.quickReplies}</span>
           {savingQR&&<span style={{color:"rgba(255,255,255,0.6)",fontSize:13}}>{t.saving}</span>}
@@ -523,13 +522,17 @@ export default function InboxPage() {
     );
   };
 
+  // ✅ FIX 2: Settings panel — safe area padding so ✕ button clears iPhone notch
   const SettingsPanel = () => (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setShowSettings(false)}>
-      <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:540,maxHeight:"90vh",overflowY:"auto",padding:"24px 20px 40px"}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
+      <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:540,maxHeight:"90vh",overflowY:"auto",padding:"0 0 40px"}} onClick={e=>e.stopPropagation()}>
+        {/* Header row with safe area inset */}
+        <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) 20px 16px",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <p style={{fontSize:22,fontWeight:700,color:textColor}}>⚙️ {t.settings}</p>
-          <button onClick={()=>setShowSettings(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"6px 14px",fontSize:14,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
+          <button onClick={()=>setShowSettings(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit",minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
+        {/* Content */}
+        <div style={{padding:"0 20px 0"}}>
         <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
           <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:14}}>{t.myProfile}</p>
           <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:16}}>
@@ -582,6 +585,7 @@ export default function InboxPage() {
             <button onClick={()=>setLang("en")} style={{flex:1,padding:12,borderRadius:10,border:lang==="en"?"2px solid #007AFF":`2px solid ${borderColor}`,background:lang==="en"?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:lang==="en"?"#007AFF":textColor,fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:15}}>🇺🇸 English</button>
           </div>
         </div>
+        </div>
       </div>
     </div>
   );
@@ -592,7 +596,7 @@ export default function InboxPage() {
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
-        .topbar { flex-shrink: 0; height: 66px; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 100; }
+        .topbar { flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 100; height: calc(66px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
         .body { display: flex; flex: 1; overflow: hidden; }
         .sidebar { width: 340px; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid ${borderColor}; }
         .sidebar-head { padding: 14px 16px; background: ${darkMode?"#2A2A2C":"#F6F6F6"}; border-bottom: 1px solid ${borderColor}; }
@@ -615,7 +619,7 @@ export default function InboxPage() {
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 14px 0; }
         .date-sep-pill { background: ${darkMode?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.92)"}; border-radius: 99px; padding: 5px 16px; font-size: 13px; color: ${darkMode?"white":"#555"}; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-        .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px 14px; display: flex; align-items: center; gap: 10px; z-index: 50; }
+        .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px 14px; display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 66px; }
         .back-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 22px; font-weight: 700; transition: background 0.15s; }
         .back-btn:hover { background: rgba(255,255,255,0.25); }
         .chat-av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
@@ -655,6 +659,7 @@ export default function InboxPage() {
           .main-area { position: absolute; inset: 0; z-index: 20; transition: transform 0.25s ease; }
           .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
           .main-area.hidden { transform: translateX(100%); pointer-events: none; }
+          .chat-head { padding-top: max(10px, env(safe-area-inset-top)); min-height: calc(66px + env(safe-area-inset-top)); }
         }
       `}</style>
 
