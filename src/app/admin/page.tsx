@@ -403,8 +403,9 @@ export default function AdminPage() {
         .topbar-select { appearance: none; -webkit-appearance: none; width: 152px; height: 42px; padding: 0 36px 0 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px); background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
         .menu-btn { display: none; width: 42px; height: 42px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; cursor: pointer; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
         .menu-panel { display: none; }
-        .hero { background: linear-gradient(135deg, #111827 0%, #1D4ED8 100%); color: white; border-radius: 28px; padding: 24px; margin-bottom: 18px; box-shadow: 0 18px 45px rgba(29,78,216,0.18); }
-        .hero-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 18px; align-items: center; }
+        .hero { background: linear-gradient(135deg, #111827 0%, #1E3A8A 100%); color: white; border-radius: 30px; padding: 26px; margin-bottom: 18px; box-shadow: 0 18px 50px rgba(15,23,42,0.2); }
+        .hero-grid { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 18px; align-items: end; }
+        .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr); gap: 16px; align-items: start; }
         .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 18px 0; }
         .stat-card, .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 8px 28px rgba(15,23,42,0.06); }
         .stat-card { padding: 18px 16px; }
@@ -413,15 +414,26 @@ export default function AdminPage() {
         .subtle { color: rgba(255,255,255,0.84); line-height: 1.6; font-size: 15px; }
         .quick-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
         .hero-link { padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.12); color: white; font-size: 14px; font-weight: 800; cursor: pointer; font-family: inherit; }
-        .hero-search-card { background: rgba(255,255,255,0.12); color: white; box-shadow: none; display: grid; gap: 12px; align-content: start; }
-        .hero-search-input { width: 100%; padding: 13px 15px; background: rgba(255,255,255,0.96); border: 1px solid transparent; border-radius: 14px; font-size: 15px; font-family: inherit; color: #111827; outline: none; font-weight: 700; }
-        .hero-search-input:focus { border-color: rgba(255,255,255,0.42); }
+        .hero-link:disabled { opacity: 0.5; cursor: not-allowed; }
+        .hero-note { padding: 14px 16px; border-radius: 18px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.12); }
+        .search-panel { display: grid; gap: 16px; }
+        .search-toolbar { display: grid; gap: 12px; }
+        .search-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
+        .line-input.search-main { height: 52px; font-size: 16px; font-weight: 700; }
+        .filter-stack { display: grid; gap: 10px; }
+        .filter-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        .filter-chip { padding: 10px 13px; border-radius: 999px; border: 1px solid #DCE7F5; background: #F8FBFF; color: #334155; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit; }
+        .filter-chip.active { background: #1D4ED8; color: white; border-color: #1D4ED8; box-shadow: 0 10px 24px rgba(29,78,216,0.18); }
+        .search-status { padding: 14px 16px; border-radius: 18px; background: linear-gradient(135deg, #F8FBFF, #EEF4FF); color: #1E3A8A; font-size: 14px; font-weight: 800; line-height: 1.5; border: 1px solid #DBEAFE; }
+        .summary-panel { display: grid; gap: 14px; }
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .summary-item { padding: 14px; border-radius: 18px; background: #F8FAFC; border: 1px solid #E7EEF7; }
+        .summary-label { font-size: 11px; font-weight: 900; color: #64748B; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+        .summary-value { font-size: 28px; font-weight: 900; color: #111827; line-height: 1; }
+        .summary-copy { color: #6B7280; font-size: 13px; line-height: 1.5; margin-top: 6px; }
         .hero-pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
-        .hero-filter-btn { padding: 9px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.12); color: white; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit; }
-        .hero-filter-btn.active { background: white; color: #111827; border-color: white; }
         .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-        .hero-secondary-btn { padding: 12px 14px; border-radius: 14px; border: none; background: rgba(255,255,255,0.14); color: white; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; }
-        .hero-result-note { padding: 12px 14px; border-radius: 16px; background: rgba(15,23,42,0.24); border: 1px solid rgba(255,255,255,0.1); font-size: 13px; font-weight: 700; line-height: 1.5; color: rgba(255,255,255,0.9); }
+        .hero-secondary-btn { padding: 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; }
         .main-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #007AFF; color: white; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
         .main-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .ghost-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
@@ -455,7 +467,7 @@ export default function AdminPage() {
         .result-count { font-size: 13px; color: #64748B; font-weight: 700; }
         .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         @media (max-width: 980px) {
-          .hero-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
+          .hero-grid, .workspace-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
           .stats-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
         }
         @media (max-width: 560px) {
@@ -473,9 +485,12 @@ export default function AdminPage() {
           .quick-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
           .quick-links .hero-link:last-child { grid-column: 1 / -1; }
           .hero-link { width: 100%; text-align: center; padding: 10px 12px; font-size: 13px; }
-          .hero-pill-row { display: grid; grid-template-columns: 1fr 1fr; }
+          .search-input-row { grid-template-columns: 1fr; }
+          .hero-pill-row,
+          .filter-row,
           .hero-actions { display: grid; grid-template-columns: 1fr 1fr; }
           .hero-secondary-btn { width: 100%; text-align: center; padding: 12px 12px; }
+          .summary-grid { grid-template-columns: 1fr 1fr; }
           .patient-row, .staff-row { flex-direction: column; }
           .toast-stack { right: 12px; left: 12px; width: auto; }
           .header-row { flex-direction: column; }
@@ -539,122 +554,114 @@ export default function AdminPage() {
                   <button className="hero-link" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "❓ Ayuda" : "❓ Help"}</button>
                 </div>
               </div>
-
-              <div className="card hero-search-card">
-                <div>
-                  <p className="section-title" style={{ color: "rgba(255,255,255,0.72)" }}>{isSpanish ? "Buscar paciente" : "Find patient"}</p>
-                  <p className="subtle" style={{ marginTop: 0 }}>
-                    {isSpanish ? "Busca por nombre, teléfono, correo, procedimiento o sede." : "Search by name, phone, email, procedure, or office."}
-                  </p>
-                </div>
-                <input
-                  className="hero-search-input"
-                  placeholder={isSpanish ? "Nombre, teléfono, email, procedimiento o sede..." : "Name, phone, email, procedure, or office..."}
-                  value={patientSearch}
-                  onChange={(event) => setPatientSearch(event.target.value)}
-                />
-                <div className="hero-pill-row">
-                  {([
-                    ["active", isSpanish ? `🟢 Activos (${recordCounts.active})` : `🟢 Active (${recordCounts.active})`],
-                    ["archived", isSpanish ? `🗂️ Archivados (${recordCounts.archived})` : `🗂️ Archived (${recordCounts.archived})`],
-                    ["trash", isSpanish ? `🗑️ Papelera (${recordCounts.trash})` : `🗑️ Trash (${recordCounts.trash})`],
-                  ] as Array<[PatientRecordStatus, string]>).map(([value, label]) => (
-                    <button
-                      key={value}
-                      className={`hero-filter-btn${recordFilter === value ? " active" : ""}`}
-                      onClick={() => setRecordFilter(value)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="hero-pill-row">
-                  {(["Todas", "Guadalajara", "Tijuana"] as OfficeFilter[]).map((option) => (
-                    <button
-                      key={option}
-                      className={`hero-filter-btn${officeFilter === option ? " active" : ""}`}
-                      onClick={() => setOfficeFilter(option)}
-                    >
-                      {officeText(option)}
-                    </button>
-                  ))}
-                </div>
-                <div className="hero-actions">
-                  <button
-                    className="hero-secondary-btn"
-                    onClick={() => {
-                      setPatientSearch("");
-                      setOfficeFilter("Todas");
-                      setRecordFilter("active");
-                    }}
-                    disabled={!hasActiveSearch}
-                  >
-                    {isSpanish ? "Borrar filtros" : "Clear filters"}
-                  </button>
-                  <button
-                    className="hero-secondary-btn"
-                    onClick={() => {
-                      if (patientCards.length > 0) scrollToSection("expedientes");
-                    }}
-                    disabled={!hasActiveSearch || patientCards.length === 0}
-                  >
-                    {isSpanish ? "📂 Ver resultados" : "📂 View results"}
-                  </button>
-                </div>
-                <div className="hero-result-note">
-                  {hasActiveSearch ? (
-                    patientCards.length > 0 ? (
-                      isSpanish
-                        ? `Encontré ${patientCards.length} expediente(s). Abre la ficha correcta para revisar la historia completa antes de exportar.`
-                        : `I found ${patientCards.length} record(s). Open the right file to review the full history before exporting.`
-                    ) : (
-                      isSpanish
-                        ? "No encontré coincidencias con ese filtro. Prueba con menos palabras o cambia la sede."
-                        : "No matches found for that filter. Try fewer words or change the office."
-                    )
-                  ) : (
-                    isSpanish
-                      ? "No se descarga nada desde aquí. Primero encuentra al paciente y abre su expediente."
-                      : "Nothing downloads from here. First find the patient and open the record."
-                  )}
-                </div>
-                <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,0.72)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    {isSpanish ? "Siguiente paso" : "Next step"}
-                  </span>
-                  <button className="hero-link" onClick={() => scrollToSection("equipo")}>
-                    {isSpanish ? "👥 Ir al equipo" : "👥 Go to team"}
-                  </button>
-                </div>
+              <div className="hero-note">
+                <p className="section-title" style={{ color: "rgba(255,255,255,0.68)", marginBottom: 8 }}>{isSpanish ? "Flujo recomendado" : "Recommended flow"}</p>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 800, lineHeight: 1.6 }}>
+                  {isSpanish
+                    ? "1. Busca al paciente. 2. Abre el expediente. 3. Revisa la historia completa. 4. Exporta solo si realmente lo necesitas."
+                    : "1. Search for the patient. 2. Open the record. 3. Review the full history. 4. Export only if you truly need it."}
+                </p>
               </div>
             </div>
           </section>
 
-          <section className="stats-grid">
-            <div className="stat-card">
-              <p className="section-title">{isSpanish ? "Equipo total" : "Total staff"}</p>
-              <div className="value-display">{staff.length}</div>
-              <p className="muted">{isSpanish ? "Usuarios visibles en el portal" : "Users visible in the portal"}</p>
-            </div>
-            <div className="stat-card">
-              <p className="section-title">{isSpanish ? "Activos" : "Active"}</p>
-              <div className="value-display">{recordCounts.active}</div>
-              <p className="muted">{isSpanish ? "Expedientes en uso diario" : "Records in daily use"}</p>
-            </div>
-            <div className="stat-card">
-              <p className="section-title">Guadalajara</p>
-              <div className="value-display">{officeCounts.Guadalajara}</div>
-              <p className="muted">{isSpanish ? "Procedimientos en GDL" : "Procedures in GDL"}</p>
-            </div>
-            <div className="stat-card">
-              <p className="section-title">Tijuana</p>
-              <div className="value-display">{officeCounts.Tijuana}</div>
-              <p className="muted">{isSpanish ? "Procedimientos en TJN" : "Procedures in TJN"}</p>
-            </div>
-          </section>
+          <div className="workspace-grid">
+            <div className="stack">
+              <section className="card search-panel">
+                <div className="header-row" style={{ marginBottom: 0 }}>
+                  <div>
+                    <p className="card-title">{isSpanish ? "Buscar paciente" : "Find patient"}</p>
+                    <p className="muted">{isSpanish ? "Todo empieza aquí. Busca por nombre, teléfono, correo, procedimiento o sede." : "Everything starts here. Search by name, phone, email, procedure, or office."}</p>
+                  </div>
+                </div>
 
-          <div className="grid-2">
-            <section className="card" id="expedientes">
+                <div className="search-toolbar">
+                  <div className="search-input-row">
+                    <input
+                      className="line-input search-main"
+                      placeholder={isSpanish ? "Nombre, teléfono, email, procedimiento o sede..." : "Name, phone, email, procedure, or office..."}
+                      value={patientSearch}
+                      onChange={(event) => setPatientSearch(event.target.value)}
+                    />
+                    <button
+                      className="main-btn"
+                      onClick={() => {
+                        if (patientCards.length > 0) scrollToSection("expedientes");
+                      }}
+                      disabled={!hasActiveSearch || patientCards.length === 0}
+                    >
+                      {isSpanish ? "Ver resultados" : "View results"}
+                    </button>
+                    <button
+                      className="ghost-btn"
+                      onClick={() => {
+                        setPatientSearch("");
+                        setOfficeFilter("Todas");
+                        setRecordFilter("active");
+                      }}
+                      disabled={!hasActiveSearch}
+                    >
+                      {isSpanish ? "Borrar" : "Clear"}
+                    </button>
+                  </div>
+
+                  <div className="filter-stack">
+                    <div>
+                      <p className="group-label">{isSpanish ? "Estado del expediente" : "Record status"}</p>
+                      <div className="filter-row">
+                        {([
+                          ["active", isSpanish ? `Activos (${recordCounts.active})` : `Active (${recordCounts.active})`],
+                          ["archived", isSpanish ? `Archivados (${recordCounts.archived})` : `Archived (${recordCounts.archived})`],
+                          ["trash", isSpanish ? `Papelera (${recordCounts.trash})` : `Trash (${recordCounts.trash})`],
+                        ] as Array<[PatientRecordStatus, string]>).map(([value, label]) => (
+                          <button
+                            key={value}
+                            className={`filter-chip${recordFilter === value ? " active" : ""}`}
+                            onClick={() => setRecordFilter(value)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="group-label">{isSpanish ? "Sede" : "Office"}</p>
+                      <div className="filter-row">
+                        {(["Todas", "Guadalajara", "Tijuana"] as OfficeFilter[]).map((option) => (
+                          <button
+                            key={option}
+                            className={`filter-chip${officeFilter === option ? " active" : ""}`}
+                            onClick={() => setOfficeFilter(option)}
+                          >
+                            {officeText(option)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="search-status">
+                    {hasActiveSearch ? (
+                      patientCards.length > 0 ? (
+                        isSpanish
+                          ? `Encontré ${patientCards.length} expediente(s). El siguiente paso es abrir la ficha correcta y revisar la historia completa.`
+                          : `I found ${patientCards.length} record(s). The next step is to open the right file and review the full history.`
+                      ) : (
+                        isSpanish
+                          ? "No encontré coincidencias con ese filtro. Prueba con menos palabras o cambia la sede."
+                          : "No matches found for that filter. Try fewer words or change the office."
+                      )
+                    ) : (
+                      isSpanish
+                        ? "Aquí no se descarga nada. Primero encuentra al paciente correcto y después entra al expediente."
+                        : "Nothing downloads here. First find the right patient, then open the record."
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="card" id="expedientes">
               <div className="header-row">
                 <div>
                   <p className="card-title">{isSpanish ? "Resultados de búsqueda" : "Search results"}</p>
@@ -742,9 +749,49 @@ export default function AdminPage() {
                   ))}
                 </>
               )}
-            </section>
+              </section>
+            </div>
 
             <div className="stack">
+              <section className="card summary-panel">
+                <div>
+                  <p className="card-title">{isSpanish ? "Vista rápida" : "Quick view"}</p>
+                  <p className="muted">{isSpanish ? "Un resumen corto del portal para orientarte sin llenar la pantalla de cajas." : "A short summary of the portal so you can orient yourself without filling the screen with boxes."}</p>
+                </div>
+
+                <div className="summary-grid">
+                  <div className="summary-item">
+                    <p className="summary-label">{isSpanish ? "Equipo total" : "Total staff"}</p>
+                    <div className="summary-value">{staff.length}</div>
+                    <p className="summary-copy">{isSpanish ? "Usuarios visibles en el portal" : "Users visible in the portal"}</p>
+                  </div>
+                  <div className="summary-item">
+                    <p className="summary-label">{isSpanish ? "Activos" : "Active"}</p>
+                    <div className="summary-value">{recordCounts.active}</div>
+                    <p className="summary-copy">{isSpanish ? "Expedientes en uso diario" : "Records in daily use"}</p>
+                  </div>
+                  <div className="summary-item">
+                    <p className="summary-label">Guadalajara</p>
+                    <div className="summary-value">{officeCounts.Guadalajara}</div>
+                    <p className="summary-copy">{isSpanish ? "Procedimientos en GDL" : "Procedures in GDL"}</p>
+                  </div>
+                  <div className="summary-item">
+                    <p className="summary-label">Tijuana</p>
+                    <div className="summary-value">{officeCounts.Tijuana}</div>
+                    <p className="summary-copy">{isSpanish ? "Procedimientos en TJN" : "Procedures in TJN"}</p>
+                  </div>
+                </div>
+
+                <div className="inline-actions">
+                  <button className="ghost-btn" onClick={() => scrollToSection("equipo")}>
+                    {isSpanish ? "Ver equipo" : "View team"}
+                  </button>
+                  <button className="ghost-btn" onClick={() => goTo("/admin/ayuda")}>
+                    {isSpanish ? "Abrir ayuda" : "Open help"}
+                  </button>
+                </div>
+              </section>
+
               <section className="card">
                 <div className="header-row">
                   <div>
