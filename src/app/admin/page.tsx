@@ -20,7 +20,6 @@ import {
   roleLabel,
   type AdminLevel,
   type Office,
-  type OfficeFilter,
   type PatientRecord,
   type PatientRecordStatus,
   type ProcedureRecord,
@@ -36,10 +35,6 @@ type PatientCard = {
   recordStatus: PatientRecordStatus;
   latestSurgery: string;
   matchesSearch: boolean;
-};
-
-const scrollToSection = (id: string) => {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
 export default function AdminPage() {
@@ -60,8 +55,6 @@ export default function AdminPage() {
   const [savingKey, setSavingKey] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [patientSearch, setPatientSearch] = useState("");
-  const [officeFilter, setOfficeFilter] = useState<OfficeFilter>("Todas");
-  const [recordFilter, setRecordFilter] = useState<PatientRecordStatus>("active");
   const [successMsg, setSuccessMsg] = useState("");
   const [pageError, setPageError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -71,8 +64,7 @@ export default function AdminPage() {
   const canManageAdmins = viewerAdminLevel === "owner" || viewerAdminLevel === "super_admin";
   const canManageOwner = viewerEmail.toLowerCase() === OWNER_EMAIL || viewerAdminLevel === "owner";
 
-  const officeText = (office: OfficeFilter | Office) => {
-    if (office === "Todas") return isSpanish ? "🏥 Todas las sedes" : "🏥 All offices";
+  const officeText = (office: Office) => {
     if (office === "Guadalajara") return "📍 Guadalajara";
     if (office === "Tijuana") return "📍 Tijuana";
     return isSpanish ? "📍 Sin sede" : "📍 No office";
@@ -151,36 +143,16 @@ export default function AdminPage() {
           matchesSearch: !normalizedSearch || haystack.includes(normalizedSearch),
         };
       })
-      .filter((card) => (officeFilter === "Todas" ? true : card.offices.includes(officeFilter)))
-      .filter((card) => card.recordStatus === recordFilter)
       .filter((card) => card.matchesSearch)
       .sort((a, b) => (a.patient.full_name || "").localeCompare(b.patient.full_name || "", "es"));
-  }, [officeFilter, patientSearch, patients, procedures, recordFilter, rooms]);
+  }, [patientSearch, patients, procedures, rooms]);
 
-  const officeCounts = useMemo(() => {
-    return procedures.reduce(
-      (counts, procedure) => {
-        const office = normalizeOffice(procedure.office_location);
-        if (office) counts[office] += 1;
-        return counts;
-      },
-      { Guadalajara: 0, Tijuana: 0 }
-    );
-  }, [procedures]);
-
-  const recordCounts = useMemo(() => {
-    return patients.reduce(
-      (counts, patient) => {
-        counts[normalizeRecordStatus(patient.record_status)] += 1;
-        return counts;
-      },
-      { active: 0, archived: 0, trash: 0 }
-    );
-  }, [patients]);
-
-  const hasActiveSearch = patientSearch.trim().length > 0 || officeFilter !== "Todas" || recordFilter !== "active";
+  const hasActiveSearch = patientSearch.trim().length > 0;
   const visiblePatientCards = hasActiveSearch ? patientCards.slice(0, 12) : [];
   const hiddenPatientCount = Math.max(0, patientCards.length - visiblePatientCards.length);
+  const inviteLink = typeof window !== "undefined" && inviteCode
+    ? `${window.location.origin}/register?code=${encodeURIComponent(inviteCode)}`
+    : "";
 
   const updateSuccess = (message: string) => {
     setPageError("");
@@ -308,6 +280,33 @@ export default function AdminPage() {
     setInviteCode(nextCode);
     setNewInviteCode("");
     updateSuccess(isSpanish ? "Código de invitación actualizado." : "Invitation code updated.");
+  };
+
+  const copyInviteLink = async () => {
+    if (!inviteLink) return;
+    await navigator.clipboard.writeText(inviteLink);
+    updateSuccess(isSpanish ? "Enlace de invitación copiado." : "Invitation link copied.");
+  };
+
+  const shareInviteLink = async () => {
+    if (!inviteLink) return;
+    const nav = navigator as Navigator & { share?: (data?: ShareData) => Promise<void> };
+    if (typeof nav.share === "function") {
+      try {
+        await nav.share({
+          title: isSpanish ? "Invitación al portal" : "Portal invitation",
+          text: isSpanish
+            ? "Usa este enlace para registrarte en el portal del equipo."
+            : "Use this link to register for the team portal.",
+          url: inviteLink,
+        });
+        updateSuccess(isSpanish ? "Se abrió el menú para compartir el enlace." : "The share menu opened for the invitation link.");
+        return;
+      } catch (error: any) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+    await copyInviteLink();
   };
 
   const deleteStaff = async (member: StaffProfile) => {
@@ -542,24 +541,19 @@ export default function AdminPage() {
           <section className="hero">
             <div className="hero-grid">
               <div>
-                <h1 className="big-title">{isSpanish ? "Busca, revisa y luego exporta" : "Search, review, then export"}</h1>
+                <h1 className="big-title">{isSpanish ? "Busca al paciente y abre su expediente" : "Find the patient and open the record"}</h1>
                 <p className="subtle">
-                  {isSpanish ? "Primero encuentra el expediente correcto. Después abre la ficha del paciente, revisa su historia completa y decide si quieres exportarla." : "First find the right record. Then open the patient file, review the full history, and decide whether to export it."}
+                  {isSpanish
+                    ? "Busca por nombre, teléfono, correo o procedimiento. Cuando encuentres al paciente correcto, abre su expediente para revisar toda la información con calma."
+                    : "Search by name, phone, email, or procedure. Once you find the right patient, open the record to review everything carefully."}
                 </p>
-                <div className="quick-links">
-                  <button className="hero-link" onClick={handleRefresh} disabled={refreshing}>
-                    {refreshing ? (isSpanish ? "Actualizando..." : "Refreshing...") : (isSpanish ? "🔄 Actualizar datos" : "🔄 Refresh data")}
-                  </button>
-                  <button className="hero-link" onClick={() => scrollToSection("equipo")}>{isSpanish ? "👥 Equipo" : "👥 Team"}</button>
-                  <button className="hero-link" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "❓ Ayuda" : "❓ Help"}</button>
-                </div>
               </div>
               <div className="hero-note">
-                <p className="section-title" style={{ color: "rgba(255,255,255,0.68)", marginBottom: 8 }}>{isSpanish ? "Flujo recomendado" : "Recommended flow"}</p>
+                <p className="section-title" style={{ color: "rgba(255,255,255,0.68)", marginBottom: 8 }}>{isSpanish ? "Cómo usar esta pantalla" : "How to use this screen"}</p>
                 <p style={{ margin: 0, fontSize: 16, fontWeight: 800, lineHeight: 1.6 }}>
                   {isSpanish
-                    ? "1. Busca al paciente. 2. Abre el expediente. 3. Revisa la historia completa. 4. Exporta solo si realmente lo necesitas."
-                    : "1. Search for the patient. 2. Open the record. 3. Review the full history. 4. Export only if you truly need it."}
+                    ? "Primero busca. Después abre el expediente. La exportación y el resto de acciones viven dentro de cada expediente."
+                    : "Search first. Then open the record. Export and the rest of the actions live inside each record."}
                 </p>
               </div>
             </div>
@@ -571,7 +565,7 @@ export default function AdminPage() {
                 <div className="header-row" style={{ marginBottom: 0 }}>
                   <div>
                     <p className="card-title">{isSpanish ? "Buscar paciente" : "Find patient"}</p>
-                    <p className="muted">{isSpanish ? "Todo empieza aquí. Busca por nombre, teléfono, correo, procedimiento o sede." : "Everything starts here. Search by name, phone, email, procedure, or office."}</p>
+                    <p className="muted">{isSpanish ? "Escribe nombre, teléfono, correo o procedimiento y después toca buscar." : "Type a name, phone, email, or procedure, then tap search."}</p>
                   </div>
                 </div>
 
@@ -586,18 +580,16 @@ export default function AdminPage() {
                     <button
                       className="main-btn"
                       onClick={() => {
-                        if (patientCards.length > 0) scrollToSection("expedientes");
+                        document.getElementById("expedientes")?.scrollIntoView({ behavior: "smooth", block: "start" });
                       }}
-                      disabled={!hasActiveSearch || patientCards.length === 0}
+                      disabled={!hasActiveSearch}
                     >
-                      {isSpanish ? "Ver resultados" : "View results"}
+                      {isSpanish ? "Buscar" : "Search"}
                     </button>
                     <button
                       className="ghost-btn"
                       onClick={() => {
                         setPatientSearch("");
-                        setOfficeFilter("Todas");
-                        setRecordFilter("active");
                       }}
                       disabled={!hasActiveSearch}
                     >
@@ -605,57 +597,21 @@ export default function AdminPage() {
                     </button>
                   </div>
 
-                  <div className="filter-stack">
-                    <div>
-                      <p className="group-label">{isSpanish ? "Estado del expediente" : "Record status"}</p>
-                      <div className="filter-row">
-                        {([
-                          ["active", isSpanish ? `Activos (${recordCounts.active})` : `Active (${recordCounts.active})`],
-                          ["archived", isSpanish ? `Archivados (${recordCounts.archived})` : `Archived (${recordCounts.archived})`],
-                          ["trash", isSpanish ? `Papelera (${recordCounts.trash})` : `Trash (${recordCounts.trash})`],
-                        ] as Array<[PatientRecordStatus, string]>).map(([value, label]) => (
-                          <button
-                            key={value}
-                            className={`filter-chip${recordFilter === value ? " active" : ""}`}
-                            onClick={() => setRecordFilter(value)}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="group-label">{isSpanish ? "Sede" : "Office"}</p>
-                      <div className="filter-row">
-                        {(["Todas", "Guadalajara", "Tijuana"] as OfficeFilter[]).map((option) => (
-                          <button
-                            key={option}
-                            className={`filter-chip${officeFilter === option ? " active" : ""}`}
-                            onClick={() => setOfficeFilter(option)}
-                          >
-                            {officeText(option)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
                   <div className="search-status">
                     {hasActiveSearch ? (
                       patientCards.length > 0 ? (
                         isSpanish
-                          ? `Encontré ${patientCards.length} expediente(s). El siguiente paso es abrir la ficha correcta y revisar la historia completa.`
-                          : `I found ${patientCards.length} record(s). The next step is to open the right file and review the full history.`
+                          ? `Encontré ${patientCards.length} expediente(s). Ahora solo elige al paciente correcto y abre su expediente.`
+                          : `I found ${patientCards.length} record(s). Now simply choose the right patient and open the record.`
                       ) : (
                         isSpanish
-                          ? "No encontré coincidencias con ese filtro. Prueba con menos palabras o cambia la sede."
-                          : "No matches found for that filter. Try fewer words or change the office."
+                          ? "No encontré coincidencias. Prueba con menos palabras o intenta otro dato del paciente."
+                          : "No matches found. Try fewer words or a different patient detail."
                       )
                     ) : (
                       isSpanish
-                        ? "Aquí no se descarga nada. Primero encuentra al paciente correcto y después entra al expediente."
-                        : "Nothing downloads here. First find the right patient, then open the record."
+                        ? "Desde aquí solo buscas. La revisión completa y la exportación suceden dentro del expediente."
+                        : "This screen is only for searching. Full review and export happen inside the record."
                     )}
                   </div>
                 </div>
@@ -678,14 +634,14 @@ export default function AdminPage() {
 
               {!hasActiveSearch ? (
                 <div className="empty-state" style={{ padding: "24px 18px" }}>
-                  <p style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "La búsqueda principal está arriba" : "The main search lives above"}</p>
-                  <p className="muted">{isSpanish ? "Escribe un nombre, teléfono, correo, procedimiento o sede para empezar." : "Type a name, phone number, email, procedure, or office to begin."}</p>
+                  <p style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "Empieza con una búsqueda" : "Start with a search"}</p>
+                  <p className="muted">{isSpanish ? "Escribe el nombre, teléfono, correo o procedimiento del paciente." : "Type the patient's name, phone, email, or procedure."}</p>
                 </div>
               ) : patientCards.length === 0 ? (
                 <div className="empty-state">
                   <div style={{ fontSize: 40, marginBottom: 8 }}>📁</div>
-                  <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "No encontré expedientes con ese filtro" : "No records matched that filter"}</p>
-                  <p className="muted">{isSpanish ? "Prueba cambiando la sede o usando menos palabras en la búsqueda." : "Try changing the office or using fewer words in the search."}</p>
+                  <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "No encontré expedientes con esa búsqueda" : "No records matched that search"}</p>
+                  <p className="muted">{isSpanish ? "Prueba con menos palabras o con otro dato del paciente." : "Try fewer words or a different patient detail."}</p>
                 </div>
               ) : (
                 <>
@@ -753,59 +709,29 @@ export default function AdminPage() {
             </div>
 
             <div className="stack">
-              <section className="card summary-panel">
-                <div>
-                  <p className="card-title">{isSpanish ? "Vista rápida" : "Quick view"}</p>
-                  <p className="muted">{isSpanish ? "Un resumen corto del portal para orientarte sin llenar la pantalla de cajas." : "A short summary of the portal so you can orient yourself without filling the screen with boxes."}</p>
-                </div>
-
-                <div className="summary-grid">
-                  <div className="summary-item">
-                    <p className="summary-label">{isSpanish ? "Equipo total" : "Total staff"}</p>
-                    <div className="summary-value">{staff.length}</div>
-                    <p className="summary-copy">{isSpanish ? "Usuarios visibles en el portal" : "Users visible in the portal"}</p>
-                  </div>
-                  <div className="summary-item">
-                    <p className="summary-label">{isSpanish ? "Activos" : "Active"}</p>
-                    <div className="summary-value">{recordCounts.active}</div>
-                    <p className="summary-copy">{isSpanish ? "Expedientes en uso diario" : "Records in daily use"}</p>
-                  </div>
-                  <div className="summary-item">
-                    <p className="summary-label">Guadalajara</p>
-                    <div className="summary-value">{officeCounts.Guadalajara}</div>
-                    <p className="summary-copy">{isSpanish ? "Procedimientos en GDL" : "Procedures in GDL"}</p>
-                  </div>
-                  <div className="summary-item">
-                    <p className="summary-label">Tijuana</p>
-                    <div className="summary-value">{officeCounts.Tijuana}</div>
-                    <p className="summary-copy">{isSpanish ? "Procedimientos en TJN" : "Procedures in TJN"}</p>
-                  </div>
-                </div>
-
-                <div className="inline-actions">
-                  <button className="ghost-btn" onClick={() => scrollToSection("equipo")}>
-                    {isSpanish ? "Ver equipo" : "View team"}
-                  </button>
-                  <button className="ghost-btn" onClick={() => goTo("/admin/ayuda")}>
-                    {isSpanish ? "Abrir ayuda" : "Open help"}
-                  </button>
-                </div>
-              </section>
-
               <section className="card">
                 <div className="header-row">
                   <div>
-                    <p className="card-title">{isSpanish ? "Código de invitación" : "Invitation code"}</p>
-                    <p className="muted">{isSpanish ? "Cámbialo si quieres detener nuevos registros con el código actual." : "Change it if you want to stop new registrations using the current code."}</p>
+                    <p className="card-title">{isSpanish ? "Invitar personal" : "Invite team member"}</p>
+                    <p className="muted">{isSpanish ? "Envía este enlace a un nuevo integrante. El código ya va incluido para que el registro tenga menos pasos." : "Send this link to a new team member. The code is already included so registration has fewer steps."}</p>
                   </div>
                 </div>
 
                 <div className="export-card" style={{ marginBottom: 14 }}>
-                  <p className="section-title">{isSpanish ? "Código actual" : "Current code"}</p>
-                  <p style={{ fontSize: 28, fontWeight: 900, color: "#1D4ED8", letterSpacing: "0.12em", margin: 0, wordBreak: "break-word" }}>{inviteCode || "SIN CÓDIGO"}</p>
+                  <p className="section-title">{isSpanish ? "Enlace de invitación" : "Invitation link"}</p>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: "#1D4ED8", margin: 0, wordBreak: "break-word", lineHeight: 1.6 }}>{inviteLink || (isSpanish ? "Primero carga un código de invitación." : "Load an invitation code first.")}</p>
                 </div>
 
                 <div style={{ display: "grid", gap: 10 }}>
+                  <div className="inline-actions">
+                    <button className="main-btn" onClick={copyInviteLink} disabled={!inviteLink}>
+                      {isSpanish ? "Copiar enlace" : "Copy link"}
+                    </button>
+                    <button className="ghost-btn" onClick={shareInviteLink} disabled={!inviteLink}>
+                      {isSpanish ? "Compartir" : "Share"}
+                    </button>
+                  </div>
+                  <p className="group-label" style={{ marginBottom: -2 }}>{isSpanish ? "Si quieres cambiar el código actual" : "If you want to change the current code"}</p>
                   <input
                     className="line-input"
                     value={newInviteCode}

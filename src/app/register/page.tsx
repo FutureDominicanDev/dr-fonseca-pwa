@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 const OWNER_EMAIL = "mrdiazsr@icloud.com";
@@ -49,6 +49,38 @@ export default function RegisterPage() {
     setLoading(false);
     setStep("details");
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const codeFromLink = (new URLSearchParams(window.location.search).get("code") || "").trim().toUpperCase();
+    if (!codeFromLink) return;
+
+    setInviteCode(codeFromLink);
+
+    const verifyPrefilledCode = async () => {
+      setLoading(true);
+      setError("");
+
+      const { data, error: err } = await supabase.from("app_settings").select("value").eq("key", "invite_code").single();
+
+      if (err || !data) {
+        setError("Error verificando el código.");
+        setLoading(false);
+        return;
+      }
+
+      if (data.value.trim().toUpperCase() !== codeFromLink) {
+        setError("Este enlace ya no es válido. Pide un enlace nuevo.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(false);
+      setStep("details");
+    };
+
+    verifyPrefilledCode();
+  }, []);
 
   const handleRegister = async () => {
     if (!fullName.trim()) {
@@ -220,7 +252,7 @@ export default function RegisterPage() {
               <div style={{ textAlign: "center", marginBottom: 24 }}>
                 <div style={{ fontSize: 52, marginBottom: 10 }}>👤</div>
                 <p className="reg-title2">Crear tu Cuenta</p>
-                <p className="reg-sub2">Completa tu información de staff y selecciona tu sede</p>
+              <p className="reg-sub2">Completa tu información de personal y selecciona tu sede</p>
               </div>
               {error && <div className="err2">⚠️ {error}</div>}
               <label className="flabel2">Nombre Completo</label>
@@ -232,7 +264,7 @@ export default function RegisterPage() {
                   { id: "enfermeria", label: "💉 Enfermería" },
                   { id: "coordinacion", label: "📋 Coordinación" },
                   { id: "post_quirofano", label: "🏥 Post-Q" },
-                  { id: "staff", label: "👤 Staff" },
+                  { id: "staff", label: "👤 Personal" },
                 ].map(r => (
                   <div key={r.id} className={`ropt${role === r.id ? " sel" : ""}`} onClick={() => setRole(r.id)}>{r.label}</div>
                 ))}

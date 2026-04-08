@@ -119,11 +119,11 @@ export const roleLabel = (role: string | null | undefined) =>
       enfermeria: "💉 Enfermería",
       coordinacion: "📋 Coordinación",
       post_quirofano: "🏥 Post-Q",
-      staff: "👤 Staff",
+      staff: "👤 Personal",
       patient: "🧑 Paciente",
       system: "⚙️ Sistema",
     } as Record<string, string>
-  )[role || ""] || "👤 Staff";
+  )[role || ""] || "👤 Personal";
 
 export const roleColor = (role: string | null | undefined) =>
   (
