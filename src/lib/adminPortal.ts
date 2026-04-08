@@ -1,6 +1,7 @@
 export type AdminLevel = "owner" | "super_admin" | "admin" | "none";
 export type Office = "Guadalajara" | "Tijuana" | "";
 export type OfficeFilter = "Todas" | "Guadalajara" | "Tijuana";
+export type PatientRecordStatus = "active" | "archived" | "trash";
 
 export type StaffProfile = {
   id: string;
@@ -19,6 +20,22 @@ export type PatientRecord = {
   email?: string | null;
   birthdate?: string | null;
   profile_picture_url?: string | null;
+  record_status?: string | null;
+  record_status_changed_at?: string | null;
+  record_status_changed_by?: string | null;
+};
+
+export type PatientRecordEvent = {
+  id: string;
+  patient_id?: string | null;
+  action?: string | null;
+  previous_status?: string | null;
+  next_status?: string | null;
+  actor_id?: string | null;
+  actor_name?: string | null;
+  actor_email?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
 };
 
 export type ProcedureRecord = {
@@ -135,6 +152,29 @@ export const normalizeOffice = (value: unknown): Office => {
   if (value === "Guadalajara" || value === "Tijuana") return value;
   return "";
 };
+
+export const normalizeRecordStatus = (value: unknown): PatientRecordStatus => {
+  if (value === "archived" || value === "trash" || value === "active") return value;
+  return "active";
+};
+
+export const recordStatusLabel = (value: unknown) =>
+  (
+    {
+      active: "🟢 Activo",
+      archived: "🗂️ Archivado",
+      trash: "🗑️ Papelera",
+    } as const
+  )[normalizeRecordStatus(value)];
+
+export const recordStatusColor = (value: unknown) =>
+  (
+    {
+      active: "#15803D",
+      archived: "#B45309",
+      trash: "#DC2626",
+    } as const
+  )[normalizeRecordStatus(value)];
 
 export const initials = (name?: string | null) =>
   name ? name.split(" ").map((word) => word[0]).join("").slice(0, 2).toUpperCase() : "??";

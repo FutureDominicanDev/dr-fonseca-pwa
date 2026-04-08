@@ -1,36 +1,54 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { useAdminLang } from "@/lib/useAdminLang";
 import {
   OWNER_EMAIL,
   buildExportHtml,
   buildPatientBundles,
   downloadFile,
-  formatDate,
-  formatDateTime,
   getMediaEntries,
   getTimelineEntries,
   initials,
-  messageReason,
-  messageTypeLabel,
+  isMissingColumnError,
   normalizeAdminLevel,
   normalizeOffice,
+  normalizeRecordStatus,
   officeLabel,
+  recordStatusColor,
+  recordStatusLabel,
   roleColor,
   roleLabel,
   sanitizeFileName,
   type MessageRecord,
+  type Office,
   type PatientRecord,
+  type PatientRecordStatus,
   type ProcedureRecord,
   type RoomRecord,
   type StaffProfile,
 } from "@/lib/adminPortal";
 
+type PatientDraft = {
+  full_name: string;
+  phone: string;
+  email: string;
+  birthdate: string;
+};
+
+type ProcedureDraft = {
+  procedure_name: string;
+  office_location: Office;
+  status: string;
+  surgery_date: string;
+};
+
 export default function AdminPatientRecordPage() {
   const params = useParams<{ patientId: string }>();
   const patientId = Array.isArray(params?.patientId) ? params.patientId[0] : params?.patientId || "";
+  const { lang, setLang, isSpanish } = useAdminLang();
 
   const [sessionChecked, setSessionChecked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -42,12 +60,199 @@ export default function AdminPatientRecordPage() {
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
+  const [patientDraft, setPatientDraft] = useState<PatientDraft>({
+    full_name: "",
+    phone: "",
+    email: "",
+    birthdate: "",
+  });
+  const [procedureDrafts, setProcedureDrafts] = useState<Record<string, ProcedureDraft>>({});
+  const [savingPatient, setSavingPatient] = useState(false);
+  const [savingProcedureId, setSavingProcedureId] = useState("");
+  const [statusSaving, setStatusSaving] = useState<PatientRecordStatus | "">("");
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [pageError, setPageError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
   const hasAdminAccess = viewerEmail.toLowerCase() === OWNER_EMAIL || ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
   const staffById = useMemo(() => new Map(staffProfiles.map((member) => [member.id, member])), [staffProfiles]);
+  const patientStatus = normalizeRecordStatus(patient?.record_status);
+
+  const t = {
+    loadingTitle: isSpanish ? "Abriendo expediente" : "Opening record",
+    loadingCopy: isSpanish
+      ? "Estoy reuniendo procedimientos, salas, medios e historial completo del paciente."
+      : "I am gathering procedures, rooms, media, and the full patient history.",
+    signInTitle: isSpanish ? "Inicia sesión primero" : "Sign in first",
+    signInCopy: isSpanish
+      ? "Este expediente solo se puede abrir desde una sesión administrativa activa."
+      : "This record can only be opened from an active admin session.",
+    signInButton: isSpanish ? "Ir a login" : "Go to login",
+    noAccessTitle: isSpanish ? "Sin acceso" : "No access",
+    noAccessCopy: isSpanish
+      ? "Tu cuenta puede usar el portal, pero no tiene permisos para revisar expedientes administrativos."
+      : "Your account can use the portal, but it does not have permission to review admin records.",
+    backToPortal: isSpanish ? "Volver al portal" : "Back to portal",
+    recordTitle: isSpanish ? "Expediente del paciente" : "Patient record",
+    recordSubtitle: isSpanish ? "Revisión completa antes de exportar" : "Full review before export",
+    backToCenter: isSpanish ? "← Volver al centro" : "← Back to control center",
+    goToPortal: isSpanish ? "Ir al portal" : "Go to portal",
+    exporting: isSpanish ? "Exportando..." : "Exporting...",
+    exportRecord: isSpanish ? "📦 Exportar expediente" : "📦 Export record",
+    unavailableTitle: isSpanish ? "Expediente no disponible" : "Record unavailable",
+    unavailableCopy: isSpanish
+      ? "Vuelve al centro de control para buscarlo de nuevo o intenta recargar la página."
+      : "Go back to the control center to search again or reload the page.",
+    reload: isSpanish ? "Recargar" : "Reload",
+    unnamedPatient: isSpanish ? "Paciente sin nombre" : "Unnamed patient",
+    noPhone: isSpanish ? "Sin teléfono" : "No phone",
+    noEmail: isSpanish ? "Sin correo" : "No email",
+    noBirthdate: isSpanish ? "Sin fecha" : "No date",
+    relatedOffices: isSpanish ? "Sedes relacionadas" : "Related offices",
+    noOffice: isSpanish ? "📍 Sin sede" : "📍 No office",
+    heroCopy: isSpanish
+      ? "Aquí puedes revisar datos del paciente, procedimientos, medios y toda la cronología del chat antes de decidir si quieres exportar este expediente."
+      : "Here you can review patient details, procedures, media, and the full chat timeline before deciding whether to export this record.",
+    heroHelper: isSpanish
+      ? "Puedes corregir datos del paciente y del procedimiento aquí mismo. La cronología del chat se conserva sin edición."
+      : "You can correct patient and procedure details here. The chat timeline stays read-only.",
+    patientPhoto: isSpanish ? "Foto del paciente" : "Patient photo",
+    addPhoto: isSpanish ? "Agregar foto" : "Add photo",
+    changePhoto: isSpanish ? "Cambiar foto" : "Change photo",
+    uploadPhotoHelp: isSpanish
+      ? "Úsalo si el paciente nunca subió foto o si quieres corregirla."
+      : "Use this if the patient never uploaded a photo or if you need to correct it.",
+    basicInfo: isSpanish ? "Datos del paciente" : "Patient details",
+    basicInfoCopy: isSpanish
+      ? "Puedes corregir nombre, teléfono, correo y fecha de nacimiento."
+      : "You can correct the patient's name, phone, email, and birth date.",
+    savePatient: isSpanish ? "Guardar datos del paciente" : "Save patient details",
+    savingPatient: isSpanish ? "Guardando..." : "Saving...",
+    quickSummary: isSpanish ? "Resumen rápido" : "Quick summary",
+    lastEvent: isSpanish ? "Último evento registrado" : "Latest recorded event",
+    firstRoom: isSpanish ? "Primera sala creada" : "First room created",
+    noActivity: isSpanish ? "Sin actividad" : "No activity",
+    noRooms: isSpanish ? "Sin salas" : "No rooms",
+    recordStatus: isSpanish ? "Estado del expediente" : "Record status",
+    recordStatusCopy: isSpanish
+      ? "Usa activo, archivado o papelera. El chat no se borra."
+      : "Use active, archived, or trash. The chat is not deleted.",
+    active: isSpanish ? "🟢 Activo" : "🟢 Active",
+    archived: isSpanish ? "🗂️ Archivado" : "🗂️ Archived",
+    trash: isSpanish ? "🗑️ Papelera" : "🗑️ Trash",
+    proceduresTitle: isSpanish ? "Procedimientos y sedes" : "Procedures and offices",
+    proceduresCopy: isSpanish
+      ? "Aquí puedes corregir procedimiento, sede, fecha de cirugía y estatus."
+      : "Here you can correct procedure, office, surgery date, and status.",
+    saveProcedure: isSpanish ? "Guardar procedimiento" : "Save procedure",
+    savingProcedure: isSpanish ? "Guardando..." : "Saving...",
+    noProcedures: isSpanish ? "No hay procedimientos registrados para este paciente." : "There are no procedures registered for this patient.",
+    roomsRelated: isSpanish ? "Salas relacionadas" : "Related rooms",
+    mediaTitle: isSpanish ? "Media y archivos" : "Media and files",
+    mediaCopy: isSpanish ? "Aquí está todo el material enviado y recibido dentro del chat del paciente." : "This is all the material sent and received inside the patient chat.",
+    images: isSpanish ? "Imágenes" : "Images",
+    videos: isSpanish ? "Videos" : "Videos",
+    audios: isSpanish ? "Audios" : "Audio files",
+    files: isSpanish ? "Archivos" : "Files",
+    noImages: isSpanish ? "No hay imágenes en el historial." : "There are no images in the history.",
+    noVideos: isSpanish ? "No hay videos en el historial." : "There are no videos in the history.",
+    noAudios: isSpanish ? "No hay audios en el historial." : "There are no audio files in the history.",
+    noFiles: isSpanish ? "No hay archivos en el historial." : "There are no files in the history.",
+    open: isSpanish ? "Abrir" : "Open",
+    timelineTitle: isSpanish ? "Cronología completa" : "Full timeline",
+    timelineCopy: isSpanish
+      ? "Qué pasó, quién escribió, cuándo ocurrió, desde qué sede y con qué procedimiento estaba relacionado."
+      : "What happened, who wrote it, when it happened, from which office, and which procedure it was tied to.",
+    noTimeline: isSpanish ? "No hay historial registrado todavía." : "There is no recorded history yet.",
+    roomLabel: isSpanish ? "Sala" : "Room",
+    procedureLabel: isSpanish ? "Procedimiento" : "Procedure",
+    reasonLabel: isSpanish ? "Motivo / contexto" : "Reason / context",
+    deletedMessage: isSpanish
+      ? "Este mensaje fue marcado como eliminado, pero se mantiene en el historial."
+      : "This message was marked as deleted, but it remains in the history.",
+    patientSaved: isSpanish ? "Datos del paciente guardados." : "Patient details saved.",
+    photoSaved: isSpanish ? "Foto del paciente actualizada." : "Patient photo updated.",
+    uploadError: isSpanish ? "No pude subir la foto del paciente." : "I could not upload the patient photo.",
+    fieldSetupError: isSpanish
+      ? "Falta correr la configuración de Supabase para guardar esta información nueva."
+      : "The Supabase setup still needs to be run before this new information can be saved.",
+  };
+
+  const formatDateLocal = (value?: string | null) => {
+    if (!value) return t.noBirthdate;
+    return new Date(value).toLocaleDateString(lang === "es" ? "es-MX" : "en-US", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  const formatDateTimeLocal = (value?: string | null) => {
+    if (!value) return t.noBirthdate;
+    return new Date(value).toLocaleString(lang === "es" ? "es-MX" : "en-US", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const roleText = (role: string | null | undefined) =>
+    isSpanish
+      ? roleLabel(role)
+      : (
+          {
+            doctor: "👨‍⚕️ Doctor",
+            enfermeria: "💉 Nursing",
+            coordinacion: "📋 Coordination",
+            post_quirofano: "🏥 Post-Op",
+            staff: "👤 Staff",
+            patient: "🧑 Patient",
+            system: "⚙️ System",
+          } as Record<string, string>
+        )[role || ""] || "👤 Staff";
+
+  const officeText = (office: string | null | undefined) => {
+    if (office === "Guadalajara") return "📍 Guadalajara";
+    if (office === "Tijuana") return "📍 Tijuana";
+    return t.noOffice;
+  };
+
+  const recordStatusText = (status: PatientRecordStatus) =>
+    isSpanish
+      ? recordStatusLabel(status)
+      : (
+          {
+            active: "🟢 Active",
+            archived: "🗂️ Archived",
+            trash: "🗑️ Trash",
+          } as const
+        )[status];
+
+  const messageTypeText = (message: MessageRecord) => {
+    if (message.is_internal) return isSpanish ? "Nota interna" : "Internal note";
+    if (message.message_type === "image") return isSpanish ? "Imagen" : "Image";
+    if (message.message_type === "video") return isSpanish ? "Video" : "Video";
+    if (message.message_type === "audio") return isSpanish ? "Audio" : "Audio";
+    if (message.message_type === "file") return isSpanish ? "Archivo" : "File";
+    return isSpanish ? "Mensaje" : "Message";
+  };
+
+  const messageReasonText = (message: MessageRecord, procedure: ProcedureRecord) => {
+    const rawName = message.file_name || "";
+    if (message.is_internal) return isSpanish ? "Seguimiento interno del equipo" : "Internal team follow-up";
+    if (rawName.startsWith("[MED]")) return isSpanish ? "Seguimiento de medicamento" : "Medication follow-up";
+    if (rawName.startsWith("[BEFORE]")) return isSpanish ? "Material preoperatorio" : "Pre-op material";
+    if (message.message_type === "image") return isSpanish ? "Imagen compartida en el chat" : "Image shared in chat";
+    if (message.message_type === "video") return isSpanish ? "Video compartido en el chat" : "Video shared in chat";
+    if (message.message_type === "audio") return isSpanish ? "Audio compartido en el chat" : "Audio shared in chat";
+    if (message.message_type === "file") return isSpanish ? "Archivo compartido en el chat" : "File shared in chat";
+    return procedure.procedure_name || (isSpanish ? "Seguimiento general del paciente" : "General patient follow-up");
+  };
 
   const bundle = useMemo(() => {
     if (!patient) return null;
@@ -65,6 +270,29 @@ export default function AdminPatientRecordPage() {
   const media = useMemo(() => (bundle ? getMediaEntries(bundle) : { images: [], videos: [], audios: [], files: [] }), [bundle]);
   const offices = useMemo(() => {
     return [...new Set(procedures.map((procedure) => normalizeOffice(procedure.office_location)).filter(Boolean))];
+  }, [procedures]);
+
+  useEffect(() => {
+    if (!patient) return;
+    setPatientDraft({
+      full_name: patient.full_name || "",
+      phone: patient.phone || "",
+      email: patient.email || "",
+      birthdate: patient.birthdate || "",
+    });
+  }, [patient]);
+
+  useEffect(() => {
+    const nextDrafts: Record<string, ProcedureDraft> = {};
+    procedures.forEach((procedure) => {
+      nextDrafts[procedure.id] = {
+        procedure_name: procedure.procedure_name || "",
+        office_location: normalizeOffice(procedure.office_location),
+        status: procedure.status || "",
+        surgery_date: procedure.surgery_date || "",
+      };
+    });
+    setProcedureDrafts(nextDrafts);
   }, [procedures]);
 
   const updateSuccess = (message: string) => {
@@ -102,7 +330,7 @@ export default function AdminPatientRecordPage() {
 
     const { data: patientData, error: patientError } = await supabase.from("patients").select("*").eq("id", patientId).maybeSingle();
     if (patientError || !patientData) {
-      setPageError(patientError?.message || "No pude cargar este expediente.");
+      setPageError(patientError?.message || (isSpanish ? "No pude cargar este expediente." : "I could not load this record."));
       setSessionChecked(true);
       setLoading(false);
       return;
@@ -110,7 +338,7 @@ export default function AdminPatientRecordPage() {
 
     const { data: procedureData, error: procedureError } = await supabase.from("procedures").select("*").eq("patient_id", patientId);
     if (procedureError) {
-      setPageError(procedureError.message || "No pude cargar los procedimientos.");
+      setPageError(procedureError.message || (isSpanish ? "No pude cargar los procedimientos." : "I could not load the procedures."));
       setSessionChecked(true);
       setLoading(false);
       return;
@@ -123,7 +351,7 @@ export default function AdminPatientRecordPage() {
     if (procedureIds.length > 0) {
       const { data: roomData, error: roomError } = await supabase.from("rooms").select("*").in("procedure_id", procedureIds).order("created_at", { ascending: true });
       if (roomError) {
-        setPageError(roomError.message || "No pude cargar las salas.");
+        setPageError(roomError.message || (isSpanish ? "No pude cargar las salas." : "I could not load the rooms."));
         setSessionChecked(true);
         setLoading(false);
         return;
@@ -141,7 +369,7 @@ export default function AdminPatientRecordPage() {
         .order("created_at", { ascending: true });
 
       if (messageError) {
-        setPageError(messageError.message || "No pude cargar el historial.");
+        setPageError(messageError.message || (isSpanish ? "No pude cargar el historial." : "I could not load the history."));
         setSessionChecked(true);
         setLoading(false);
         return;
@@ -169,45 +397,169 @@ export default function AdminPatientRecordPage() {
     if (patientId) fetchRecord();
   }, [patientId]);
 
+  const savePatientInfo = async () => {
+    if (!patient) return;
+    setSavingPatient(true);
+
+    const payload = {
+      full_name: patientDraft.full_name.trim() || null,
+      phone: patientDraft.phone.trim() || null,
+      email: patientDraft.email.trim() || null,
+      birthdate: patientDraft.birthdate || null,
+    };
+
+    const { data, error } = await supabase.from("patients").update(payload).eq("id", patient.id).select().single();
+    setSavingPatient(false);
+
+    if (error) {
+      setPageError(error.message || (isSpanish ? "No pude guardar los datos del paciente." : "I could not save the patient details."));
+      return;
+    }
+
+    setPatient(data as PatientRecord);
+    updateSuccess(t.patientSaved);
+  };
+
+  const saveProcedure = async (procedureId: string) => {
+    const draft = procedureDrafts[procedureId];
+    if (!draft) return;
+
+    setSavingProcedureId(procedureId);
+    const payload = {
+      procedure_name: draft.procedure_name.trim() || null,
+      office_location: draft.office_location || null,
+      status: draft.status.trim() || null,
+      surgery_date: draft.surgery_date || null,
+    };
+
+    const { data, error } = await supabase.from("procedures").update(payload).eq("id", procedureId).select().single();
+    setSavingProcedureId("");
+
+    if (error) {
+      setPageError(error.message || (isSpanish ? "No pude guardar el procedimiento." : "I could not save the procedure."));
+      return;
+    }
+
+    setProcedures((previous) => previous.map((procedure) => (procedure.id === procedureId ? (data as ProcedureRecord) : procedure)));
+    updateSuccess(isSpanish ? "Procedimiento guardado." : "Procedure saved.");
+  };
+
+  const changeRecordStatus = async (nextStatus: PatientRecordStatus) => {
+    if (!patient || patientStatus === nextStatus) return;
+    setStatusSaving(nextStatus);
+
+    const payload = {
+      record_status: nextStatus,
+      record_status_changed_at: new Date().toISOString(),
+      record_status_changed_by: viewerProfile?.id || null,
+    };
+
+    const { data, error } = await supabase.from("patients").update(payload).eq("id", patient.id).select().single();
+    setStatusSaving("");
+
+    if (error) {
+      if (isMissingColumnError(error)) {
+        setPageError(t.fieldSetupError);
+        return;
+      }
+      setPageError(error.message || (isSpanish ? "No pude cambiar el estado del expediente." : "I could not change the record status."));
+      return;
+    }
+
+    setPatient(data as PatientRecord);
+    updateSuccess(
+      nextStatus === "active"
+        ? isSpanish
+          ? "Expediente restaurado como activo."
+          : "Record restored as active."
+        : nextStatus === "archived"
+          ? isSpanish
+            ? "Expediente archivado."
+            : "Record archived."
+          : isSpanish
+            ? "Expediente enviado a papelera."
+            : "Record moved to trash."
+    );
+  };
+
+  const uploadPatientPhoto = async (file: File) => {
+    if (!patient) return;
+    setPhotoUploading(true);
+
+    const extension = file.name.split(".").pop() || "jpg";
+    const storagePath = `patient-profiles/${patient.id}/profile.${extension}`;
+    const { error: uploadError } = await supabase.storage.from("chat-files").upload(storagePath, file, { upsert: true });
+
+    if (uploadError) {
+      setPhotoUploading(false);
+      setPageError(uploadError.message || t.uploadError);
+      return;
+    }
+
+    const { data: publicUrl } = supabase.storage.from("chat-files").getPublicUrl(storagePath);
+    const { data, error } = await supabase
+      .from("patients")
+      .update({ profile_picture_url: publicUrl.publicUrl })
+      .eq("id", patient.id)
+      .select()
+      .single();
+
+    setPhotoUploading(false);
+
+    if (error) {
+      setPageError(error.message || t.uploadError);
+      return;
+    }
+
+    setPatient(data as PatientRecord);
+    updateSuccess(t.photoSaved);
+  };
+
   const exportRecord = async () => {
     if (!bundle || !patient) return;
     setExporting(true);
 
     try {
       const html = buildExportHtml({
-        title: `Expediente exportado · ${patient.full_name || "Paciente"}`,
-        subtitle: "Incluye procedimientos, sedes, historial completo y medios relacionados.",
+        title: `${isSpanish ? "Expediente exportado" : "Exported record"} · ${patient.full_name || t.unnamedPatient}`,
+        subtitle: isSpanish
+          ? "Incluye procedimientos, sedes, historial completo y medios relacionados."
+          : "Includes procedures, offices, full history, and related media.",
         bundles: [bundle],
         staffById,
         generatedBy: viewerProfile?.full_name || viewerEmail,
       });
 
       downloadFile(
-        `expediente-${sanitizeFileName(patient.full_name || "paciente")}.html`,
+        `expediente-${sanitizeFileName(patient.full_name || "patient")}.html`,
         html,
         "text/html;charset=utf-8"
       );
-      updateSuccess(`Expediente de ${patient.full_name || "Paciente"} descargado.`);
+      updateSuccess(
+        isSpanish
+          ? `Expediente de ${patient.full_name || t.unnamedPatient} descargado.`
+          : `${patient.full_name || t.unnamedPatient}'s record downloaded.`
+      );
     } catch (error: any) {
-      setPageError(error?.message || "No pude exportar este expediente.");
+      setPageError(error?.message || (isSpanish ? "No pude exportar este expediente." : "I could not export this record."));
     } finally {
       setExporting(false);
     }
   };
 
-  const renderTimelineBody = (entry: typeof timeline[number]) => {
+  const renderTimelineBody = (entry: (typeof timeline)[number]) => {
     const { message } = entry;
     const cleanFileName = (message.file_name || "").replace(/^\[(MED|BEFORE)\]\s*/i, "");
 
     if (message.deleted_by_staff || message.deleted_by_patient) {
-      return <p className="body-muted">Este mensaje fue marcado como eliminado, pero se mantiene en el historial.</p>;
+      return <p className="body-muted">{t.deletedMessage}</p>;
     }
 
     if (message.message_type === "image" && message.content) {
       return (
         <div className="preview-wrap">
           <img src={message.content} alt="" className="media-preview image" />
-          <a href={message.content} target="_blank" rel="noopener noreferrer" className="open-link">Abrir imagen</a>
+          <a href={message.content} target="_blank" rel="noopener noreferrer" className="open-link">{isSpanish ? "Abrir imagen" : "Open image"}</a>
         </div>
       );
     }
@@ -216,7 +568,7 @@ export default function AdminPatientRecordPage() {
       return (
         <div className="preview-wrap">
           <video src={message.content} controls className="media-preview video" />
-          <a href={message.content} target="_blank" rel="noopener noreferrer" className="open-link">Abrir video</a>
+          <a href={message.content} target="_blank" rel="noopener noreferrer" className="open-link">{isSpanish ? "Abrir video" : "Open video"}</a>
         </div>
       );
     }
@@ -225,7 +577,7 @@ export default function AdminPatientRecordPage() {
       return (
         <div className="preview-wrap">
           <audio src={message.content} controls style={{ width: "100%" }} />
-          <p className="body-muted">{cleanFileName || "Audio del chat"}</p>
+          <p className="body-muted">{cleanFileName || (isSpanish ? "Audio del chat" : "Chat audio")}</p>
         </div>
       );
     }
@@ -233,13 +585,13 @@ export default function AdminPatientRecordPage() {
     if (message.message_type === "file" && message.content) {
       return (
         <div className="preview-wrap">
-          <p style={{ fontWeight: 800, color: "#111827", marginBottom: 6 }}>{cleanFileName || "Archivo"}</p>
-          <a href={message.content} target="_blank" rel="noopener noreferrer" className="open-link">Abrir archivo</a>
+          <p style={{ fontWeight: 800, color: "#111827", marginBottom: 6 }}>{cleanFileName || (isSpanish ? "Archivo" : "File")}</p>
+          <a href={message.content} target="_blank" rel="noopener noreferrer" className="open-link">{isSpanish ? "Abrir archivo" : "Open file"}</a>
         </div>
       );
     }
 
-    return <p className="body-copy">{message.content || "Sin contenido"}</p>;
+    return <p className="body-copy">{message.content || (isSpanish ? "Sin contenido" : "No content")}</p>;
   };
 
   const renderMediaGroup = (
@@ -251,7 +603,7 @@ export default function AdminPatientRecordPage() {
       <div className="section-head">
         <div>
           <p className="section-kicker">{title}</p>
-          <p className="section-sub">{entries.length} elemento(s)</p>
+          <p className="section-sub">{entries.length} {isSpanish ? "elemento(s)" : "item(s)"}</p>
         </div>
       </div>
 
@@ -271,15 +623,15 @@ export default function AdminPatientRecordPage() {
             return (
               <div key={entry.message.id} className="media-item">
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 14, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{cleanFileName || messageTypeLabel(entry.message)}</p>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{cleanFileName || messageTypeText(entry.message)}</p>
                   <p className="body-muted">
-                    {entry.message.sender_name || "Sin nombre"} · {roleLabel(entry.message.sender_role || entry.message.sender_type || "staff")} · {senderOffice || "Sin sede"}
+                    {entry.message.sender_name || (isSpanish ? "Sin nombre" : "No name")} · {roleText(entry.message.sender_role || entry.message.sender_type || "staff")} · {senderOffice ? officeText(senderOffice) : t.noOffice}
                   </p>
-                  <p className="body-muted">{formatDateTime(entry.message.created_at)}</p>
+                  <p className="body-muted">{formatDateTimeLocal(entry.message.created_at)}</p>
                 </div>
                 {entry.message.content && (
                   <a href={entry.message.content} target="_blank" rel="noopener noreferrer" className="open-link">
-                    Abrir
+                    {t.open}
                   </a>
                 )}
               </div>
@@ -302,8 +654,8 @@ export default function AdminPatientRecordPage() {
         <div className="record-loading-page">
           <div className="record-loading-card">
             <div className="spinner" />
-            <p style={{ fontSize: 24, fontWeight: 800, color: "#111827", marginBottom: 6 }}>Abriendo expediente</p>
-            <p style={{ fontSize: 15, color: "#6B7280", lineHeight: 1.6 }}>Estoy reuniendo procedimientos, salas, medios e historial completo del paciente.</p>
+            <p style={{ fontSize: 24, fontWeight: 800, color: "#111827", marginBottom: 6 }}>{t.loadingTitle}</p>
+            <p style={{ fontSize: 15, color: "#6B7280", lineHeight: 1.6 }}>{t.loadingCopy}</p>
           </div>
         </div>
       </>
@@ -315,9 +667,9 @@ export default function AdminPatientRecordPage() {
       <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", padding: 24, background: "#F5F7FB" }}>
         <div style={{ maxWidth: 460, background: "white", borderRadius: 24, padding: 28, textAlign: "center", boxShadow: "0 20px 60px rgba(15,23,42,0.12)" }}>
           <div style={{ fontSize: 50, marginBottom: 10 }}>🔐</div>
-          <p style={{ fontSize: 28, fontWeight: 900, color: "#111827", marginBottom: 8 }}>Inicia sesión primero</p>
-          <p style={{ color: "#6B7280", lineHeight: 1.7 }}>Este expediente solo se puede abrir desde una sesión administrativa activa.</p>
-          <button style={{ marginTop: 14, padding: "14px 16px", border: "none", borderRadius: 14, background: "#007AFF", color: "white", fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }} onClick={() => (window.location.href = "/login")}>Ir a login</button>
+          <p style={{ fontSize: 28, fontWeight: 900, color: "#111827", marginBottom: 8 }}>{t.signInTitle}</p>
+          <p style={{ color: "#6B7280", lineHeight: 1.7 }}>{t.signInCopy}</p>
+          <button style={{ marginTop: 14, padding: "14px 16px", border: "none", borderRadius: 14, background: "#007AFF", color: "white", fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }} onClick={() => (window.location.href = "/login")}>{t.signInButton}</button>
         </div>
       </div>
     );
@@ -328,9 +680,9 @@ export default function AdminPatientRecordPage() {
       <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", padding: 24, background: "#F5F7FB" }}>
         <div style={{ maxWidth: 460, background: "white", borderRadius: 24, padding: 28, textAlign: "center", boxShadow: "0 20px 60px rgba(15,23,42,0.12)" }}>
           <div style={{ fontSize: 50, marginBottom: 10 }}>⛔</div>
-          <p style={{ fontSize: 28, fontWeight: 900, color: "#111827", marginBottom: 8 }}>Sin acceso</p>
-          <p style={{ color: "#6B7280", lineHeight: 1.7 }}>Tu cuenta puede usar el portal, pero no tiene permisos para revisar expedientes administrativos.</p>
-          <button style={{ marginTop: 14, padding: "14px 16px", border: "none", borderRadius: 14, background: "#007AFF", color: "white", fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }} onClick={() => (window.location.href = "/inbox")}>Volver al portal</button>
+          <p style={{ fontSize: 28, fontWeight: 900, color: "#111827", marginBottom: 8 }}>{t.noAccessTitle}</p>
+          <p style={{ color: "#6B7280", lineHeight: 1.7 }}>{t.noAccessCopy}</p>
+          <button style={{ marginTop: 14, padding: "14px 16px", border: "none", borderRadius: 14, background: "#007AFF", color: "white", fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }} onClick={() => (window.location.href = "/inbox")}>{t.backToPortal}</button>
         </div>
       </div>
     );
@@ -382,8 +734,17 @@ export default function AdminPatientRecordPage() {
         .toast { border-radius: 16px; padding: 14px 16px; box-shadow: 0 14px 36px rgba(15,23,42,0.16); font-size: 14px; font-weight: 800; line-height: 1.5; }
         .toast.error { background: #FFF1F2; color: #E11D48; }
         .toast.success { background: #EDFAF1; color: #15803D; }
+        .line-input { width: 100%; padding: 13px 14px; background: #F3F4F6; border: 1px solid transparent; border-radius: 14px; font-size: 15px; color: #111827; font-family: inherit; outline: none; }
+        .line-input:focus { background: white; border-color: rgba(0,122,255,0.4); }
+        .field-label { font-size: 12px; font-weight: 900; color: #64748B; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; display: block; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .photo-card { display: grid; gap: 14px; align-content: start; }
+        .patient-photo { width: 124px; height: 124px; border-radius: 22px; object-fit: cover; background: #E5E7EB; box-shadow: 0 10px 24px rgba(15,23,42,0.12); }
+        .photo-fallback { width: 124px; height: 124px; border-radius: 22px; background: linear-gradient(135deg,#111827,#1D4ED8); display: flex; align-items: center; justify-content: center; color: white; font-size: 34px; font-weight: 900; }
+        .photo-actions { display: flex; flex-wrap: wrap; gap: 10px; }
         @media (max-width: 980px) {
           .hero-grid, .grid-2, .grid-4 { grid-template-columns: 1fr; }
+          .form-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 560px) {
           .record-topbar { align-items: flex-start; }
@@ -392,17 +753,33 @@ export default function AdminPatientRecordPage() {
         }
       `}</style>
 
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) uploadPatientPhoto(file);
+          event.target.value = "";
+        }}
+      />
+
       <div className="record-shell">
         <div className="record-topbar">
           <div>
-            <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>Expediente del paciente</p>
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>Revisión completa antes de exportar</p>
+            <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>{t.recordTitle}</p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>{t.recordSubtitle}</p>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button className="ghost-btn" style={{ background: lang === "es" ? "white" : "#EFF3F8" }} onClick={() => setLang("es")}>🇲🇽 Español</button>
+            <button className="ghost-btn" style={{ background: lang === "en" ? "white" : "#EFF3F8" }} onClick={() => setLang("en")}>🇺🇸 English</button>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="ghost-btn" onClick={() => (window.location.href = "/admin")}>← Volver al centro</button>
-            <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>Ir al portal</button>
+            <button className="ghost-btn" onClick={() => (window.location.href = "/admin")}>{t.backToCenter}</button>
+            <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>{t.goToPortal}</button>
             <button className="main-btn" onClick={exportRecord} disabled={!bundle || exporting}>
-              {exporting ? "Exportando..." : "📦 Exportar expediente"}
+              {exporting ? t.exporting : t.exportRecord}
             </button>
           </div>
         </div>
@@ -410,12 +787,12 @@ export default function AdminPatientRecordPage() {
         <div className="record-body">
           {!patient ? (
             <div className="card">
-              <p className="section-kicker">Expediente no disponible</p>
-              <p style={{ fontSize: 24, fontWeight: 900, color: "#111827", marginBottom: 8 }}>No pude abrir este paciente</p>
-              <p className="muted">Vuelve al centro de control para buscarlo de nuevo o intenta recargar la página.</p>
+              <p className="section-kicker">{t.unavailableTitle}</p>
+              <p style={{ fontSize: 24, fontWeight: 900, color: "#111827", marginBottom: 8 }}>{t.unavailableTitle}</p>
+              <p className="muted">{t.unavailableCopy}</p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-                <button className="main-btn" onClick={() => (window.location.href = "/admin")}>Volver al centro</button>
-                <button className="ghost-btn" onClick={fetchRecord}>Recargar</button>
+                <button className="main-btn" onClick={() => (window.location.href = "/admin")}>{t.backToCenter}</button>
+                <button className="ghost-btn" onClick={fetchRecord}>{t.reload}</button>
               </div>
             </div>
           ) : (
@@ -423,63 +800,59 @@ export default function AdminPatientRecordPage() {
               <section className="hero">
                 <div className="hero-grid">
                   <div>
-                    <h1 className="big-title">{patient.full_name || "Paciente sin nombre"}</h1>
-                    <p className="hero-copy">
-                      Aquí puedes revisar datos del paciente, procedimientos, medios y toda la cronología del chat antes de decidir si quieres exportar este expediente.
-                    </p>
+                    <h1 className="big-title">{patient.full_name || t.unnamedPatient}</h1>
+                    <p className="hero-copy">{t.heroCopy}</p>
                     <div className="pill-row">
                       <span className="meta-badge" style={{ color: "#1D4ED8", background: "rgba(255,255,255,0.92)" }}>
-                        ☎️ {patient.phone || "Sin teléfono"}
+                        ☎️ {patient.phone || t.noPhone}
                       </span>
                       <span className="meta-badge" style={{ color: "#1D4ED8", background: "rgba(255,255,255,0.92)" }}>
-                        ✉️ {patient.email || "Sin correo"}
+                        ✉️ {patient.email || t.noEmail}
                       </span>
                       <span className="meta-badge" style={{ color: "#1D4ED8", background: "rgba(255,255,255,0.92)" }}>
-                        🎂 {formatDate(patient.birthdate)}
+                        🎂 {formatDateLocal(patient.birthdate)}
                       </span>
                     </div>
                   </div>
 
                   <div className="card" style={{ background: "rgba(255,255,255,0.12)", color: "white", boxShadow: "none" }}>
-                    <p className="section-kicker" style={{ color: "rgba(255,255,255,0.72)" }}>Sedes relacionadas</p>
+                    <p className="section-kicker" style={{ color: "rgba(255,255,255,0.72)" }}>{t.relatedOffices}</p>
                     <div className="pill-row">
                       {offices.length > 0 ? (
                         offices.map((office) => (
                           <span key={office} className="meta-badge" style={{ color: "#111827", background: "rgba(255,255,255,0.92)" }}>
-                            {officeLabel(office)}
+                            {officeText(office)}
                           </span>
                         ))
                       ) : (
-                        <span className="meta-badge" style={{ color: "#111827", background: "rgba(255,255,255,0.92)" }}>📍 Sin sede</span>
+                        <span className="meta-badge" style={{ color: "#111827", background: "rgba(255,255,255,0.92)" }}>{t.noOffice}</span>
                       )}
                     </div>
-                    <p className="hero-copy" style={{ marginTop: 12 }}>
-                      Abre primero esta vista para revisar el caso completo. Si todo está correcto, exporta desde el botón de arriba.
-                    </p>
+                    <p className="hero-copy" style={{ marginTop: 12 }}>{t.heroHelper}</p>
                   </div>
                 </div>
               </section>
 
               <section className="grid-4">
                 <div className="stat-card">
-                  <p className="section-kicker">Procedimientos</p>
+                  <p className="section-kicker">{isSpanish ? "Procedimientos" : "Procedures"}</p>
                   <div className="value-display">{procedures.length}</div>
-                  <p className="muted">Relacionados al paciente</p>
+                  <p className="muted">{isSpanish ? "Relacionados al paciente" : "Linked to the patient"}</p>
                 </div>
                 <div className="stat-card">
-                  <p className="section-kicker">Salas</p>
+                  <p className="section-kicker">{isSpanish ? "Salas" : "Rooms"}</p>
                   <div className="value-display">{rooms.length}</div>
-                  <p className="muted">Chats o salas del expediente</p>
+                  <p className="muted">{isSpanish ? "Chats o salas del expediente" : "Chats or record rooms"}</p>
                 </div>
                 <div className="stat-card">
-                  <p className="section-kicker">Eventos</p>
+                  <p className="section-kicker">{isSpanish ? "Eventos" : "Events"}</p>
                   <div className="value-display">{timeline.length}</div>
-                  <p className="muted">Mensajes y archivos en historial</p>
+                  <p className="muted">{isSpanish ? "Mensajes y archivos en historial" : "Messages and files in history"}</p>
                 </div>
                 <div className="stat-card">
-                  <p className="section-kicker">Medios</p>
+                  <p className="section-kicker">{isSpanish ? "Medios" : "Media"}</p>
                   <div className="value-display">{media.images.length + media.videos.length + media.audios.length + media.files.length}</div>
-                  <p className="muted">Imágenes, videos, audios y archivos</p>
+                  <p className="muted">{isSpanish ? "Imágenes, videos, audios y archivos" : "Images, videos, audio files, and files"}</p>
                 </div>
               </section>
 
@@ -487,50 +860,92 @@ export default function AdminPatientRecordPage() {
                 <section className="card">
                   <div className="section-head">
                     <div>
-                      <p className="section-kicker">Ficha básica</p>
-                      <p className="section-sub">Datos generales del paciente y resumen del caso.</p>
+                      <p className="section-kicker">{t.basicInfo}</p>
+                      <p className="section-sub">{t.basicInfoCopy}</p>
                     </div>
                   </div>
-                  <div className="procedure-list">
-                    <div className="procedure-item">
-                      <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 6 }}>Datos del paciente</p>
-                      <p className="muted">Nombre: {patient.full_name || "Sin nombre"}</p>
-                      <p className="muted">Teléfono: {patient.phone || "Sin teléfono"}</p>
-                      <p className="muted">Correo: {patient.email || "Sin correo"}</p>
-                      <p className="muted">Nacimiento: {formatDate(patient.birthdate)}</p>
+
+                  <div className="form-grid">
+                    <div>
+                      <label className="field-label">{isSpanish ? "Nombre completo" : "Full name"}</label>
+                      <input className="line-input" value={patientDraft.full_name} onChange={(event) => setPatientDraft((prev) => ({ ...prev, full_name: event.target.value }))} />
                     </div>
+                    <div>
+                      <label className="field-label">{isSpanish ? "Teléfono" : "Phone"}</label>
+                      <input className="line-input" value={patientDraft.phone} onChange={(event) => setPatientDraft((prev) => ({ ...prev, phone: event.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="field-label">{isSpanish ? "Correo" : "Email"}</label>
+                      <input className="line-input" type="email" value={patientDraft.email} onChange={(event) => setPatientDraft((prev) => ({ ...prev, email: event.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="field-label">{isSpanish ? "Fecha de nacimiento" : "Birth date"}</label>
+                      <input className="line-input" type="date" value={patientDraft.birthdate} onChange={(event) => setPatientDraft((prev) => ({ ...prev, birthdate: event.target.value }))} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+                    <button className="main-btn" onClick={savePatientInfo} disabled={savingPatient}>
+                      {savingPatient ? t.savingPatient : t.savePatient}
+                    </button>
+                  </div>
+
+                  <div className="procedure-list" style={{ marginTop: 16 }}>
                     <div className="procedure-item">
-                      <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 6 }}>Resumen rápido</p>
-                      <p className="muted">Último evento registrado: {timeline.length ? formatDateTime(timeline[timeline.length - 1]?.message.created_at) : "Sin actividad"}</p>
-                      <p className="muted">Primera sala creada: {rooms.length ? formatDateTime(rooms[0]?.created_at) : "Sin salas"}</p>
+                      <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 6 }}>{t.quickSummary}</p>
+                      <p className="muted">{t.lastEvent}: {timeline.length ? formatDateTimeLocal(timeline[timeline.length - 1]?.message.created_at) : t.noActivity}</p>
+                      <p className="muted">{t.firstRoom}: {rooms.length ? formatDateTimeLocal(rooms[0]?.created_at) : t.noRooms}</p>
                     </div>
                   </div>
                 </section>
 
-                <section className="card">
+                <section className="card photo-card">
                   <div className="section-head">
                     <div>
-                      <p className="section-kicker">Procedimientos y sedes</p>
-                      <p className="section-sub">Qué procedimiento está relacionado, en qué sede y cuántas salas tiene.</p>
+                      <p className="section-kicker">{t.patientPhoto}</p>
+                      <p className="section-sub">{t.uploadPhotoHelp}</p>
                     </div>
                   </div>
-                  <div className="procedure-list">
-                    {procedures.length === 0 ? (
-                      <div className="empty-mini">No hay procedimientos registrados para este paciente.</div>
-                    ) : (
-                      procedures.map((procedure) => {
-                        const relatedRooms = rooms.filter((room) => room.procedure_id === procedure.id);
-                        return (
-                          <div key={procedure.id} className="procedure-item">
-                            <p style={{ fontSize: 16, fontWeight: 900, color: "#111827", marginBottom: 6 }}>{procedure.procedure_name || "Procedimiento sin nombre"}</p>
-                            <p className="muted">Sede: {procedure.office_location || "Sin sede"}</p>
-                            <p className="muted">Cirugía: {formatDate(procedure.surgery_date)}</p>
-                            <p className="muted">Estatus: {procedure.status || "Sin estatus"}</p>
-                            <p className="muted">Salas relacionadas: {relatedRooms.length}</p>
-                          </div>
-                        );
-                      })
-                    )}
+
+                  {patient.profile_picture_url ? (
+                    <img src={patient.profile_picture_url} alt="" className="patient-photo" />
+                  ) : (
+                    <div className="photo-fallback">{initials(patient.full_name)}</div>
+                  )}
+
+                  <div className="photo-actions">
+                    <button className="main-btn" onClick={() => photoInputRef.current?.click()} disabled={photoUploading}>
+                      {photoUploading ? (isSpanish ? "Subiendo..." : "Uploading...") : patient.profile_picture_url ? t.changePhoto : t.addPhoto}
+                    </button>
+                  </div>
+
+                  <div className="procedure-item">
+                    <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 6 }}>{t.recordStatus}</p>
+                    <p className="muted" style={{ marginBottom: 10 }}>{t.recordStatusCopy}</p>
+                    <div className="pill-row">
+                      {([
+                        ["active", t.active],
+                        ["archived", t.archived],
+                        ["trash", t.trash],
+                      ] as Array<[PatientRecordStatus, string]>).map(([status, label]) => (
+                        <button
+                          key={status}
+                          className="ghost-btn"
+                          style={{
+                            background: patientStatus === status ? `${recordStatusColor(status)}18` : "#EFF3F8",
+                            color: patientStatus === status ? recordStatusColor(status) : "#111827",
+                            opacity: statusSaving && statusSaving !== status ? 0.7 : 1,
+                          }}
+                          disabled={Boolean(statusSaving)}
+                          onClick={() => changeRecordStatus(status)}
+                        >
+                          {statusSaving === status ? (isSpanish ? "Guardando..." : "Saving...") : label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="muted" style={{ marginTop: 10 }}>
+                      {isSpanish ? "Estado actual" : "Current status"}: {recordStatusText(patientStatus)}
+                    </p>
                   </div>
                 </section>
               </div>
@@ -538,28 +953,134 @@ export default function AdminPatientRecordPage() {
               <section className="card" style={{ marginTop: 16 }}>
                 <div className="section-head">
                   <div>
-                    <p className="section-kicker">Media y archivos</p>
-                    <p className="section-sub">Aquí está todo el material enviado y recibido dentro del chat del paciente.</p>
+                    <p className="section-kicker">{t.proceduresTitle}</p>
+                    <p className="section-sub">{t.proceduresCopy}</p>
                   </div>
                 </div>
-                <div className="grid-2">
-                  {renderMediaGroup("Imágenes", media.images, "No hay imágenes en el historial.")}
-                  {renderMediaGroup("Videos", media.videos, "No hay videos en el historial.")}
-                  {renderMediaGroup("Audios", media.audios, "No hay audios en el historial.")}
-                  {renderMediaGroup("Archivos", media.files, "No hay archivos en el historial.")}
+                <div className="procedure-list">
+                  {procedures.length === 0 ? (
+                    <div className="empty-mini">{t.noProcedures}</div>
+                  ) : (
+                    procedures.map((procedure) => {
+                      const relatedRooms = rooms.filter((room) => room.procedure_id === procedure.id);
+                      const draft = procedureDrafts[procedure.id] || {
+                        procedure_name: procedure.procedure_name || "",
+                        office_location: normalizeOffice(procedure.office_location),
+                        status: procedure.status || "",
+                        surgery_date: procedure.surgery_date || "",
+                      };
+
+                      return (
+                        <div key={procedure.id} className="procedure-item">
+                          <div className="form-grid">
+                            <div>
+                              <label className="field-label">{isSpanish ? "Procedimiento" : "Procedure"}</label>
+                              <input
+                                className="line-input"
+                                value={draft.procedure_name}
+                                onChange={(event) =>
+                                  setProcedureDrafts((prev) => ({
+                                    ...prev,
+                                    [procedure.id]: { ...draft, procedure_name: event.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <label className="field-label">{isSpanish ? "Estatus" : "Status"}</label>
+                              <input
+                                className="line-input"
+                                value={draft.status}
+                                onChange={(event) =>
+                                  setProcedureDrafts((prev) => ({
+                                    ...prev,
+                                    [procedure.id]: { ...draft, status: event.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <label className="field-label">{isSpanish ? "Fecha de cirugía" : "Surgery date"}</label>
+                              <input
+                                className="line-input"
+                                type="date"
+                                value={draft.surgery_date}
+                                onChange={(event) =>
+                                  setProcedureDrafts((prev) => ({
+                                    ...prev,
+                                    [procedure.id]: { ...draft, surgery_date: event.target.value },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <label className="field-label">{isSpanish ? "Sede" : "Office"}</label>
+                              <div className="pill-row" style={{ marginTop: 0 }}>
+                                {(["Guadalajara", "Tijuana"] as Office[]).map((office) => (
+                                  <button
+                                    key={`${procedure.id}-${office}`}
+                                    className="ghost-btn"
+                                    style={{
+                                      background: draft.office_location === office ? "#DBEAFE" : "#EFF3F8",
+                                      color: draft.office_location === office ? "#1D4ED8" : "#111827",
+                                    }}
+                                    onClick={() =>
+                                      setProcedureDrafts((prev) => ({
+                                        ...prev,
+                                        [procedure.id]: { ...draft, office_location: office },
+                                      }))
+                                    }
+                                  >
+                                    {office === "Guadalajara" ? "🏙️ Guadalajara" : "🌊 Tijuana"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+                            <button className="main-btn" onClick={() => saveProcedure(procedure.id)} disabled={savingProcedureId === procedure.id}>
+                              {savingProcedureId === procedure.id ? t.savingProcedure : t.saveProcedure}
+                            </button>
+                            <span className="meta-badge" style={{ color: "#166534", background: "#ECFDF5" }}>
+                              {t.roomsRelated}: {relatedRooms.length}
+                            </span>
+                            <span className="meta-badge" style={{ color: "#1D4ED8", background: "#EFF6FF" }}>
+                              {draft.office_location ? officeText(draft.office_location) : t.noOffice}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </section>
 
               <section className="card" style={{ marginTop: 16 }}>
                 <div className="section-head">
                   <div>
-                    <p className="section-kicker">Cronología completa</p>
-                    <p className="section-sub">Qué pasó, quién escribió, cuándo ocurrió, desde qué sede y con qué procedimiento estaba relacionado.</p>
+                    <p className="section-kicker">{t.mediaTitle}</p>
+                    <p className="section-sub">{t.mediaCopy}</p>
+                  </div>
+                </div>
+                <div className="grid-2">
+                  {renderMediaGroup(t.images, media.images, t.noImages)}
+                  {renderMediaGroup(t.videos, media.videos, t.noVideos)}
+                  {renderMediaGroup(t.audios, media.audios, t.noAudios)}
+                  {renderMediaGroup(t.files, media.files, t.noFiles)}
+                </div>
+              </section>
+
+              <section className="card" style={{ marginTop: 16 }}>
+                <div className="section-head">
+                  <div>
+                    <p className="section-kicker">{t.timelineTitle}</p>
+                    <p className="section-sub">{t.timelineCopy}</p>
                   </div>
                 </div>
 
                 {timeline.length === 0 ? (
-                  <div className="empty-mini">No hay historial registrado todavía.</div>
+                  <div className="empty-mini">{t.noTimeline}</div>
                 ) : (
                   <div className="timeline-list">
                     {timeline.map((entry) => {
@@ -575,31 +1096,31 @@ export default function AdminPatientRecordPage() {
                           <div className="timeline-top">
                             <div>
                               <p style={{ fontSize: 16, fontWeight: 900, color: "#111827", marginBottom: 6 }}>
-                                {entry.message.sender_name || (entry.message.sender_type === "patient" ? patient.full_name || "Paciente" : "Staff")}
+                                {entry.message.sender_name || (entry.message.sender_type === "patient" ? patient.full_name || t.unnamedPatient : isSpanish ? "Staff" : "Staff")}
                               </p>
                               <div className="pill-row">
                                 <span className="meta-badge" style={{ color: roleColor(entry.message.sender_role || entry.message.sender_type), background: `${roleColor(entry.message.sender_role || entry.message.sender_type)}18` }}>
-                                  {roleLabel(entry.message.sender_role || entry.message.sender_type || "staff")}
+                                  {roleText(entry.message.sender_role || entry.message.sender_type || "staff")}
                                 </span>
                                 <span className="meta-badge" style={{ color: "#1D4ED8", background: "#EFF6FF" }}>
-                                  {officeLabel(senderOffice)}
+                                  {officeText(senderOffice)}
                                 </span>
                                 <span className="meta-badge" style={{ color: "#166534", background: "#ECFDF5" }}>
-                                  {messageTypeLabel(entry.message)}
+                                  {messageTypeText(entry.message)}
                                 </span>
                               </div>
                             </div>
                             <div style={{ textAlign: "right" }}>
-                              <p className="body-muted">{formatDateTime(entry.message.created_at)}</p>
-                              <p className="body-muted">Sala: {entry.room.id.slice(0, 8)}</p>
+                              <p className="body-muted">{formatDateTimeLocal(entry.message.created_at)}</p>
+                              <p className="body-muted">{t.roomLabel}: {entry.room.id.slice(0, 8)}</p>
                             </div>
                           </div>
 
                           <div style={{ display: "grid", gap: 10 }}>
                             {renderTimelineBody(entry)}
                             <div style={{ borderTop: "1px solid #EEF2F7", paddingTop: 10 }}>
-                              <p className="body-muted">Procedimiento: {entry.procedure.procedure_name || "Sin procedimiento"}</p>
-                              <p className="body-muted">Motivo / contexto: {messageReason(entry.message, entry.procedure)}</p>
+                              <p className="body-muted">{t.procedureLabel}: {entry.procedure.procedure_name || (isSpanish ? "Sin procedimiento" : "No procedure")}</p>
+                              <p className="body-muted">{t.reasonLabel}: {messageReasonText(entry.message, entry.procedure)}</p>
                             </div>
                           </div>
                         </div>

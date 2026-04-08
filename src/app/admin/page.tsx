@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useAdminLang } from "@/lib/useAdminLang";
 import {
   OWNER_EMAIL,
   adminColor,
@@ -14,7 +15,10 @@ import {
   isMissingColumnError,
   normalizeAdminLevel,
   normalizeOffice,
+  normalizeRecordStatus,
   officeLabel,
+  recordStatusColor,
+  recordStatusLabel,
   roleColor,
   roleLabel,
   sanitizeFileName,
@@ -23,6 +27,7 @@ import {
   type Office,
   type OfficeFilter,
   type PatientRecord,
+  type PatientRecordStatus,
   type ProcedureRecord,
   type RoomRecord,
   type StaffProfile,
@@ -33,6 +38,7 @@ type PatientCard = {
   procedures: ProcedureRecord[];
   rooms: RoomRecord[];
   offices: Office[];
+  recordStatus: PatientRecordStatus;
   latestSurgery: string;
   matchesSearch: boolean;
 };
@@ -42,6 +48,7 @@ const scrollToSection = (id: string) => {
 };
 
 export default function AdminPage() {
+  const { lang, setLang, isSpanish } = useAdminLang();
   const [sessionChecked, setSessionChecked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,6 +67,7 @@ export default function AdminPage() {
   const [exportingKey, setExportingKey] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
   const [officeFilter, setOfficeFilter] = useState<OfficeFilter>("Todas");
+  const [recordFilter, setRecordFilter] = useState<PatientRecordStatus>("active");
   const [successMsg, setSuccessMsg] = useState("");
   const [pageError, setPageError] = useState("");
 
@@ -67,6 +75,51 @@ export default function AdminPage() {
   const hasAdminAccess = viewerEmail.toLowerCase() === OWNER_EMAIL || ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
   const canManageAdmins = viewerAdminLevel === "owner" || viewerAdminLevel === "super_admin";
   const canManageOwner = viewerEmail.toLowerCase() === OWNER_EMAIL || viewerAdminLevel === "owner";
+
+  const officeText = (office: OfficeFilter | Office) => {
+    if (office === "Todas") return isSpanish ? "🏥 Todas las sedes" : "🏥 All offices";
+    if (office === "Guadalajara") return "📍 Guadalajara";
+    if (office === "Tijuana") return "📍 Tijuana";
+    return isSpanish ? "📍 Sin sede" : "📍 No office";
+  };
+
+  const roleText = (role: string | null | undefined) =>
+    isSpanish
+      ? roleLabel(role)
+      : (
+          {
+            doctor: "👨‍⚕️ Doctor",
+            enfermeria: "💉 Nursing",
+            coordinacion: "📋 Coordination",
+            post_quirofano: "🏥 Post-Op",
+            staff: "👤 Staff",
+            patient: "🧑 Patient",
+            system: "⚙️ System",
+          } as Record<string, string>
+        )[role || ""] || "👤 Staff";
+
+  const adminText = (level: AdminLevel) =>
+    isSpanish
+      ? adminLabel(level)
+      : (
+          {
+            owner: "👑 Full access",
+            super_admin: "⭐ Advanced admin",
+            admin: "🛡️ Admin",
+            none: "No admin",
+          } as const
+        )[level];
+
+  const recordText = (value: PatientRecordStatus) =>
+    isSpanish
+      ? recordStatusLabel(value)
+      : (
+          {
+            active: "🟢 Active",
+            archived: "🗂️ Archived",
+            trash: "🗑️ Trash",
+          } as const
+        )[value];
 
   const staffById = useMemo(() => new Map(staff.map((member) => [member.id, member])), [staff]);
 
@@ -95,6 +148,7 @@ export default function AdminPage() {
           procedures: patientProcedures,
           rooms: patientRooms,
           offices,
+          recordStatus: normalizeRecordStatus(patient.record_status),
           latestSurgery:
             patientProcedures
               .map((procedure) => procedure.surgery_date)
@@ -105,9 +159,10 @@ export default function AdminPage() {
         };
       })
       .filter((card) => (officeFilter === "Todas" ? true : card.offices.includes(officeFilter)))
+      .filter((card) => card.recordStatus === recordFilter)
       .filter((card) => card.matchesSearch)
       .sort((a, b) => (a.patient.full_name || "").localeCompare(b.patient.full_name || "", "es"));
-  }, [officeFilter, patientSearch, patients, procedures, rooms]);
+  }, [officeFilter, patientSearch, patients, procedures, recordFilter, rooms]);
 
   const officeCounts = useMemo(() => {
     return procedures.reduce(
@@ -120,7 +175,17 @@ export default function AdminPage() {
     );
   }, [procedures]);
 
-  const hasActiveSearch = patientSearch.trim().length > 0 || officeFilter !== "Todas";
+  const recordCounts = useMemo(() => {
+    return patients.reduce(
+      (counts, patient) => {
+        counts[normalizeRecordStatus(patient.record_status)] += 1;
+        return counts;
+      },
+      { active: 0, archived: 0, trash: 0 }
+    );
+  }, [patients]);
+
+  const hasActiveSearch = patientSearch.trim().length > 0 || officeFilter !== "Todas" || recordFilter !== "active";
   const visiblePatientCards = hasActiveSearch ? patientCards.slice(0, 12) : [];
   const hiddenPatientCount = Math.max(0, patientCards.length - visiblePatientCards.length);
 
@@ -244,12 +309,12 @@ export default function AdminPage() {
 
     setInviteCode(nextCode);
     setNewInviteCode("");
-    updateSuccess("Código de invitación actualizado.");
+    updateSuccess(isSpanish ? "Código de invitación actualizado." : "Invitation code updated.");
   };
 
   const deleteStaff = async (member: StaffProfile) => {
     const name = member.full_name || "este usuario";
-    if (!confirm(`¿Eliminar la cuenta de ${name}?\n\nEsta acción solo borra el perfil visible en el portal.`)) return;
+    if (!confirm(isSpanish ? `¿Eliminar la cuenta de ${name}?\n\nEsta acción solo borra el perfil visible en el portal.` : `Delete ${name}'s account?\n\nThis only removes the visible profile from the portal.`)) return;
     setDeletingId(member.id);
     const { error } = await supabase.from("profiles").delete().eq("id", member.id);
     setDeletingId(null);
@@ -384,7 +449,7 @@ export default function AdminPage() {
             <div style={{ fontSize: 56, marginBottom: 10 }}>⛔</div>
             <p style={{ fontSize: 28, fontWeight: 800, color: "#111827", marginBottom: 8 }}>Tu cuenta no tiene acceso</p>
             <p style={{ fontSize: 15, color: "#6B7280", lineHeight: 1.7 }}>Esta cuenta puede usar el portal, pero todavía no tiene permisos para entrar al centro de control.</p>
-            <button className="main-btn" onClick={() => (window.location.href = "/inbox")}>Volver al portal</button>
+            <button className="main-btn" onClick={() => (window.location.href = "/inbox")}>{isSpanish ? "Volver al portal" : "Back to portal"}</button>
           </div>
         </div>
       </>
@@ -457,13 +522,17 @@ export default function AdminPage() {
       <div className="admin-shell">
         <div className="admin-topbar">
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>Centro de control</p>
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>Expedientes, equipo y accesos del portal</p>
+            <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>{isSpanish ? "Centro de control" : "Control center"}</p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>{isSpanish ? "Expedientes, equipo y accesos del portal" : "Records, team, and portal access"}</p>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button className="ghost-btn" style={{ background: lang === "es" ? "white" : "#EFF3F8", color: "#111827" }} onClick={() => setLang("es")}>🇲🇽 Español</button>
+            <button className="ghost-btn" style={{ background: lang === "en" ? "white" : "#EFF3F8", color: "#111827" }} onClick={() => setLang("en")}>🇺🇸 English</button>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button className="ghost-btn" onClick={() => (window.location.href = "/admin/ayuda")}>Ayuda</button>
-            <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>Volver al portal</button>
-            <button className="ghost-btn" onClick={() => supabase.auth.signOut().then(() => (window.location.href = "/login"))}>Salir</button>
+            <button className="ghost-btn" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
+            <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>{isSpanish ? "Volver al portal" : "Back to portal"}</button>
+            <button className="ghost-btn" onClick={() => supabase.auth.signOut().then(() => (window.location.href = "/login"))}>{isSpanish ? "Salir" : "Sign out"}</button>
           </div>
         </div>
 
@@ -471,28 +540,28 @@ export default function AdminPage() {
           <section className="hero">
             <div className="hero-grid">
               <div>
-                <h1 className="big-title">Busca, revisa y luego exporta</h1>
+                <h1 className="big-title">{isSpanish ? "Busca, revisa y luego exporta" : "Search, review, then export"}</h1>
                 <p className="subtle">
-                  Primero encuentra el expediente correcto. Después abre la ficha del paciente, revisa su historia completa y decide si quieres exportarla.
+                  {isSpanish ? "Primero encuentra el expediente correcto. Después abre la ficha del paciente, revisa su historia completa y decide si quieres exportarla." : "First find the right record. Then open the patient file, review the full history, and decide whether to export it."}
                 </p>
                 <div className="quick-links">
-                  <button className="hero-link" onClick={() => scrollToSection("expedientes")}>📂 Buscar expediente</button>
-                  <button className="hero-link" onClick={() => scrollToSection("equipo")}>👥 Equipo</button>
-                  <button className="hero-link" onClick={() => (window.location.href = "/admin/ayuda")}>❓ Ayuda</button>
+                  <button className="hero-link" onClick={() => scrollToSection("expedientes")}>{isSpanish ? "📂 Buscar expediente" : "📂 Find record"}</button>
+                  <button className="hero-link" onClick={() => scrollToSection("equipo")}>{isSpanish ? "👥 Equipo" : "👥 Team"}</button>
+                  <button className="hero-link" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "❓ Ayuda" : "❓ Help"}</button>
                 </div>
               </div>
 
               <div className="card" style={{ background: "rgba(255,255,255,0.12)", color: "white", boxShadow: "none" }}>
-                <p className="section-title" style={{ color: "rgba(255,255,255,0.7)" }}>Acciones rápidas</p>
+                <p className="section-title" style={{ color: "rgba(255,255,255,0.7)" }}>{isSpanish ? "Acciones rápidas" : "Quick actions"}</p>
                 <div style={{ display: "grid", gap: 10 }}>
                   <button className="main-btn" onClick={handleRefresh} disabled={refreshing}>
-                    {refreshing ? "Actualizando..." : "🔄 Actualizar datos"}
+                    {refreshing ? (isSpanish ? "Actualizando..." : "Refreshing...") : (isSpanish ? "🔄 Actualizar datos" : "🔄 Refresh data")}
                   </button>
                   <button className="ghost-btn" style={{ background: "rgba(255,255,255,0.14)", color: "white" }} onClick={() => scrollToSection("expedientes")}>
-                    🔎 Ir a expedientes
+                    {isSpanish ? "🔎 Ir a expedientes" : "🔎 Go to records"}
                   </button>
                   <button className="ghost-btn" style={{ background: "rgba(255,255,255,0.14)", color: "white" }} onClick={() => scrollToSection("equipo")}>
-                    👥 Ir al equipo
+                    {isSpanish ? "👥 Ir al equipo" : "👥 Go to team"}
                   </button>
                 </div>
               </div>
@@ -501,24 +570,24 @@ export default function AdminPage() {
 
           <section className="stats-grid">
             <div className="stat-card">
-              <p className="section-title">Staff total</p>
+              <p className="section-title">{isSpanish ? "Equipo total" : "Total staff"}</p>
               <div className="value-display">{staff.length}</div>
-              <p className="muted">Usuarios visibles en el portal</p>
+              <p className="muted">{isSpanish ? "Usuarios visibles en el portal" : "Users visible in the portal"}</p>
             </div>
             <div className="stat-card">
-              <p className="section-title">Pacientes</p>
-              <div className="value-display">{patients.length}</div>
-              <p className="muted">Registros disponibles para revisar</p>
+              <p className="section-title">{isSpanish ? "Activos" : "Active"}</p>
+              <div className="value-display">{recordCounts.active}</div>
+              <p className="muted">{isSpanish ? "Expedientes en uso diario" : "Records in daily use"}</p>
             </div>
             <div className="stat-card">
               <p className="section-title">Guadalajara</p>
               <div className="value-display">{officeCounts.Guadalajara}</div>
-              <p className="muted">Procedimientos en GDL</p>
+              <p className="muted">{isSpanish ? "Procedimientos en GDL" : "Procedures in GDL"}</p>
             </div>
             <div className="stat-card">
               <p className="section-title">Tijuana</p>
               <div className="value-display">{officeCounts.Tijuana}</div>
-              <p className="muted">Procedimientos en TJN</p>
+              <p className="muted">{isSpanish ? "Procedimientos en TJN" : "Procedures in TJN"}</p>
             </div>
           </section>
 
@@ -526,8 +595,8 @@ export default function AdminPage() {
             <section className="card" id="expedientes">
               <div className="header-row">
                 <div>
-                  <p className="card-title">Buscar expediente</p>
-                  <p className="muted">Escribe nombre, teléfono, correo, procedimiento o sede. Después abre el expediente para revisarlo con calma antes de exportar.</p>
+                  <p className="card-title">{isSpanish ? "Buscar expediente" : "Find record"}</p>
+                  <p className="muted">{isSpanish ? "Escribe nombre, teléfono, correo, procedimiento o sede. Después abre el expediente para revisarlo con calma antes de exportar." : "Type a name, phone number, email, procedure, or office. Then open the record and review it before exporting."}</p>
                 </div>
                 <div className="inline-actions">
                   <button
@@ -535,17 +604,18 @@ export default function AdminPage() {
                     onClick={() => {
                       setPatientSearch("");
                       setOfficeFilter("Todas");
+                      setRecordFilter("active");
                     }}
                     disabled={!hasActiveSearch}
                   >
-                    Limpiar
+                    {isSpanish ? "Borrar" : "Clear"}
                   </button>
                   <button
                     className="main-btn"
                     onClick={() => exportPatients("filtered")}
                     disabled={!hasActiveSearch || patientCards.length === 0 || exportingKey === "filtered"}
                   >
-                    {exportingKey === "filtered" ? "Exportando..." : "Descargar resultados"}
+                    {exportingKey === "filtered" ? (isSpanish ? "Exportando..." : "Exporting...") : (isSpanish ? "Descargar resultados" : "Download results")}
                   </button>
                 </div>
               </div>
@@ -553,10 +623,30 @@ export default function AdminPage() {
               <div style={{ display: "grid", gap: 12, marginBottom: 12 }}>
                 <input
                   className="line-input"
-                  placeholder="Buscar por nombre, teléfono, email, procedimiento o sede..."
+                  placeholder={isSpanish ? "Buscar por nombre, teléfono, email, procedimiento o sede..." : "Search by name, phone, email, procedure, or office..."}
                   value={patientSearch}
                   onChange={(event) => setPatientSearch(event.target.value)}
                 />
+                <div className="pill-row">
+                  {([
+                    ["active", isSpanish ? `🟢 Activos (${recordCounts.active})` : `🟢 Active (${recordCounts.active})`],
+                    ["archived", isSpanish ? `🗂️ Archivados (${recordCounts.archived})` : `🗂️ Archived (${recordCounts.archived})`],
+                    ["trash", isSpanish ? `🗑️ Papelera (${recordCounts.trash})` : `🗑️ Trash (${recordCounts.trash})`],
+                  ] as Array<[PatientRecordStatus, string]>).map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={`hero-link${recordFilter === value ? " active" : ""}`}
+                      style={{
+                        background: recordFilter === value ? "#111827" : "#EFF3F8",
+                        color: recordFilter === value ? "white" : "#111827",
+                        borderColor: recordFilter === value ? "#111827" : "#D7E1EC",
+                      }}
+                      onClick={() => setRecordFilter(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <div className="helper-row">
                   <div className="pill-row">
                     {(["Todas", "Guadalajara", "Tijuana"] as OfficeFilter[]).map((option) => (
@@ -570,13 +660,13 @@ export default function AdminPage() {
                         }}
                         onClick={() => setOfficeFilter(option)}
                       >
-                        {option === "Todas" ? "🏥 Todas las sedes" : officeLabel(option)}
+                        {officeText(option)}
                       </button>
                     ))}
                   </div>
                   {hasActiveSearch && (
                     <span className="result-count">
-                      {patientCards.length} resultado(s)
+                      {isSpanish ? `${patientCards.length} resultado(s)` : `${patientCards.length} result(s)`}
                     </span>
                   )}
                 </div>
@@ -585,24 +675,24 @@ export default function AdminPage() {
               {!hasActiveSearch ? (
                 <div className="empty-state">
                   <div style={{ fontSize: 40, marginBottom: 8 }}>🔎</div>
-                  <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>Empieza con una búsqueda</p>
-                  <p className="muted">Así el doctor ve solo el expediente que quiere revisar, en lugar de una lista enorme de pacientes.</p>
+                  <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "Empieza con una búsqueda" : "Start with a search"}</p>
+                  <p className="muted">{isSpanish ? "Busca por nombre, teléfono o sede. Si quieres revisar archivo o papelera, solo cambia el filtro de estado." : "Search by name, phone number, or office. If you want archived or trash records, just change the status filter."}</p>
                 </div>
               ) : patientCards.length === 0 ? (
                 <div className="empty-state">
                   <div style={{ fontSize: 40, marginBottom: 8 }}>📁</div>
-                  <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>No encontré expedientes con ese filtro</p>
-                  <p className="muted">Prueba cambiando la sede o usando menos palabras en la búsqueda.</p>
+                  <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "No encontré expedientes con ese filtro" : "No records matched that filter"}</p>
+                  <p className="muted">{isSpanish ? "Prueba cambiando la sede o usando menos palabras en la búsqueda." : "Try changing the office or using fewer words in the search."}</p>
                 </div>
               ) : (
                 <>
                   {hiddenPatientCount > 0 && (
                     <div className="export-card" style={{ marginBottom: 12 }}>
                       <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "#1D4ED8" }}>
-                        Mostrando {visiblePatientCards.length} de {patientCards.length} resultados.
+                        {isSpanish ? `Mostrando ${visiblePatientCards.length} de ${patientCards.length} resultados.` : `Showing ${visiblePatientCards.length} of ${patientCards.length} results.`}
                       </p>
                       <p className="small-note" style={{ marginTop: 6 }}>
-                        Para ver menos resultados, agrega más detalle como teléfono, nombre completo o procedimiento.
+                        {isSpanish ? "Para ver menos resultados, agrega más detalle como teléfono, nombre completo o procedimiento." : "To narrow the list, add more detail like a phone number, full name, or procedure."}
                       </p>
                     </div>
                   )}
@@ -617,32 +707,38 @@ export default function AdminPage() {
                         )}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 4 }}>{card.patient.full_name || "Paciente sin nombre"}</p>
+                        <p style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 4 }}>{card.patient.full_name || (isSpanish ? "Paciente sin nombre" : "Unnamed patient")}</p>
                         <p className="muted">
-                          Tel: {card.patient.phone || "Sin teléfono"} · Correo: {card.patient.email || "Sin correo"}
+                          {isSpanish ? "Tel" : "Phone"}: {card.patient.phone || (isSpanish ? "Sin teléfono" : "No phone")} · {isSpanish ? "Correo" : "Email"}: {card.patient.email || (isSpanish ? "Sin correo" : "No email")}
                         </p>
                         <p className="muted">
-                          {card.procedures.length} procedimiento(s) · {card.rooms.length} sala(s) · Última cirugía: {formatDate(card.latestSurgery)}
+                          {card.procedures.length} {isSpanish ? "procedimiento(s)" : "procedure(s)"} · {card.rooms.length} {isSpanish ? "sala(s)" : "room(s)"} · {isSpanish ? "Última cirugía" : "Last surgery"}: {formatDate(card.latestSurgery)}
                         </p>
                         <div>
+                          <span
+                            className="meta-badge"
+                            style={{ color: recordStatusColor(card.recordStatus), background: `${recordStatusColor(card.recordStatus)}18` }}
+                          >
+                            {recordText(card.recordStatus)}
+                          </span>
                           {card.offices.length === 0 ? (
-                            <span className="meta-badge" style={{ color: "#6B7280", background: "#F3F4F6" }}>📍 Sin sede registrada</span>
+                            <span className="meta-badge" style={{ color: "#6B7280", background: "#F3F4F6" }}>{isSpanish ? "📍 Sin sede registrada" : "📍 No office assigned"}</span>
                           ) : (
                             card.offices.map((office) => (
                               <span key={`${card.patient.id}-${office}`} className="meta-badge" style={{ color: "#1D4ED8", background: "#EFF6FF" }}>
-                                {officeLabel(office)}
+                                {officeText(office)}
                               </span>
                             ))
                           )}
                           {card.procedures.slice(0, 2).map((procedure) => (
                             <span key={procedure.id} className="meta-badge" style={{ color: "#166534", background: "#ECFDF5" }}>
-                              🩺 {procedure.procedure_name || "Procedimiento"}
+                              🩺 {procedure.procedure_name || (isSpanish ? "Procedimiento" : "Procedure")}
                             </span>
                           ))}
                         </div>
                         <div className="mini-actions">
                           <button className="main-btn" onClick={() => (window.location.href = `/admin/paciente/${card.patient.id}`)}>
-                            📂 Ver expediente
+                            {isSpanish ? "📂 Ver expediente" : "📂 Open record"}
                           </button>
                         </div>
                       </div>
@@ -656,13 +752,13 @@ export default function AdminPage() {
               <section className="card">
                 <div className="header-row">
                   <div>
-                    <p className="card-title">Código de invitación</p>
-                    <p className="muted">Cámbialo si quieres detener nuevos registros con el código actual.</p>
+                    <p className="card-title">{isSpanish ? "Código de invitación" : "Invitation code"}</p>
+                    <p className="muted">{isSpanish ? "Cámbialo si quieres detener nuevos registros con el código actual." : "Change it if you want to stop new registrations using the current code."}</p>
                   </div>
                 </div>
 
                 <div className="export-card" style={{ marginBottom: 14 }}>
-                  <p className="section-title">Código actual</p>
+                  <p className="section-title">{isSpanish ? "Código actual" : "Current code"}</p>
                   <p style={{ fontSize: 28, fontWeight: 900, color: "#1D4ED8", letterSpacing: "0.12em", margin: 0, wordBreak: "break-word" }}>{inviteCode || "SIN CÓDIGO"}</p>
                 </div>
 
@@ -671,11 +767,11 @@ export default function AdminPage() {
                     className="line-input"
                     value={newInviteCode}
                     onChange={(event) => setNewInviteCode(event.target.value.toUpperCase())}
-                    placeholder="Nuevo código..."
+                    placeholder={isSpanish ? "Nuevo código..." : "New code..."}
                   />
                   <div className="inline-actions">
                     <button className="main-btn" onClick={saveInviteCode} disabled={savingCode || !newInviteCode.trim()}>
-                      {savingCode ? "Guardando..." : "Guardar"}
+                      {savingCode ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar" : "Save")}
                     </button>
                   </div>
                 </div>
@@ -684,27 +780,27 @@ export default function AdminPage() {
               <section className="card">
                 <div className="header-row">
                   <div>
-                    <p className="card-title">Guía rápida</p>
-                    <p className="muted">Solo lo esencial para moverte rápido y sin dudas.</p>
+                    <p className="card-title">{isSpanish ? "Guía rápida" : "Quick guide"}</p>
+                    <p className="muted">{isSpanish ? "Solo lo esencial para moverte rápido y sin dudas." : "Only the essentials so you can move quickly without guessing."}</p>
                   </div>
                 </div>
                 <div style={{ display: "grid", gap: 10 }}>
                   <div className="export-card">
-                    <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 4 }}>1. Busca</p>
-                    <p className="muted">Filtra por sede o escribe nombre, teléfono, correo o procedimiento.</p>
+                    <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 4 }}>{isSpanish ? "1. Busca" : "1. Search"}</p>
+                    <p className="muted">{isSpanish ? "Filtra por sede o escribe nombre, teléfono, correo o procedimiento." : "Filter by office or type a name, phone number, email, or procedure."}</p>
                   </div>
                   <div className="export-card">
-                    <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 4 }}>2. Revisa</p>
-                    <p className="muted">Abre el expediente del paciente y revisa historia, medios y cronología completa.</p>
+                    <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 4 }}>{isSpanish ? "2. Revisa" : "2. Review"}</p>
+                    <p className="muted">{isSpanish ? "Abre el expediente del paciente y revisa historia, medios y cronología completa." : "Open the patient record and review the history, media, and full timeline."}</p>
                   </div>
                   <div className="export-card">
                     <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 4 }}>3. Decide</p>
-                    <p className="muted">Si todo está correcto, exporta ese expediente o los resultados filtrados.</p>
+                    <p className="muted">{isSpanish ? "Si todo está correcto, exporta ese expediente o los resultados filtrados." : "If everything looks correct, export that record or the filtered results."}</p>
                   </div>
                 </div>
                 <div className="inline-actions" style={{ marginTop: 14 }}>
-                  <button className="main-btn" onClick={() => (window.location.href = "/admin/ayuda")}>Abrir ayuda</button>
-                  <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>Ir al portal</button>
+                  <button className="main-btn" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "Abrir ayuda" : "Open help"}</button>
+                  <button className="ghost-btn" onClick={() => (window.location.href = "/inbox")}>{isSpanish ? "Ir al portal" : "Go to portal"}</button>
                 </div>
               </section>
             </div>
