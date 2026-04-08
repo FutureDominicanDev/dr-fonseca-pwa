@@ -487,6 +487,14 @@ export default function AdminPage() {
         .subtle { color: rgba(255,255,255,0.84); line-height: 1.6; font-size: 15px; }
         .quick-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
         .hero-link { padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.12); color: white; font-size: 14px; font-weight: 800; cursor: pointer; font-family: inherit; }
+        .hero-search-card { background: rgba(255,255,255,0.12); color: white; box-shadow: none; display: grid; gap: 12px; }
+        .hero-search-input { width: 100%; padding: 13px 15px; background: rgba(255,255,255,0.96); border: 1px solid transparent; border-radius: 14px; font-size: 15px; font-family: inherit; color: #111827; outline: none; font-weight: 700; }
+        .hero-search-input:focus { border-color: rgba(255,255,255,0.42); }
+        .hero-pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        .hero-filter-btn { padding: 9px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.12); color: white; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit; }
+        .hero-filter-btn.active { background: white; color: #111827; border-color: white; }
+        .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .hero-secondary-btn { padding: 12px 14px; border-radius: 14px; border: none; background: rgba(255,255,255,0.14); color: white; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; }
         .main-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #007AFF; color: white; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
         .main-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .ghost-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
@@ -538,6 +546,10 @@ export default function AdminPage() {
           .quick-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
           .quick-links .hero-link:last-child { grid-column: 1 / -1; }
           .hero-link { width: 100%; text-align: center; padding: 10px 12px; font-size: 13px; }
+          .hero-pill-row { display: grid; grid-template-columns: 1fr 1fr; }
+          .hero-actions { display: grid; grid-template-columns: 1fr 1fr; }
+          .hero-actions .main-btn { grid-column: 1 / -1; }
+          .hero-secondary-btn { width: 100%; text-align: center; padding: 12px 12px; }
           .patient-row, .staff-row { flex-direction: column; }
           .toast-stack { right: 12px; left: 12px; width: auto; }
           .header-row { flex-direction: column; }
@@ -594,23 +606,74 @@ export default function AdminPage() {
                   {isSpanish ? "Primero encuentra el expediente correcto. Después abre la ficha del paciente, revisa su historia completa y decide si quieres exportarla." : "First find the right record. Then open the patient file, review the full history, and decide whether to export it."}
                 </p>
                 <div className="quick-links">
-                  <button className="hero-link" onClick={() => scrollToSection("expedientes")}>{isSpanish ? "📂 Buscar expediente" : "📂 Find record"}</button>
                   <button className="hero-link" onClick={() => scrollToSection("equipo")}>{isSpanish ? "👥 Equipo" : "👥 Team"}</button>
                   <button className="hero-link" onClick={() => (window.location.href = "/admin/ayuda")}>{isSpanish ? "❓ Ayuda" : "❓ Help"}</button>
+                  <button className="hero-link" onClick={handleRefresh} disabled={refreshing}>
+                    {refreshing ? (isSpanish ? "Actualizando..." : "Refreshing...") : (isSpanish ? "🔄 Actualizar datos" : "🔄 Refresh data")}
+                  </button>
                 </div>
               </div>
 
-              <div className="card" style={{ background: "rgba(255,255,255,0.12)", color: "white", boxShadow: "none" }}>
-                <p className="section-title" style={{ color: "rgba(255,255,255,0.7)" }}>{isSpanish ? "Acciones rápidas" : "Quick actions"}</p>
-                <div style={{ display: "grid", gap: 10 }}>
-                  <button className="main-btn" onClick={handleRefresh} disabled={refreshing}>
-                    {refreshing ? (isSpanish ? "Actualizando..." : "Refreshing...") : (isSpanish ? "🔄 Actualizar datos" : "🔄 Refresh data")}
+              <div className="card hero-search-card">
+                <div>
+                  <p className="section-title" style={{ color: "rgba(255,255,255,0.72)" }}>{isSpanish ? "Buscar paciente" : "Find patient"}</p>
+                  <p className="subtle" style={{ marginTop: 0 }}>
+                    {isSpanish ? "Busca por nombre, teléfono, correo, procedimiento o sede." : "Search by name, phone, email, procedure, or office."}
+                  </p>
+                </div>
+                <input
+                  className="hero-search-input"
+                  placeholder={isSpanish ? "Nombre, teléfono, email, procedimiento o sede..." : "Name, phone, email, procedure, or office..."}
+                  value={patientSearch}
+                  onChange={(event) => setPatientSearch(event.target.value)}
+                />
+                <div className="hero-pill-row">
+                  {([
+                    ["active", isSpanish ? `🟢 Activos (${recordCounts.active})` : `🟢 Active (${recordCounts.active})`],
+                    ["archived", isSpanish ? `🗂️ Archivados (${recordCounts.archived})` : `🗂️ Archived (${recordCounts.archived})`],
+                    ["trash", isSpanish ? `🗑️ Papelera (${recordCounts.trash})` : `🗑️ Trash (${recordCounts.trash})`],
+                  ] as Array<[PatientRecordStatus, string]>).map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={`hero-filter-btn${recordFilter === value ? " active" : ""}`}
+                      onClick={() => setRecordFilter(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="hero-pill-row">
+                  {(["Todas", "Guadalajara", "Tijuana"] as OfficeFilter[]).map((option) => (
+                    <button
+                      key={option}
+                      className={`hero-filter-btn${officeFilter === option ? " active" : ""}`}
+                      onClick={() => setOfficeFilter(option)}
+                    >
+                      {officeText(option)}
+                    </button>
+                  ))}
+                </div>
+                <div className="hero-actions">
+                  <button
+                    className="hero-secondary-btn"
+                    onClick={() => {
+                      setPatientSearch("");
+                      setOfficeFilter("Todas");
+                      setRecordFilter("active");
+                    }}
+                    disabled={!hasActiveSearch}
+                  >
+                    {isSpanish ? "Borrar filtros" : "Clear filters"}
                   </button>
-                  <button className="ghost-btn" style={{ background: "rgba(255,255,255,0.14)", color: "white" }} onClick={() => scrollToSection("expedientes")}>
-                    {isSpanish ? "🔎 Ir a expedientes" : "🔎 Go to records"}
-                  </button>
-                  <button className="ghost-btn" style={{ background: "rgba(255,255,255,0.14)", color: "white" }} onClick={() => scrollToSection("equipo")}>
+                  <button className="hero-secondary-btn" onClick={() => scrollToSection("equipo")}>
                     {isSpanish ? "👥 Ir al equipo" : "👥 Go to team"}
+                  </button>
+                  <button
+                    className="main-btn"
+                    onClick={() => exportPatients("filtered")}
+                    disabled={!hasActiveSearch || patientCards.length === 0 || exportingKey === "filtered"}
+                  >
+                    {exportingKey === "filtered" ? (isSpanish ? "Exportando..." : "Exporting...") : (isSpanish ? "Descargar resultados" : "Download results")}
                   </button>
                 </div>
               </div>
@@ -644,75 +707,10 @@ export default function AdminPage() {
             <section className="card" id="expedientes">
               <div className="header-row">
                 <div>
-                  <p className="card-title">{isSpanish ? "Buscar expediente" : "Find record"}</p>
-                  <p className="muted">{isSpanish ? "Escribe nombre, teléfono, correo, procedimiento o sede. Después abre el expediente para revisarlo con calma antes de exportar." : "Type a name, phone number, email, procedure, or office. Then open the record and review it before exporting."}</p>
+                  <p className="card-title">{isSpanish ? "Resultados de búsqueda" : "Search results"}</p>
+                  <p className="muted">{isSpanish ? "Abre el expediente correcto para revisarlo con calma antes de exportar." : "Open the correct record and review it before exporting."}</p>
                 </div>
                 <div className="inline-actions">
-                  <button
-                    className="ghost-btn"
-                    onClick={() => {
-                      setPatientSearch("");
-                      setOfficeFilter("Todas");
-                      setRecordFilter("active");
-                    }}
-                    disabled={!hasActiveSearch}
-                  >
-                    {isSpanish ? "Borrar" : "Clear"}
-                  </button>
-                  <button
-                    className="main-btn"
-                    onClick={() => exportPatients("filtered")}
-                    disabled={!hasActiveSearch || patientCards.length === 0 || exportingKey === "filtered"}
-                  >
-                    {exportingKey === "filtered" ? (isSpanish ? "Exportando..." : "Exporting...") : (isSpanish ? "Descargar resultados" : "Download results")}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gap: 12, marginBottom: 12 }}>
-                <input
-                  className="line-input"
-                  placeholder={isSpanish ? "Buscar por nombre, teléfono, email, procedimiento o sede..." : "Search by name, phone, email, procedure, or office..."}
-                  value={patientSearch}
-                  onChange={(event) => setPatientSearch(event.target.value)}
-                />
-                <div className="pill-row">
-                  {([
-                    ["active", isSpanish ? `🟢 Activos (${recordCounts.active})` : `🟢 Active (${recordCounts.active})`],
-                    ["archived", isSpanish ? `🗂️ Archivados (${recordCounts.archived})` : `🗂️ Archived (${recordCounts.archived})`],
-                    ["trash", isSpanish ? `🗑️ Papelera (${recordCounts.trash})` : `🗑️ Trash (${recordCounts.trash})`],
-                  ] as Array<[PatientRecordStatus, string]>).map(([value, label]) => (
-                    <button
-                      key={value}
-                      className={`hero-link${recordFilter === value ? " active" : ""}`}
-                      style={{
-                        background: recordFilter === value ? "#111827" : "#EFF3F8",
-                        color: recordFilter === value ? "white" : "#111827",
-                        borderColor: recordFilter === value ? "#111827" : "#D7E1EC",
-                      }}
-                      onClick={() => setRecordFilter(value)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="helper-row">
-                  <div className="pill-row">
-                    {(["Todas", "Guadalajara", "Tijuana"] as OfficeFilter[]).map((option) => (
-                      <button
-                        key={option}
-                        className={`hero-link${officeFilter === option ? " active" : ""}`}
-                        style={{
-                          background: officeFilter === option ? "#111827" : "#EFF3F8",
-                          color: officeFilter === option ? "white" : "#111827",
-                          borderColor: officeFilter === option ? "#111827" : "#D7E1EC",
-                        }}
-                        onClick={() => setOfficeFilter(option)}
-                      >
-                        {officeText(option)}
-                      </button>
-                    ))}
-                  </div>
                   {hasActiveSearch && (
                     <span className="result-count">
                       {isSpanish ? `${patientCards.length} resultado(s)` : `${patientCards.length} result(s)`}
