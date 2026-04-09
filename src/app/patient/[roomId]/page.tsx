@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, use } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { labelPatientLanguage } from "@/lib/patientMeta";
 
@@ -63,6 +63,8 @@ const T = {
     noMessagesHint: "Cuando escribas, el equipo verá tu mensaje en su panel.",
     patient: "Paciente",
     clinic: "Clínica",
+    careTeamLabel: "Equipo clínico",
+    typingSuffix: "está escribiendo...",
     quickReplyHint: "Toca una respuesta para enviarla rápido.",
     installedHint: "Puedes volver usando este mismo enlace cuando quieras.",
     installApp: "Agregar a pantalla inicial",
@@ -122,6 +124,8 @@ const T = {
     noMessagesHint: "When you write, the care team will see your message in their panel.",
     patient: "Patient",
     clinic: "Clinic",
+    careTeamLabel: "Care team",
+    typingSuffix: "is typing...",
     quickReplyHint: "Tap a quick reply to send it fast.",
     installedHint: "You can come back using this same link anytime.",
     installApp: "Add to home screen",
@@ -174,6 +178,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [recordingVideo, setRecordingVideo] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [staffTyping, setStaffTyping] = useState(false);
+  const [staffTypingName, setStaffTypingName] = useState("");
   const [settings, setSettings] = useState<PatientSettings>({
     displayName: "",
     darkMode: false,
@@ -199,6 +205,13 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const captureChunksRef = useRef<Blob[]>([]);
   const discardCaptureRef = useRef(false);
   const discardAudioRef = useRef(false);
+  const typingChannelRef = useRef<any>(null);
+  const typingIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outgoingTypingRef = useRef(false);
+  const notificationsPermissionRef = useRef<NotificationPermission>("default");
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioUnlockedRef = useRef(false);
 
   const t = T[settings.lang];
   const fontSize = settings.fontSizeLevel === "small" ? 14 : settings.fontSizeLevel === "large" ? 19 : 16;
@@ -264,6 +277,110 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     return groups;
   }, [messages]);
 
+  const ensureAudioContext = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return null;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextCtor();
+    return audioContextRef.current;
+  }, []);
+
+  const armAudioAlerts = useCallback(() => {
+    audioUnlockedRef.current = true;
+    const context = ensureAudioContext();
+    if (context?.state === "suspended") context.resume().catch(() => {});
+  }, [ensureAudioContext]);
+
+  const playIncomingTone = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
+    const context = ensureAudioContext();
+    if (!context) return;
+    if (context.state === "suspended") {
+      context.resume().catch(() => {});
+      return;
+    }
+
+    const startAt = context.currentTime;
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(0.05, startAt + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.22);
+    gain.connect(context.destination);
+
+    const oscillator = context.createOscillator();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, startAt);
+    oscillator.frequency.exponentialRampToValueAtTime(660, startAt + 0.22);
+    oscillator.connect(gain);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + 0.24);
+  }, [ensureAudioContext]);
+
+  const describeIncomingMessage = useCallback((message: any) => {
+    if (message.message_type === "audio") return settings.lang === "es" ? "Nuevo audio" : "New audio";
+    if (message.message_type === "video") return settings.lang === "es" ? "Nuevo video" : "New video";
+    if (message.message_type === "image") return settings.lang === "es" ? "Nueva imagen" : "New image";
+    if (message.message_type === "file") return settings.lang === "es" ? "Nuevo archivo" : "New file";
+    const text = `${message.content || ""}`.trim();
+    return text ? text.slice(0, 120) : settings.lang === "es" ? "Nuevo mensaje" : "New message";
+  }, [settings.lang]);
+
+  const notifyIncomingMessage = useCallback(async (message: any) => {
+    playIncomingTone();
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    if (document.visibilityState === "visible") return;
+    if (notificationsPermissionRef.current !== "granted") return;
+
+    const title = message.sender_name || staffTypingName || t.careTeamLabel;
+    const options = {
+      body: describeIncomingMessage(message),
+      icon: "/apple-touch-icon.png",
+      badge: "/apple-touch-icon.png",
+      data: { url: window.location.href },
+    };
+
+    if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.ready.catch(() => null);
+      if (registration) {
+        await registration.showNotification(title, options as NotificationOptions);
+        return;
+      }
+    }
+
+    if ("Notification" in window) new Notification(title, options);
+  }, [describeIncomingMessage, playIncomingTone, staffTypingName, t.careTeamLabel]);
+
+  const broadcastTypingState = useCallback((isTyping: boolean) => {
+    if (!typingChannelRef.current) return;
+    outgoingTypingRef.current = isTyping;
+    typingChannelRef.current.send({
+      type: "broadcast",
+      event: "typing",
+      payload: {
+        roomId,
+        senderType: "patient",
+        name: patientName,
+        isTyping,
+        sentAt: new Date().toISOString(),
+      },
+    }).catch(() => {});
+  }, [patientName, roomId]);
+
+  const updateTypingState = useCallback((nextValue: string) => {
+    const hasText = nextValue.trim().length > 0;
+    if (typingIdleTimeoutRef.current) clearTimeout(typingIdleTimeoutRef.current);
+
+    if (!hasText) {
+      if (outgoingTypingRef.current) broadcastTypingState(false);
+      return;
+    }
+
+    broadcastTypingState(true);
+    typingIdleTimeoutRef.current = setTimeout(() => {
+      broadcastTypingState(false);
+    }, 1400);
+  }, [broadcastTypingState]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -295,7 +412,18 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if ("Notification" in window) setNotificationsPermission(Notification.permission);
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if ("Notification" in window) {
+      setNotificationsPermission(Notification.permission);
+      notificationsPermissionRef.current = Notification.permission;
+      // Auto-request notification permission on first open so no message is ever missed
+      if (Notification.permission === "default") {
+        Notification.requestPermission().then((perm) => {
+          setNotificationsPermission(perm);
+          notificationsPermissionRef.current = perm;
+        });
+      }
+    }
     const standalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
     setIsStandalone(Boolean(standalone));
 
@@ -309,6 +437,17 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const unlock = () => armAudioAlerts();
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [armAudioAlerts]);
+
+  useEffect(() => {
     fetchRoom();
     fetchOfficePhones();
 
@@ -320,14 +459,72 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         filter: `room_id=eq.${roomId}`,
       }, ({ new: m }) => {
         if (m.is_internal) return;
-        setMessages((prev) => prev.some((entry) => entry.id === m.id) ? prev : [...prev, m]);
+        if (m.sender_type === "staff") {
+          setStaffTyping(false);
+          setStaffTypingName("");
+          if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+          notifyIncomingMessage(m);
+        }
+        setMessages((prev) => {
+          const ti = prev.findIndex((x) => typeof x.id === "string" && x.id.startsWith("temp-") && x.content === m.content && x.sender_type === m.sender_type);
+          if (ti !== -1) { const u = [...prev]; u[ti] = m; return u; }
+          if (prev.some((x) => x.id === m.id)) return prev;
+          return [...prev, m];
+        });
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [roomId]);
+  }, [notifyIncomingMessage, roomId]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`chat-signals:${roomId}`, { config: { broadcast: { self: false } } })
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload?.senderType !== "staff") return;
+        if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+
+        if (!payload?.isTyping) {
+          setStaffTyping(false);
+          setStaffTypingName("");
+          return;
+        }
+
+        setStaffTyping(true);
+        setStaffTypingName(payload?.name || t.careTeamLabel);
+        remoteTypingTimeoutRef.current = setTimeout(() => {
+          setStaffTyping(false);
+          setStaffTypingName("");
+        }, 2600);
+      });
+
+    typingChannelRef.current = channel;
+    channel.subscribe();
+
+    return () => {
+      if (typingIdleTimeoutRef.current) clearTimeout(typingIdleTimeoutRef.current);
+      if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+      if (outgoingTypingRef.current) {
+        channel.send({
+          type: "broadcast",
+          event: "typing",
+          payload: {
+            roomId,
+            senderType: "patient",
+            name: patientName,
+            isTyping: false,
+            sentAt: new Date().toISOString(),
+          },
+        }).catch(() => {});
+      }
+      typingChannelRef.current = null;
+      setStaffTyping(false);
+      setStaffTypingName("");
+      supabase.removeChannel(channel);
+    };
+  }, [patientName, roomId, t.careTeamLabel]);
 
   const fetchOfficePhones = async () => {
     const { data } = await supabase
@@ -425,6 +622,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const sendMessage = async (override?: string) => {
     const content = (override || newMessage).trim();
     if (!content || isSending.current) return;
+    updateTypingState("");
 
     isSending.current = true;
     setSending(true);
@@ -450,7 +648,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       sender_type: "patient",
       sender_name: patientName,
       is_internal: false,
-    });
+    }).select().single();
 
     if (insert.error && isSchemaColumnError(insert.error)) {
       insert = await supabase.from("messages").insert({
@@ -459,11 +657,13 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         message_type: "text",
         sender_type: "patient",
         sender_name: patientName,
-      });
+      }).select().single();
     }
 
     if (insert.error) {
       setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
+    } else if (insert.data) {
+      setMessages((prev) => prev.map((entry) => entry.id === tempId ? insert.data : entry));
     }
 
     if (override || newMessage.startsWith("/")) {
@@ -479,6 +679,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     if (typeof window === "undefined" || !("Notification" in window)) return;
     const permission = await Notification.requestPermission();
     setNotificationsPermission(permission);
+    notificationsPermissionRef.current = permission;
   };
 
   const promptInstall = async () => {
@@ -713,6 +914,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const updateDraft = (value: string, target?: HTMLTextAreaElement) => {
     setNewMessage(value);
+    updateTypingState(value);
     setShowAttachMenu(false);
     if (value.startsWith("/")) {
       setShowSlashMenu(true);
@@ -1046,6 +1248,12 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22C55E", display: "inline-block" }} />
               {t.online}
             </div>
+            {staffTyping && (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 999, background: "rgba(37,99,235,0.18)", color: "white", fontSize: 13, fontWeight: 700 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#93C5FD", display: "inline-block" }} />
+                {(staffTypingName || t.careTeamLabel)} {t.typingSuffix}
+              </div>
+            )}
             {officePhone && (
               <a href={`tel:${officePhone}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 999, background: "rgba(255,255,255,0.08)", color: "white", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>
                 📞 {t.callOffice}
@@ -1160,6 +1368,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             <textarea
               value={newMessage}
               onChange={(event) => updateDraft(event.target.value, event.currentTarget)}
+              onBlur={() => updateTypingState("")}
               placeholder={t.typeMessage}
               rows={1}
               style={{ flex: 1, resize: "none", minHeight: 46, maxHeight: 120, borderRadius: 20, border: `1px solid ${border}`, background: settings.darkMode ? "#111827" : "white", color: textColor, padding: "12px 14px", fontSize, fontFamily: "inherit", lineHeight: 1.5 }}

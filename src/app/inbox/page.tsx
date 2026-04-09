@@ -37,6 +37,8 @@ const T = {
   es: {
     patients: "Pacientes", search: "Buscar paciente...", noPatients: "Sin pacientes aún",
     noPatientsHint: "Toca + para crear el primero", online: "En línea",
+    patientLabel: "Paciente",
+    typingSuffix: "está escribiendo...",
     typeMessage: "Escribe un mensaje o usa / para respuestas rápidas...",
     send: "Enviar", recording: "Grabando...", recordAudio: "Grabar audio",
     deleteMsg: "¿Eliminar este mensaje?", msgDeleted: "Mensaje eliminado",
@@ -127,6 +129,8 @@ const T = {
   en: {
     patients: "Patients", search: "Search patient...", noPatients: "No patients yet",
     noPatientsHint: "Tap + to create the first one", online: "Online",
+    patientLabel: "Patient",
+    typingSuffix: "is typing...",
     typeMessage: "Type a message or use / for quick replies...",
     send: "Send", recording: "Recording...", recordAudio: "Record audio",
     deleteMsg: "Delete this message?", msgDeleted: "Message deleted",
@@ -380,6 +384,7 @@ export default function InboxPage() {
   const [savedName, setSavedName] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
+  const [patientTyping, setPatientTyping] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedRoomRef = useRef<any>(null);
@@ -400,6 +405,12 @@ export default function InboxPage() {
   const discardCaptureRef = useRef(false);
   const notifRef = useRef<string>("default");
   const isSending = useRef(false);
+  const typingChannelRef = useRef<any>(null);
+  const typingIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outgoingTypingRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioUnlockedRef = useRef(false);
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
@@ -468,6 +479,93 @@ export default function InboxPage() {
     return t.careTeamRoleStaff;
   };
 
+  const ensureAudioContext = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return null;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextCtor();
+    return audioContextRef.current;
+  }, []);
+
+  const armAudioAlerts = useCallback(() => {
+    audioUnlockedRef.current = true;
+    const context = ensureAudioContext();
+    if (context?.state === "suspended") context.resume().catch(() => {});
+  }, [ensureAudioContext]);
+
+  const playIncomingTone = useCallback(() => {
+    if (!audioUnlockedRef.current) return;
+    const context = ensureAudioContext();
+    if (!context) return;
+    if (context.state === "suspended") {
+      context.resume().catch(() => {});
+      return;
+    }
+
+    const startAt = context.currentTime;
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(0.05, startAt + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.22);
+    gain.connect(context.destination);
+
+    const oscillator = context.createOscillator();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, startAt);
+    oscillator.frequency.exponentialRampToValueAtTime(660, startAt + 0.22);
+    oscillator.connect(gain);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + 0.24);
+  }, [ensureAudioContext]);
+
+  const describeIncomingMessage = useCallback((message: any) => {
+    if (message.message_type === "audio") return lang==="es" ? "Nuevo audio" : "New audio";
+    if (message.message_type === "video") return lang==="es" ? "Nuevo video" : "New video";
+    if (message.message_type === "image") return lang==="es" ? "Nueva imagen" : "New image";
+    if (message.message_type === "file") return lang==="es" ? "Nuevo archivo" : "New file";
+    const text = `${message.content || ""}`.trim();
+    return text ? text.slice(0, 120) : lang==="es" ? "Nuevo mensaje" : "New message";
+  }, [lang]);
+
+  const roomPatientName = useCallback((roomId: string) => {
+    const patient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === roomId));
+    return patient?.full_name || t.patientLabel;
+  }, [patients, t.patientLabel]);
+
+  const broadcastTypingState = useCallback((isTyping: boolean, roomId: string, name: string) => {
+    if (!typingChannelRef.current) return;
+    outgoingTypingRef.current = isTyping;
+    typingChannelRef.current.send({
+      type: "broadcast",
+      event: "typing",
+      payload: {
+        roomId,
+        senderType: "staff",
+        name,
+        isTyping,
+        sentAt: new Date().toISOString(),
+      },
+    }).catch(() => {});
+  }, []);
+
+  const updateTypingState = useCallback((nextValue: string, roomId?: string) => {
+    const activeRoomId = roomId || selectedRoom?.id;
+    const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
+    if (!activeRoomId) return;
+    const hasText = nextValue.trim().length > 0;
+    if (typingIdleTimeoutRef.current) clearTimeout(typingIdleTimeoutRef.current);
+
+    if (!hasText) {
+      if (outgoingTypingRef.current) broadcastTypingState(false, activeRoomId, senderName);
+      return;
+    }
+
+    broadcastTypingState(true, activeRoomId, senderName);
+    typingIdleTimeoutRef.current = setTimeout(() => {
+      broadcastTypingState(false, activeRoomId, senderName);
+    }, 1400);
+  }, [broadcastTypingState, selectedRoom?.id, userProfile?.display_name, userProfile?.full_name]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) { window.location.href = "/login"; return; }
@@ -477,6 +575,17 @@ export default function InboxPage() {
     if ("Notification" in window) Notification.requestPermission().then(p=>{notifRef.current=p;});
     return () => { subscription.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const unlock = () => armAudioAlerts();
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [armAudioAlerts]);
 
   const fetchProfile = async (id: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id",id).single();
@@ -553,6 +662,57 @@ export default function InboxPage() {
   useEffect(()=>{ selectedRoomRef.current=selectedRoom; },[selectedRoom]);
 
   useEffect(() => {
+    if (!selectedRoom?.id) {
+      if (typingIdleTimeoutRef.current) clearTimeout(typingIdleTimeoutRef.current);
+      if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+      setPatientTyping(false);
+      typingChannelRef.current = null;
+      return;
+    }
+
+    const channel = supabase
+      .channel(`chat-signals:${selectedRoom.id}`, { config: { broadcast: { self: false } } })
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload?.senderType !== "patient") return;
+        if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+
+        if (!payload?.isTyping) {
+          setPatientTyping(false);
+          return;
+        }
+
+        setPatientTyping(true);
+        remoteTypingTimeoutRef.current = setTimeout(() => {
+          setPatientTyping(false);
+        }, 2600);
+      });
+
+    typingChannelRef.current = channel;
+    channel.subscribe();
+
+    return () => {
+      if (typingIdleTimeoutRef.current) clearTimeout(typingIdleTimeoutRef.current);
+      if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+      if (outgoingTypingRef.current) {
+        channel.send({
+          type: "broadcast",
+          event: "typing",
+          payload: {
+            roomId: selectedRoom.id,
+            senderType: "staff",
+            name: userProfile?.full_name || userProfile?.display_name || "Staff",
+            isTyping: false,
+            sentAt: new Date().toISOString(),
+          },
+        }).catch(() => {});
+      }
+      typingChannelRef.current = null;
+      setPatientTyping(false);
+      supabase.removeChannel(channel);
+    };
+  }, [selectedRoom?.id, userProfile?.display_name, userProfile?.full_name]);
+
+  useEffect(() => {
     if (currentUserId) fetchAssignableStaff();
   }, [currentUserId, userProfile]);
 
@@ -575,6 +735,11 @@ export default function InboxPage() {
   useEffect(()=>{
     const ch = supabase.channel("rt-msgs")
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},({new:m})=>{
+        if (m.sender_type==="patient") {
+          playIncomingTone();
+          setPatientTyping(false);
+          if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+        }
         if (selectedRoomRef.current?.id===m.room_id) {
           setMessages(prev=>{
             const ti=prev.findIndex(x=>typeof x.id==="string"&&x.id.startsWith("temp-")&&x.content===m.content&&x.sender_type===m.sender_type);
@@ -582,16 +747,19 @@ export default function InboxPage() {
             if (prev.some(x=>x.id===m.id)) return prev;
             return [...prev,m];
           });
+          if (m.sender_type==="patient" && typeof document !== "undefined" && document.visibilityState === "hidden") {
+            pushNotif(roomPatientName(m.room_id), describeIncomingMessage(m));
+          }
         } else if (m.sender_type==="patient") {
           setUnreadRooms(p=>{const n=new Set(p);n.add(m.room_id);return n;});
           setTotalUnread(p=>p+1);
-          pushNotif("Dr. Fonseca Portal",lang==="es"?"Nuevo mensaje de un paciente":"New message from a patient");
+          pushNotif(roomPatientName(m.room_id), describeIncomingMessage(m));
         }
       })
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},({new:m})=>{ if (selectedRoomRef.current?.id===m.room_id) setMessages(p=>p.map(x=>x.id===m.id?m:x)); })
       .subscribe();
     return ()=>{ supabase.removeChannel(ch); };
-  },[]);
+  },[describeIncomingMessage, playIncomingTone, roomPatientName]);
 
   useEffect(()=>{ document.title=totalUnread>0?`(${totalUnread}) Dr. Fonseca Portal`:"Dr. Fonseca Portal"; },[totalUnread]);
 
@@ -630,6 +798,7 @@ export default function InboxPage() {
   const sendMessage = async (content?: string) => {
     const msg=(content||newMessage).trim();
     if (!msg||!selectedRoom||isSending.current) return;
+    updateTypingState("", selectedRoom.id);
     isSending.current=true; setSending(true);
     if (!content) setNewMessage("");
     setShowSlashMenu(false);
@@ -960,9 +1129,10 @@ export default function InboxPage() {
       </div>
     );
 
-    const bubbleBg=isOut?"#E3F2FF":"#DCF8C6";
+    const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
+    const bubbleBg = !isOut ? "#DCF8C6" : darkMode ? "#2C2C2E" : "#FFFFFF";
     const bubbleRadius=isOut?"18px 18px 4px 18px":"18px 18px 18px 4px";
-    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:"#111",borderRadius:bubbleRadius,maxWidth:"78%",padding:"10px 14px",boxShadow:"0 1px 2px rgba(0,0,0,0.1)",position:"relative"};
+    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"78%",padding:"10px 14px",boxShadow:isOwn?"0 1px 3px rgba(0,0,0,0.12)":"0 1px 2px rgba(0,0,0,0.08)",position:"relative",border:isOut?`1px solid ${isOwn?"#D1D5DB":borderColor}`:"none"};
 
     return (
       <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}>
@@ -1638,6 +1808,11 @@ export default function InboxPage() {
                       {selectedRoom.procedures?.surgery_date&&` · ${new Date(selectedRoom.procedures.surgery_date).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"})}`}
                       {selectedRoom.procedures?.office_location&&` · 📍${selectedRoom.procedures.office_location}`}
                     </div>
+                    {patientTyping && (
+                      <div style={{fontSize:12,color:"#93C5FD",fontWeight:700,marginTop:4}}>
+                        {(selectedRoom.procedures?.patients?.full_name || t.patientLabel)} {t.typingSuffix}
+                      </div>
+                    )}
                   </div>
                   {selectedRoom.procedures?.patients?.phone && (
                     <a href={`tel:${selectedRoom.procedures.patients.phone}`} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",fontSize:18,flexShrink:0}} title={t.callPatient}>📞</a>
@@ -1714,12 +1889,14 @@ export default function InboxPage() {
                       onChange={e=>{
                         const v=e.target.value;
                         setNewMessage(v);
+                        updateTypingState(v);
                         setShowMediaMenu(false);
                         if(v.startsWith("/")){setShowSlashMenu(true);setSlashFilter(v.slice(1));}
                         else{setShowSlashMenu(false);setSlashFilter("");}
                         e.target.style.height="auto";
                         e.target.style.height=Math.min(e.target.scrollHeight,120)+"px";
                       }}
+                      onBlur={()=>updateTypingState("")}
                       onKeyDown={e=>{
                         if(e.key==="Enter"&&!e.shiftKey){
                           e.preventDefault();
