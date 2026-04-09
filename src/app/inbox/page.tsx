@@ -941,8 +941,6 @@ export default function InboxPage() {
 
   const renderMsg = (msg: any) => {
     const isOut=msg.sender_type==="staff"||!msg.sender_type;
-    const isTemp=typeof msg.id==="string"&&msg.id.startsWith("temp-");
-    const isPressed=pressedMsgId===msg.id;
     const isSystem=msg.sender_name==="Sistema";
     const sc=senderColor(msg.sender_type||"staff",msg.sender_role||"staff");
     const sn=msg.sender_name||(isOut?"Staff":"Paciente");
@@ -954,51 +952,45 @@ export default function InboxPage() {
       </div>
     );
 
-    const tap=(e:any)=>{e.stopPropagation();if(!isTemp)setPressedMsgId(isPressed?null:msg.id);};
     const bubbleBg=isOut?"#E3F2FF":"#DCF8C6";
     const bubbleRadius=isOut?"18px 18px 4px 18px":"18px 18px 18px 4px";
     const bubbleStyle:React.CSSProperties={background:bubbleBg,color:"#111",borderRadius:bubbleRadius,maxWidth:"78%",padding:"10px 14px",boxShadow:"0 1px 2px rgba(0,0,0,0.1)",position:"relative"};
 
     return (
       <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}>
-        {isPressed&&!isTemp&&(
-          <div style={{position:"absolute",top:-44,right:isOut?0:"auto",left:isOut?"auto":0,background:"white",borderRadius:12,padding:4,zIndex:99,boxShadow:"0 4px 20px rgba(0,0,0,0.15)"}}>
-            <button onPointerDown={e=>{e.stopPropagation();if(confirm(t.deleteMsg)){supabase.from("messages").update({deleted_by_staff:true,deleted_at:new Date().toISOString()}).eq("id",msg.id).then(()=>{setMessages(p=>p.map(m=>m.id===msg.id?{...m,deleted_by_staff:true}:m));setPressedMsgId(null);})}}} style={{display:"flex",alignItems:"center",gap:6,background:"#FF3B30",border:"none",color:"white",padding:"9px 16px",borderRadius:9,cursor:"pointer",fontSize:14,fontWeight:700,fontFamily:"inherit"}}>🗑️ {lang==="es"?"Eliminar":"Delete"}</button>
-          </div>
-        )}
         <div style={{fontSize:12,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
         {msg.deleted_by_patient?(
           <div style={{...bubbleStyle,fontStyle:"italic",opacity:0.6,fontSize}}>{t.msgDeleted}<div style={{fontSize:11,opacity:0.6,marginTop:3,textAlign:"right"}}>{fmtTime(msg.created_at)}</div></div>
         ):effectiveType==="image"?(
-          <div style={{...bubbleStyle,padding:4,cursor:"pointer"}} onClick={tap} onTouchEnd={tap}>
+          <div style={{...bubbleStyle,padding:4}}>
             <img src={msg.content} alt="" style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
             <div style={{fontSize:11,opacity:0.6,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="video"?(
-          <div style={{...bubbleStyle,padding:4}} onClick={tap} onTouchEnd={tap}>
+          <div style={{...bubbleStyle,padding:4}}>
             <video src={msg.content} controls style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}}/>
             <div style={{fontSize:11,opacity:0.6,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="audio"?(
-          <div style={{...bubbleStyle,minWidth:220}} onClick={tap} onTouchEnd={tap}>
+          <div style={{...bubbleStyle,minWidth:220}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:20}}>🎤</span><span style={{fontSize:14,fontWeight:600}}>Audio</span></div>
             <audio src={msg.content} controls style={{width:"100%"}}/>
             <div style={{fontSize:11,opacity:0.6,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="file"?(
-          <div style={{...bubbleStyle,cursor:"pointer"}} onClick={tap} onTouchEnd={tap}>
-            <a href={isPressed?undefined:msg.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,color:"inherit",textDecoration:"none"}}>
+          <div style={{...bubbleStyle,cursor:"pointer"}}>
+            <a href={msg.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,color:"inherit",textDecoration:"none"}}>
               <span style={{fontSize:28}}>📄</span>
               <div><div style={{fontSize:14,fontWeight:700}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.6}}>{fmtSize(msg.file_size)}</div></div>
             </a>
             <div style={{fontSize:11,opacity:0.6,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
-          <div style={{...bubbleStyle,cursor:"pointer",lineHeight:1.6,wordBreak:"break-word",fontSize}} onClick={tap} onTouchEnd={tap}>
+          <div style={{...bubbleStyle,lineHeight:1.6,wordBreak:"break-word",fontSize}}>
             {msg.content}
             <div style={{fontSize:11,opacity:0.6,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
               {fmtTime(msg.created_at)}
-              {isOut&&<span style={{color:isTemp?"#8E8E93":"#007AFF"}}>{isTemp?"✓":"✓✓"}</span>}
+              {isOut&&<span style={{color:"#007AFF"}}>✓✓</span>}
             </div>
           </div>
         )}
