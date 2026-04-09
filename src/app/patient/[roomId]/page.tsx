@@ -1014,7 +1014,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         </div>
       )}
 
-      <div style={{ minHeight: "100dvh", background: bg, color: textColor, fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif", display: "flex", flexDirection: "column" }}>
+      <div style={{ height: "100dvh", minHeight: "100dvh", background: bg, color: textColor, fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <header style={{ background: "#0F172A", color: "white", padding: "calc(env(safe-area-inset-top) + 16px) 18px 16px", boxShadow: "0 10px 30px rgba(15,23,42,0.14)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#111827,#2563EB)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, flexShrink: 0 }}>
@@ -1075,7 +1075,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           )}
         </header>
 
-        <main style={{ flex: 1, overflowY: "auto", padding: "16px 14px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <main style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 14px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
           {groupedMessages.length === 0 ? (
             <div style={{ marginTop: 36, background: surface, borderRadius: 24, padding: 24, textAlign: "center", boxShadow: "0 10px 30px rgba(15,23,42,0.08)" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
