@@ -384,6 +384,9 @@ export default function InboxPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedRoomRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const mediaCaptureVideoRef = useRef<HTMLVideoElement>(null);
   const profilePicRef = useRef<HTMLInputElement>(null);
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
@@ -405,6 +408,8 @@ export default function InboxPage() {
   const fmtRec = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
   const isImageUrl = (url: string) => { if (!url) return false; const u=url.toLowerCase(); return u.includes("supabase")&&(u.endsWith(".jpg")||u.endsWith(".jpeg")||u.endsWith(".png")||u.endsWith(".gif")||u.endsWith(".webp")||u.includes("before")||u.includes("patient-photo")); };
   const senderColor = (type: string, role: string) => type==="patient"?"#1A6B3C":({doctor:"#0050A0",post_quirofano:"#6B3A9E",enfermeria:"#007A7A",coordinacion:"#B35A00",staff:"#444"} as any)[role]||"#444";
+  const prefersNativeCapture =
+    typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   const patientFullName = `${newPatientFirstName.trim()} ${newPatientLastName.trim()}`.trim();
   const combinedPatientPhone = newPatientPhoneLocal.trim() ? `${newPatientPhoneCountry} ${newPatientPhoneLocal.trim()}` : "";
   const isMissingColumnError = (error: any) => {
@@ -1275,6 +1280,9 @@ export default function InboxPage() {
       `}</style>
 
       <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
+      <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
+      <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
+      <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
 
@@ -1618,9 +1626,21 @@ export default function InboxPage() {
                   <div className="input-area" onClick={e=>e.stopPropagation()}>
                     {showMediaMenu&&(
                       <div style={{position:"absolute",left:12,bottom:`calc(66px + env(safe-area-inset-bottom))`,width:220,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:18,padding:8,boxShadow:"0 14px 34px rgba(15,23,42,0.16)",zIndex:30}}>
-                        <button onClick={()=>{setShowMediaMenu(false);startRec();}} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎤</span>{t.recordAudio}</button>
-                        <button onClick={()=>openCapture("video")} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎥</span>{t.recordVideoOption}</button>
-                        <button onClick={()=>openCapture("photo")} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📷</span>{t.takePhoto}</button>
+                        <button onClick={()=>{
+                          setShowMediaMenu(false);
+                          if (prefersNativeCapture) audioInputRef.current?.click();
+                          else startRec();
+                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎤</span>{t.recordAudio}</button>
+                        <button onClick={()=>{
+                          setShowMediaMenu(false);
+                          if (prefersNativeCapture) videoInputRef.current?.click();
+                          else openCapture("video");
+                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎥</span>{t.recordVideoOption}</button>
+                        <button onClick={()=>{
+                          setShowMediaMenu(false);
+                          if (prefersNativeCapture) cameraInputRef.current?.click();
+                          else openCapture("photo");
+                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📷</span>{t.takePhoto}</button>
                         <button onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📁</span>{t.chooseFile}</button>
                       </div>
                     )}

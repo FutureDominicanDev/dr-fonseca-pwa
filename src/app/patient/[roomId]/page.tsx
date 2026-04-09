@@ -180,6 +180,9 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaLibraryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const isSending = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -199,6 +202,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const bubbleOut = "#DCF8C6";
   const bubbleIn = settings.darkMode ? "#1F2937" : "#FFFFFF";
   const border = settings.darkMode ? "rgba(255,255,255,0.08)" : "#E5E7EB";
+  const prefersNativeCapture =
+    typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
   const patientName = settings.displayName.trim() || room?.procedures?.patients?.full_name || t.patient;
   const officePhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara;
@@ -420,6 +425,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     const { error } = await supabase.storage.from("chat-files").upload(storagePath, file, { upsert: true });
     if (error) {
       setUploadingMedia(false);
+      alert(settings.lang === "es" ? "No pude subir el archivo." : "I could not upload the file.");
       return;
     }
 
@@ -429,7 +435,23 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     else if (file.type.startsWith("video/")) messageType = "video";
     else if (file.type.startsWith("audio/")) messageType = "audio";
 
-    await supabase.from("messages").insert({
+    const tempId = `temp-file-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        room_id: roomId,
+        content: publicUrl.publicUrl,
+        file_name: file.name,
+        file_size: file.size,
+        message_type: messageType,
+        sender_type: "patient",
+        sender_name: patientName,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    const { data: inserted, error: insertError } = await supabase.from("messages").insert({
       room_id: roomId,
       content: publicUrl.publicUrl,
       file_name: file.name,
@@ -438,8 +460,20 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       sender_type: "patient",
       sender_name: patientName,
       is_internal: false,
-    });
-    await refreshMessages();
+    }).select().single();
+
+    if (insertError) {
+      setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
+      setUploadingMedia(false);
+      alert(settings.lang === "es" ? "El archivo se subió, pero no pude enviarlo al chat." : "The file uploaded, but I could not send it to the chat.");
+      return;
+    }
+
+    if (inserted) {
+      setMessages((prev) => prev.map((entry) => (entry.id === tempId ? inserted : entry)));
+    } else {
+      await refreshMessages();
+    }
     setUploadingMedia(false);
   };
 
@@ -711,6 +745,42 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           event.target.value = "";
         }}
       />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*,video/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) uploadPatientFile(file);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*"
+        capture
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) uploadPatientFile(file);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) uploadPatientFile(file);
+          event.target.value = "";
+        }}
+      />
 
       {(captureMode || preparingCapture) && (
         <div style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(15,23,42,0.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
@@ -917,13 +987,25 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               <button onClick={() => { setShowAttachMenu(false); mediaLibraryInputRef.current?.click(); }} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
                 <span style={{ fontSize: 20 }}>🖼️</span>{t.photoLibrary}
               </button>
-              <button onClick={() => openCapture("photo")} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
+              <button onClick={() => {
+                setShowAttachMenu(false);
+                if (prefersNativeCapture) cameraInputRef.current?.click();
+                else openCapture("photo");
+              }} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
                 <span style={{ fontSize: 20 }}>📷</span>{t.takePhoto}
               </button>
-              <button onClick={() => startAudioRecording()} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
+              <button onClick={() => {
+                setShowAttachMenu(false);
+                if (prefersNativeCapture) audioInputRef.current?.click();
+                else startAudioRecording();
+              }} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
                 <span style={{ fontSize: 20 }}>🎤</span>{t.recordAudioOption}
               </button>
-              <button onClick={() => openCapture("video")} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
+              <button onClick={() => {
+                setShowAttachMenu(false);
+                if (prefersNativeCapture) videoInputRef.current?.click();
+                else openCapture("video");
+              }} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
                 <span style={{ fontSize: 20 }}>🎥</span>{t.recordVideoOption}
               </button>
               <button onClick={() => { setShowAttachMenu(false); fileInputRef.current?.click(); }} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
@@ -961,9 +1043,13 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               }}
             />
             <button onClick={() => {
+              if (recordingAudio) {
+                stopAudioRecording();
+                return;
+              }
               sendMessage();
-            }} disabled={sending || !newMessage.trim() || recordingAudio} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#2563EB", color: "white", cursor: "pointer", fontWeight: 800, flexShrink: 0, opacity: sending || !newMessage.trim() || recordingAudio ? 0.45 : 1 }}>
-              {t.send}
+            }} disabled={sending || (!newMessage.trim() && !recordingAudio)} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingAudio ? "#DC2626" : "#2563EB", color: "white", cursor: "pointer", fontWeight: 800, flexShrink: 0, opacity: sending || (!newMessage.trim() && !recordingAudio) ? 0.45 : 1 }}>
+              {recordingAudio ? "⏹" : t.send}
             </button>
           </div>
           {uploadingMedia && <div style={{ fontSize: 12, color: subText, margin: "8px 0 0 6px" }}>{settings.lang === "es" ? "Subiendo archivo..." : "Uploading file..."}</div>}
