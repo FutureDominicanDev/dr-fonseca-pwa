@@ -70,6 +70,9 @@ const T = {
     careTeamRoleCoordinacion: "Coordinación",
     careTeamRolePost: "Post-operatorio",
     careTeamRoleStaff: "Personal",
+    manageTeam: "Administrar equipo",
+    saveTeam: "Guardar equipo",
+    teamSaved: "Equipo actualizado.",
     patientInfo: "Ficha del Paciente",
     patientInfoHint: "Datos clínicos y operativos del caso",
     callPatient: "Llamar paciente",
@@ -149,6 +152,9 @@ const T = {
     careTeamRoleCoordinacion: "Coordination",
     careTeamRolePost: "Post-op",
     careTeamRoleStaff: "Staff",
+    manageTeam: "Manage team",
+    saveTeam: "Save team",
+    teamSaved: "Team updated.",
     patientInfo: "Patient Info",
     patientInfoHint: "Clinical and operational case details",
     callPatient: "Call patient",
@@ -325,6 +331,8 @@ export default function InboxPage() {
   const [showAllCareTeamOptions, setShowAllCareTeamOptions] = useState(false);
   const [showPatientInfo, setShowPatientInfo] = useState(false);
   const [selectedRoomTeam, setSelectedRoomTeam] = useState<CareTeamMember[]>([]);
+  const [managedTeamIds, setManagedTeamIds] = useState<string[]>([]);
+  const [savingTeam, setSavingTeam] = useState(false);
   const [internalNoteDraft, setInternalNoteDraft] = useState("");
   const [savingInternalNote, setSavingInternalNote] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
@@ -498,6 +506,10 @@ export default function InboxPage() {
     }
   }, [showNewRoom, currentUserId]);
 
+  useEffect(() => {
+    setManagedTeamIds(selectedRoomTeam.map((member) => member.id));
+  }, [selectedRoomTeam]);
+
   useEffect(()=>{
     const ch = supabase.channel("rt-msgs")
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},({new:m})=>{
@@ -637,6 +649,35 @@ export default function InboxPage() {
     }
 
     setSavingInternalNote(false);
+  };
+
+  const saveManagedTeam = async () => {
+    if (!selectedRoom || savingTeam) return;
+    setSavingTeam(true);
+    const creatorId = selectedRoom.created_by || currentUserId || null;
+    const ids = Array.from(new Set([creatorId, ...managedTeamIds].filter(Boolean))) as string[];
+    const rows = ids.map((memberId) => {
+      const profile = staffDirectory.find((entry) => entry.id === memberId);
+      return {
+        room_id: selectedRoom.id,
+        user_id: memberId,
+        role: profile?.role || (memberId === creatorId ? (userProfile?.role || "staff") : "staff"),
+      };
+    });
+
+    const { error: deleteError } = await supabase.from("room_members").delete().eq("room_id", selectedRoom.id);
+    if (!deleteError && rows.length) {
+      const { error: insertError } = await supabase.from("room_members").insert(rows);
+      if (!insertError) {
+        await fetchSelectedRoomTeam(selectedRoom.id);
+        setSavingTeam(false);
+        alert(t.teamSaved);
+        return;
+      }
+    }
+
+    setSavingTeam(false);
+    alert(lang === "es" ? "No pude actualizar el equipo." : "I could not update the team.");
   };
 
   const createRoom = async () => {
@@ -884,6 +925,11 @@ export default function InboxPage() {
     const internalNotes = messages.filter((entry) => entry.is_internal).sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
     const locale = lang === "es" ? "es-MX" : "en-US";
     const localTime = currentTimeInZone(patient?.timezone, locale);
+    const panelCareTeamDirectory = staffDirectory.filter((member) => !member.office_location || member.office_location === selectedRoom?.procedures?.office_location);
+    const panelCareTeamGroups = CARE_TEAM_ROLE_ORDER.map((role) => ({
+      role,
+      members: panelCareTeamDirectory.filter((member) => (member.role || "staff") === role),
+    })).filter((group) => group.members.length > 0);
 
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:210,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowPatientInfo(false)}>
@@ -940,6 +986,54 @@ export default function InboxPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+              {canOpenAdmin && (
+                <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${borderColor}`}}>
+                  <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{t.manageTeam}</p>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ids = [selectedRoom?.created_by, ...panelCareTeamDirectory.map((member)=>member.id)].filter(Boolean) as string[];
+                        setManagedTeamIds(Array.from(new Set(ids)));
+                      }}
+                      style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
+                    >
+                      {t.careTeamSelectAll}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setManagedTeamIds(selectedRoom?.created_by ? [selectedRoom.created_by] : [])}
+                      style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#EEF2F7",color:"#475569",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
+                    >
+                      {t.careTeamClear}
+                    </button>
+                    <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${borderColor}`,fontSize:12,fontWeight:800,color:textColor}}>
+                      {t.careTeamSelected}: {managedTeamIds.length}
+                    </span>
+                  </div>
+                  <div style={{display:"grid",gap:10,marginBottom:12}}>
+                    {panelCareTeamGroups.map((group)=>(
+                      <div key={group.role} style={{background:darkMode?"#1F2937":"white",border:`1px solid ${borderColor}`,borderRadius:16,padding:12}}>
+                        <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{careTeamRoleLabel(group.role)}</p>
+                        <div style={{display:"grid",gap:8}}>
+                          {group.members.map((member)=>(
+                            <label key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:managedTeamIds.includes(member.id)?"#EBF5FF":(darkMode?"#111827":"#F8FBFF"),border:managedTeamIds.includes(member.id)?"1px solid #93C5FD":`1px solid ${borderColor}`,cursor:"pointer"}}>
+                              <input type="checkbox" checked={managedTeamIds.includes(member.id)} onChange={()=>setManagedTeamIds((current)=>current.includes(member.id)?current.filter((entry)=>entry!==member.id):[...current, member.id])} style={{width:16,height:16,accentColor:"#2563EB"}} />
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:14,fontWeight:800,color:textColor}}>{member.full_name || (lang==="es" ? "Personal" : "Staff")}</div>
+                                <div style={{fontSize:12,color:subTextColor}}>{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={saveManagedTeam} disabled={savingTeam} style={{width:"100%",padding:12,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:savingTeam?0.5:1}}>
+                    {savingTeam ? (lang==="es" ? "Guardando..." : "Saving...") : t.saveTeam}
+                  </button>
                 </div>
               )}
             </div>
