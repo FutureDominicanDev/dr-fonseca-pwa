@@ -82,6 +82,9 @@ const T = {
     preparingCamera: "Abriendo cámara...",
     takePhotoNow: "Tomar foto ahora",
     cancelCapture: "Cancelar",
+    deleteMsg: "¿Eliminar este mensaje?",
+    msgDeleted: "Mensaje eliminado",
+    deleteAction: "Eliminar",
   },
   en: {
     loading: "Opening private chat...",
@@ -138,6 +141,9 @@ const T = {
     preparingCamera: "Opening camera...",
     takePhotoNow: "Take photo now",
     cancelCapture: "Cancel",
+    deleteMsg: "Delete this message?",
+    msgDeleted: "Message deleted",
+    deleteAction: "Delete",
   },
 } as const;
 
@@ -388,6 +394,31 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const refreshMessages = async () => {
     const { data: msgs } = await loadMessages();
     setMessages((msgs || []).filter((message: any) => !message?.is_internal));
+  };
+
+  const deletePatientMessage = async (messageId: string) => {
+    if (!confirm(t.deleteMsg)) return;
+    const deletedAt = new Date().toISOString();
+    let result = await supabase
+      .from("messages")
+      .update({ deleted_by_patient: true, deleted_at: deletedAt })
+      .eq("id", messageId);
+
+    if (result.error && isSchemaColumnError(result.error)) {
+      setMessages((prev) => prev.filter((message) => message.id !== messageId));
+      return;
+    }
+
+    if (result.error) {
+      alert(settings.lang === "es" ? "No pude eliminar este mensaje." : "I could not delete this message.");
+      return;
+    }
+
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === messageId ? { ...message, deleted_by_patient: true, deleted_at: deletedAt } : message
+      )
+    );
   };
 
   const sendMessage = async (override?: string) => {
@@ -727,6 +758,20 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       border: isPatient ? "none" : `1px solid ${border}`,
     };
 
+    if (message.deleted_by_patient) {
+      return (
+        <div key={message.id} style={{ display: "flex", flexDirection: "column", alignItems: isPatient ? "flex-end" : "flex-start", gap: 4 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: isPatient ? "#166534" : subText }}>
+            {isPatient ? patientName : t.clinic}
+          </div>
+          <div style={{ ...bubbleStyle, fontStyle: "italic", opacity: 0.68, padding: "11px 14px" }}>
+            {t.msgDeleted}
+            <div style={{ fontSize: 11, color: "rgba(17,24,39,0.55)", marginTop: 6, textAlign: "right" }}>{formatTime(message.created_at)}</div>
+          </div>
+        </div>
+      );
+    }
+
     let body: React.ReactNode;
     if (message.message_type === "image") {
       body = <img src={message.content} alt="" style={{ width: "100%", maxWidth: 280, borderRadius: 14, display: "block" }} />;
@@ -754,6 +799,22 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           {body}
           <div style={{ fontSize: 11, color: "rgba(17,24,39,0.55)", marginTop: 6, textAlign: "right" }}>{formatTime(message.created_at)}</div>
         </div>
+        {isPatient && (
+          <button
+            onClick={() => deletePatientMessage(message.id)}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "#DC2626",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              padding: "2px 4px",
+            }}
+          >
+            🗑 {t.deleteAction}
+          </button>
+        )}
       </div>
     );
   };
@@ -1050,9 +1111,6 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           )}
           {showAttachMenu && (
             <div style={{ marginBottom: 10, width: 220, background: settings.darkMode ? "#111827" : "#FFFFFF", border: `1px solid ${border}`, borderRadius: 20, padding: 8, boxShadow: "0 14px 34px rgba(15,23,42,0.16)" }}>
-              <button onClick={() => { setShowAttachMenu(false); mediaLibraryInputRef.current?.click(); }} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
-                <span style={{ fontSize: 20 }}>🖼️</span>{t.photoLibrary}
-              </button>
               <button onClick={() => {
                 setShowAttachMenu(false);
                 if (prefersNativeCapture) cameraInputRef.current?.click();
