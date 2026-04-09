@@ -198,6 +198,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const captureRecorderRef = useRef<MediaRecorder | null>(null);
   const captureChunksRef = useRef<Blob[]>([]);
   const discardCaptureRef = useRef(false);
+  const discardAudioRef = useRef(false);
 
   const t = T[settings.lang];
   const fontSize = settings.fontSizeLevel === "small" ? 14 : settings.fontSizeLevel === "large" ? 19 : 16;
@@ -573,8 +574,9 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     captureStreamRef.current = null;
   };
 
-  const stopAudioRecording = () => {
+  const stopAudioRecording = (discard = false) => {
     if (!recordingAudio || !mediaRecorderRef.current) return;
+    discardAudioRef.current = discard;
     setRecordingAudio(false);
     mediaRecorderRef.current.stop();
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
@@ -588,15 +590,21 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       const mimeType = pickRecorderMimeType("audio");
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
+      discardAudioRef.current = false;
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) audioChunksRef.current.push(event.data);
       };
       recorder.onstop = async () => {
         const finalMimeType = recorder.mimeType || mimeType || "audio/webm";
         const blob = new Blob(audioChunksRef.current, { type: finalMimeType });
+        const shouldDiscard = discardAudioRef.current;
         stream.getTracks().forEach((track) => track.stop());
         audioChunksRef.current = [];
         mediaRecorderRef.current = null;
+        discardAudioRef.current = false;
+        if (blob.size === 0 || shouldDiscard) {
+          return;
+        }
         const ext = extensionForMimeType(finalMimeType, "webm");
         await uploadPatientFile(new File([blob], `audio-${Date.now()}.${ext}`, { type: blob.type || finalMimeType }));
       };
@@ -1143,7 +1151,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#DC2626", flexShrink: 0 }} />
               <span style={{ fontSize: 16, fontWeight: 800, color: "#DC2626", fontFamily: "monospace" }}>{`${Math.floor(recordingSeconds / 60)}:${(recordingSeconds % 60).toString().padStart(2, "0")}`}</span>
               <span style={{ fontSize: 13, color: subText, flex: 1 }}>{settings.lang === "es" ? "Grabando audio..." : "Recording audio..."}</span>
-              <button onClick={stopAudioRecording} style={{ border: "none", borderRadius: 12, padding: "10px 12px", background: "#DC2626", color: "white", fontWeight: 800, cursor: "pointer" }}>{t.stopAndSendAudio}</button>
+              <button onClick={() => stopAudioRecording(true)} style={{ border: "none", borderRadius: 12, padding: "10px 12px", background: "#6B7280", color: "white", fontWeight: 800, cursor: "pointer" }}>{t.cancelCapture}</button>
+              <button onClick={() => stopAudioRecording(false)} style={{ border: "none", borderRadius: 12, padding: "10px 12px", background: "#DC2626", color: "white", fontWeight: 800, cursor: "pointer" }}>{t.stopAndSendAudio}</button>
             </div>
           )}
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
