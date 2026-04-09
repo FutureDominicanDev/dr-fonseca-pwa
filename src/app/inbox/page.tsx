@@ -59,6 +59,17 @@ const T = {
     medicationsPH: "Ej: Ibuprofeno, metformina, vitaminas...",
     careTeam: "Equipo Asignado",
     careTeamHint: "Selecciona quién debe tener acceso y alertas para este paciente.",
+    careTeamFocused: "Mostrando primero personal de la sede elegida para evitar errores.",
+    careTeamShowAll: "Mostrar todo el personal",
+    careTeamShowOffice: "Ver solo sede elegida",
+    careTeamSelectAll: "Seleccionar todos",
+    careTeamClear: "Limpiar selección",
+    careTeamSelected: "Seleccionados",
+    careTeamRoleDoctor: "Doctores",
+    careTeamRoleEnfermeria: "Enfermería",
+    careTeamRoleCoordinacion: "Coordinación",
+    careTeamRolePost: "Post-operatorio",
+    careTeamRoleStaff: "Personal",
     patientInfo: "Ficha del Paciente",
     patientInfoHint: "Datos clínicos y operativos del caso",
     callPatient: "Llamar paciente",
@@ -127,6 +138,17 @@ const T = {
     medicationsPH: "e.g. Ibuprofen, metformin, vitamins...",
     careTeam: "Assigned Care Team",
     careTeamHint: "Choose who should have access and alerts for this patient.",
+    careTeamFocused: "Showing staff from the selected office first to avoid assignment mistakes.",
+    careTeamShowAll: "Show all staff",
+    careTeamShowOffice: "Show selected office only",
+    careTeamSelectAll: "Select all",
+    careTeamClear: "Clear selection",
+    careTeamSelected: "Selected",
+    careTeamRoleDoctor: "Doctors",
+    careTeamRoleEnfermeria: "Nursing",
+    careTeamRoleCoordinacion: "Coordination",
+    careTeamRolePost: "Post-op",
+    careTeamRoleStaff: "Staff",
     patientInfo: "Patient Info",
     patientInfoHint: "Clinical and operational case details",
     callPatient: "Call patient",
@@ -180,6 +202,8 @@ interface CareTeamMember {
   office_location?: string | null;
   avatar_url?: string | null;
 }
+
+const CARE_TEAM_ROLE_ORDER = ["doctor", "enfermeria", "coordinacion", "post_quirofano", "staff"] as const;
 
 interface QREditorProps {
   show: boolean; onClose: () => void; quickReplies: QuickReply[];
@@ -298,6 +322,7 @@ export default function InboxPage() {
   const [beforePhotosFiles, setBeforePhotosFiles] = useState<File[]>([]);
   const [staffDirectory, setStaffDirectory] = useState<CareTeamMember[]>([]);
   const [selectedCareTeamIds, setSelectedCareTeamIds] = useState<string[]>([]);
+  const [showAllCareTeamOptions, setShowAllCareTeamOptions] = useState(false);
   const [showPatientInfo, setShowPatientInfo] = useState(false);
   const [selectedRoomTeam, setSelectedRoomTeam] = useState<CareTeamMember[]>([]);
   const [internalNoteDraft, setInternalNoteDraft] = useState("");
@@ -363,6 +388,21 @@ export default function InboxPage() {
     setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   };
   const canOpenAdmin = currentUserEmail.toLowerCase()===OWNER_EMAIL || ["owner","super_admin","admin"].includes(userProfile?.admin_level||"");
+  const careTeamDirectory = showAllCareTeamOptions
+    ? staffDirectory
+    : staffDirectory.filter((member) => !member.office_location || member.office_location === newLocation);
+  const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id));
+  const careTeamGroups = CARE_TEAM_ROLE_ORDER.map((role) => ({
+    role,
+    members: careTeamDirectory.filter((member) => (member.role || "staff") === role),
+  })).filter((group) => group.members.length > 0);
+  const careTeamRoleLabel = (role: string) => {
+    if (role === "doctor") return t.careTeamRoleDoctor;
+    if (role === "enfermeria") return t.careTeamRoleEnfermeria;
+    if (role === "coordinacion") return t.careTeamRoleCoordinacion;
+    if (role === "post_quirofano") return t.careTeamRolePost;
+    return t.careTeamRoleStaff;
+  };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -1004,20 +1044,20 @@ export default function InboxPage() {
         .slash-item:hover { background: ${darkMode?"#3A3A3C":"#F8F8F8"}; }
         .slash-shortcut { background: #007AFF; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; flex-shrink: 0; }
         .slash-msg { font-size: 15px; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(4px); }
-        .modal { background: ${sidebarBg}; border-radius: 20px 20px 0 0; width: 100%; max-width: 540px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
-        .modal-scroll { background: ${sidebarBg}; border-radius: 20px 20px 0 0; width: 100%; max-width: 540px; position: fixed; top: 8vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); }
+        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
+        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
         .modal-title { font-size: 20px; font-weight: 700; color: ${textColor}; margin-bottom: 20px; }
         .flabel { font-size: 13px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
-        .finput { width: 100%; padding: 13px 16px; background: ${darkMode?"#3A3A3C":"#F2F2F7"}; border: none; border-radius: 12px; font-size: 16px; font-family: inherit; color: ${textColor}; outline: none; margin-bottom: 14px; }
+        .finput { width: 100%; padding: 13px 16px; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; border-radius: 14px; font-size: 16px; font-family: inherit; color: ${textColor}; outline: none; margin-bottom: 14px; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
         .finput::placeholder { color: #AEAEB2; }
         .loc-group { display: flex; gap: 10px; margin-bottom: 14px; }
-        .loc-opt { flex: 1; padding: 13px; border-radius: 12px; cursor: pointer; font-size: 15px; font-weight: 600; color: ${subTextColor}; background: ${darkMode?"#3A3A3C":"#F2F2F7"}; border: 2px solid transparent; text-align: center; }
+        .loc-opt { flex: 1; padding: 13px; border-radius: 14px; cursor: pointer; font-size: 15px; font-weight: 600; color: ${subTextColor}; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; text-align: center; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
         .loc-opt.sel { background: #EBF5FF; color: #007AFF; border-color: #007AFF; }
-        .file-box { width: 100%; padding: 16px; border: 2px dashed ${darkMode?"#555":"#C7C7CC"}; border-radius: 12px; cursor: pointer; text-align: center; font-size: 14px; font-weight: 600; color: ${subTextColor}; margin-bottom: 14px; }
+        .file-box { width: 100%; padding: 16px; border: 2px dashed ${darkMode?"#555":"#C7D8EA"}; border-radius: 14px; cursor: pointer; text-align: center; font-size: 14px; font-weight: 600; color: ${subTextColor}; margin-bottom: 14px; background: ${darkMode?"transparent":"#F8FBFF"}; }
         .pbtn { width: 100%; padding: 15px; background: #007AFF; border: none; border-radius: 14px; color: white; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 8px; }
         .pbtn:disabled { opacity: 0.45; }
-        .sbtn { width: 100%; padding: 13px; background: ${cardBg}; border: none; border-radius: 14px; color: ${textColor}; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 8px; }
+        .sbtn { width: 100%; padding: 13px; background: ${darkMode?cardBg:"#F5F8FC"}; border: 1px solid ${darkMode?"transparent":"#D9E4F2"}; border-radius: 14px; color: ${textColor}; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 8px; }
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 700px) {
@@ -1106,12 +1146,53 @@ export default function InboxPage() {
             </div>
             <label className="flabel">{t.careTeam}</label>
             <p style={{fontSize:13,color:subTextColor,margin:"-4px 0 10px"}}>{t.careTeamHint}</p>
-            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
-              {staffDirectory.map((member)=>(
-                <button key={member.id} type="button" onClick={()=>toggleCareTeamMember(member.id)} style={{padding:"9px 12px",borderRadius:999,border:selectedCareTeamIds.includes(member.id)?"2px solid #007AFF":`1px solid ${borderColor}`,background:selectedCareTeamIds.includes(member.id)?"#EBF5FF":(darkMode?"#2C2C2E":"#F2F2F7"),color:selectedCareTeamIds.includes(member.id)?"#007AFF":textColor,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                  {member.full_name || "Staff"} · {roleName(member.role)}
+            <div style={{background:darkMode?"#2C2C2E":"#F8FBFF",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,borderRadius:18,padding:14,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+                <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{showAllCareTeamOptions ? t.careTeamShowAll : t.careTeamFocused}</p>
+                <button type="button" onClick={()=>setShowAllCareTeamOptions((prev)=>!prev)} style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#E8F0FE",color:"#2563EB",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
+                  {showAllCareTeamOptions ? t.careTeamShowOffice : t.careTeamShowAll}
                 </button>
-              ))}
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ids = [currentUserId, ...careTeamDirectory.map((member)=>member.id)].filter(Boolean) as string[];
+                    setSelectedCareTeamIds(Array.from(new Set(ids)));
+                  }}
+                  style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
+                >
+                  {t.careTeamSelectAll}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCareTeamIds(currentUserId ? [currentUserId] : [])}
+                  style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#EEF2F7",color:"#475569",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
+                >
+                  {t.careTeamClear}
+                </button>
+                <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,fontSize:12,fontWeight:800,color:textColor}}>
+                  {t.careTeamSelected}: {careTeamSelectedMembers.length}
+                </span>
+              </div>
+              <div style={{display:"grid",gap:10}}>
+                {careTeamGroups.map((group)=>(
+                  <div key={group.role} style={{background:darkMode?"#1F2937":"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#E6EEF7"}`,borderRadius:16,padding:12}}>
+                    <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{careTeamRoleLabel(group.role)}</p>
+                    <div style={{display:"grid",gap:8}}>
+                      {group.members.map((member)=>(
+                        <label key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:selectedCareTeamIds.includes(member.id)?"#EBF5FF":(darkMode?"#111827":"#F8FBFF"),border:selectedCareTeamIds.includes(member.id)?"1px solid #93C5FD":`1px solid ${darkMode?"rgba(255,255,255,0.05)":"#E6EEF7"}`,cursor:"pointer"}}>
+                          <input type="checkbox" checked={selectedCareTeamIds.includes(member.id)} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB"}} />
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:14,fontWeight:800,color:textColor}}>{member.full_name || (lang==="es"?"Personal":"Staff")}</div>
+                            <div style={{fontSize:12,color:subTextColor}}>{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             <p style={{fontSize:12,color:subTextColor,marginBottom:14}}>{t.noTeamSelected}</p>
             <label className="flabel">📸 {t.profilePic}</label>
