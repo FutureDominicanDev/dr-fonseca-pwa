@@ -71,6 +71,33 @@ export default function AdminPage() {
     return isSpanish ? "📍 Sin sede" : "📍 No office";
   };
 
+  const roleText = (role: string | null | undefined) =>
+    isSpanish
+      ? roleLabel(role)
+      : (
+          {
+            doctor: "👨‍⚕️ Doctor",
+            enfermeria: "💉 Nursing",
+            coordinacion: "📋 Coordination",
+            post_quirofano: "🏥 Post-Op",
+            staff: "👤 Staff",
+            patient: "🧑 Patient",
+            system: "⚙️ System",
+          } as Record<string, string>
+        )[role || ""] || "👤 Staff";
+
+  const adminText = (level: AdminLevel) =>
+    isSpanish
+      ? adminLabel(level)
+      : (
+          {
+            owner: "👑 Full access",
+            super_admin: "⭐ Advanced admin",
+            admin: "🛡️ Admin",
+            none: "No admin",
+          } as const
+        )[level];
+
   const recordText = (value: PatientRecordStatus) =>
     isSpanish
       ? recordStatusLabel(value)
@@ -775,16 +802,20 @@ export default function AdminPage() {
           <section className="card" id="equipo" style={{ marginTop: 16 }}>
             <div className="header-row">
               <div>
-                <p className="card-title">Equipo y permisos</p>
-                <p className="muted">Aquí corriges la sede del equipo y decides quién también puede entrar al centro de control. Los cambios se guardan al instante y verás una confirmación en pantalla.</p>
+                <p className="card-title">{isSpanish ? "Equipo y permisos" : "Team and permissions"}</p>
+                <p className="muted">
+                  {isSpanish
+                    ? "Aquí corriges la sede del equipo y decides quién también puede entrar al centro de control. Los cambios se guardan al instante y verás una confirmación en pantalla."
+                    : "Here you can correct team office assignments and decide who can also enter the control center. Changes save immediately and you will see an on-screen confirmation."}
+                </p>
               </div>
             </div>
 
             {staff.length === 0 ? (
               <div className="empty-state">
                 <div style={{ fontSize: 40, marginBottom: 8 }}>👥</div>
-                <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>Todavía no hay equipo</p>
-                <p className="muted">Cuando se registren aparecerán aquí.</p>
+                <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "Todavía no hay equipo" : "No team members yet"}</p>
+                <p className="muted">{isSpanish ? "Cuando se registren aparecerán aquí." : "They will appear here once they register."}</p>
               </div>
             ) : (
               staff.map((member) => {
@@ -805,17 +836,17 @@ export default function AdminPage() {
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 4 }}>{member.full_name || member.display_name || "Sin nombre"}</p>
+                      <p style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 4 }}>{member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name")}</p>
                       <div>
-                        <span className="meta-badge" style={{ color: roleColor(member.role), background: `${roleColor(member.role)}18` }}>{roleLabel(member.role)}</span>
-                        <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>{adminLabel(level)}</span>
+                        <span className="meta-badge" style={{ color: roleColor(member.role), background: `${roleColor(member.role)}18` }}>{roleText(member.role)}</span>
+                        <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>{adminText(level)}</span>
                         <span className="meta-badge" style={{ color: memberOffice ? "#1D4ED8" : "#6B7280", background: memberOffice ? "#EFF6FF" : "#F3F4F6" }}>
                           {officeLabel(memberOffice)}
                         </span>
                       </div>
 
                       <div className="setting-group">
-                        <p className="group-label">Sede del equipo</p>
+                        <p className="group-label">{isSpanish ? "Sede del equipo" : "Team office"}</p>
                         <div className="mini-actions">
                           {(["Guadalajara", "Tijuana"] as Office[]).map((office) => (
                             <button
@@ -836,7 +867,7 @@ export default function AdminPage() {
                       </div>
 
                       <div className="setting-group">
-                        <p className="group-label">Acceso al centro de control</p>
+                        <p className="group-label">{isSpanish ? "Acceso al centro de control" : "Control center access"}</p>
                         <div className="mini-actions">
                           {(["none", "admin", "super_admin"] as AdminLevel[]).map((option) => (
                             <button
@@ -848,21 +879,21 @@ export default function AdminPage() {
                                 opacity: !canEditThisMember || savingKey === accessKey ? 0.55 : 1,
                               }}
                               disabled={!canEditThisMember || savingKey === accessKey}
-                              onClick={() => updateStaffField(member, { admin_level: option }, `Acceso de ${member.full_name || "staff"} actualizado a ${adminLabel(option)}.`)}
+                              onClick={() => updateStaffField(member, { admin_level: option }, isSpanish ? `Acceso de ${member.full_name || "staff"} actualizado a ${adminLabel(option)}.` : `Access for ${member.full_name || "staff"} updated to ${adminText(option)}.`)}
                             >
-                              {adminLabel(option)}
+                              {adminText(option)}
                             </button>
                           ))}
                           {level === "owner" && (
                             <span className="meta-badge" style={{ color: adminColor("owner"), background: `${adminColor("owner")}18` }}>
-                              Protegido
+                              {isSpanish ? "Protegido" : "Protected"}
                             </span>
                           )}
                         </div>
                       </div>
 
                       <p className="small-note" style={{ marginTop: 10 }}>
-                        Estado actual: {memberOffice || "Sin sede"} · {adminLabel(level)}
+                        {isSpanish ? "Estado actual" : "Current status"}: {memberOffice || (isSpanish ? "Sin sede" : "No office")} · {adminText(level)}
                       </p>
                     </div>
 
@@ -873,7 +904,7 @@ export default function AdminPage() {
                         disabled={deletingId === member.id || !canManageAdmins || (level === "owner" && !canManageOwner)}
                         onClick={() => deleteStaff(member)}
                       >
-                        {deletingId === member.id ? "Eliminando..." : "🗑️ Eliminar"}
+                        {deletingId === member.id ? (isSpanish ? "Eliminando..." : "Deleting...") : (isSpanish ? "🗑️ Eliminar" : "🗑️ Delete")}
                       </button>
                     </div>
                   </div>
