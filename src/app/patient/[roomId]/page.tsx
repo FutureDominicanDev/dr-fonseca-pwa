@@ -62,12 +62,19 @@ const T = {
     installHelpTitle: "Guarda este chat en tu teléfono",
     installHelpIOS: "En iPhone o iPad: toca Compartir y luego Agregar a pantalla de inicio.",
     installHelpOther: "En tu navegador puedes instalar este chat para volver más rápido.",
+    setupDone: "Tu acceso rápido ya quedó listo.",
+    dismiss: "Ocultar",
     enableAlerts: "Activar notificaciones",
     alertsReady: "Notificaciones activadas",
     alertsBlocked: "Las notificaciones están bloqueadas en este navegador.",
     photoHelp: "Esta foto solo se guarda en este dispositivo.",
     callOffice: "Llamar a la oficina",
     callOfficeHint: "Si necesitas ayuda inmediata, llama a la sede asignada.",
+    recordingAudio: "Grabando audio... toca el micrófono para enviar.",
+    recordingVideo: "Grabando video... toca la cámara para enviar.",
+    preparingVideo: "Preparando cámara...",
+    closeVideo: "Cancelar video",
+    browserRecorderFallback: "Si tu navegador no permite grabar directo, se abrirá el selector del dispositivo.",
   },
   en: {
     loading: "Opening private chat...",
@@ -104,16 +111,24 @@ const T = {
     installHelpTitle: "Save this chat on your device",
     installHelpIOS: "On iPhone or iPad: tap Share and then Add to Home Screen.",
     installHelpOther: "In your browser you can install this chat for faster return.",
+    setupDone: "Your quick access is ready.",
+    dismiss: "Hide",
     enableAlerts: "Enable notifications",
     alertsReady: "Notifications enabled",
     alertsBlocked: "Notifications are blocked in this browser.",
     photoHelp: "This photo only stays on this device.",
     callOffice: "Call office",
     callOfficeHint: "If you need immediate help, call the assigned office.",
+    recordingAudio: "Recording audio... tap the mic again to send.",
+    recordingVideo: "Recording video... tap the camera again to send.",
+    preparingVideo: "Preparing camera...",
+    closeVideo: "Cancel video",
+    browserRecorderFallback: "If your browser cannot record directly, the device picker will open.",
   },
 } as const;
 
 const storageKeyForRoom = (roomId: string) => `patient-room-settings-${roomId}`;
+const setupDismissedKeyForRoom = (roomId: string) => `patient-room-setup-dismissed-${roomId}`;
 
 export default function PatientPage({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = use(params);
@@ -128,8 +143,14 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPrompt | null>(null);
   const [notificationsPermission, setNotificationsPermission] = useState<NotificationPermission>("default");
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [setupDismissed, setSetupDismissed] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
+  const [recordingAudio, setRecordingAudio] = useState(false);
+  const [recordingVideo, setRecordingVideo] = useState(false);
+  const [preparingVideo, setPreparingVideo] = useState(false);
+  const [videoPreviewOpen, setVideoPreviewOpen] = useState(false);
   const [settings, setSettings] = useState<PatientSettings>({
     displayName: "",
     darkMode: false,
@@ -144,6 +165,14 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const audioInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const isSending = useRef(false);
+  const audioRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const videoChunksRef = useRef<Blob[]>([]);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
+  const videoElementRef = useRef<HTMLVideoElement>(null);
+  const discardVideoRef = useRef(false);
 
   const t = T[settings.lang];
   const fontSize = settings.fontSizeLevel === "small" ? 14 : settings.fontSizeLevel === "large" ? 19 : 16;
@@ -183,12 +212,14 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKeyForRoom(roomId)) : null;
+    const dismissed = typeof window !== "undefined" ? window.localStorage.getItem(setupDismissedKeyForRoom(roomId)) : null;
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as PatientSettings;
         setSettings(parsed);
       } catch {}
     }
+    if (dismissed === "1") setSetupDismissed(true);
   }, [roomId]);
 
   useEffect(() => {
@@ -200,6 +231,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   useEffect(() => {
     if (typeof window === "undefined") return;
     if ("Notification" in window) setNotificationsPermission(Notification.permission);
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setIsStandalone(Boolean(standalone));
 
     const handler = (event: Event) => {
       event.preventDefault();
@@ -208,6 +241,13 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      audioStreamRef.current?.getTracks().forEach((track) => track.stop());
+      videoStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   useEffect(() => {
@@ -335,9 +375,16 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       await deferredInstallPrompt.prompt();
       if (deferredInstallPrompt.userChoice) await deferredInstallPrompt.userChoice;
       setDeferredInstallPrompt(null);
+      const standalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+      setIsStandalone(Boolean(standalone));
       return;
     }
     setShowInstallHelp(true);
+  };
+
+  const hideSetupPanel = () => {
+    setSetupDismissed(true);
+    if (typeof window !== "undefined") window.localStorage.setItem(setupDismissedKeyForRoom(roomId), "1");
   };
 
   const uploadPatientFile = async (file: File) => {
@@ -362,6 +409,105 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       sender_name: patientName,
       is_internal: false,
     });
+  };
+
+  const startAudioRecording = async () => {
+    if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
+      audioInputRef.current?.click();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      audioRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const file = new File([blob], `audio-${Date.now()}.webm`, { type: blob.type || "audio/webm" });
+        audioStreamRef.current?.getTracks().forEach((track) => track.stop());
+        audioStreamRef.current = null;
+        audioRecorderRef.current = null;
+        audioChunksRef.current = [];
+        setRecordingAudio(false);
+        await uploadPatientFile(file);
+      };
+      recorder.start();
+      setRecordingAudio(true);
+    } catch {
+      audioInputRef.current?.click();
+    }
+  };
+
+  const toggleAudioRecording = async () => {
+    if (recordingAudio) {
+      audioRecorderRef.current?.stop();
+      return;
+    }
+    await startAudioRecording();
+  };
+
+  const startVideoRecording = async () => {
+    if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
+      videoInputRef.current?.click();
+      return;
+    }
+    try {
+      setPreparingVideo(true);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
+      videoStreamRef.current = stream;
+      videoChunksRef.current = [];
+      setVideoPreviewOpen(true);
+      const recorder = new MediaRecorder(stream);
+      videoRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) videoChunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        if (discardVideoRef.current) {
+          discardVideoRef.current = false;
+          videoChunksRef.current = [];
+          return;
+        }
+        const blob = new Blob(videoChunksRef.current, { type: recorder.mimeType || "video/webm" });
+        const file = new File([blob], `video-${Date.now()}.webm`, { type: blob.type || "video/webm" });
+        videoStreamRef.current?.getTracks().forEach((track) => track.stop());
+        videoStreamRef.current = null;
+        videoRecorderRef.current = null;
+        videoChunksRef.current = [];
+        setRecordingVideo(false);
+        setVideoPreviewOpen(false);
+        await uploadPatientFile(file);
+      };
+      recorder.start();
+      setRecordingVideo(true);
+    } catch {
+      videoInputRef.current?.click();
+    } finally {
+      setPreparingVideo(false);
+    }
+  };
+
+  const toggleVideoRecording = async () => {
+    if (recordingVideo) {
+      videoRecorderRef.current?.stop();
+      return;
+    }
+    await startVideoRecording();
+  };
+
+  const cancelVideoRecording = () => {
+    discardVideoRef.current = true;
+    videoRecorderRef.current?.stop();
+    videoChunksRef.current = [];
+    videoRecorderRef.current = null;
+    videoStreamRef.current?.getTracks().forEach((track) => track.stop());
+    videoStreamRef.current = null;
+    setRecordingVideo(false);
+    setVideoPreviewOpen(false);
   };
 
   const onSelectProfilePhoto = (file: File) => {
@@ -410,6 +556,16 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           minute: "2-digit",
         })
       : "";
+
+  const setupComplete = notificationsPermission === "granted" && (isStandalone || deferredInstallPrompt === null);
+  const showSetupPanel = !setupDismissed && (!setupComplete || showInstallHelp);
+
+  useEffect(() => {
+    if (videoPreviewOpen && videoElementRef.current && videoStreamRef.current) {
+      videoElementRef.current.srcObject = videoStreamRef.current;
+      videoElementRef.current.play().catch(() => {});
+    }
+  }, [videoPreviewOpen]);
 
   const renderMessage = (message: any) => {
     const isPatient = message.sender_type === "patient";
@@ -521,6 +677,21 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         }}
       />
 
+      {videoPreviewOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(15,23,42,0.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: "#111827", borderRadius: 24, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.35)" }}>
+            <div style={{ padding: "14px 16px", color: "white", fontWeight: 800 }}>{recordingVideo ? t.recordingVideo : t.preparingVideo}</div>
+            <video ref={videoElementRef} muted playsInline autoPlay style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", background: "#000" }} />
+            <div style={{ display: "flex", gap: 10, padding: 16 }}>
+              <button onClick={cancelVideoRecording} style={{ flex: 1, border: "none", borderRadius: 14, padding: "12px 14px", background: "#374151", color: "white", fontWeight: 700, cursor: "pointer" }}>{t.closeVideo}</button>
+              <button onClick={toggleVideoRecording} style={{ flex: 1, border: "none", borderRadius: 14, padding: "12px 14px", background: recordingVideo ? "#DC2626" : "#2563EB", color: "white", fontWeight: 800, cursor: "pointer" }}>
+                {recordingVideo ? t.send : t.recordVideo}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {settingsOpen && (
         <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(15,23,42,0.45)", display: "flex", justifyContent: "center", alignItems: "flex-end" }} onClick={() => setSettingsOpen(false)}>
           <div style={{ width: "100%", maxWidth: 560, maxHeight: "92dvh", overflowY: "auto", background: surface, borderRadius: "24px 24px 0 0", padding: "22px 20px 38px" }} onClick={(event) => event.stopPropagation()}>
@@ -603,7 +774,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
       <div style={{ minHeight: "100dvh", background: bg, color: textColor, fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif", display: "flex", flexDirection: "column" }}>
         <header style={{ background: "#0F172A", color: "white", padding: "calc(env(safe-area-inset-top) + 16px) 18px 16px", boxShadow: "0 10px 30px rgba(15,23,42,0.14)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#111827,#2563EB)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, flexShrink: 0 }}>
               {settings.avatarDataUrl ? <img src={settings.avatarDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : patientName.slice(0, 1).toUpperCase()}
             </div>
@@ -620,32 +791,46 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               <button onClick={() => setSettingsOpen(true)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>⚙️</button>
             </div>
           </div>
-          <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 16, background: "rgba(255,255,255,0.08)", fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.5 }}>
-            <div style={{ fontWeight: 700, color: "white", marginBottom: 4 }}>{t.online}</div>
-            <div>{t.addToHome}</div>
-            <div style={{ marginTop: 6 }}>{t.installedHint}</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-              <button onClick={promptInstall} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: "pointer" }}>
-                ⬇️ {t.installApp}
-              </button>
-              <button onClick={requestNotifications} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: "pointer" }}>
-                🔔 {notificationsPermission === "granted" ? t.alertsReady : t.enableAlerts}
-              </button>
+          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 999, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 700 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22C55E", display: "inline-block" }} />
+              {t.online}
             </div>
-            {notificationsPermission === "denied" && <div style={{ marginTop: 6, fontSize: 12 }}>{t.alertsBlocked}</div>}
-            {showInstallHelp && (
-              <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 14, background: "rgba(255,255,255,0.1)", fontSize: 12 }}>
-                <div style={{ fontWeight: 700, color: "white", marginBottom: 4 }}>{t.installHelpTitle}</div>
-                <div>{/iPad|iPhone|iPod/.test(typeof navigator !== "undefined" ? navigator.userAgent : "") ? t.installHelpIOS : t.installHelpOther}</div>
-              </div>
-            )}
             {officePhone && (
-              <a href={`tel:${officePhone}`} style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 999, background: "rgba(255,255,255,0.14)", color: "white", textDecoration: "none", fontWeight: 700 }}>
+              <a href={`tel:${officePhone}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 999, background: "rgba(255,255,255,0.08)", color: "white", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>
                 📞 {t.callOffice}
               </a>
             )}
-            {officePhone && <div style={{ marginTop: 6, fontSize: 12 }}>{t.callOfficeHint}: {officePhone}</div>}
           </div>
+          {showSetupPanel && (
+            <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 16, background: "rgba(255,255,255,0.08)", fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.5 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                <div style={{ fontWeight: 700, color: "white" }}>{showInstallHelp ? t.installHelpTitle : t.addToHome}</div>
+                <button onClick={hideSetupPanel} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t.dismiss}</button>
+              </div>
+              <div style={{ marginTop: 6 }}>{showInstallHelp ? (/iPad|iPhone|iPod/.test(typeof navigator !== "undefined" ? navigator.userAgent : "") ? t.installHelpIOS : t.installHelpOther) : t.installedHint}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                {!isStandalone && (
+                  <button onClick={promptInstall} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: "pointer" }}>
+                    ⬇️ {t.installApp}
+                  </button>
+                )}
+                {notificationsPermission !== "granted" ? (
+                  <button onClick={requestNotifications} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: "pointer" }}>
+                    🔔 {t.enableAlerts}
+                  </button>
+                ) : (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 999, background: "rgba(34,197,94,0.16)", color: "white", fontWeight: 700 }}>
+                    🔔 {t.alertsReady}
+                  </div>
+                )}
+              </div>
+              {notificationsPermission === "denied" && <div style={{ marginTop: 6, fontSize: 12 }}>{t.alertsBlocked}</div>}
+            </div>
+          )}
+          {!showSetupPanel && setupComplete && (
+            <div style={{ marginTop: 12, fontSize: 12, color: "rgba(255,255,255,0.72)" }}>{t.setupDone}</div>
+          )}
         </header>
 
         <main style={{ flex: 1, overflowY: "auto", padding: "16px 14px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -685,8 +870,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           <div style={{ fontSize: 12, color: subText, margin: "0 0 8px 6px" }}>{t.quickRepliesSlashHint}</div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
             <button onClick={() => fileInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>📎</button>
-            <button onClick={() => audioInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.recordAudio}>🎤</button>
-            <button onClick={() => videoInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.recordVideo}>🎥</button>
+            <button onClick={toggleAudioRecording} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingAudio ? "#DC2626" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.recordAudio}>🎤</button>
+            <button onClick={toggleVideoRecording} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingVideo || preparingVideo ? "#DC2626" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.recordVideo}>🎥</button>
             <textarea
               value={newMessage}
               onChange={(event) => updateDraft(event.target.value, event.currentTarget)}
@@ -708,6 +893,11 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               {t.send}
             </button>
           </div>
+          {(recordingAudio || recordingVideo || preparingVideo) && (
+            <div style={{ fontSize: 12, color: subText, margin: "8px 0 0 6px" }}>
+              {recordingAudio ? t.recordingAudio : recordingVideo ? t.recordingVideo : `${t.preparingVideo} ${t.browserRecorderFallback}`}
+            </div>
+          )}
         </div>
       </div>
     </>
