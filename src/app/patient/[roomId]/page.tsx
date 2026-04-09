@@ -32,7 +32,7 @@ const T = {
     invalidLink: "Este enlace ya no es válido.",
     invalidLinkHint: "Pide un enlace actualizado al equipo del Dr. Fonseca.",
     roomTitle: "Chat del paciente",
-    secureChat: "Conversación privada con el equipo del Dr. Fonseca",
+    secureChat: "Conversación privada con tu equipo médico",
     settings: "Ajustes",
     displayName: "Tu nombre visible",
     darkMode: "Modo oscuro",
@@ -83,7 +83,7 @@ const T = {
     invalidLink: "This link is no longer valid.",
     invalidLinkHint: "Ask Dr. Fonseca's team for an updated link.",
     roomTitle: "Patient chat",
-    secureChat: "Private conversation with Dr. Fonseca's team",
+    secureChat: "Private conversation with your care team",
     settings: "Settings",
     displayName: "Your visible name",
     darkMode: "Dark mode",
@@ -800,9 +800,9 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               {settings.avatarDataUrl ? <img src={settings.avatarDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : patientName.slice(0, 1).toUpperCase()}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 22, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.roomTitle}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{patientName}</div>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.72)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {room?.procedures?.procedure_name || t.secureChat} {room?.procedures?.office_location ? `· ${room.procedures.office_location}` : ""}
+                {t.secureChat}
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>

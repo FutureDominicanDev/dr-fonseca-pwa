@@ -6,6 +6,32 @@ import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, 
 
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
+type PhoneCountryOption = { code: string; label: string };
+
+const PHONE_COUNTRY_OPTIONS: PhoneCountryOption[] = [
+  { code: "+52", label: "🇲🇽 +52 México" },
+  { code: "+1", label: "🇺🇸🇨🇦 +1 USA / Canadá" },
+  { code: "+34", label: "🇪🇸 +34 España" },
+  { code: "+502", label: "🇬🇹 +502 Guatemala" },
+  { code: "+503", label: "🇸🇻 +503 El Salvador" },
+  { code: "+504", label: "🇭🇳 +504 Honduras" },
+  { code: "+506", label: "🇨🇷 +506 Costa Rica" },
+  { code: "+507", label: "🇵🇦 +507 Panamá" },
+  { code: "+51", label: "🇵🇪 +51 Perú" },
+  { code: "+54", label: "🇦🇷 +54 Argentina" },
+  { code: "+55", label: "🇧🇷 +55 Brasil" },
+  { code: "+56", label: "🇨🇱 +56 Chile" },
+  { code: "+57", label: "🇨🇴 +57 Colombia" },
+  { code: "+44", label: "🇬🇧 +44 UK" },
+];
+
+const formatPhoneLocal = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 15);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 10)}-${digits.slice(10)}`;
+};
 
 const T = {
   es: {
@@ -16,9 +42,9 @@ const T = {
     deleteMsg: "¿Eliminar este mensaje?", msgDeleted: "Mensaje eliminado",
     noMessages: "Sin mensajes aún", noMessagesHint: "Envía el primero para comenzar",
     selectPatient: "Selecciona un paciente", selectPatientHint: "para abrir su sala de chat",
-    newRoom: "Nueva Sala de Paciente", patientName: "Nombre del Paciente *",
-    patientNamePH: "Ej: María González", phone: "Teléfono (WhatsApp)",
-    phonePH: "+52 (33) 555-0000", birthdate: "Fecha de Nacimiento",
+    newRoom: "Nueva Sala de Paciente", patientFirstName: "Nombre *", patientLastName: "Apellido *",
+    patientFirstNamePH: "Ej: María", patientLastNamePH: "Ej: González", phone: "Teléfono (WhatsApp)",
+    phoneCode: "Clave internacional", phonePH: "123-456-7890", birthdate: "Fecha de Nacimiento",
     birthdatePH: "dd/mm/aaaa",
     email: "Correo Electrónico",
     emailPH: "paciente@correo.com",
@@ -55,7 +81,10 @@ const T = {
     createRoom: "✅ Crear Sala del Paciente", creating: "Creando sala...",
     cancel: "Cancelar", roomCreated: "¡Sala Creada!", shareLink: "Comparte este enlace con",
     copyLink: "📋 Copiar Enlace", copied: "✅ ¡Copiado!", whatsapp: "💬 Enviar por WhatsApp",
-    done: "Listo", required: "Nombre y procedimiento son obligatorios.",
+    done: "Listo", required: "Nombre, apellido y procedimiento son obligatorios.",
+    fixErrors: "Corrige los errores antes de continuar.",
+    invalidEmail: "El correo debe incluir un formato válido, por ejemplo nombre@correo.com.",
+    invalidPhone: "El teléfono debe tener al menos 7 dígitos.",
     settings: "Ajustes", myProfile: "Mi Perfil",
     displayName: "Nombre a Mostrar",
     darkMode: "Modo Oscuro", fontSize: "Tamaño de Texto",
@@ -81,9 +110,9 @@ const T = {
     deleteMsg: "Delete this message?", msgDeleted: "Message deleted",
     noMessages: "No messages yet", noMessagesHint: "Send the first one to get started",
     selectPatient: "Select a patient", selectPatientHint: "to open their chat room",
-    newRoom: "New Patient Room", patientName: "Patient Name *",
-    patientNamePH: "e.g. María González", phone: "Phone (WhatsApp)",
-    phonePH: "+52 (33) 555-0000", birthdate: "Date of Birth",
+    newRoom: "New Patient Room", patientFirstName: "First Name *", patientLastName: "Last Name *",
+    patientFirstNamePH: "e.g. Maria", patientLastNamePH: "e.g. Gonzalez", phone: "Phone (WhatsApp)",
+    phoneCode: "Country Code", phonePH: "123-456-7890", birthdate: "Date of Birth",
     birthdatePH: "dd/mm/yyyy",
     email: "Email",
     emailPH: "patient@email.com",
@@ -120,7 +149,10 @@ const T = {
     createRoom: "✅ Create Patient Room", creating: "Creating room...",
     cancel: "Cancel", roomCreated: "Room Created!", shareLink: "Share this link with",
     copyLink: "📋 Copy Link", copied: "✅ Copied!", whatsapp: "💬 Send via WhatsApp",
-    done: "Done", required: "Name and procedure are required.",
+    done: "Done", required: "First name, last name, and procedure are required.",
+    fixErrors: "Please correct the errors before continuing.",
+    invalidEmail: "Email must use a valid format, for example name@email.com.",
+    invalidPhone: "Phone number must contain at least 7 digits.",
     settings: "Settings", myProfile: "My Profile",
     displayName: "Display Name",
     darkMode: "Dark Mode", fontSize: "Font Size",
@@ -249,8 +281,10 @@ export default function InboxPage() {
   const [showNewRoom, setShowNewRoom] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showQREditor, setShowQREditor] = useState(false);
-  const [newPatientName, setNewPatientName] = useState("");
-  const [newPatientPhone, setNewPatientPhone] = useState("");
+  const [newPatientFirstName, setNewPatientFirstName] = useState("");
+  const [newPatientLastName, setNewPatientLastName] = useState("");
+  const [newPatientPhoneCountry, setNewPatientPhoneCountry] = useState("+52");
+  const [newPatientPhoneLocal, setNewPatientPhoneLocal] = useState("");
   const [newPatientEmail, setNewPatientEmail] = useState("");
   const [newProcedureName, setNewProcedureName] = useState("");
   const [newSurgeryDate, setNewSurgeryDate] = useState("");
@@ -269,6 +303,7 @@ export default function InboxPage() {
   const [internalNoteDraft, setInternalNoteDraft] = useState("");
   const [savingInternalNote, setSavingInternalNote] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
+  const [newRoomError, setNewRoomError] = useState("");
   const [createdRoomLink, setCreatedRoomLink] = useState<string|null>(null);
   const [createdPatientName, setCreatedPatientName] = useState("");
   const [createdPatientLanguage, setCreatedPatientLanguage] = useState<"es" | "en">("es");
@@ -312,6 +347,8 @@ export default function InboxPage() {
   const fmtRec = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
   const isImageUrl = (url: string) => { if (!url) return false; const u=url.toLowerCase(); return u.includes("supabase")&&(u.endsWith(".jpg")||u.endsWith(".jpeg")||u.endsWith(".png")||u.endsWith(".gif")||u.endsWith(".webp")||u.includes("before")||u.includes("patient-photo")); };
   const senderColor = (type: string, role: string) => type==="patient"?"#1A6B3C":({doctor:"#0050A0",post_quirofano:"#6B3A9E",enfermeria:"#007A7A",coordinacion:"#B35A00",staff:"#444"} as any)[role]||"#444";
+  const patientFullName = `${newPatientFirstName.trim()} ${newPatientLastName.trim()}`.trim();
+  const combinedPatientPhone = newPatientPhoneLocal.trim() ? `${newPatientPhoneCountry} ${newPatientPhoneLocal.trim()}` : "";
   const isMissingColumnError = (error: any) => {
     const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
     return message.includes("column") || message.includes("schema cache") || message.includes("relation");
@@ -563,18 +600,21 @@ export default function InboxPage() {
   };
 
   const createRoom = async () => {
-    if (!newPatientName.trim()||!newProcedureName.trim()){alert(t.required);return;}
+    setNewRoomError("");
+    if (!newPatientFirstName.trim()||!newPatientLastName.trim()||!newProcedureName.trim()){setNewRoomError(t.required);return;}
+    if (newPatientEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatientEmail.trim())) { setNewRoomError(t.invalidEmail); return; }
+    if (newPatientPhoneLocal.trim() && newPatientPhoneLocal.replace(/\D/g, "").length < 7) { setNewRoomError(t.invalidPhone); return; }
     const birthdateIso = newBirthdate ? displayToIsoDate(newBirthdate) : "";
     const surgeryDateIso = newSurgeryDate ? displayToIsoDate(newSurgeryDate) : "";
-    if (newBirthdate && !birthdateIso) { alert(lang==="es" ? "La fecha de nacimiento debe ir en formato dd/mm/aaaa." : "Birth date must use dd/mm/yyyy format."); return; }
-    if (newSurgeryDate && !surgeryDateIso) { alert(lang==="es" ? "La fecha de cirugía debe ir en formato dd/mm/aaaa." : "Surgery date must use dd/mm/yyyy format."); return; }
+    if (newBirthdate && !birthdateIso) { setNewRoomError(lang==="es" ? "La fecha de nacimiento debe ir en formato dd/mm/aaaa." : "Birth date must use dd/mm/yyyy format."); return; }
+    if (newSurgeryDate && !surgeryDateIso) { setNewRoomError(lang==="es" ? "La fecha de cirugía debe ir en formato dd/mm/aaaa." : "Surgery date must use dd/mm/yyyy format."); return; }
     setCreatingRoom(true);
     try {
       const creatorId=currentUserId||userProfile?.id||null;
       const creatorRole=userProfile?.role||"staff";
       const patientPayload = {
-        full_name:newPatientName.trim(),
-        phone:newPatientPhone||null,
+        full_name:patientFullName,
+        phone:combinedPatientPhone||null,
         email:newPatientEmail.trim()||null,
         birthdate:birthdateIso||null,
         preferred_language:newPatientLanguage,
@@ -587,7 +627,7 @@ export default function InboxPage() {
       if (patientInsert.error && isMissingColumnError(patientInsert.error)) {
         patientInsert = await supabase
           .from("patients")
-          .insert({ full_name:newPatientName.trim(), phone:newPatientPhone||null, birthdate:birthdateIso||null })
+          .insert({ full_name:patientFullName, phone:combinedPatientPhone||null, birthdate:birthdateIso||null })
           .select()
           .single();
       }
@@ -616,11 +656,11 @@ export default function InboxPage() {
       }
       for (let i=0;i<beforePhotosFiles.length;i++){const f=beforePhotosFiles[i];const fn2=`patient-photos/${pt.id}/before/${Date.now()}-${i}.${f.name.split(".").pop()||"jpg"}`;const{error:ue2}=await supabase.storage.from("chat-files").upload(fn2,f,{upsert:true});if(!ue2){const{data:ud2}=supabase.storage.from("chat-files").getPublicUrl(fn2);await supabase.from("messages").insert({room_id:rm.id,content:ud2.publicUrl,message_type:"image",file_name:`[BEFORE] Foto Pre-Op ${i+1}`,sender_type:"staff",sender_id:creatorId,sender_name:"Sistema",sender_role:creatorRole,sender_office:newLocation});}}
       setCreatedRoomLink(`${window.location.origin}/patient/${rm.id}`);
-      setCreatedPatientName(newPatientName);
+      setCreatedPatientName(patientFullName);
       setCreatedPatientLanguage(newPatientLanguage);
-      setNewPatientName("");setNewPatientPhone("");setNewPatientEmail("");setNewProcedureName("");setNewSurgeryDate("");setNewBirthdate("");setNewLocation("Guadalajara");setNewPatientLanguage("es");setNewPatientTimezone("America/Mexico_City");setNewPatientAllergies("");setNewPatientMedications("");setSelectedCareTeamIds([]);setProfilePicFile(null);setBeforePhotosFiles([]);setShowNewRoom(false);
+      setNewPatientFirstName("");setNewPatientLastName("");setNewPatientPhoneCountry("+52");setNewPatientPhoneLocal("");setNewPatientEmail("");setNewProcedureName("");setNewSurgeryDate("");setNewBirthdate("");setNewLocation("Guadalajara");setNewPatientLanguage("es");setNewPatientTimezone("America/Mexico_City");setNewPatientAllergies("");setNewPatientMedications("");setSelectedCareTeamIds([]);setProfilePicFile(null);setBeforePhotosFiles([]);setShowNewRoom(false);
       fetchRooms();
-    } catch(err:any){console.error(err);alert("Error: "+(err?.message||JSON.stringify(err)));}
+    } catch(err:any){console.error(err);setNewRoomError("Error: "+(err?.message||JSON.stringify(err)));}
     setCreatingRoom(false);
   };
 
@@ -1013,12 +1053,28 @@ export default function InboxPage() {
         <div className="modal-overlay" onClick={()=>setShowNewRoom(false)}>
           <div className="modal-scroll" onClick={e=>e.stopPropagation()}>
             <p className="modal-title">➕ {t.newRoom}</p>
-            <label className="flabel">{t.patientName}</label>
-            <input className="finput" placeholder={t.patientNamePH} value={newPatientName} onChange={e=>setNewPatientName(e.target.value)}/>
+            {newRoomError && <div style={{background:"#FFF1F2",color:"#E11D48",borderRadius:14,padding:"12px 14px",fontSize:14,fontWeight:800,marginBottom:14}}>⚠️ {t.fixErrors} {newRoomError}</div>}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label className="flabel">{t.patientFirstName}</label>
+                <input className="finput" placeholder={t.patientFirstNamePH} value={newPatientFirstName} onChange={e=>{setNewPatientFirstName(e.target.value);if(newRoomError)setNewRoomError("");}}/>
+              </div>
+              <div>
+                <label className="flabel">{t.patientLastName}</label>
+                <input className="finput" placeholder={t.patientLastNamePH} value={newPatientLastName} onChange={e=>{setNewPatientLastName(e.target.value);if(newRoomError)setNewRoomError("");}}/>
+              </div>
+            </div>
             <label className="flabel">{t.phone}</label>
-            <input className="finput" placeholder={t.phonePH} value={newPatientPhone} onChange={e=>setNewPatientPhone(e.target.value)}/>
+            <div style={{display:"grid",gridTemplateColumns:"minmax(150px, 220px) 1fr",gap:10}}>
+              <select className="finput" value={newPatientPhoneCountry} onChange={e=>setNewPatientPhoneCountry(e.target.value)}>
+                {PHONE_COUNTRY_OPTIONS.map((option)=>(
+                  <option key={option.code} value={option.code}>{option.label}</option>
+                ))}
+              </select>
+              <input className="finput" inputMode="tel" placeholder={t.phonePH} value={newPatientPhoneLocal} onChange={e=>{setNewPatientPhoneLocal(formatPhoneLocal(e.target.value));if(newRoomError)setNewRoomError("");}}/>
+            </div>
             <label className="flabel">{t.email}</label>
-            <input className="finput" type="email" placeholder={t.emailPH} value={newPatientEmail} onChange={e=>setNewPatientEmail(e.target.value)}/>
+            <input className="finput" type="email" placeholder={t.emailPH} value={newPatientEmail} onChange={e=>{setNewPatientEmail(e.target.value);if(newRoomError)setNewRoomError("");}}/>
             <label className="flabel">{t.birthdate}</label>
             <input className="finput" inputMode="numeric" placeholder={t.birthdatePH} value={isoToDisplayDate(newBirthdate)} onChange={e=>setNewBirthdate(formatDateTyping(e.target.value))}/>
             <label className="flabel">{t.procedure}</label>
