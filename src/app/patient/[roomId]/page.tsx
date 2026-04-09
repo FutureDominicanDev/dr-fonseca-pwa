@@ -16,6 +16,11 @@ type PatientSettings = {
   quickReplies: string[];
 };
 
+type DeferredInstallPrompt = Event & {
+  prompt: () => Promise<void>;
+  userChoice?: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
 const DEFAULT_QUICK_REPLIES = {
   es: ["Hola", "Gracias", "Tengo una duda", "Voy en camino", "Me siento bien"],
   en: ["Hello", "Thank you", "I have a question", "I am on my way", "I feel okay"],
@@ -34,6 +39,7 @@ const T = {
     fontSize: "Tamaño de texto",
     language: "Idioma",
     quickReplies: "Respuestas rápidas",
+    quickRepliesSlashHint: "Escribe / para ver tus respuestas rápidas.",
     addReply: "Agregar respuesta",
     replyPlaceholder: "Ej: Tengo una duda",
     profilePhoto: "Foto de perfil",
@@ -50,6 +56,13 @@ const T = {
     clinic: "Clínica",
     quickReplyHint: "Toca una respuesta para enviarla rápido.",
     installedHint: "Puedes volver usando este mismo enlace cuando quieras.",
+    installApp: "Agregar a pantalla inicial",
+    installHelpTitle: "Guarda este chat en tu teléfono",
+    installHelpIOS: "En iPhone o iPad: toca Compartir y luego Agregar a pantalla de inicio.",
+    installHelpOther: "En tu navegador puedes instalar este chat para volver más rápido.",
+    enableAlerts: "Activar notificaciones",
+    alertsReady: "Notificaciones activadas",
+    alertsBlocked: "Las notificaciones están bloqueadas en este navegador.",
     photoHelp: "Esta foto solo se guarda en este dispositivo.",
     callOffice: "Llamar a la oficina",
     callOfficeHint: "Si necesitas ayuda inmediata, llama a la sede asignada.",
@@ -66,6 +79,7 @@ const T = {
     fontSize: "Text size",
     language: "Language",
     quickReplies: "Quick replies",
+    quickRepliesSlashHint: "Type / to see your quick replies.",
     addReply: "Add reply",
     replyPlaceholder: "e.g. I have a question",
     profilePhoto: "Profile photo",
@@ -82,6 +96,13 @@ const T = {
     clinic: "Clinic",
     quickReplyHint: "Tap a quick reply to send it fast.",
     installedHint: "You can come back using this same link anytime.",
+    installApp: "Add to home screen",
+    installHelpTitle: "Save this chat on your device",
+    installHelpIOS: "On iPhone or iPad: tap Share and then Add to Home Screen.",
+    installHelpOther: "In your browser you can install this chat for faster return.",
+    enableAlerts: "Enable notifications",
+    alertsReady: "Notifications enabled",
+    alertsBlocked: "Notifications are blocked in this browser.",
     photoHelp: "This photo only stays on this device.",
     callOffice: "Call office",
     callOfficeHint: "If you need immediate help, call the assigned office.",
@@ -100,6 +121,11 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [notFound, setNotFound] = useState(false);
   const [officePhones, setOfficePhones] = useState<{ Guadalajara: string; Tijuana: string }>({ Guadalajara: "", Tijuana: "" });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPrompt | null>(null);
+  const [notificationsPermission, setNotificationsPermission] = useState<NotificationPermission>("default");
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashFilter, setSlashFilter] = useState("");
   const [settings, setSettings] = useState<PatientSettings>({
     displayName: "",
     darkMode: false,
@@ -125,6 +151,10 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const patientName = settings.displayName.trim() || room?.procedures?.patients?.full_name || t.patient;
   const officePhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara;
+  const slashMatches = useMemo(() => {
+    const filter = slashFilter.trim().toLowerCase();
+    return settings.quickReplies.filter((reply) => !filter || reply.toLowerCase().includes(filter));
+  }, [settings.quickReplies, slashFilter]);
 
   const groupedMessages = useMemo(() => {
     const groups: { date: string; msgs: any[] }[] = [];
@@ -160,6 +190,19 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       window.localStorage.setItem(storageKeyForRoom(roomId), JSON.stringify(settings));
     }
   }, [roomId, settings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ("Notification" in window) setNotificationsPermission(Notification.permission);
+
+    const handler = (event: Event) => {
+      event.preventDefault();
+      setDeferredInstallPrompt(event as DeferredInstallPrompt);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
 
   useEffect(() => {
     fetchRoom();
@@ -253,24 +296,42 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       },
     ]);
 
-    const { data, error } = await supabase.from("messages").insert({
+    const { error } = await supabase.from("messages").insert({
       room_id: roomId,
       content,
       message_type: "text",
       sender_type: "patient",
       sender_name: patientName,
       is_internal: false,
-    }).select().single();
+    });
 
     if (error) {
       setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
-    } else if (data) {
-      setMessages((prev) => prev.map((entry) => entry.id === tempId ? data : entry));
     }
 
+    if (override || newMessage.startsWith("/")) {
+      setShowSlashMenu(false);
+      setSlashFilter("");
+    }
     if (!override) setNewMessage("");
     setSending(false);
     isSending.current = false;
+  };
+
+  const requestNotifications = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    const permission = await Notification.requestPermission();
+    setNotificationsPermission(permission);
+  };
+
+  const promptInstall = async () => {
+    if (deferredInstallPrompt) {
+      await deferredInstallPrompt.prompt();
+      if (deferredInstallPrompt.userChoice) await deferredInstallPrompt.userChoice;
+      setDeferredInstallPrompt(null);
+      return;
+    }
+    setShowInstallHelp(true);
   };
 
   const uploadPatientFile = async (file: File) => {
@@ -310,6 +371,21 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     if (!value) return;
     setSettings((prev) => ({ ...prev, quickReplies: [...prev.quickReplies, value] }));
     setNewQuickReply("");
+  };
+
+  const updateDraft = (value: string, target?: HTMLTextAreaElement) => {
+    setNewMessage(value);
+    if (value.startsWith("/")) {
+      setShowSlashMenu(true);
+      setSlashFilter(value.slice(1));
+    } else {
+      setShowSlashMenu(false);
+      setSlashFilter("");
+    }
+    if (target) {
+      target.style.height = "46px";
+      target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+    }
   };
 
   const formatDateLabel = (value?: string) =>
@@ -497,7 +573,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
       <div style={{ minHeight: "100dvh", background: bg, color: textColor, fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif", display: "flex", flexDirection: "column" }}>
         <header style={{ background: "#0F172A", color: "white", padding: "calc(env(safe-area-inset-top) + 16px) 18px 16px", boxShadow: "0 10px 30px rgba(15,23,42,0.14)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#111827,#2563EB)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, flexShrink: 0 }}>
               {settings.avatarDataUrl ? <img src={settings.avatarDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : patientName.slice(0, 1).toUpperCase()}
             </div>
@@ -507,12 +583,32 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                 {room?.procedures?.procedure_name || t.secureChat} {room?.procedures?.office_location ? `· ${room.procedures.office_location}` : ""}
               </div>
             </div>
-            <button onClick={() => setSettingsOpen(true)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>⚙️</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <button onClick={() => setSettings((prev) => ({ ...prev, lang: prev.lang === "es" ? "en" : "es" }))} style={{ border: "none", background: "rgba(255,255,255,0.14)", color: "white", borderRadius: 999, padding: "10px 12px", fontWeight: 700, cursor: "pointer" }}>
+                {settings.lang === "es" ? "🇲🇽 ES" : "🇺🇸 EN"}
+              </button>
+              <button onClick={() => setSettingsOpen(true)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>⚙️</button>
+            </div>
           </div>
           <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 16, background: "rgba(255,255,255,0.08)", fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.5 }}>
             <div style={{ fontWeight: 700, color: "white", marginBottom: 4 }}>{t.online}</div>
             <div>{t.addToHome}</div>
             <div style={{ marginTop: 6 }}>{t.installedHint}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              <button onClick={promptInstall} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: "pointer" }}>
+                ⬇️ {t.installApp}
+              </button>
+              <button onClick={requestNotifications} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: "pointer" }}>
+                🔔 {notificationsPermission === "granted" ? t.alertsReady : t.enableAlerts}
+              </button>
+            </div>
+            {notificationsPermission === "denied" && <div style={{ marginTop: 6, fontSize: 12 }}>{t.alertsBlocked}</div>}
+            {showInstallHelp && (
+              <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 14, background: "rgba(255,255,255,0.1)", fontSize: 12 }}>
+                <div style={{ fontWeight: 700, color: "white", marginBottom: 4 }}>{t.installHelpTitle}</div>
+                <div>{/iPad|iPhone|iPod/.test(typeof navigator !== "undefined" ? navigator.userAgent : "") ? t.installHelpIOS : t.installHelpOther}</div>
+              </div>
+            )}
             {officePhone && (
               <a href={`tel:${officePhone}`} style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 999, background: "rgba(255,255,255,0.14)", color: "white", textDecoration: "none", fontWeight: 700 }}>
                 📞 {t.callOffice}
@@ -547,6 +643,15 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         </main>
 
         <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: surface, borderTop: `1px solid ${border}`, padding: "10px 12px calc(env(safe-area-inset-bottom) + 10px)", boxShadow: "0 -10px 30px rgba(15,23,42,0.08)" }}>
+          {showSlashMenu && slashMatches.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, background: settings.darkMode ? "#111827" : "#FFFFFF", border: `1px solid ${border}`, borderRadius: 18, padding: 10, boxShadow: "0 10px 30px rgba(15,23,42,0.12)" }}>
+              {slashMatches.map((reply, index) => (
+                <button key={`${reply}-slash-${index}`} onClick={() => sendMessage(reply)} style={{ border: "none", background: settings.darkMode ? "#1F2937" : "#F8FAFC", color: textColor, borderRadius: 12, padding: "10px 12px", textAlign: "left", cursor: "pointer", fontWeight: 700 }}>
+                  / {reply}
+                </button>
+              ))}
+            </div>
+          )}
           {settings.quickReplies.length > 0 && (
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 10 }}>
               {settings.quickReplies.map((reply, index) => (
@@ -556,17 +661,22 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               ))}
             </div>
           )}
+          <div style={{ fontSize: 12, color: subText, margin: "0 0 8px 6px" }}>{t.quickRepliesSlashHint}</div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
             <button onClick={() => fileInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>📎</button>
             <textarea
               value={newMessage}
-              onChange={(event) => setNewMessage(event.target.value)}
+              onChange={(event) => updateDraft(event.target.value, event.currentTarget)}
               placeholder={t.typeMessage}
               rows={1}
               style={{ flex: 1, resize: "none", minHeight: 46, maxHeight: 120, borderRadius: 20, border: `1px solid ${border}`, background: settings.darkMode ? "#111827" : "white", color: textColor, padding: "12px 14px", fontSize, fontFamily: "inherit", lineHeight: 1.5 }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
+                  if (showSlashMenu && slashMatches[0]) {
+                    sendMessage(slashMatches[0]);
+                    return;
+                  }
                   sendMessage();
                 }
               }}

@@ -35,6 +35,7 @@ const T = {
     careTeamHint: "Selecciona quién debe tener acceso y alertas para este paciente.",
     patientInfo: "Ficha del Paciente",
     patientInfoHint: "Datos clínicos y operativos del caso",
+    callPatient: "Llamar paciente",
     patientLocalTime: "Hora Local del Paciente",
     internalNotes: "Notas internas del equipo",
     internalNotesHint: "Solo el equipo asignado puede ver estas notas.",
@@ -99,6 +100,7 @@ const T = {
     careTeamHint: "Choose who should have access and alerts for this patient.",
     patientInfo: "Patient Info",
     patientInfoHint: "Clinical and operational case details",
+    callPatient: "Call patient",
     patientLocalTime: "Patient Local Time",
     internalNotes: "Internal team notes",
     internalNotesHint: "Only the assigned care team can see these notes.",
@@ -346,9 +348,19 @@ export default function InboxPage() {
       .select("id, full_name, role, office_location, avatar_url")
       .order("full_name", { ascending: true });
 
-    if (data) {
-      setStaffDirectory(data as CareTeamMember[]);
-    }
+    const list = (data || []) as CareTeamMember[];
+    const fallback = userProfile?.id ? [{
+      id: userProfile.id,
+      full_name: userProfile.full_name || userProfile.display_name || "Staff",
+      role: userProfile.role || "staff",
+      office_location: userProfile.office_location || null,
+      avatar_url: userProfile.avatar_url || null,
+    }] : [];
+    const merged = [...list];
+    fallback.forEach((entry) => {
+      if (!merged.some((member) => member.id === entry.id)) merged.unshift(entry);
+    });
+    setStaffDirectory(merged);
   };
 
   const fetchSelectedRoomTeam = async (roomId: string) => {
@@ -401,7 +413,7 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (currentUserId) fetchAssignableStaff();
-  }, [currentUserId]);
+  }, [currentUserId, userProfile]);
 
   useEffect(() => {
     if (showNewRoom && currentUserId) {
@@ -1191,6 +1203,9 @@ export default function InboxPage() {
                       {selectedRoom.procedures?.office_location&&` · 📍${selectedRoom.procedures.office_location}`}
                     </div>
                   </div>
+                  {selectedRoom.procedures?.patients?.phone && (
+                    <a href={`tel:${selectedRoom.procedures.patients.phone}`} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",fontSize:18,flexShrink:0}} title={t.callPatient}>📞</a>
+                  )}
                   <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
                 </div>
 
