@@ -333,7 +333,7 @@ export default function InboxPage() {
       .order("full_name", { ascending: true });
 
     if (data) {
-      setStaffDirectory(data.filter((entry: any) => entry.id !== currentUserId));
+      setStaffDirectory(data as CareTeamMember[]);
     }
   };
 
@@ -388,6 +388,12 @@ export default function InboxPage() {
   useEffect(() => {
     if (currentUserId) fetchAssignableStaff();
   }, [currentUserId]);
+
+  useEffect(() => {
+    if (showNewRoom && currentUserId) {
+      setSelectedCareTeamIds((current) => current.includes(currentUserId) ? current : [currentUserId, ...current]);
+    }
+  }, [showNewRoom, currentUserId]);
 
   useEffect(()=>{
     const ch = supabase.channel("rt-msgs")
