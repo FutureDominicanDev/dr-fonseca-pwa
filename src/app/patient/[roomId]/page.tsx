@@ -47,6 +47,8 @@ const T = {
     close: "Cerrar",
     save: "Guardar",
     typeMessage: "Escribe tu mensaje...",
+    recordAudio: "Grabar audio",
+    recordVideo: "Grabar video",
     send: "Enviar",
     online: "Equipo disponible",
     addToHome: "Guarda este enlace para volver fácilmente a tu chat.",
@@ -87,6 +89,8 @@ const T = {
     close: "Close",
     save: "Save",
     typeMessage: "Type your message...",
+    recordAudio: "Record audio",
+    recordVideo: "Record video",
     send: "Send",
     online: "Team available",
     addToHome: "Save this link so you can easily come back to your chat.",
@@ -137,6 +141,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [newQuickReply, setNewQuickReply] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const isSending = useRef(false);
 
   const t = T[settings.lang];
@@ -490,6 +496,30 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           event.target.value = "";
         }}
       />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*"
+        capture
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) uploadPatientFile(file);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) uploadPatientFile(file);
+          event.target.value = "";
+        }}
+      />
 
       {settingsOpen && (
         <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(15,23,42,0.45)", display: "flex", justifyContent: "center", alignItems: "flex-end" }} onClick={() => setSettingsOpen(false)}>
@@ -655,6 +685,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           <div style={{ fontSize: 12, color: subText, margin: "0 0 8px 6px" }}>{t.quickRepliesSlashHint}</div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
             <button onClick={() => fileInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>📎</button>
+            <button onClick={() => audioInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.recordAudio}>🎤</button>
+            <button onClick={() => videoInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.recordVideo}>🎥</button>
             <textarea
               value={newMessage}
               onChange={(event) => updateDraft(event.target.value, event.currentTarget)}
