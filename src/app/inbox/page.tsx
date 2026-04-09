@@ -38,8 +38,16 @@ const T = {
     patients: "Pacientes", search: "Buscar paciente...", noPatients: "Sin pacientes aún",
     noPatientsHint: "Toca + para crear el primero", online: "En línea",
     typeMessage: "Escribe un mensaje o usa / para respuestas rápidas...",
-    send: "Enviar", recording: "Grabando...",
+    send: "Enviar", recording: "Grabando...", recordAudio: "Grabar audio",
     deleteMsg: "¿Eliminar este mensaje?", msgDeleted: "Mensaje eliminado",
+    attachmentOptions: "Adjuntar",
+    takePhoto: "Tomar foto",
+    recordVideoOption: "Grabar video",
+    chooseFile: "Elegir archivo",
+    stopAndSendVideo: "Detener y enviar video",
+    takePhotoNow: "Tomar foto ahora",
+    cancelCapture: "Cancelar",
+    preparingCamera: "Abriendo cámara...",
     noMessages: "Sin mensajes aún", noMessagesHint: "Envía el primero para comenzar",
     selectPatient: "Selecciona un paciente", selectPatientHint: "para abrir su sala de chat",
     newRoom: "Nueva Sala de Paciente", patientFirstName: "Nombre *", patientLastName: "Apellido *",
@@ -120,8 +128,16 @@ const T = {
     patients: "Patients", search: "Search patient...", noPatients: "No patients yet",
     noPatientsHint: "Tap + to create the first one", online: "Online",
     typeMessage: "Type a message or use / for quick replies...",
-    send: "Send", recording: "Recording...",
+    send: "Send", recording: "Recording...", recordAudio: "Record audio",
     deleteMsg: "Delete this message?", msgDeleted: "Message deleted",
+    attachmentOptions: "Attach",
+    takePhoto: "Take photo",
+    recordVideoOption: "Record video",
+    chooseFile: "Choose file",
+    stopAndSendVideo: "Stop and send video",
+    takePhotoNow: "Take photo now",
+    cancelCapture: "Cancel",
+    preparingCamera: "Opening camera...",
     noMessages: "No messages yet", noMessagesHint: "Send the first one to get started",
     selectPatient: "Select a patient", selectPatientHint: "to open their chat room",
     newRoom: "New Patient Room", patientFirstName: "First Name *", patientLastName: "Last Name *",
@@ -343,6 +359,10 @@ export default function InboxPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [pendingFile, setPendingFile] = useState<File|null>(null);
+  const [showMediaMenu, setShowMediaMenu] = useState(false);
+  const [captureMode, setCaptureMode] = useState<"photo" | "video" | null>(null);
+  const [preparingCapture, setPreparingCapture] = useState(false);
+  const [recordingVideo, setRecordingVideo] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([
     { shortcut: "hola", message: "¡Hola! ¿Cómo se siente hoy?" },
@@ -364,12 +384,17 @@ export default function InboxPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedRoomRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaCaptureVideoRef = useRef<HTMLVideoElement>(null);
   const profilePicRef = useRef<HTMLInputElement>(null);
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
   const beforePhotosRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
+  const captureStreamRef = useRef<MediaStream | null>(null);
+  const captureRecorderRef = useRef<MediaRecorder | null>(null);
+  const captureChunksRef = useRef<Blob[]>([]);
+  const discardCaptureRef = useRef(false);
   const notifRef = useRef<string>("default");
   const isSending = useRef(false);
 
@@ -510,6 +535,12 @@ export default function InboxPage() {
     setManagedTeamIds(selectedRoomTeam.map((member) => member.id));
   }, [selectedRoomTeam]);
 
+  useEffect(() => {
+    return () => {
+      captureStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
   useEffect(()=>{
     const ch = supabase.channel("rt-msgs")
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},({new:m})=>{
@@ -538,6 +569,13 @@ export default function InboxPage() {
   },[selectedRoom]);
 
   useEffect(()=>{ messagesEndRef.current?.scrollIntoView({behavior:"smooth"}); },[messages]);
+
+  useEffect(() => {
+    if (captureMode && mediaCaptureVideoRef.current && captureStreamRef.current) {
+      mediaCaptureVideoRef.current.srcObject = captureStreamRef.current;
+      mediaCaptureVideoRef.current.play().catch(() => {});
+    }
+  }, [captureMode]);
 
   const fetchRooms = async () => {
     const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications))";
@@ -760,6 +798,79 @@ export default function InboxPage() {
     } catch {alert("No se pudo acceder al micrófono.");}
   };
   const stopRec = () => { if (mediaRecorderRef.current&&recording){mediaRecorderRef.current.stop();setRecording(false);clearInterval(recordingTimerRef.current);setRecordingSeconds(0);} };
+  const stopCaptureStream = () => {
+    captureStreamRef.current?.getTracks().forEach((track) => track.stop());
+    captureStreamRef.current = null;
+  };
+  const openCapture = async (mode: "photo" | "video") => {
+    try {
+      setPreparingCapture(true);
+      setShowMediaMenu(false);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: mode === "video" });
+      captureStreamRef.current = stream;
+      setCaptureMode(mode);
+      if (mode === "video") {
+        captureChunksRef.current = [];
+        discardCaptureRef.current = false;
+        const recorder = new MediaRecorder(stream);
+        captureRecorderRef.current = recorder;
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) captureChunksRef.current.push(event.data);
+        };
+        recorder.onstop = async () => {
+          const shouldDiscard = discardCaptureRef.current;
+          const blob = new Blob(captureChunksRef.current, { type: recorder.mimeType || "video/webm" });
+          captureChunksRef.current = [];
+          captureRecorderRef.current = null;
+          stopCaptureStream();
+          setCaptureMode(null);
+          setRecordingVideo(false);
+          if (!shouldDiscard) {
+            await uploadFile(new File([blob], `video-${Date.now()}.webm`, { type: blob.type || "video/webm" }));
+          }
+        };
+        recorder.start();
+        setRecordingVideo(true);
+      }
+    } catch {
+      stopCaptureStream();
+      alert(lang==="es" ? "No se pudo abrir la cámara." : "I could not open the camera.");
+    } finally {
+      setPreparingCapture(false);
+    }
+  };
+  const cancelCapture = () => {
+    if (captureMode === "video" && captureRecorderRef.current) {
+      discardCaptureRef.current = true;
+      captureRecorderRef.current.stop();
+      return;
+    }
+    stopCaptureStream();
+    setCaptureMode(null);
+    setRecordingVideo(false);
+  };
+  const takePhotoNow = async () => {
+    if (!mediaCaptureVideoRef.current || !captureStreamRef.current) return;
+    const video = mediaCaptureVideoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    stopCaptureStream();
+    setCaptureMode(null);
+    if (blob) {
+      await uploadFile(new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }));
+    }
+  };
+  const sendCapturedVideo = () => {
+    if (captureMode === "video" && captureRecorderRef.current) {
+      discardCaptureRef.current = false;
+      captureRecorderRef.current.stop();
+    }
+  };
 
   const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
   const filtPts = patients.filter(p=>{
@@ -1167,6 +1278,31 @@ export default function InboxPage() {
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
 
+      {(captureMode || preparingCapture) && (
+        <div className="modal-overlay" onClick={cancelCapture}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxHeight:"88vh",paddingTop:16}}>
+            <p style={{fontSize:18,fontWeight:700,marginBottom:12,color:textColor}}>
+              {preparingCapture ? t.preparingCamera : captureMode==="photo" ? t.takePhoto : t.recordVideoOption}
+            </p>
+            <div style={{background:"#000",borderRadius:18,overflow:"hidden",aspectRatio:"3 / 4",display:"grid",placeItems:"center",marginBottom:14}}>
+              {preparingCapture ? (
+                <span style={{color:"white",fontWeight:700}}>{t.preparingCamera}</span>
+              ) : (
+                <video ref={mediaCaptureVideoRef} muted playsInline autoPlay style={{width:"100%",height:"100%",objectFit:"cover"}} />
+              )}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={cancelCapture} className="sbtn" style={{marginTop:0,flex:1}}>{t.cancelCapture}</button>
+              {captureMode==="photo" ? (
+                <button onClick={takePhotoNow} className="pbtn" style={{marginTop:0,flex:1}}>{t.takePhotoNow}</button>
+              ) : (
+                <button onClick={sendCapturedVideo} className="pbtn" style={{marginTop:0,flex:1,background:"#DC2626"}}>{t.stopAndSendVideo}</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showUploadMenu&&pendingFile&&(
         <div className="modal-overlay" onClick={()=>{setShowUploadMenu(false);setPendingFile(null);}}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxHeight:"50vh"}}>
@@ -1480,7 +1616,15 @@ export default function InboxPage() {
                   </div>
                 ):(
                   <div className="input-area" onClick={e=>e.stopPropagation()}>
-                    <button className="icon-btn" onClick={()=>fileInputRef.current?.click()}>📎</button>
+                    {showMediaMenu&&(
+                      <div style={{position:"absolute",left:12,bottom:`calc(66px + env(safe-area-inset-bottom))`,width:220,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:18,padding:8,boxShadow:"0 14px 34px rgba(15,23,42,0.16)",zIndex:30}}>
+                        <button onClick={()=>{setShowMediaMenu(false);startRec();}} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎤</span>{t.recordAudio}</button>
+                        <button onClick={()=>openCapture("video")} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎥</span>{t.recordVideoOption}</button>
+                        <button onClick={()=>openCapture("photo")} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📷</span>{t.takePhoto}</button>
+                        <button onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📁</span>{t.chooseFile}</button>
+                      </div>
+                    )}
+                    <button className="icon-btn" onClick={()=>setShowMediaMenu(v=>!v)}>📎</button>
                     <textarea
                       className="msg-input"
                       placeholder={t.typeMessage}
@@ -1489,6 +1633,7 @@ export default function InboxPage() {
                       onChange={e=>{
                         const v=e.target.value;
                         setNewMessage(v);
+                        setShowMediaMenu(false);
                         if(v.startsWith("/")){setShowSlashMenu(true);setSlashFilter(v.slice(1));}
                         else{setShowSlashMenu(false);setSlashFilter("");}
                         e.target.style.height="auto";
