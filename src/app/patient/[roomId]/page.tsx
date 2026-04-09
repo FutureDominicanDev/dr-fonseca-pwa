@@ -51,6 +51,10 @@ const T = {
     recordVideo: "Grabar video",
     stopAndSendAudio: "Detener y enviar audio",
     stopAndSendVideo: "Detener y enviar video",
+    attachmentOptions: "Adjuntar",
+    photoLibrary: "Fotos y videos",
+    takePhotoVideo: "Tomar foto o video",
+    chooseFile: "Elegir archivo",
     send: "Enviar",
     online: "Equipo clínico en línea",
     addToHome: "Guarda este enlace para volver fácilmente a tu chat.",
@@ -102,6 +106,10 @@ const T = {
     recordVideo: "Record video",
     stopAndSendAudio: "Stop and send audio",
     stopAndSendVideo: "Stop and send video",
+    attachmentOptions: "Attach",
+    photoLibrary: "Photo library",
+    takePhotoVideo: "Take photo or video",
+    chooseFile: "Choose file",
     send: "Send",
     online: "Care team online",
     addToHome: "Save this link so you can easily come back to your chat.",
@@ -156,6 +164,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [preparingVideo, setPreparingVideo] = useState(false);
   const [videoPreviewOpen, setVideoPreviewOpen] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [settings, setSettings] = useState<PatientSettings>({
     displayName: "",
     darkMode: false,
@@ -167,6 +176,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [newQuickReply, setNewQuickReply] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaLibraryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const isSending = useRef(false);
@@ -548,6 +559,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const updateDraft = (value: string, target?: HTMLTextAreaElement) => {
     setNewMessage(value);
+    setShowAttachMenu(false);
     if (value.startsWith("/")) {
       setShowSlashMenu(true);
       setSlashFilter(value.slice(1));
@@ -665,7 +677,30 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+        accept="*/*"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) uploadPatientFile(file);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={mediaLibraryInputRef}
+        type="file"
+        accept="image/*,video/*"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) uploadPatientFile(file);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*,video/*"
+        capture="environment"
         style={{ display: "none" }}
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -888,11 +923,23 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               ))}
             </div>
           )}
+          {showAttachMenu && (
+            <div style={{ marginBottom: 10, width: 220, background: settings.darkMode ? "#111827" : "#FFFFFF", border: `1px solid ${border}`, borderRadius: 20, padding: 8, boxShadow: "0 14px 34px rgba(15,23,42,0.16)" }}>
+              <button onClick={() => { setShowAttachMenu(false); mediaLibraryInputRef.current?.click(); }} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
+                <span style={{ fontSize: 20 }}>🖼️</span>{t.photoLibrary}
+              </button>
+              <button onClick={() => { setShowAttachMenu(false); cameraInputRef.current?.click(); }} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
+                <span style={{ fontSize: 20 }}>📷</span>{t.takePhotoVideo}
+              </button>
+              <button onClick={() => { setShowAttachMenu(false); fileInputRef.current?.click(); }} style={{ width: "100%", border: "none", background: "transparent", color: textColor, borderRadius: 14, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
+                <span style={{ fontSize: 20 }}>📁</span>{t.chooseFile}
+              </button>
+            </div>
+          )}
           <div style={{ fontSize: 12, color: subText, margin: "0 0 8px 6px" }}>{t.quickRepliesSlashHint}</div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
-            <button onClick={() => fileInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>📎</button>
+            <button onClick={() => setShowAttachMenu((prev) => !prev)} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: showAttachMenu ? "#2563EB" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.attachmentOptions}>📎</button>
             <button onClick={toggleAudioRecording} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingAudio ? "#DC2626" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0, boxShadow: recordingAudio ? "0 0 0 6px rgba(220,38,38,0.18)" : "none" }} title={recordingAudio ? t.stopAndSendAudio : t.recordAudio}>🎤</button>
-            <button onClick={toggleVideoRecording} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingVideo || preparingVideo ? "#DC2626" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0, boxShadow: recordingVideo ? "0 0 0 6px rgba(220,38,38,0.18)" : "none" }} title={recordingVideo ? t.stopAndSendVideo : t.recordVideo}>🎥</button>
             <textarea
               value={newMessage}
               onChange={(event) => updateDraft(event.target.value, event.currentTarget)}
@@ -902,6 +949,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
+                  setShowAttachMenu(false);
                   if (showSlashMenu && slashMatches[0]) {
                     sendMessage(slashMatches[0]);
                     return;
