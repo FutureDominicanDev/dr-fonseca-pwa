@@ -208,6 +208,32 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
     return message.includes("column") || message.includes("schema cache") || message.includes("relation");
   };
+  const pickRecorderMimeType = (kind: "audio" | "video") => {
+    if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") return "";
+    const options = kind === "audio"
+      ? [
+          "audio/mp4;codecs=mp4a.40.2",
+          "audio/mp4",
+          "audio/webm;codecs=opus",
+          "audio/webm",
+        ]
+      : [
+          "video/mp4;codecs=h264,mp4a.40.2",
+          "video/mp4",
+          "video/webm;codecs=vp8,opus",
+          "video/webm",
+        ];
+    return options.find((value) => MediaRecorder.isTypeSupported(value)) || "";
+  };
+  const extensionForMimeType = (mimeType: string, fallback: string) => {
+    const value = mimeType.toLowerCase();
+    if (value.includes("audio/mp4")) return "m4a";
+    if (value.includes("audio/webm")) return "webm";
+    if (value.includes("video/mp4")) return "mp4";
+    if (value.includes("video/webm")) return "webm";
+    if (value.includes("jpeg")) return "jpg";
+    return fallback;
+  };
 
   const patientName = settings.displayName.trim() || room?.procedures?.patients?.full_name || t.patient;
   const officePhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara;
@@ -528,17 +554,20 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
+      const mimeType = pickRecorderMimeType("audio");
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) audioChunksRef.current.push(event.data);
       };
       recorder.onstop = async () => {
-        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const finalMimeType = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(audioChunksRef.current, { type: finalMimeType });
         stream.getTracks().forEach((track) => track.stop());
         audioChunksRef.current = [];
         mediaRecorderRef.current = null;
-        await uploadPatientFile(new File([blob], `audio-${Date.now()}.webm`, { type: blob.type || "audio/webm" }));
+        const ext = extensionForMimeType(finalMimeType, "webm");
+        await uploadPatientFile(new File([blob], `audio-${Date.now()}.${ext}`, { type: blob.type || finalMimeType }));
       };
       recorder.start();
       setRecordingAudio(true);
@@ -562,21 +591,24 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       if (mode === "video") {
         captureChunksRef.current = [];
         discardCaptureRef.current = false;
-        const recorder = new MediaRecorder(stream);
+        const mimeType = pickRecorderMimeType("video");
+        const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
         captureRecorderRef.current = recorder;
         recorder.ondataavailable = (event) => {
           if (event.data.size > 0) captureChunksRef.current.push(event.data);
         };
         recorder.onstop = async () => {
           const shouldDiscard = discardCaptureRef.current;
-          const blob = new Blob(captureChunksRef.current, { type: recorder.mimeType || "video/webm" });
+          const finalMimeType = recorder.mimeType || mimeType || "video/webm";
+          const blob = new Blob(captureChunksRef.current, { type: finalMimeType });
           captureChunksRef.current = [];
           captureRecorderRef.current = null;
           stopCaptureStream();
           setCaptureMode(null);
           setRecordingVideo(false);
           if (!shouldDiscard) {
-            await uploadPatientFile(new File([blob], `video-${Date.now()}.webm`, { type: blob.type || "video/webm" }));
+            const ext = extensionForMimeType(finalMimeType, "webm");
+            await uploadPatientFile(new File([blob], `video-${Date.now()}.${ext}`, { type: blob.type || finalMimeType }));
           }
         };
         recorder.start();

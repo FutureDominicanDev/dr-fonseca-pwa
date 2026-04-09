@@ -410,6 +410,32 @@ export default function InboxPage() {
   const senderColor = (type: string, role: string) => type==="patient"?"#1A6B3C":({doctor:"#0050A0",post_quirofano:"#6B3A9E",enfermeria:"#007A7A",coordinacion:"#B35A00",staff:"#444"} as any)[role]||"#444";
   const prefersNativeCapture =
     typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const pickRecorderMimeType = (kind: "audio" | "video") => {
+    if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") return "";
+    const options = kind === "audio"
+      ? [
+          "audio/mp4;codecs=mp4a.40.2",
+          "audio/mp4",
+          "audio/webm;codecs=opus",
+          "audio/webm",
+        ]
+      : [
+          "video/mp4;codecs=h264,mp4a.40.2",
+          "video/mp4",
+          "video/webm;codecs=vp8,opus",
+          "video/webm",
+        ];
+    return options.find((value) => MediaRecorder.isTypeSupported(value)) || "";
+  };
+  const extensionForMimeType = (mimeType: string, fallback: string) => {
+    const value = mimeType.toLowerCase();
+    if (value.includes("audio/mp4")) return "m4a";
+    if (value.includes("audio/webm")) return "webm";
+    if (value.includes("video/mp4")) return "mp4";
+    if (value.includes("video/webm")) return "webm";
+    if (value.includes("jpeg")) return "jpg";
+    return fallback;
+  };
   const patientFullName = `${newPatientFirstName.trim()} ${newPatientLastName.trim()}`.trim();
   const combinedPatientPhone = newPatientPhoneLocal.trim() ? `${newPatientPhoneCountry} ${newPatientPhoneLocal.trim()}` : "";
   const isMissingColumnError = (error: any) => {
@@ -794,10 +820,17 @@ export default function InboxPage() {
   const startRec = async () => {
     try {
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-      const mr=new MediaRecorder(stream);
+      const mimeType = pickRecorderMimeType("audio");
+      const mr=mimeType ? new MediaRecorder(stream,{ mimeType }) : new MediaRecorder(stream);
       mediaRecorderRef.current=mr; audioChunksRef.current=[];
       mr.ondataavailable=e=>{if(e.data.size>0)audioChunksRef.current.push(e.data);};
-      mr.onstop=async()=>{const b=new Blob(audioChunksRef.current,{type:"audio/mp4"});stream.getTracks().forEach(t=>t.stop());await uploadFile(new File([b],`voice-${Date.now()}.mp4`,{type:"audio/mp4"}));};
+      mr.onstop=async()=>{
+        const finalMimeType = mr.mimeType || mimeType || "audio/webm";
+        const b=new Blob(audioChunksRef.current,{type:finalMimeType});
+        stream.getTracks().forEach(t=>t.stop());
+        const ext = extensionForMimeType(finalMimeType, "webm");
+        await uploadFile(new File([b],`voice-${Date.now()}.${ext}`,{type:finalMimeType}));
+      };
       mr.start(); setRecording(true); setRecordingSeconds(0);
       recordingTimerRef.current=setInterval(()=>setRecordingSeconds(s=>s+1),1000);
     } catch {alert("No se pudo acceder al micrófono.");}
@@ -817,21 +850,24 @@ export default function InboxPage() {
       if (mode === "video") {
         captureChunksRef.current = [];
         discardCaptureRef.current = false;
-        const recorder = new MediaRecorder(stream);
+        const mimeType = pickRecorderMimeType("video");
+        const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
         captureRecorderRef.current = recorder;
         recorder.ondataavailable = (event) => {
           if (event.data.size > 0) captureChunksRef.current.push(event.data);
         };
         recorder.onstop = async () => {
           const shouldDiscard = discardCaptureRef.current;
-          const blob = new Blob(captureChunksRef.current, { type: recorder.mimeType || "video/webm" });
+          const finalMimeType = recorder.mimeType || mimeType || "video/webm";
+          const blob = new Blob(captureChunksRef.current, { type: finalMimeType });
           captureChunksRef.current = [];
           captureRecorderRef.current = null;
           stopCaptureStream();
           setCaptureMode(null);
           setRecordingVideo(false);
           if (!shouldDiscard) {
-            await uploadFile(new File([blob], `video-${Date.now()}.webm`, { type: blob.type || "video/webm" }));
+            const ext = extensionForMimeType(finalMimeType, "webm");
+            await uploadFile(new File([blob], `video-${Date.now()}.${ext}`, { type: blob.type || finalMimeType }));
           }
         };
         recorder.start();
