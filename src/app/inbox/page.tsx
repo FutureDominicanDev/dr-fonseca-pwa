@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
@@ -17,8 +18,10 @@ const T = {
     newRoom: "Nueva Sala de Paciente", patientName: "Nombre del Paciente *",
     patientNamePH: "Ej: María González", phone: "Teléfono (WhatsApp)",
     phonePH: "+52 (33) 555-0000", birthdate: "Fecha de Nacimiento",
+    birthdatePH: "dd/mm/aaaa",
     procedure: "Procedimiento *", procedurePH: "Ej: Rinoplastia, Lipo 360...",
     surgeryDate: "Fecha de Cirugía", location: "Sede *",
+    surgeryDatePH: "dd/mm/aaaa",
     gdl: "🏙️ Guadalajara", tjn: "🌊 Tijuana",
     profilePic: "Foto de Perfil", beforePhotos: "Fotos Pre-Op",
     tapProfilePic: "Toca para subir foto de perfil",
@@ -55,8 +58,10 @@ const T = {
     newRoom: "New Patient Room", patientName: "Patient Name *",
     patientNamePH: "e.g. María González", phone: "Phone (WhatsApp)",
     phonePH: "+52 (33) 555-0000", birthdate: "Date of Birth",
+    birthdatePH: "dd/mm/yyyy",
     procedure: "Procedure *", procedurePH: "e.g. Rhinoplasty, Lipo 360...",
     surgeryDate: "Surgery Date", location: "Location *",
+    surgeryDatePH: "dd/mm/yyyy",
     gdl: "🏙️ Guadalajara", tjn: "🌊 Tijuana",
     profilePic: "Profile Photo", beforePhotos: "Pre-Op Photos",
     tapProfilePic: "Tap to upload profile photo",
@@ -365,14 +370,18 @@ export default function InboxPage() {
 
   const createRoom = async () => {
     if (!newPatientName.trim()||!newProcedureName.trim()){alert(t.required);return;}
+    const birthdateIso = newBirthdate ? displayToIsoDate(newBirthdate) : "";
+    const surgeryDateIso = newSurgeryDate ? displayToIsoDate(newSurgeryDate) : "";
+    if (newBirthdate && !birthdateIso) { alert(lang==="es" ? "La fecha de nacimiento debe ir en formato dd/mm/aaaa." : "Birth date must use dd/mm/yyyy format."); return; }
+    if (newSurgeryDate && !surgeryDateIso) { alert(lang==="es" ? "La fecha de cirugía debe ir en formato dd/mm/aaaa." : "Surgery date must use dd/mm/yyyy format."); return; }
     setCreatingRoom(true);
     try {
       const creatorId=currentUserId||userProfile?.id||null;
       const creatorRole=userProfile?.role||"staff";
-      const { data: pt, error: pe } = await supabase.from("patients").insert({full_name:newPatientName.trim(),phone:newPatientPhone||null,birthdate:newBirthdate||null}).select().single();
+      const { data: pt, error: pe } = await supabase.from("patients").insert({full_name:newPatientName.trim(),phone:newPatientPhone||null,birthdate:birthdateIso||null}).select().single();
       if (pe) throw pe;
       if (profilePicFile){const fn=`patient-profiles/${pt.id}/profile.${profilePicFile.name.split(".").pop()||"jpg"}`;const{error:ue}=await supabase.storage.from("chat-files").upload(fn,profilePicFile,{upsert:true});if(!ue){const{data:ud}=supabase.storage.from("chat-files").getPublicUrl(fn);await supabase.from("patients").update({profile_picture_url:ud.publicUrl}).eq("id",pt.id);}}
-      const { data: pr, error: pre } = await supabase.from("procedures").insert({patient_id:pt.id,procedure_name:newProcedureName.trim(),surgery_date:newSurgeryDate||null,office_location:newLocation,status:"scheduled"}).select().single();
+      const { data: pr, error: pre } = await supabase.from("procedures").insert({patient_id:pt.id,procedure_name:newProcedureName.trim(),surgery_date:surgeryDateIso||null,office_location:newLocation,status:"scheduled"}).select().single();
       if (pre) throw pre;
       const { data: rm, error: re } = await supabase.from("rooms").insert({procedure_id:pr.id,created_by:creatorId}).select().single();
       if (re) throw re;
@@ -653,11 +662,11 @@ export default function InboxPage() {
             <label className="flabel">{t.phone}</label>
             <input className="finput" placeholder={t.phonePH} value={newPatientPhone} onChange={e=>setNewPatientPhone(e.target.value)}/>
             <label className="flabel">{t.birthdate}</label>
-            <input className="finput" type="date" value={newBirthdate} onChange={e=>setNewBirthdate(e.target.value)}/>
+            <input className="finput" inputMode="numeric" placeholder={t.birthdatePH} value={isoToDisplayDate(newBirthdate)} onChange={e=>setNewBirthdate(formatDateTyping(e.target.value))}/>
             <label className="flabel">{t.procedure}</label>
             <input className="finput" placeholder={t.procedurePH} value={newProcedureName} onChange={e=>setNewProcedureName(e.target.value)}/>
             <label className="flabel">{t.surgeryDate}</label>
-            <input className="finput" type="date" value={newSurgeryDate} onChange={e=>setNewSurgeryDate(e.target.value)}/>
+            <input className="finput" inputMode="numeric" placeholder={t.surgeryDatePH} value={isoToDisplayDate(newSurgeryDate)} onChange={e=>setNewSurgeryDate(formatDateTyping(e.target.value))}/>
             <label className="flabel">{t.location}</label>
             <div className="loc-group">
               <div className={`loc-opt${newLocation==="Guadalajara"?" sel":""}`} onClick={()=>setNewLocation("Guadalajara")}>{t.gdl}</div>

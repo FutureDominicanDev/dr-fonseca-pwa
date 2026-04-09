@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
   OWNER_EMAIL,
@@ -135,6 +136,7 @@ export default function AdminPatientRecordPage() {
     basicInfoCopy: isSpanish
       ? "Puedes corregir nombre, teléfono, correo y fecha de nacimiento."
       : "You can correct the patient's name, phone, email, and birth date.",
+    dateHint: isSpanish ? "Usa formato dd/mm/aaaa" : "Use dd/mm/yyyy format",
     savePatient: isSpanish ? "Guardar datos del paciente" : "Save patient details",
     savingPatient: isSpanish ? "Guardando..." : "Saving...",
     quickSummary: isSpanish ? "Resumen rápido" : "Quick summary",
@@ -295,7 +297,7 @@ export default function AdminPatientRecordPage() {
       full_name: patient.full_name || "",
       phone: patient.phone || "",
       email: patient.email || "",
-      birthdate: patient.birthdate || "",
+      birthdate: isoToDisplayDate(patient.birthdate),
     });
   }, [patient]);
 
@@ -306,7 +308,7 @@ export default function AdminPatientRecordPage() {
         procedure_name: procedure.procedure_name || "",
         office_location: normalizeOffice(procedure.office_location),
         status: procedure.status || "",
-        surgery_date: procedure.surgery_date || "",
+        surgery_date: isoToDisplayDate(procedure.surgery_date),
       };
     });
     setProcedureDrafts(nextDrafts);
@@ -421,20 +423,25 @@ export default function AdminPatientRecordPage() {
 
   const savePatientInfo = async () => {
     if (!patient) return;
+    const birthdateIso = patientDraft.birthdate ? displayToIsoDate(patientDraft.birthdate) : "";
+    if (patientDraft.birthdate && !birthdateIso) {
+      setPageError(isSpanish ? "La fecha de nacimiento debe ir en formato dd/mm/aaaa." : "Birth date must use dd/mm/yyyy format.");
+      return;
+    }
     setSavingPatient(true);
 
     const payload = {
       full_name: patientDraft.full_name.trim() || null,
       phone: patientDraft.phone.trim() || null,
       email: patientDraft.email.trim() || null,
-      birthdate: patientDraft.birthdate || null,
+      birthdate: birthdateIso || null,
     };
 
     const changedFields = [
       payloadFieldChanged(patient.full_name, patientDraft.full_name.trim(), "full_name"),
       payloadFieldChanged(patient.phone, patientDraft.phone.trim(), "phone"),
       payloadFieldChanged(patient.email, patientDraft.email.trim(), "email"),
-      payloadFieldChanged(patient.birthdate, patientDraft.birthdate, "birthdate"),
+      payloadFieldChanged(patient.birthdate, birthdateIso, "birthdate"),
     ].filter(Boolean) as string[];
 
     const { data, error } = await supabase.from("patients").update(payload).eq("id", patient.id).select().single();
@@ -464,13 +471,18 @@ export default function AdminPatientRecordPage() {
   const saveProcedure = async (procedureId: string) => {
     const draft = procedureDrafts[procedureId];
     if (!draft) return;
+    const surgeryDateIso = draft.surgery_date ? displayToIsoDate(draft.surgery_date) : "";
+    if (draft.surgery_date && !surgeryDateIso) {
+      setPageError(isSpanish ? "La fecha de cirugía debe ir en formato dd/mm/aaaa." : "Surgery date must use dd/mm/yyyy format.");
+      return;
+    }
 
     setSavingProcedureId(procedureId);
     const payload = {
       procedure_name: draft.procedure_name.trim() || null,
       office_location: draft.office_location || null,
       status: draft.status || null,
-      surgery_date: draft.surgery_date || null,
+      surgery_date: surgeryDateIso || null,
     };
 
     const { data, error } = await supabase.from("procedures").update(payload).eq("id", procedureId).select().single();
@@ -1101,7 +1113,7 @@ export default function AdminPatientRecordPage() {
                     </div>
                     <div>
                       <label className="field-label">{isSpanish ? "Fecha de nacimiento" : "Birth date"}</label>
-                      <input className="line-input" type="date" value={patientDraft.birthdate} onChange={(event) => setPatientDraft((prev) => ({ ...prev, birthdate: event.target.value }))} />
+                      <input className="line-input" inputMode="numeric" placeholder={t.dateHint} value={patientDraft.birthdate} onChange={(event) => setPatientDraft((prev) => ({ ...prev, birthdate: formatDateTyping(event.target.value) }))} />
                     </div>
                   </div>
 
@@ -1234,12 +1246,13 @@ export default function AdminPatientRecordPage() {
                               <label className="field-label">{isSpanish ? "Fecha de cirugía" : "Surgery date"}</label>
                               <input
                                 className="line-input"
-                                type="date"
+                                inputMode="numeric"
+                                placeholder={t.dateHint}
                                 value={draft.surgery_date}
                                 onChange={(event) =>
                                   setProcedureDrafts((prev) => ({
                                     ...prev,
-                                    [procedure.id]: { ...draft, surgery_date: event.target.value },
+                                    [procedure.id]: { ...draft, surgery_date: formatDateTyping(event.target.value) },
                                   }))
                                 }
                               />

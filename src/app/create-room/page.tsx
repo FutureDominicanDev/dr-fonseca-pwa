@@ -5,13 +5,13 @@ export default function CreateRoomPage() {
     <main style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "#F5F7FB" }}>
       <div style={{ width: "100%", maxWidth: 560, background: "white", borderRadius: 24, padding: 28, boxShadow: "0 20px 60px rgba(15,23,42,0.08)" }}>
         <p style={{ margin: 0, fontSize: 13, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "#64748B" }}>
-          Herramienta movida
+          Ruta protegida
         </p>
         <h1 style={{ margin: "10px 0 8px", fontSize: 34, lineHeight: 1.1, color: "#0F172A" }}>
           Esta página ya no se usa
         </h1>
         <p style={{ margin: 0, fontSize: 16, lineHeight: 1.7, color: "#475569" }}>
-          La creación de expedientes y salas ya vive dentro del flujo principal del portal. Esto evita rutas antiguas con acceso directo a tablas sensibles.
+          Esto es normal. La creación de expedientes y salas ya vive dentro del flujo principal del portal para evitar rutas antiguas con acceso directo a tablas sensibles.
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 22 }}>
           <button
