@@ -51,6 +51,8 @@ const T = {
     quickReplyHint: "Toca una respuesta para enviarla rápido.",
     installedHint: "Puedes volver usando este mismo enlace cuando quieras.",
     photoHelp: "Esta foto solo se guarda en este dispositivo.",
+    callOffice: "Llamar a la oficina",
+    callOfficeHint: "Si necesitas ayuda inmediata, llama a la sede asignada.",
   },
   en: {
     loading: "Opening private chat...",
@@ -81,6 +83,8 @@ const T = {
     quickReplyHint: "Tap a quick reply to send it fast.",
     installedHint: "You can come back using this same link anytime.",
     photoHelp: "This photo only stays on this device.",
+    callOffice: "Call office",
+    callOfficeHint: "If you need immediate help, call the assigned office.",
   },
 } as const;
 
@@ -94,6 +98,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [room, setRoom] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [officePhones, setOfficePhones] = useState<{ Guadalajara: string; Tijuana: string }>({ Guadalajara: "", Tijuana: "" });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<PatientSettings>({
     displayName: "",
@@ -119,6 +124,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const border = settings.darkMode ? "rgba(255,255,255,0.08)" : "#E5E7EB";
 
   const patientName = settings.displayName.trim() || room?.procedures?.patients?.full_name || t.patient;
+  const officePhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara;
 
   const groupedMessages = useMemo(() => {
     const groups: { date: string; msgs: any[] }[] = [];
@@ -157,6 +163,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   useEffect(() => {
     fetchRoom();
+    fetchOfficePhones();
 
     const ch = supabase.channel("patient-rt-" + roomId)
       .on("postgres_changes", {
@@ -174,6 +181,19 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       supabase.removeChannel(ch);
     };
   }, [roomId]);
+
+  const fetchOfficePhones = async () => {
+    const { data } = await supabase
+      .from("app_settings")
+      .select("key, value")
+      .in("key", ["office_phone_guadalajara", "office_phone_tijuana"]);
+
+    if (!data) return;
+    setOfficePhones({
+      Guadalajara: data.find((entry: any) => entry.key === "office_phone_guadalajara")?.value || "",
+      Tijuana: data.find((entry: any) => entry.key === "office_phone_tijuana")?.value || "",
+    });
+  };
 
   const fetchRoom = async () => {
     const extendedSelect = "*, procedures(procedure_name, office_location, patients(full_name, preferred_language))";
@@ -493,6 +513,12 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             <div style={{ fontWeight: 700, color: "white", marginBottom: 4 }}>{t.online}</div>
             <div>{t.addToHome}</div>
             <div style={{ marginTop: 6 }}>{t.installedHint}</div>
+            {officePhone && (
+              <a href={`tel:${officePhone}`} style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 999, background: "rgba(255,255,255,0.14)", color: "white", textDecoration: "none", fontWeight: 700 }}>
+                📞 {t.callOffice}
+              </a>
+            )}
+            {officePhone && <div style={{ marginTop: 6, fontSize: 12 }}>{t.callOfficeHint}: {officePhone}</div>}
           </div>
         </header>
 

@@ -36,6 +36,12 @@ const T = {
     patientInfo: "Ficha del Paciente",
     patientInfoHint: "Datos clínicos y operativos del caso",
     patientLocalTime: "Hora Local del Paciente",
+    internalNotes: "Notas internas del equipo",
+    internalNotesHint: "Solo el equipo asignado puede ver estas notas.",
+    addInternalNote: "Agregar nota interna",
+    internalNotePH: "Escribe una nota clínica o administrativa para el equipo...",
+    noInternalNotes: "Todavía no hay notas internas para este caso.",
+    noteSaved: "Nota interna guardada.",
     noTeamSelected: "Si no eliges a nadie, se asignará solo la persona que crea la sala.",
     noPatientInfo: "Todavía no hay datos extendidos para este paciente.",
     openFullRecord: "Abrir expediente",
@@ -94,6 +100,12 @@ const T = {
     patientInfo: "Patient Info",
     patientInfoHint: "Clinical and operational case details",
     patientLocalTime: "Patient Local Time",
+    internalNotes: "Internal team notes",
+    internalNotesHint: "Only the assigned care team can see these notes.",
+    addInternalNote: "Add internal note",
+    internalNotePH: "Write a clinical or administrative note for the team...",
+    noInternalNotes: "There are no internal notes for this case yet.",
+    noteSaved: "Internal note saved.",
     noTeamSelected: "If you do not choose anyone, only the room creator will be assigned.",
     noPatientInfo: "There is no extended patient data yet.",
     openFullRecord: "Open record",
@@ -252,6 +264,8 @@ export default function InboxPage() {
   const [selectedCareTeamIds, setSelectedCareTeamIds] = useState<string[]>([]);
   const [showPatientInfo, setShowPatientInfo] = useState(false);
   const [selectedRoomTeam, setSelectedRoomTeam] = useState<CareTeamMember[]>([]);
+  const [internalNoteDraft, setInternalNoteDraft] = useState("");
+  const [savingInternalNote, setSavingInternalNote] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [createdRoomLink, setCreatedRoomLink] = useState<string|null>(null);
   const [createdPatientName, setCreatedPatientName] = useState("");
@@ -487,6 +501,55 @@ export default function InboxPage() {
     setSending(false);
   };
 
+  const saveInternalNote = async () => {
+    if (!selectedRoom || !internalNoteDraft.trim() || savingInternalNote) return;
+    setSavingInternalNote(true);
+    const sName = userProfile?.full_name || userProfile?.display_name || "Staff";
+    const sRole = userProfile?.role || "staff";
+    const sOffice = userProfile?.office_location || selectedRoom?.procedures?.office_location || null;
+    const tempId = "temp-note-" + Date.now();
+    const tempMessage = {
+      id: tempId,
+      room_id: selectedRoom.id,
+      content: internalNoteDraft.trim(),
+      message_type: "text",
+      sender_type: "staff",
+      sender_id: currentUserId || null,
+      sender_name: sName,
+      sender_role: sRole,
+      sender_office: sOffice,
+      is_internal: true,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMessage]);
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        room_id: selectedRoom.id,
+        content: internalNoteDraft.trim(),
+        message_type: "text",
+        sender_type: "staff",
+        sender_id: currentUserId || null,
+        sender_name: sName,
+        sender_role: sRole,
+        sender_office: sOffice,
+        is_internal: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
+      alert(error.message || (lang==="es" ? "No pude guardar la nota interna." : "I could not save the internal note."));
+    } else if (data) {
+      setMessages((prev) => prev.map((entry) => entry.id === tempId ? data : entry));
+      setInternalNoteDraft("");
+      alert(t.noteSaved);
+    }
+
+    setSavingInternalNote(false);
+  };
+
   const createRoom = async () => {
     if (!newPatientName.trim()||!newProcedureName.trim()){alert(t.required);return;}
     const birthdateIso = newBirthdate ? displayToIsoDate(newBirthdate) : "";
@@ -583,7 +646,7 @@ export default function InboxPage() {
     const groups: {date:string;msgs:any[]}[]=[];
     let currentDate="";
     messages.forEach(m=>{
-      if (m.deleted_by_staff) return;
+      if (m.deleted_by_staff || m.is_internal) return;
       const d=new Date(m.created_at).toDateString();
       if (d!==currentDate){currentDate=d;groups.push({date:m.created_at,msgs:[]});}
       groups[groups.length-1].msgs.push(m);
@@ -726,6 +789,7 @@ export default function InboxPage() {
   const PatientInfoPanel = () => {
     const patient = selectedRoom?.procedures?.patients;
     const beforeEntries = messages.filter((entry) => (entry.file_name || "").startsWith("[BEFORE]"));
+    const internalNotes = messages.filter((entry) => entry.is_internal).sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
     const locale = lang === "es" ? "es-MX" : "en-US";
     const localTime = currentTimeInZone(patient?.timezone, locale);
 
@@ -803,6 +867,30 @@ export default function InboxPage() {
                   ))}
                 </div>
               )}
+            </div>
+
+            <div style={{background:cardBg,borderRadius:18,padding:16}}>
+              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:6}}>{t.internalNotes}</p>
+              <p style={{fontSize:13,color:subTextColor,margin:"0 0 12px"}}>{t.internalNotesHint}</p>
+              {internalNotes.length===0 ? (
+                <p style={{fontSize:14,color:subTextColor,marginBottom:12}}>{t.noInternalNotes}</p>
+              ) : (
+                <div style={{display:"grid",gap:10,marginBottom:12}}>
+                  {internalNotes.map((note)=>(
+                    <div key={note.id} style={{padding:"12px 14px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
+                      <div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:6}}>
+                        <strong style={{color:textColor,fontSize:14}}>{note.sender_name || roleName(note.sender_role)}</strong>
+                        <span style={{fontSize:12,color:subTextColor}}>{fmtTime(note.created_at)} · {new Date(note.created_at).toLocaleDateString(locale)}</span>
+                      </div>
+                      <div style={{fontSize:14,color:textColor,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{note.content}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <textarea value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:14,resize:"vertical",marginBottom:10}} />
+              <button onClick={saveInternalNote} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{width:"100%",padding:12,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:savingInternalNote || !internalNoteDraft.trim()?0.5:1}}>
+                {savingInternalNote ? (lang==="es" ? "Guardando..." : "Saving...") : t.addInternalNote}
+              </button>
             </div>
 
             {canOpenAdmin && patient?.id && (
