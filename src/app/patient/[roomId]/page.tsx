@@ -652,15 +652,6 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               ))}
             </div>
           )}
-          {settings.quickReplies.length > 0 && (
-            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 10 }}>
-              {settings.quickReplies.map((reply, index) => (
-                <button key={`${reply}-${index}`} onClick={() => sendMessage(reply)} style={{ whiteSpace: "nowrap", border: "none", background: settings.darkMode ? "#1F2937" : "#E0E7FF", color: settings.darkMode ? "#E5E7EB" : "#1D4ED8", padding: "9px 12px", borderRadius: 999, fontWeight: 700, cursor: "pointer" }}>
-                  {reply}
-                </button>
-              ))}
-            </div>
-          )}
           <div style={{ fontSize: 12, color: subText, margin: "0 0 8px 6px" }}>{t.quickRepliesSlashHint}</div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
             <button onClick={() => fileInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>📎</button>
