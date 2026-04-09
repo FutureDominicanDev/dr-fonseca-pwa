@@ -23,6 +23,9 @@ alter table public.patients
 alter table public.messages
   add column if not exists sender_office text;
 
+alter table public.messages
+  add column if not exists is_internal boolean not null default false;
+
 -- 4) Tabla de auditoria para cambios administrativos
 create table if not exists public.admin_audit_events (
   id uuid primary key default gen_random_uuid(),

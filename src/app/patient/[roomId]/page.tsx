@@ -204,6 +204,10 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const border = settings.darkMode ? "rgba(255,255,255,0.08)" : "#E5E7EB";
   const prefersNativeCapture =
     typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const isSchemaColumnError = (error: any) => {
+    const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+    return message.includes("column") || message.includes("schema cache") || message.includes("relation");
+  };
 
   const patientName = settings.displayName.trim() || room?.procedures?.patients?.full_name || t.patient;
   const officePhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara;
@@ -305,6 +309,25 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     });
   };
 
+  const loadMessages = async () => {
+    let query = await supabase
+      .from("messages")
+      .select("*")
+      .eq("room_id", roomId)
+      .eq("is_internal", false)
+      .order("created_at", { ascending: true });
+
+    if (query.error && isSchemaColumnError(query.error)) {
+      query = await supabase
+        .from("messages")
+        .select("*")
+        .eq("room_id", roomId)
+        .order("created_at", { ascending: true });
+    }
+
+    return query;
+  };
+
   const fetchRoom = async () => {
     const extendedSelect = "*, procedures(procedure_name, office_location, patients(full_name, preferred_language))";
     const fallbackSelect = "*, procedures(procedure_name, office_location, patients(full_name))";
@@ -331,25 +354,14 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       };
     });
 
-    const { data: msgs } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("room_id", roomId)
-      .eq("is_internal", false)
-      .order("created_at", { ascending: true });
-
-    setMessages(msgs || []);
+    const { data: msgs } = await loadMessages();
+    setMessages((msgs || []).filter((message: any) => !message?.is_internal));
     setLoading(false);
   };
 
   const refreshMessages = async () => {
-    const { data: msgs } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("room_id", roomId)
-      .eq("is_internal", false)
-      .order("created_at", { ascending: true });
-    setMessages(msgs || []);
+    const { data: msgs } = await loadMessages();
+    setMessages((msgs || []).filter((message: any) => !message?.is_internal));
   };
 
   const sendMessage = async (override?: string) => {
@@ -373,7 +385,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       },
     ]);
 
-    const { error } = await supabase.from("messages").insert({
+    let insert = await supabase.from("messages").insert({
       room_id: roomId,
       content,
       message_type: "text",
@@ -382,7 +394,17 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       is_internal: false,
     });
 
-    if (error) {
+    if (insert.error && isSchemaColumnError(insert.error)) {
+      insert = await supabase.from("messages").insert({
+        room_id: roomId,
+        content,
+        message_type: "text",
+        sender_type: "patient",
+        sender_name: patientName,
+      });
+    }
+
+    if (insert.error) {
       setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
     }
 
@@ -451,7 +473,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       },
     ]);
 
-    const { data: inserted, error: insertError } = await supabase.from("messages").insert({
+    let insertResult = await supabase.from("messages").insert({
       room_id: roomId,
       content: publicUrl.publicUrl,
       file_name: file.name,
@@ -462,15 +484,27 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       is_internal: false,
     }).select().single();
 
-    if (insertError) {
+    if (insertResult.error && isSchemaColumnError(insertResult.error)) {
+      insertResult = await supabase.from("messages").insert({
+        room_id: roomId,
+        content: publicUrl.publicUrl,
+        file_name: file.name,
+        file_size: file.size,
+        message_type: messageType,
+        sender_type: "patient",
+        sender_name: patientName,
+      }).select().single();
+    }
+
+    if (insertResult.error) {
       setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
       setUploadingMedia(false);
       alert(settings.lang === "es" ? "El archivo se subió, pero no pude enviarlo al chat." : "The file uploaded, but I could not send it to the chat.");
       return;
     }
 
-    if (inserted) {
-      setMessages((prev) => prev.map((entry) => (entry.id === tempId ? inserted : entry)));
+    if (insertResult.data) {
+      setMessages((prev) => prev.map((entry) => (entry.id === tempId ? insertResult.data : entry)));
     } else {
       await refreshMessages();
     }
