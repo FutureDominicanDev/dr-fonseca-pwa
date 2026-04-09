@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
+import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone } from "@/lib/patientMeta";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
   OWNER_EMAIL,
@@ -41,6 +42,10 @@ type PatientDraft = {
   phone: string;
   email: string;
   birthdate: string;
+  preferred_language: string;
+  timezone: string;
+  allergies: string;
+  current_medications: string;
 };
 
 type ProcedureDraft = {
@@ -70,6 +75,10 @@ export default function AdminPatientRecordPage() {
     phone: "",
     email: "",
     birthdate: "",
+    preferred_language: "es",
+    timezone: "America/Mexico_City",
+    allergies: "",
+    current_medications: "",
   });
   const [procedureDrafts, setProcedureDrafts] = useState<Record<string, ProcedureDraft>>({});
   const [savingPatient, setSavingPatient] = useState(false);
@@ -134,9 +143,14 @@ export default function AdminPatientRecordPage() {
       : "Use this if the patient never uploaded a photo or if you need to correct it.",
     basicInfo: isSpanish ? "Datos del paciente" : "Patient details",
     basicInfoCopy: isSpanish
-      ? "Puedes corregir nombre, teléfono, correo y fecha de nacimiento."
-      : "You can correct the patient's name, phone, email, and birth date.",
+      ? "Puedes corregir nombre, teléfono, correo, fecha de nacimiento, idioma, zona horaria, alergias y medicamentos."
+      : "You can correct the patient's name, phone, email, birth date, language, time zone, allergies, and medications.",
     dateHint: isSpanish ? "Usa formato dd/mm/aaaa" : "Use dd/mm/yyyy format",
+    patientLanguage: isSpanish ? "Idioma del paciente" : "Patient language",
+    patientTimezone: isSpanish ? "Zona horaria del paciente" : "Patient time zone",
+    patientAllergies: isSpanish ? "Alergias" : "Allergies",
+    patientMedications: isSpanish ? "Medicamentos actuales" : "Current medications",
+    patientLocalTime: isSpanish ? "Hora local actual" : "Current local time",
     savePatient: isSpanish ? "Guardar datos del paciente" : "Save patient details",
     savingPatient: isSpanish ? "Guardando..." : "Saving...",
     quickSummary: isSpanish ? "Resumen rápido" : "Quick summary",
@@ -290,6 +304,7 @@ export default function AdminPatientRecordPage() {
   const offices = useMemo(() => {
     return [...new Set(procedures.map((procedure) => normalizeOffice(procedure.office_location)).filter(Boolean))];
   }, [procedures]);
+  const patientLocalTime = currentTimeInZone(patient?.timezone, lang === "es" ? "es-MX" : "en-US");
 
   useEffect(() => {
     if (!patient) return;
@@ -298,6 +313,10 @@ export default function AdminPatientRecordPage() {
       phone: patient.phone || "",
       email: patient.email || "",
       birthdate: isoToDisplayDate(patient.birthdate),
+      preferred_language: patient.preferred_language || "es",
+      timezone: patient.timezone || "America/Mexico_City",
+      allergies: patient.allergies || "",
+      current_medications: patient.current_medications || "",
     });
   }, [patient]);
 
@@ -435,6 +454,10 @@ export default function AdminPatientRecordPage() {
       phone: patientDraft.phone.trim() || null,
       email: patientDraft.email.trim() || null,
       birthdate: birthdateIso || null,
+      preferred_language: patientDraft.preferred_language || null,
+      timezone: patientDraft.timezone || null,
+      allergies: patientDraft.allergies.trim() || null,
+      current_medications: patientDraft.current_medications.trim() || null,
     };
 
     const changedFields = [
@@ -442,6 +465,10 @@ export default function AdminPatientRecordPage() {
       payloadFieldChanged(patient.phone, patientDraft.phone.trim(), "phone"),
       payloadFieldChanged(patient.email, patientDraft.email.trim(), "email"),
       payloadFieldChanged(patient.birthdate, birthdateIso, "birthdate"),
+      payloadFieldChanged(patient.preferred_language, patientDraft.preferred_language, "preferred_language"),
+      payloadFieldChanged(patient.timezone, patientDraft.timezone, "timezone"),
+      payloadFieldChanged(patient.allergies, patientDraft.allergies.trim(), "allergies"),
+      payloadFieldChanged(patient.current_medications, patientDraft.current_medications.trim(), "current_medications"),
     ].filter(Boolean) as string[];
 
     const { data, error } = await supabase.from("patients").update(payload).eq("id", patient.id).select().single();
@@ -1115,6 +1142,30 @@ export default function AdminPatientRecordPage() {
                       <label className="field-label">{isSpanish ? "Fecha de nacimiento" : "Birth date"}</label>
                       <input className="line-input" inputMode="numeric" placeholder={t.dateHint} value={patientDraft.birthdate} onChange={(event) => setPatientDraft((prev) => ({ ...prev, birthdate: formatDateTyping(event.target.value) }))} />
                     </div>
+                    <div>
+                      <label className="field-label">{t.patientLanguage}</label>
+                      <select className="line-input" value={patientDraft.preferred_language} onChange={(event) => setPatientDraft((prev) => ({ ...prev, preferred_language: event.target.value }))}>
+                        {PATIENT_LANGUAGE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{isSpanish ? option.labelEs : option.labelEn}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="field-label">{t.patientTimezone}</label>
+                      <select className="line-input" value={patientDraft.timezone} onChange={(event) => setPatientDraft((prev) => ({ ...prev, timezone: event.target.value }))}>
+                        {PATIENT_TIMEZONE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label className="field-label">{t.patientAllergies}</label>
+                      <textarea className="line-input" rows={3} value={patientDraft.allergies} onChange={(event) => setPatientDraft((prev) => ({ ...prev, allergies: event.target.value }))} />
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label className="field-label">{t.patientMedications}</label>
+                      <textarea className="line-input" rows={3} value={patientDraft.current_medications} onChange={(event) => setPatientDraft((prev) => ({ ...prev, current_medications: event.target.value }))} />
+                    </div>
                   </div>
 
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
@@ -1128,6 +1179,9 @@ export default function AdminPatientRecordPage() {
                       <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 6 }}>{t.quickSummary}</p>
                       <p className="muted">{t.lastEvent}: {timeline.length ? formatDateTimeLocal(timeline[timeline.length - 1]?.message.created_at) : t.noActivity}</p>
                       <p className="muted">{t.firstRoom}: {rooms.length ? formatDateTimeLocal(rooms[0]?.created_at) : t.noRooms}</p>
+                      <p className="muted">{t.patientLanguage}: {labelPatientLanguage(patient.preferred_language, lang)}</p>
+                      <p className="muted">{t.patientTimezone}: {labelTimeZone(patient.timezone)}</p>
+                      {patientLocalTime && <p className="muted">{t.patientLocalTime}: {patientLocalTime}</p>}
                     </div>
                   </div>
                 </section>

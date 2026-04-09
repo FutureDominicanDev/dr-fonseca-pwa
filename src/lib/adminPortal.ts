@@ -21,6 +21,10 @@ export type PatientRecord = {
   email?: string | null;
   birthdate?: string | null;
   profile_picture_url?: string | null;
+  preferred_language?: string | null;
+  timezone?: string | null;
+  allergies?: string | null;
+  current_medications?: string | null;
   record_status?: string | null;
   record_status_changed_at?: string | null;
   record_status_changed_by?: string | null;

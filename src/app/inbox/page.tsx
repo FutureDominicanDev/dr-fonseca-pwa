@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
+import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
 
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
@@ -19,9 +20,27 @@ const T = {
     patientNamePH: "Ej: María González", phone: "Teléfono (WhatsApp)",
     phonePH: "+52 (33) 555-0000", birthdate: "Fecha de Nacimiento",
     birthdatePH: "dd/mm/aaaa",
+    email: "Correo Electrónico",
+    emailPH: "paciente@correo.com",
     procedure: "Procedimiento *", procedurePH: "Ej: Rinoplastia, Lipo 360...",
     surgeryDate: "Fecha de Cirugía", location: "Sede *",
     surgeryDatePH: "dd/mm/aaaa",
+    preferredLanguage: "Idioma Preferido",
+    timezone: "Zona Horaria",
+    allergies: "Alergias",
+    allergiesPH: "Ej: Penicilina, látex, anestesia...",
+    medications: "Medicamentos Actuales",
+    medicationsPH: "Ej: Ibuprofeno, metformina, vitaminas...",
+    careTeam: "Equipo Asignado",
+    careTeamHint: "Selecciona quién debe tener acceso y alertas para este paciente.",
+    patientInfo: "Ficha del Paciente",
+    patientInfoHint: "Datos clínicos y operativos del caso",
+    patientLocalTime: "Hora Local del Paciente",
+    noTeamSelected: "Si no eliges a nadie, se asignará solo la persona que crea la sala.",
+    noPatientInfo: "Todavía no hay datos extendidos para este paciente.",
+    openFullRecord: "Abrir expediente",
+    teamEmpty: "No hay personal asignado todavía.",
+    beforeMaterials: "Material Pre-Op",
     gdl: "🏙️ Guadalajara", tjn: "🌊 Tijuana",
     profilePic: "Foto de Perfil", beforePhotos: "Fotos Pre-Op",
     tapProfilePic: "Toca para subir foto de perfil",
@@ -59,9 +78,27 @@ const T = {
     patientNamePH: "e.g. María González", phone: "Phone (WhatsApp)",
     phonePH: "+52 (33) 555-0000", birthdate: "Date of Birth",
     birthdatePH: "dd/mm/yyyy",
+    email: "Email",
+    emailPH: "patient@email.com",
     procedure: "Procedure *", procedurePH: "e.g. Rhinoplasty, Lipo 360...",
     surgeryDate: "Surgery Date", location: "Location *",
     surgeryDatePH: "dd/mm/yyyy",
+    preferredLanguage: "Preferred Language",
+    timezone: "Time Zone",
+    allergies: "Allergies",
+    allergiesPH: "e.g. Penicillin, latex, anesthesia...",
+    medications: "Current Medications",
+    medicationsPH: "e.g. Ibuprofen, metformin, vitamins...",
+    careTeam: "Assigned Care Team",
+    careTeamHint: "Choose who should have access and alerts for this patient.",
+    patientInfo: "Patient Info",
+    patientInfoHint: "Clinical and operational case details",
+    patientLocalTime: "Patient Local Time",
+    noTeamSelected: "If you do not choose anyone, only the room creator will be assigned.",
+    noPatientInfo: "There is no extended patient data yet.",
+    openFullRecord: "Open record",
+    teamEmpty: "No staff assigned yet.",
+    beforeMaterials: "Pre-Op Material",
     gdl: "🏙️ Guadalajara", tjn: "🌊 Tijuana",
     profilePic: "Profile Photo", beforePhotos: "Pre-Op Photos",
     tapProfilePic: "Tap to upload profile photo",
@@ -90,6 +127,13 @@ const T = {
 };
 
 interface QuickReply { shortcut: string; message: string; }
+interface CareTeamMember {
+  id: string;
+  full_name?: string | null;
+  role?: string | null;
+  office_location?: string | null;
+  avatar_url?: string | null;
+}
 
 interface QREditorProps {
   show: boolean; onClose: () => void; quickReplies: QuickReply[];
@@ -193,15 +237,25 @@ export default function InboxPage() {
   const [showQREditor, setShowQREditor] = useState(false);
   const [newPatientName, setNewPatientName] = useState("");
   const [newPatientPhone, setNewPatientPhone] = useState("");
+  const [newPatientEmail, setNewPatientEmail] = useState("");
   const [newProcedureName, setNewProcedureName] = useState("");
   const [newSurgeryDate, setNewSurgeryDate] = useState("");
   const [newBirthdate, setNewBirthdate] = useState("");
   const [newLocation, setNewLocation] = useState("Guadalajara");
+  const [newPatientLanguage, setNewPatientLanguage] = useState<"es" | "en">("es");
+  const [newPatientTimezone, setNewPatientTimezone] = useState("America/Mexico_City");
+  const [newPatientAllergies, setNewPatientAllergies] = useState("");
+  const [newPatientMedications, setNewPatientMedications] = useState("");
   const [profilePicFile, setProfilePicFile] = useState<File|null>(null);
   const [beforePhotosFiles, setBeforePhotosFiles] = useState<File[]>([]);
+  const [staffDirectory, setStaffDirectory] = useState<CareTeamMember[]>([]);
+  const [selectedCareTeamIds, setSelectedCareTeamIds] = useState<string[]>([]);
+  const [showPatientInfo, setShowPatientInfo] = useState(false);
+  const [selectedRoomTeam, setSelectedRoomTeam] = useState<CareTeamMember[]>([]);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [createdRoomLink, setCreatedRoomLink] = useState<string|null>(null);
   const [createdPatientName, setCreatedPatientName] = useState("");
+  const [createdPatientLanguage, setCreatedPatientLanguage] = useState<"es" | "en">("es");
   const [linkCopied, setLinkCopied] = useState(false);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [pendingFile, setPendingFile] = useState<File|null>(null);
@@ -242,12 +296,25 @@ export default function InboxPage() {
   const fmtRec = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
   const isImageUrl = (url: string) => { if (!url) return false; const u=url.toLowerCase(); return u.includes("supabase")&&(u.endsWith(".jpg")||u.endsWith(".jpeg")||u.endsWith(".png")||u.endsWith(".gif")||u.endsWith(".webp")||u.includes("before")||u.includes("patient-photo")); };
   const senderColor = (type: string, role: string) => type==="patient"?"#1A6B3C":({doctor:"#0050A0",post_quirofano:"#6B3A9E",enfermeria:"#007A7A",coordinacion:"#B35A00",staff:"#444"} as any)[role]||"#444";
+  const isMissingColumnError = (error: any) => {
+    const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+    return message.includes("column") || message.includes("schema cache") || message.includes("relation");
+  };
+  const roleName = (role?: string | null) => {
+    const labels = lang==="es"
+      ? { doctor: "Doctor", enfermeria: "Enfermería", coordinacion: "Coordinación", post_quirofano: "Post-Q", staff: "Personal" }
+      : { doctor: "Doctor", enfermeria: "Nursing", coordinacion: "Coordination", post_quirofano: "Post-Op", staff: "Staff" };
+    return (labels as any)[role || "staff"] || (lang==="es" ? "Personal" : "Staff");
+  };
+  const toggleCareTeamMember = (id: string) => {
+    setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
+  };
   const canOpenAdmin = currentUserEmail.toLowerCase()===OWNER_EMAIL || ["owner","super_admin","admin"].includes(userProfile?.admin_level||"");
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) { window.location.href = "/login"; return; }
-      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); setCurrentUserId(session.user.id); fetchRooms(); fetchProfile(session.user.id); }
+      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); setCurrentUserId(session.user.id); fetchRooms(); fetchProfile(session.user.id); fetchAssignableStaff(); }
     });
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
     if ("Notification" in window) Notification.requestPermission().then(p=>{notifRef.current=p;});
@@ -257,6 +324,37 @@ export default function InboxPage() {
   const fetchProfile = async (id: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id",id).single();
     if (data) { setUserProfile(data); setDisplayNameEdit(data.full_name||data.display_name||""); if (data.quick_replies?.length) setQuickReplies(data.quick_replies); }
+  };
+
+  const fetchAssignableStaff = async () => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name, role, office_location, avatar_url")
+      .order("full_name", { ascending: true });
+
+    if (data) {
+      setStaffDirectory(data.filter((entry: any) => entry.id !== currentUserId));
+    }
+  };
+
+  const fetchSelectedRoomTeam = async (roomId: string) => {
+    const { data: members, error } = await supabase
+      .from("room_members")
+      .select("user_id")
+      .eq("room_id", roomId);
+
+    if (error || !members?.length) {
+      setSelectedRoomTeam([]);
+      return;
+    }
+
+    const memberIds = Array.from(new Set(members.map((entry: any) => entry.user_id).filter(Boolean)));
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, role, office_location, avatar_url")
+      .in("id", memberIds);
+
+    setSelectedRoomTeam((profiles || []) as CareTeamMember[]);
   };
 
   const saveQuickReplies = useCallback(async (replies: QuickReply[]) => {
@@ -287,6 +385,10 @@ export default function InboxPage() {
 
   useEffect(()=>{ selectedRoomRef.current=selectedRoom; },[selectedRoom]);
 
+  useEffect(() => {
+    if (currentUserId) fetchAssignableStaff();
+  }, [currentUserId]);
+
   useEffect(()=>{
     const ch = supabase.channel("rt-msgs")
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},({new:m})=>{
@@ -311,13 +413,24 @@ export default function InboxPage() {
   useEffect(()=>{ document.title=totalUnread>0?`(${totalUnread}) Dr. Fonseca Portal`:"Dr. Fonseca Portal"; },[totalUnread]);
 
   useEffect(()=>{
-    if (selectedRoom) { fetchMessages(selectedRoom.id); setMobileView("chat"); setUnreadRooms(p=>{const n=new Set(p);const w=n.has(selectedRoom.id);n.delete(selectedRoom.id);if(w)setTotalUnread(t=>Math.max(0,t-1));return n;}); }
+    if (selectedRoom) { fetchMessages(selectedRoom.id); fetchSelectedRoomTeam(selectedRoom.id); setMobileView("chat"); setUnreadRooms(p=>{const n=new Set(p);const w=n.has(selectedRoom.id);n.delete(selectedRoom.id);if(w)setTotalUnread(t=>Math.max(0,t-1));return n;}); }
   },[selectedRoom]);
 
   useEffect(()=>{ messagesEndRef.current?.scrollIntoView({behavior:"smooth"}); },[messages]);
 
   const fetchRooms = async () => {
-    const { data, error } = await supabase.from("rooms").select("*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, profile_picture_url, birthdate))").order("created_at",{ascending:false});
+    const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications))";
+    const fallbackSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, profile_picture_url, birthdate))";
+    let query = await supabase.from("rooms").select(extendedSelect).order("created_at",{ascending:false});
+    let data = query.data;
+    let error = query.error;
+
+    if (error && isMissingColumnError(error)) {
+      const fallbackQuery = await supabase.from("rooms").select(fallbackSelect).order("created_at",{ascending:false});
+      data = fallbackQuery.data;
+      error = fallbackQuery.error;
+    }
+
     if (!error&&data) { const pm: Record<string,any>={}; data.forEach(r=>{const p=r.procedures?.patients;if(!p)return;if(!pm[p.id])pm[p.id]={...p,rooms:[]};pm[p.id].rooms.push(r);}); setPatients(Object.values(pm)); }
     setLoading(false);
   };
@@ -378,27 +491,60 @@ export default function InboxPage() {
     try {
       const creatorId=currentUserId||userProfile?.id||null;
       const creatorRole=userProfile?.role||"staff";
-      const { data: pt, error: pe } = await supabase.from("patients").insert({full_name:newPatientName.trim(),phone:newPatientPhone||null,birthdate:birthdateIso||null}).select().single();
+      const patientPayload = {
+        full_name:newPatientName.trim(),
+        phone:newPatientPhone||null,
+        email:newPatientEmail.trim()||null,
+        birthdate:birthdateIso||null,
+        preferred_language:newPatientLanguage,
+        timezone:newPatientTimezone||null,
+        allergies:newPatientAllergies.trim()||null,
+        current_medications:newPatientMedications.trim()||null,
+      };
+
+      let patientInsert = await supabase.from("patients").insert(patientPayload).select().single();
+      if (patientInsert.error && isMissingColumnError(patientInsert.error)) {
+        patientInsert = await supabase
+          .from("patients")
+          .insert({ full_name:newPatientName.trim(), phone:newPatientPhone||null, birthdate:birthdateIso||null })
+          .select()
+          .single();
+      }
+
+      const { data: pt, error: pe } = patientInsert;
       if (pe) throw pe;
       if (profilePicFile){const fn=`patient-profiles/${pt.id}/profile.${profilePicFile.name.split(".").pop()||"jpg"}`;const{error:ue}=await supabase.storage.from("chat-files").upload(fn,profilePicFile,{upsert:true});if(!ue){const{data:ud}=supabase.storage.from("chat-files").getPublicUrl(fn);await supabase.from("patients").update({profile_picture_url:ud.publicUrl}).eq("id",pt.id);}}
       const { data: pr, error: pre } = await supabase.from("procedures").insert({patient_id:pt.id,procedure_name:newProcedureName.trim(),surgery_date:surgeryDateIso||null,office_location:newLocation,status:"scheduled"}).select().single();
       if (pre) throw pre;
       const { data: rm, error: re } = await supabase.from("rooms").insert({procedure_id:pr.id,created_by:creatorId}).select().single();
       if (re) throw re;
-      if (creatorId) {
-        await supabase.from("room_members").insert({room_id:rm.id,user_id:creatorId,role:creatorRole});
+
+      const memberIds = Array.from(new Set([creatorId, ...selectedCareTeamIds].filter(Boolean))) as string[];
+      if (memberIds.length) {
+        const selectedProfiles = staffDirectory.filter((entry) => memberIds.includes(entry.id));
+        const rows = memberIds.map((memberId) => {
+          const profile = selectedProfiles.find((entry) => entry.id === memberId);
+          return {
+            room_id: rm.id,
+            user_id: memberId,
+            role: profile?.role || (memberId === creatorId ? creatorRole : "staff"),
+          };
+        });
+
+        await supabase.from("room_members").insert(rows);
       }
       for (let i=0;i<beforePhotosFiles.length;i++){const f=beforePhotosFiles[i];const fn2=`patient-photos/${pt.id}/before/${Date.now()}-${i}.${f.name.split(".").pop()||"jpg"}`;const{error:ue2}=await supabase.storage.from("chat-files").upload(fn2,f,{upsert:true});if(!ue2){const{data:ud2}=supabase.storage.from("chat-files").getPublicUrl(fn2);await supabase.from("messages").insert({room_id:rm.id,content:ud2.publicUrl,message_type:"image",file_name:`[BEFORE] Foto Pre-Op ${i+1}`,sender_type:"staff",sender_id:creatorId,sender_name:"Sistema",sender_role:creatorRole,sender_office:newLocation});}}
       setCreatedRoomLink(`${window.location.origin}/patient/${rm.id}`);
       setCreatedPatientName(newPatientName);
-      setNewPatientName("");setNewPatientPhone("");setNewProcedureName("");setNewSurgeryDate("");setNewBirthdate("");setNewLocation("Guadalajara");setProfilePicFile(null);setBeforePhotosFiles([]);setShowNewRoom(false);
+      setCreatedPatientLanguage(newPatientLanguage);
+      setNewPatientName("");setNewPatientPhone("");setNewPatientEmail("");setNewProcedureName("");setNewSurgeryDate("");setNewBirthdate("");setNewLocation("Guadalajara");setNewPatientLanguage("es");setNewPatientTimezone("America/Mexico_City");setNewPatientAllergies("");setNewPatientMedications("");setSelectedCareTeamIds([]);setProfilePicFile(null);setBeforePhotosFiles([]);setShowNewRoom(false);
       fetchRooms();
     } catch(err:any){console.error(err);alert("Error: "+(err?.message||JSON.stringify(err)));}
     setCreatingRoom(false);
   };
 
   const copyLink = async () => { if (!createdRoomLink) return; await navigator.clipboard.writeText(createdRoomLink); setLinkCopied(true); setTimeout(()=>setLinkCopied(false),2500); };
-  const whatsAppLink = () => { if (!createdRoomLink) return; window.open(`https://wa.me/?text=${encodeURIComponent(`Hola ${createdPatientName}! 👋\n\nEnlace para comunicarse con el equipo del Dr. Fonseca:\n\n${createdRoomLink}\n\nGuárdelo — es su acceso a mensajes y actualizaciones médicas. 🏥`)}`, "_blank"); };
+  const whatsAppLink = () => { if (!createdRoomLink) return; window.open(`https://wa.me/?text=${encodeURIComponent(onboardingMessageForPatient({ patientName: createdPatientName, roomLink: createdRoomLink, preferredLanguage: createdPatientLanguage }))}`, "_blank"); };
 
   const startRec = async () => {
     try {
@@ -414,7 +560,18 @@ export default function InboxPage() {
   const stopRec = () => { if (mediaRecorderRef.current&&recording){mediaRecorderRef.current.stop();setRecording(false);clearInterval(recordingTimerRef.current);setRecordingSeconds(0);} };
 
   const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
-  const filtPts = patients.filter(p=>{const q=searchQuery.toLowerCase();return p.full_name?.toLowerCase().includes(q)||p.rooms.some((r:any)=>r.procedures?.procedure_name?.toLowerCase().includes(q));});
+  const filtPts = patients.filter(p=>{
+    const q=searchQuery.toLowerCase();
+    return (
+      p.full_name?.toLowerCase().includes(q) ||
+      String(p.phone || "").toLowerCase().includes(q) ||
+      String(p.email || "").toLowerCase().includes(q) ||
+      p.rooms.some((r:any)=>
+        r.procedures?.procedure_name?.toLowerCase().includes(q) ||
+        r.procedures?.office_location?.toLowerCase().includes(q)
+      )
+    );
+  });
 
   const groupedMessages = () => {
     const groups: {date:string;msgs:any[]}[]=[];
@@ -560,6 +717,99 @@ export default function InboxPage() {
     </div>
   );
 
+  const PatientInfoPanel = () => {
+    const patient = selectedRoom?.procedures?.patients;
+    const beforeEntries = messages.filter((entry) => (entry.file_name || "").startsWith("[BEFORE]"));
+    const locale = lang === "es" ? "es-MX" : "en-US";
+    const localTime = currentTimeInZone(patient?.timezone, locale);
+
+    return (
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:210,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowPatientInfo(false)}>
+        <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:580,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`}} onClick={e=>e.stopPropagation()}>
+          <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) max(20px, env(safe-area-inset-right)) 16px max(20px, env(safe-area-inset-left))",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <p style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patientInfo}</p>
+              <p style={{fontSize:13,color:subTextColor,marginTop:4}}>{t.patientInfoHint}</p>
+            </div>
+            <button onClick={()=>setShowPatientInfo(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
+          </div>
+          <div style={{padding:"0 20px",display:"grid",gap:14}}>
+            <div style={{background:cardBg,borderRadius:18,padding:16,display:"grid",gridTemplateColumns:"88px 1fr",gap:14,alignItems:"center"}}>
+              <div style={{width:88,height:88,borderRadius:20,overflow:"hidden",background:"linear-gradient(135deg,#0F172A,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:28,fontWeight:800}}>
+                {patient?.profile_picture_url ? <img src={patient.profile_picture_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(patient?.full_name || "P")}
+              </div>
+              <div style={{minWidth:0}}>
+                <p style={{fontSize:22,fontWeight:800,color:textColor}}>{patient?.full_name || (lang==="es" ? "Paciente sin nombre" : "Unnamed patient")}</p>
+                <p style={{fontSize:14,color:subTextColor,marginTop:4}}>{selectedRoom?.procedures?.procedure_name || (lang==="es" ? "Sin procedimiento" : "No procedure")}</p>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+                  <span style={{padding:"6px 10px",borderRadius:999,background:"#EBF5FF",color:"#2563EB",fontSize:12,fontWeight:700}}>{selectedRoom?.procedures?.office_location || (lang==="es" ? "Sin sede" : "No office")}</span>
+                  <span style={{padding:"6px 10px",borderRadius:999,background:"#EEFDF3",color:"#15803D",fontSize:12,fontWeight:700}}>{labelPatientLanguage(patient?.preferred_language, lang)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{background:cardBg,borderRadius:18,padding:16}}>
+              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:12}}>{lang==="es" ? "Datos principales" : "Core details"}</p>
+              <div style={{display:"grid",gap:10}}>
+                <div><strong style={{color:textColor}}>{t.phone}:</strong> <span style={{color:subTextColor}}>{patient?.phone || "—"}</span></div>
+                <div><strong style={{color:textColor}}>{t.email}:</strong> <span style={{color:subTextColor}}>{patient?.email || "—"}</span></div>
+                <div><strong style={{color:textColor}}>{t.birthdate}:</strong> <span style={{color:subTextColor}}>{patient?.birthdate ? new Date(patient.birthdate).toLocaleDateString(locale) : "—"}</span></div>
+                <div><strong style={{color:textColor}}>{t.timezone}:</strong> <span style={{color:subTextColor}}>{labelTimeZone(patient?.timezone)}</span></div>
+                {localTime && <div><strong style={{color:textColor}}>{t.patientLocalTime}:</strong> <span style={{color:subTextColor}}>{localTime}</span></div>}
+                <div><strong style={{color:textColor}}>{t.allergies}:</strong> <span style={{color:subTextColor}}>{patient?.allergies || "—"}</span></div>
+                <div><strong style={{color:textColor}}>{t.medications}:</strong> <span style={{color:subTextColor}}>{patient?.current_medications || "—"}</span></div>
+              </div>
+            </div>
+
+            <div style={{background:cardBg,borderRadius:18,padding:16}}>
+              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:12}}>{lang==="es" ? "Equipo asignado" : "Assigned care team"}</p>
+              {selectedRoomTeam.length===0 ? (
+                <p style={{fontSize:14,color:subTextColor}}>{t.teamEmpty}</p>
+              ) : (
+                <div style={{display:"grid",gap:10}}>
+                  {selectedRoomTeam.map((member) => (
+                    <div key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
+                      <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800}}>
+                        {member.avatar_url ? <img src={member.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(member.full_name || "S")}
+                      </div>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:700,color:textColor}}>{member.full_name || (lang==="es" ? "Sin nombre" : "No name")}</div>
+                        <div style={{fontSize:13,color:subTextColor}}>{roleName(member.role)} · {member.office_location || "—"}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{background:cardBg,borderRadius:18,padding:16}}>
+              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:12}}>{t.beforeMaterials}</p>
+              {beforeEntries.length===0 ? (
+                <p style={{fontSize:14,color:subTextColor}}>{lang==="es" ? "No hay material preoperatorio cargado todavía." : "No pre-op material has been uploaded yet."}</p>
+              ) : (
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(84px, 1fr))",gap:10}}>
+                  {beforeEntries.map((entry) => (
+                    <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",textDecoration:"none"}}>
+                      <div style={{aspectRatio:"1 / 1",borderRadius:14,overflow:"hidden",background:"#E5E7EB"}}>
+                        <img src={entry.content} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {canOpenAdmin && patient?.id && (
+              <button onClick={()=>window.location.href=`/admin/paciente/${patient.id}`} style={{width:"100%",padding:14,borderRadius:14,border:"none",background:"#0F172A",color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                {t.openFullRecord}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       <style>{`
@@ -661,17 +911,47 @@ export default function InboxPage() {
             <input className="finput" placeholder={t.patientNamePH} value={newPatientName} onChange={e=>setNewPatientName(e.target.value)}/>
             <label className="flabel">{t.phone}</label>
             <input className="finput" placeholder={t.phonePH} value={newPatientPhone} onChange={e=>setNewPatientPhone(e.target.value)}/>
+            <label className="flabel">{t.email}</label>
+            <input className="finput" type="email" placeholder={t.emailPH} value={newPatientEmail} onChange={e=>setNewPatientEmail(e.target.value)}/>
             <label className="flabel">{t.birthdate}</label>
             <input className="finput" inputMode="numeric" placeholder={t.birthdatePH} value={isoToDisplayDate(newBirthdate)} onChange={e=>setNewBirthdate(formatDateTyping(e.target.value))}/>
             <label className="flabel">{t.procedure}</label>
             <input className="finput" placeholder={t.procedurePH} value={newProcedureName} onChange={e=>setNewProcedureName(e.target.value)}/>
             <label className="flabel">{t.surgeryDate}</label>
             <input className="finput" inputMode="numeric" placeholder={t.surgeryDatePH} value={isoToDisplayDate(newSurgeryDate)} onChange={e=>setNewSurgeryDate(formatDateTyping(e.target.value))}/>
+            <label className="flabel">{t.preferredLanguage}</label>
+            <div className="loc-group">
+              {PATIENT_LANGUAGE_OPTIONS.map((option)=>(
+                <div key={option.value} className={`loc-opt${newPatientLanguage===option.value?" sel":""}`} onClick={()=>setNewPatientLanguage(option.value)}>
+                  {lang==="es" ? option.labelEs : option.labelEn}
+                </div>
+              ))}
+            </div>
+            <label className="flabel">{t.timezone}</label>
+            <select className="finput" value={newPatientTimezone} onChange={e=>setNewPatientTimezone(e.target.value)}>
+              {PATIENT_TIMEZONE_OPTIONS.map((option)=>(
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <label className="flabel">{t.allergies}</label>
+            <textarea className="finput" placeholder={t.allergiesPH} value={newPatientAllergies} onChange={e=>setNewPatientAllergies(e.target.value)} rows={3} style={{resize:"vertical"}}/>
+            <label className="flabel">{t.medications}</label>
+            <textarea className="finput" placeholder={t.medicationsPH} value={newPatientMedications} onChange={e=>setNewPatientMedications(e.target.value)} rows={3} style={{resize:"vertical"}}/>
             <label className="flabel">{t.location}</label>
             <div className="loc-group">
               <div className={`loc-opt${newLocation==="Guadalajara"?" sel":""}`} onClick={()=>setNewLocation("Guadalajara")}>{t.gdl}</div>
               <div className={`loc-opt${newLocation==="Tijuana"?" sel":""}`} onClick={()=>setNewLocation("Tijuana")}>{t.tjn}</div>
             </div>
+            <label className="flabel">{t.careTeam}</label>
+            <p style={{fontSize:13,color:subTextColor,margin:"-4px 0 10px"}}>{t.careTeamHint}</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
+              {staffDirectory.map((member)=>(
+                <button key={member.id} type="button" onClick={()=>toggleCareTeamMember(member.id)} style={{padding:"9px 12px",borderRadius:999,border:selectedCareTeamIds.includes(member.id)?"2px solid #007AFF":`1px solid ${borderColor}`,background:selectedCareTeamIds.includes(member.id)?"#EBF5FF":(darkMode?"#2C2C2E":"#F2F2F7"),color:selectedCareTeamIds.includes(member.id)?"#007AFF":textColor,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                  {member.full_name || "Staff"} · {roleName(member.role)}
+                </button>
+              ))}
+            </div>
+            <p style={{fontSize:12,color:subTextColor,marginBottom:14}}>{t.noTeamSelected}</p>
             <label className="flabel">📸 {t.profilePic}</label>
             <div className="file-box" onClick={()=>profilePicRef.current?.click()}>
               {profilePicFile?<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><img src={URL.createObjectURL(profilePicFile)} alt="" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover"}}/><span>{profilePicFile.name}</span></div>:t.tapProfilePic}
@@ -704,6 +984,7 @@ export default function InboxPage() {
       )}
 
       {showSettings&&<SettingsPanel/>}
+      {showPatientInfo&&selectedRoom&&<PatientInfoPanel/>}
 
       <QREditor
         show={showQREditor}
@@ -816,6 +1097,7 @@ export default function InboxPage() {
                       {selectedRoom.procedures?.office_location&&` · 📍${selectedRoom.procedures.office_location}`}
                     </div>
                   </div>
+                  <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
                 </div>
 
                 <div className="chat-bg" onClick={()=>setShowSlashMenu(false)}>
