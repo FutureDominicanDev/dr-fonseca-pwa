@@ -942,6 +942,14 @@ export default function InboxPage() {
   const renderMsg = (msg: any) => {
     const isOut=msg.sender_type==="staff"||!msg.sender_type;
     const isSystem=msg.sender_name==="Sistema";
+    const canDeleteOwnStaffMessage =
+      isOut &&
+      !isSystem &&
+      !msg.deleted_by_patient &&
+      !msg.deleted_by_staff &&
+      !!currentUserId &&
+      !!msg.sender_id &&
+      msg.sender_id === currentUserId;
     const sc=senderColor(msg.sender_type||"staff",msg.sender_role||"staff");
     const sn=msg.sender_name||(isOut?"Staff":"Paciente");
     const effectiveType=msg.message_type==="text"&&isImageUrl(msg.content)?"image":msg.message_type;
@@ -993,6 +1001,31 @@ export default function InboxPage() {
               {isOut&&<span style={{color:"#007AFF"}}>✓✓</span>}
             </div>
           </div>
+        )}
+        {canDeleteOwnStaffMessage && (
+          <button
+            onClick={() => {
+              if (!confirm(t.deleteMsg)) return;
+              supabase
+                .from("messages")
+                .update({ deleted_by_staff: true, deleted_at: new Date().toISOString() })
+                .eq("id", msg.id)
+                .then(() => {
+                  setMessages((prev) => prev.map((entry) => (entry.id === msg.id ? { ...entry, deleted_by_staff: true } : entry)));
+                });
+            }}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "#DC2626",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              padding: "2px 4px",
+            }}
+          >
+            🗑️ {lang==="es"?"Eliminar":"Delete"}
+          </button>
         )}
       </div>
     );
