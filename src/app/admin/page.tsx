@@ -52,7 +52,10 @@ export default function AdminPage() {
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [inviteCode, setInviteCode] = useState("");
   const [newInviteCode, setNewInviteCode] = useState("");
+  const [officePhoneGdl, setOfficePhoneGdl] = useState("");
+  const [officePhoneTjn, setOfficePhoneTjn] = useState("");
   const [savingCode, setSavingCode] = useState(false);
+  const [savingPhones, setSavingPhones] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [patientSearch, setPatientSearch] = useState("");
@@ -170,12 +173,14 @@ export default function AdminPage() {
   const fetchData = async () => {
     setPageError("");
 
-    const [staffRes, patientsRes, proceduresRes, roomsRes, inviteRes] = await Promise.all([
+    const [staffRes, patientsRes, proceduresRes, roomsRes, inviteRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("patients").select("*").order("full_name"),
       supabase.from("procedures").select("*"),
       supabase.from("rooms").select("*").order("created_at", { ascending: false }),
       supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", "office_phone_guadalajara").maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", "office_phone_tijuana").maybeSingle(),
     ]);
 
     const issues = [
@@ -184,6 +189,8 @@ export default function AdminPage() {
       proceduresRes.error ? "No pude cargar los procedimientos." : "",
       roomsRes.error ? "No pude cargar las salas." : "",
       inviteRes.error ? "No pude cargar el código de invitación." : "",
+      gdlPhoneRes.error ? "No pude cargar el teléfono de Guadalajara." : "",
+      tjnPhoneRes.error ? "No pude cargar el teléfono de Tijuana." : "",
     ].filter(Boolean);
 
     setStaff((staffRes.data || []) as StaffProfile[]);
@@ -191,6 +198,8 @@ export default function AdminPage() {
     setProcedures((proceduresRes.data || []) as ProcedureRecord[]);
     setRooms((roomsRes.data || []) as RoomRecord[]);
     setInviteCode((inviteRes.data?.value as string) || "");
+    setOfficePhoneGdl((gdlPhoneRes.data?.value as string) || "");
+    setOfficePhoneTjn((tjnPhoneRes.data?.value as string) || "");
 
     if (issues.length > 0) setPageError(issues.join(" "));
   };
@@ -303,6 +312,32 @@ export default function AdminPage() {
       metadata: { invite_code: nextCode },
     });
     updateSuccess(isSpanish ? "Código de invitación actualizado." : "Invitation code updated.");
+  };
+
+  const saveOfficePhones = async () => {
+    setSavingPhones(true);
+    const payload = [
+      { key: "office_phone_guadalajara", value: officePhoneGdl.trim(), updated_at: new Date().toISOString() },
+      { key: "office_phone_tijuana", value: officePhoneTjn.trim(), updated_at: new Date().toISOString() },
+    ];
+    const { error } = await supabase.from("app_settings").upsert(payload, { onConflict: "key" });
+    setSavingPhones(false);
+    if (error) {
+      setPageError(error.message || "No pude guardar los teléfonos de sede.");
+      return;
+    }
+    await logAdminEvent({
+      action: "office_phone_settings_updated",
+      entityType: "app_setting",
+      entityId: "office_phone_settings",
+      entityName: "Teléfonos de sede",
+      actorId: viewerId,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: isSpanish ? "Se actualizaron los teléfonos de Guadalajara y Tijuana." : "Guadalajara and Tijuana office phones were updated.",
+      metadata: { office_phone_guadalajara: officePhoneGdl, office_phone_tijuana: officePhoneTjn },
+    });
+    updateSuccess(isSpanish ? "Teléfonos de sede actualizados." : "Office phone numbers updated.");
   };
 
   const copyInviteLink = async () => {
@@ -791,6 +826,30 @@ export default function AdminPage() {
                   <div className="inline-actions">
                     <button className="main-btn" onClick={saveInviteCode} disabled={savingCode || !newInviteCode.trim()}>
                       {savingCode ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar" : "Save")}
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section className="card">
+                <div className="header-row">
+                  <div>
+                    <p className="card-title">{isSpanish ? "Teléfonos de sede" : "Office phone numbers"}</p>
+                    <p className="muted">{isSpanish ? "Estos números alimentan el botón de llamada en el chat del paciente." : "These numbers power the call button inside the patient chat."}</p>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div>
+                    <p className="group-label">{isSpanish ? "Guadalajara" : "Guadalajara"}</p>
+                    <input className="line-input" value={officePhoneGdl} onChange={(event) => setOfficePhoneGdl(event.target.value)} placeholder={isSpanish ? "Ej: +52 33 1234 5678" : "e.g. +52 33 1234 5678"} />
+                  </div>
+                  <div>
+                    <p className="group-label">{isSpanish ? "Tijuana" : "Tijuana"}</p>
+                    <input className="line-input" value={officePhoneTjn} onChange={(event) => setOfficePhoneTjn(event.target.value)} placeholder={isSpanish ? "Ej: +52 664 123 4567" : "e.g. +52 664 123 4567"} />
+                  </div>
+                  <div className="inline-actions">
+                    <button className="main-btn" onClick={saveOfficePhones} disabled={savingPhones}>
+                      {savingPhones ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar teléfonos" : "Save phone numbers")}
                     </button>
                   </div>
                 </div>

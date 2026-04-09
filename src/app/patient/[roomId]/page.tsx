@@ -49,8 +49,10 @@ const T = {
     typeMessage: "Escribe tu mensaje...",
     recordAudio: "Grabar audio",
     recordVideo: "Grabar video",
+    stopAndSendAudio: "Detener y enviar audio",
+    stopAndSendVideo: "Detener y enviar video",
     send: "Enviar",
-    online: "Equipo disponible",
+    online: "Equipo clínico en línea",
     addToHome: "Guarda este enlace para volver fácilmente a tu chat.",
     noMessages: "Todavía no hay mensajes.",
     noMessagesHint: "Cuando escribas, el equipo verá tu mensaje en su panel.",
@@ -98,8 +100,10 @@ const T = {
     typeMessage: "Type your message...",
     recordAudio: "Record audio",
     recordVideo: "Record video",
+    stopAndSendAudio: "Stop and send audio",
+    stopAndSendVideo: "Stop and send video",
     send: "Send",
-    online: "Team available",
+    online: "Care team online",
     addToHome: "Save this link so you can easily come back to your chat.",
     noMessages: "There are no messages yet.",
     noMessagesHint: "When you write, the care team will see your message in their panel.",
@@ -151,6 +155,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [recordingVideo, setRecordingVideo] = useState(false);
   const [preparingVideo, setPreparingVideo] = useState(false);
   const [videoPreviewOpen, setVideoPreviewOpen] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [settings, setSettings] = useState<PatientSettings>({
     displayName: "",
     darkMode: false,
@@ -321,6 +326,16 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     setLoading(false);
   };
 
+  const refreshMessages = async () => {
+    const { data: msgs } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("room_id", roomId)
+      .eq("is_internal", false)
+      .order("created_at", { ascending: true });
+    setMessages(msgs || []);
+  };
+
   const sendMessage = async (override?: string) => {
     const content = (override || newMessage).trim();
     if (!content || isSending.current) return;
@@ -388,10 +403,14 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   };
 
   const uploadPatientFile = async (file: File) => {
+    setUploadingMedia(true);
     const ext = file.name.split(".").pop() || "bin";
     const storagePath = `${roomId}/patient-${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from("chat-files").upload(storagePath, file, { upsert: true });
-    if (error) return;
+    if (error) {
+      setUploadingMedia(false);
+      return;
+    }
 
     const { data: publicUrl } = supabase.storage.from("chat-files").getPublicUrl(storagePath);
     let messageType = "file";
@@ -409,6 +428,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       sender_name: patientName,
       is_internal: false,
     });
+    await refreshMessages();
+    setUploadingMedia(false);
   };
 
   const startAudioRecording = async () => {
@@ -432,7 +453,6 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         audioStreamRef.current = null;
         audioRecorderRef.current = null;
         audioChunksRef.current = [];
-        setRecordingAudio(false);
         await uploadPatientFile(file);
       };
       recorder.start();
@@ -444,6 +464,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const toggleAudioRecording = async () => {
     if (recordingAudio) {
+      setRecordingAudio(false);
       audioRecorderRef.current?.stop();
       return;
     }
@@ -478,7 +499,6 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         videoStreamRef.current = null;
         videoRecorderRef.current = null;
         videoChunksRef.current = [];
-        setRecordingVideo(false);
         setVideoPreviewOpen(false);
         await uploadPatientFile(file);
       };
@@ -493,6 +513,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const toggleVideoRecording = async () => {
     if (recordingVideo) {
+      setRecordingVideo(false);
       videoRecorderRef.current?.stop();
       return;
     }
@@ -870,8 +891,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           <div style={{ fontSize: 12, color: subText, margin: "0 0 8px 6px" }}>{t.quickRepliesSlashHint}</div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
             <button onClick={() => fileInputRef.current?.click()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>📎</button>
-            <button onClick={toggleAudioRecording} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingAudio ? "#DC2626" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.recordAudio}>🎤</button>
-            <button onClick={toggleVideoRecording} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingVideo || preparingVideo ? "#DC2626" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.recordVideo}>🎥</button>
+            <button onClick={toggleAudioRecording} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingAudio ? "#DC2626" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0, boxShadow: recordingAudio ? "0 0 0 6px rgba(220,38,38,0.18)" : "none" }} title={recordingAudio ? t.stopAndSendAudio : t.recordAudio}>🎤</button>
+            <button onClick={toggleVideoRecording} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingVideo || preparingVideo ? "#DC2626" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0, boxShadow: recordingVideo ? "0 0 0 6px rgba(220,38,38,0.18)" : "none" }} title={recordingVideo ? t.stopAndSendVideo : t.recordVideo}>🎥</button>
             <textarea
               value={newMessage}
               onChange={(event) => updateDraft(event.target.value, event.currentTarget)}
@@ -889,7 +910,11 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                 }
               }}
             />
-            <button onClick={() => sendMessage()} disabled={sending || !newMessage.trim()} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#2563EB", color: "white", cursor: "pointer", fontWeight: 800, flexShrink: 0, opacity: sending || !newMessage.trim() ? 0.45 : 1 }}>
+            <button onClick={() => {
+              if (recordingAudio) { toggleAudioRecording(); return; }
+              if (recordingVideo) { toggleVideoRecording(); return; }
+              sendMessage();
+            }} disabled={(sending || !newMessage.trim()) && !recordingAudio && !recordingVideo} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: "#2563EB", color: "white", cursor: "pointer", fontWeight: 800, flexShrink: 0, opacity: (sending || !newMessage.trim()) && !recordingAudio && !recordingVideo ? 0.45 : 1 }}>
               {t.send}
             </button>
           </div>
@@ -898,6 +923,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               {recordingAudio ? t.recordingAudio : recordingVideo ? t.recordingVideo : `${t.preparingVideo} ${t.browserRecorderFallback}`}
             </div>
           )}
+          {uploadingMedia && <div style={{ fontSize: 12, color: subText, margin: "8px 0 0 6px" }}>{settings.lang === "es" ? "Subiendo archivo..." : "Uploading file..."}</div>}
         </div>
       </div>
     </>
