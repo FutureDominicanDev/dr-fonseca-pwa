@@ -1,130 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
-
-export default function CreateRoom() {
-  const [roomName, setRoomName] = useState("");
-  const [office, setOffice] = useState("guadalajara");
-  const [message, setMessage] = useState("");
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [patientLink, setPatientLink] = useState("");
-
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      setUserEmail(data.user?.email ?? null);
-    };
-    checkUser();
-  }, []);
-
-  const createRoom = async () => {
-    if (!userEmail) {
-      setMessage("You must be logged in.");
-      return;
-    }
-
-    if (!roomName) {
-      setMessage("Room name required.");
-      return;
-    }
-
-    // 🔥 CREATE ROOM WITH OFFICE TAG
-    const { data, error } = await supabase
-      .from("rooms")
-      .insert([
-        {
-          name: roomName,
-          office_location: office, // 🔥 IMPORTANT
-        },
-      ])
-      .select()
-      .single();
-
-    if (error || !data) {
-      console.error(error);
-      setMessage("Error creating room.");
-      return;
-    }
-
-    // 🔥 GENERATE PATIENT LINK
-    const link = `${window.location.origin}/patient/${data.id}`;
-
-    setPatientLink(link);
-    setMessage("Room created successfully.");
-    setRoomName("");
-  };
-
-  const copyLink = () => {
-    navigator.clipboard.writeText(patientLink);
-    alert("Link copied!");
-  };
-
-  const sendWhatsApp = () => {
-    const text = `Hola 👋\n\nEste es tu enlace para comunicarte con el equipo del Dr. Fonseca:\n\n${patientLink}\n\nGuárdalo en tu pantalla principal 📲`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
-  };
-
+export default function CreateRoomPage() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-6">
-      <h1 className="text-3xl font-bold mb-4">
-        Create Patient Room
-      </h1>
-
-      <p className="mb-4 text-sm text-gray-600">
-        Logged in as: {userEmail ?? "Not logged in"}
-      </p>
-
-      <input
-        type="text"
-        placeholder="Patient name"
-        value={roomName}
-        onChange={(e) => setRoomName(e.target.value)}
-        className="border p-2 rounded mb-4 w-64"
-      />
-
-      {/* 🔥 OFFICE SELECT */}
-      <select
-        value={office}
-        onChange={(e) => setOffice(e.target.value)}
-        className="border p-2 rounded mb-4 w-64"
-      >
-        <option value="guadalajara">Guadalajara</option>
-        <option value="tijuana">Tijuana</option>
-      </select>
-
-      <button
-        onClick={createRoom}
-        className="px-6 py-2 bg-black text-white rounded mb-4"
-      >
-        Create Room
-      </button>
-
-      {patientLink && (
-        <div className="mt-4 text-center">
-          <p className="mb-2 font-semibold">Patient Link:</p>
-
-          <div className="text-sm break-all mb-2">
-            {patientLink}
-          </div>
-
+    <main style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "#F5F7FB" }}>
+      <div style={{ width: "100%", maxWidth: 560, background: "white", borderRadius: 24, padding: 28, boxShadow: "0 20px 60px rgba(15,23,42,0.08)" }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "#64748B" }}>
+          Herramienta movida
+        </p>
+        <h1 style={{ margin: "10px 0 8px", fontSize: 34, lineHeight: 1.1, color: "#0F172A" }}>
+          Esta página ya no se usa
+        </h1>
+        <p style={{ margin: 0, fontSize: 16, lineHeight: 1.7, color: "#475569" }}>
+          La creación de expedientes y salas ya vive dentro del flujo principal del portal. Esto evita rutas antiguas con acceso directo a tablas sensibles.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 22 }}>
           <button
-            onClick={copyLink}
-            className="px-4 py-2 bg-gray-200 rounded mr-2"
+            onClick={() => (window.location.href = "/inbox")}
+            style={{ border: "none", borderRadius: 14, background: "#2563EB", color: "white", fontWeight: 800, padding: "14px 18px", cursor: "pointer", fontFamily: "inherit" }}
           >
-            Copy Link
+            Ir al inbox
           </button>
-
           <button
-            onClick={sendWhatsApp}
-            className="px-4 py-2 bg-green-500 text-white rounded"
+            onClick={() => (window.location.href = "/admin")}
+            style={{ border: "none", borderRadius: 14, background: "#E2E8F0", color: "#0F172A", fontWeight: 800, padding: "14px 18px", cursor: "pointer", fontFamily: "inherit" }}
           >
-            Send via WhatsApp
+            Ir al centro de control
           </button>
         </div>
-      )}
-
-      {message && <p className="mt-4">{message}</p>}
+      </div>
     </main>
   );
 }

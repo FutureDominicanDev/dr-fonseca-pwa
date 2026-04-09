@@ -1,87 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
-
 export default function PatientsPage() {
-
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-
-  const createPatient = async () => {
-
-    if (!name) {
-      setMessage("Patient name required.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("patients")
-      .insert([
-        {
-          full_name: name,
-          phone: phone,
-          email: email
-        }
-      ]);
-
-    if (error) {
-      console.error(error);
-      setMessage("Error creating patient.");
-    } else {
-      setMessage("Patient created successfully.");
-      setName("");
-      setPhone("");
-      setEmail("");
-    }
-  };
-
   return (
-
-    <main className="min-h-screen flex flex-col items-center justify-center p-6">
-
-      <h1 className="text-3xl font-bold mb-6">
-        Crear Paciente / Create Patient
-      </h1>
-
-      <input
-        type="text"
-        placeholder="Nombre del paciente"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="border p-2 rounded mb-3 w-80"
-      />
-
-      <input
-        type="text"
-        placeholder="Teléfono"
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-        className="border p-2 rounded mb-3 w-80"
-      />
-
-      <input
-        type="text"
-        placeholder="Correo electrónico"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="border p-2 rounded mb-3 w-80"
-      />
-
-      <button
-        onClick={createPatient}
-        className="px-6 py-2 bg-black text-white rounded"
-      >
-        Crear Paciente
-      </button>
-
-      {message && (
-        <p className="mt-4">{message}</p>
-      )}
-
+    <main style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "#F5F7FB" }}>
+      <div style={{ width: "100%", maxWidth: 560, background: "white", borderRadius: 24, padding: 28, boxShadow: "0 20px 60px rgba(15,23,42,0.08)" }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "#64748B" }}>
+          Acceso restringido
+        </p>
+        <h1 style={{ margin: "10px 0 8px", fontSize: 34, lineHeight: 1.1, color: "#0F172A" }}>
+          La creación directa de pacientes fue retirada
+        </h1>
+        <p style={{ margin: 0, fontSize: 16, lineHeight: 1.7, color: "#475569" }}>
+          Ahora los pacientes se crean desde el flujo principal del inbox y del expediente. Esto reduce rutas antiguas que escribían datos clínicos fuera del proceso normal.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 22 }}>
+          <button
+            onClick={() => (window.location.href = "/inbox")}
+            style={{ border: "none", borderRadius: 14, background: "#2563EB", color: "white", fontWeight: 800, padding: "14px 18px", cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Ir al inbox
+          </button>
+          <button
+            onClick={() => (window.location.href = "/admin")}
+            style={{ border: "none", borderRadius: 14, background: "#E2E8F0", color: "#0F172A", fontWeight: 800, padding: "14px 18px", cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Ir al centro de control
+          </button>
+        </div>
+      </div>
     </main>
-
   );
 }

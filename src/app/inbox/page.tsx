@@ -216,6 +216,7 @@ export default function InboxPage() {
   const [savingName, setSavingName] = useState(false);
   const [savedName, setSavedName] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedRoomRef = useRef<any>(null);
@@ -241,7 +242,7 @@ export default function InboxPage() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) { window.location.href = "/login"; return; }
-      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); fetchRooms(); fetchProfile(session.user.id); }
+      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); setCurrentUserId(session.user.id); fetchRooms(); fetchProfile(session.user.id); }
     });
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
     if ("Notification" in window) Notification.requestPermission().then(p=>{notifRef.current=p;});
@@ -326,9 +327,10 @@ export default function InboxPage() {
     setShowSlashMenu(false);
     const sName=userProfile?.full_name||userProfile?.display_name||"Staff";
     const sRole=userProfile?.role||"staff";
+    const sOffice=userProfile?.office_location||selectedRoom?.procedures?.office_location||null;
     const tempId="temp-"+Date.now();
     setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:msg,message_type:"text",sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
-    const { data: nm, error } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:msg,message_type:"text",sender_type:"staff",sender_name:sName,sender_role:sRole}).select().single();
+    const { data: nm, error } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:msg,message_type:"text",sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
     if (error) setMessages(p=>p.filter(m=>m.id!==tempId));
     else if (nm) setMessages(p=>p.map(m=>m.id===tempId?nm:m));
     isSending.current=false; setSending(false);
@@ -351,9 +353,10 @@ export default function InboxPage() {
       const prefix=cat==="medication"?"[MED] ":cat==="before_photo"?"[BEFORE] ":"";
       const sName=userProfile?.full_name||userProfile?.display_name||"Staff";
       const sRole=userProfile?.role||"staff";
+      const sOffice=userProfile?.office_location||selectedRoom?.procedures?.office_location||null;
       const tempId="temp-file-"+Date.now();
       setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:prefix+file.name,file_size:file.size,sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
-      const { data: nm } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:prefix+file.name,file_size:file.size,sender_type:"staff",sender_name:sName,sender_role:sRole}).select().single();
+      const { data: nm } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:prefix+file.name,file_size:file.size,sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
       if (nm) setMessages(p=>p.map(m=>m.id===tempId?nm:m));
       else setMessages(p=>p.filter(m=>m.id!==tempId));
     } catch(e){console.error(e);}
@@ -364,14 +367,19 @@ export default function InboxPage() {
     if (!newPatientName.trim()||!newProcedureName.trim()){alert(t.required);return;}
     setCreatingRoom(true);
     try {
+      const creatorId=currentUserId||userProfile?.id||null;
+      const creatorRole=userProfile?.role||"staff";
       const { data: pt, error: pe } = await supabase.from("patients").insert({full_name:newPatientName.trim(),phone:newPatientPhone||null,birthdate:newBirthdate||null}).select().single();
       if (pe) throw pe;
       if (profilePicFile){const fn=`patient-profiles/${pt.id}/profile.${profilePicFile.name.split(".").pop()||"jpg"}`;const{error:ue}=await supabase.storage.from("chat-files").upload(fn,profilePicFile,{upsert:true});if(!ue){const{data:ud}=supabase.storage.from("chat-files").getPublicUrl(fn);await supabase.from("patients").update({profile_picture_url:ud.publicUrl}).eq("id",pt.id);}}
       const { data: pr, error: pre } = await supabase.from("procedures").insert({patient_id:pt.id,procedure_name:newProcedureName.trim(),surgery_date:newSurgeryDate||null,office_location:newLocation,status:"scheduled"}).select().single();
       if (pre) throw pre;
-      const { data: rm, error: re } = await supabase.from("rooms").insert({procedure_id:pr.id}).select().single();
+      const { data: rm, error: re } = await supabase.from("rooms").insert({procedure_id:pr.id,created_by:creatorId}).select().single();
       if (re) throw re;
-      for (let i=0;i<beforePhotosFiles.length;i++){const f=beforePhotosFiles[i];const fn2=`patient-photos/${pt.id}/before/${Date.now()}-${i}.${f.name.split(".").pop()||"jpg"}`;const{error:ue2}=await supabase.storage.from("chat-files").upload(fn2,f,{upsert:true});if(!ue2){const{data:ud2}=supabase.storage.from("chat-files").getPublicUrl(fn2);await supabase.from("messages").insert({room_id:rm.id,content:ud2.publicUrl,message_type:"image",file_name:`[BEFORE] Foto Pre-Op ${i+1}`,sender_type:"staff",sender_name:"Sistema",sender_role:"staff"});}}
+      if (creatorId) {
+        await supabase.from("room_members").insert({room_id:rm.id,user_id:creatorId,role:creatorRole});
+      }
+      for (let i=0;i<beforePhotosFiles.length;i++){const f=beforePhotosFiles[i];const fn2=`patient-photos/${pt.id}/before/${Date.now()}-${i}.${f.name.split(".").pop()||"jpg"}`;const{error:ue2}=await supabase.storage.from("chat-files").upload(fn2,f,{upsert:true});if(!ue2){const{data:ud2}=supabase.storage.from("chat-files").getPublicUrl(fn2);await supabase.from("messages").insert({room_id:rm.id,content:ud2.publicUrl,message_type:"image",file_name:`[BEFORE] Foto Pre-Op ${i+1}`,sender_type:"staff",sender_id:creatorId,sender_name:"Sistema",sender_role:creatorRole,sender_office:newLocation});}}
       setCreatedRoomLink(`${window.location.origin}/patient/${rm.id}`);
       setCreatedPatientName(newPatientName);
       setNewPatientName("");setNewPatientPhone("");setNewProcedureName("");setNewSurgeryDate("");setNewBirthdate("");setNewLocation("Guadalajara");setProfilePicFile(null);setBeforePhotosFiles([]);setShowNewRoom(false);
