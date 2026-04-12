@@ -172,6 +172,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [setupFeedback, setSetupFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
+  const [toastAlert, setToastAlert] = useState<{ title: string; body: string } | null>(null);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
   const [recordingAudio, setRecordingAudio] = useState(false);
@@ -215,6 +216,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const notificationsPermissionRef = useRef<NotificationPermission>("default");
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioUnlockedRef = useRef(false);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastKnownStaffMessageKeyRef = useRef("");
 
   const t = T[settings.lang];
   const fontSize = settings.fontSizeLevel === "small" ? 14 : settings.fontSizeLevel === "large" ? 19 : 16;
@@ -330,8 +333,20 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     return text ? text.slice(0, 120) : settings.lang === "es" ? "Nuevo mensaje" : "New message";
   }, [settings.lang]);
 
+  const messageIdentity = useCallback((message: any) => {
+    if (!message) return "";
+    return `${message.id || "no-id"}:${message.created_at || ""}:${message.sender_type || ""}`;
+  }, []);
+
+  const showIncomingToast = useCallback((title: string, body: string) => {
+    setToastAlert({ title, body });
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToastAlert(null), 4500);
+  }, []);
+
   const notifyIncomingMessage = useCallback(async (message: any) => {
     playIncomingTone();
+    showIncomingToast(message.sender_name || staffTypingName || t.careTeamLabel, describeIncomingMessage(message));
     if (typeof window === "undefined" || typeof document === "undefined") return;
     if (document.visibilityState === "visible") return;
     if (notificationsPermissionRef.current !== "granted") return;
@@ -353,7 +368,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     }
 
     if ("Notification" in window) new Notification(title, options);
-  }, [describeIncomingMessage, playIncomingTone, staffTypingName, t.careTeamLabel]);
+  }, [describeIncomingMessage, playIncomingTone, showIncomingToast, staffTypingName, t.careTeamLabel]);
 
   const broadcastTypingState = useCallback((isTyping: boolean) => {
     if (!typingChannelRef.current) return;
@@ -394,6 +409,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     return () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       captureStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
   }, []);
 
@@ -493,6 +509,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       }, ({ new: m }) => {
         if (m.is_internal) return;
         if (m.sender_type === "staff") {
+          lastKnownStaffMessageKeyRef.current = messageIdentity(m);
           setStaffTyping(false);
           setStaffTypingName("");
           if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
@@ -522,7 +539,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [notifyIncomingMessage, roomId]);
+  }, [messageIdentity, notifyIncomingMessage, roomId]);
 
   useEffect(() => {
     const channel = supabase
@@ -630,7 +647,10 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     });
 
     const { data: msgs } = await loadMessages();
-    setMessages((msgs || []).filter((message: any) => !message?.is_internal));
+    const nextMessages = (msgs || []).filter((message: any) => !message?.is_internal);
+    setMessages(nextMessages);
+    const latestStaffMessage = [...nextMessages].reverse().find((message: any) => message.sender_type === "staff");
+    lastKnownStaffMessageKeyRef.current = latestStaffMessage ? messageIdentity(latestStaffMessage) : "";
     setLoading(false);
   };
 
@@ -1063,6 +1083,46 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const showSetupPanel = !setupDismissed && (!setupComplete || showInstallHelp);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const refreshMessagesWithFallback = async () => {
+      if (loading || notFound) return;
+      const { data: msgs } = await loadMessages();
+      if (cancelled || !msgs) return;
+      const nextMessages = msgs.filter((message: any) => !message?.is_internal);
+      setMessages(nextMessages);
+      const latestStaffMessage = [...nextMessages].reverse().find((message: any) => message.sender_type === "staff");
+      const latestKey = latestStaffMessage ? messageIdentity(latestStaffMessage) : "";
+
+      if (!lastKnownStaffMessageKeyRef.current) {
+        lastKnownStaffMessageKeyRef.current = latestKey;
+        return;
+      }
+
+      if (latestStaffMessage && latestKey && latestKey !== lastKnownStaffMessageKeyRef.current) {
+        lastKnownStaffMessageKeyRef.current = latestKey;
+        notifyIncomingMessage(latestStaffMessage).catch(() => {});
+      }
+    };
+
+    const interval = setInterval(refreshMessagesWithFallback, 5000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshMessagesWithFallback();
+    };
+    const onFocus = () => refreshMessagesWithFallback();
+
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadMessages, loading, messageIdentity, notFound, notifyIncomingMessage]);
+
+  useEffect(() => {
     if (captureMode && captureVideoRef.current && captureStreamRef.current) {
       captureVideoRef.current.srcObject = captureStreamRef.current;
       captureVideoRef.current.play().catch(() => {});
@@ -1391,8 +1451,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                   </button>
                 )}
                 {notificationsPermission !== "granted" ? (
-                  <button onClick={requestNotifications} disabled={notificationBusy} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: notificationBusy ? "wait" : "pointer", opacity: notificationBusy ? 0.7 : 1 }}>
-                    🔔 {notificationBusy ? (settings.lang === "es" ? "Activando..." : "Enabling...") : t.enableAlerts}
+                  <button onClick={isAppleMobile && !isStandalone ? promptInstall : requestNotifications} disabled={notificationBusy} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: notificationBusy ? "wait" : "pointer", opacity: notificationBusy ? 0.7 : 1 }}>
+                    🔔 {notificationBusy ? (settings.lang === "es" ? "Activando..." : "Enabling...") : isAppleMobile && !isStandalone ? (settings.lang === "es" ? "Abre desde inicio primero" : "Open from Home Screen first") : t.enableAlerts}
                   </button>
                 ) : (
                   <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 999, background: "rgba(34,197,94,0.16)", color: "white", fontWeight: 700 }}>
@@ -1400,7 +1460,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                   </div>
                 )}
                 {showInstallHelp && (
-                  <button onClick={() => { setShowInstallHelp(false); setSetupFeedback({ tone: "success", text: settings.lang === "es" ? "Perfecto. Cuando abras el chat desde tu pantalla de inicio, vuelve a tocar Activar notificaciones." : "Perfect. Once you open the chat from your Home Screen, tap Enable notifications again." }); }} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(59,130,246,0.22)", color: "white", fontWeight: 700, cursor: "pointer" }}>
+                  <button onClick={hideSetupPanel} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(59,130,246,0.22)", color: "white", fontWeight: 700, cursor: "pointer" }}>
                     ✅ {settings.lang === "es" ? "Ya entendí" : "Got it"}
                   </button>
                 )}
@@ -1433,6 +1493,23 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         </header>
 
         <main style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 14px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
+          {toastAlert && (
+            <div style={{ position: "sticky", top: 0, zIndex: 12, display: "flex", justifyContent: "center" }}>
+              <div style={{ width: "min(100%, 420px)", background: settings.darkMode ? "rgba(17,24,39,0.96)" : "rgba(255,255,255,0.98)", color: textColor, border: `1px solid ${border}`, borderRadius: 18, boxShadow: "0 18px 46px rgba(15,23,42,0.16)", padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#2563EB", flexShrink: 0 }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: settings.darkMode ? "#93C5FD" : "#1D4ED8" }}>
+                      {settings.lang === "es" ? "Nuevo mensaje del equipo" : "New message from the care team"}
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{toastAlert.title}</div>
+                    <div style={{ fontSize: 13, color: subText, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{toastAlert.body}</div>
+                  </div>
+                  <button onClick={() => setToastAlert(null)} style={{ border: "none", background: "transparent", color: subText, cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+                </div>
+              </div>
+            </div>
+          )}
           {groupedMessages.length === 0 ? (
             <div style={{ marginTop: 36, background: surface, borderRadius: 24, padding: 24, textAlign: "center", boxShadow: "0 10px 30px rgba(15,23,42,0.08)" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>

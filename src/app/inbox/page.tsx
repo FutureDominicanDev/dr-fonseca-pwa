@@ -870,7 +870,7 @@ export default function InboxPage() {
   // Poll for unread badges every 20s and on tab focus
   useEffect(()=>{
     checkUnreadBadges();
-    const interval = setInterval(checkUnreadBadges, 20000);
+    const interval = setInterval(checkUnreadBadges, 5000);
     const onVisible = () => { if (document.visibilityState==="visible") checkUnreadBadges(); };
     document.addEventListener("visibilitychange", onVisible);
     return ()=>{ clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
@@ -885,14 +885,18 @@ export default function InboxPage() {
     }
   },[markRoomAsRead, selectedRoom]);
 
-  // Fallback: refresh messages when tab regains focus + every 20s in case realtime drops events
+  // Fallback: refresh sidebar/messages frequently in case realtime drops events on mobile or background tabs
   useEffect(()=>{
-    const refresh = () => { if (selectedRoomRef.current) fetchMessages(selectedRoomRef.current.id); };
+    const refresh = () => {
+      fetchRooms();
+      if (selectedRoomRef.current) fetchMessages(selectedRoomRef.current.id);
+    };
     const onFocus = () => refresh();
+    const onVisible = () => { if (document.visibilityState==="visible") refresh(); };
     window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible") refresh(); });
-    const interval = setInterval(refresh, 20000);
-    return ()=>{ window.removeEventListener("focus", onFocus); clearInterval(interval); };
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = setInterval(refresh, 5000);
+    return ()=>{ window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVisible); clearInterval(interval); };
   },[]);
 
   useEffect(() => () => {
@@ -1880,7 +1884,7 @@ export default function InboxPage() {
         </div>
 
         {toastAlert && (
-          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:250,width:"min(360px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.96)":"rgba(255,255,255,0.98)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 46px rgba(15,23,42,0.2)",padding:"14px 16px",cursor:"pointer"}} onClick={()=>{setSelectedRoom(patients.find((patient)=>patient.rooms?.some((room:any)=>room.id===toastAlert.roomId))?.rooms?.[0] || null);setMobileView("chat");setToastAlert(null);}}>
+          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:250,width:"min(360px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.96)":"rgba(255,255,255,0.98)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 46px rgba(15,23,42,0.2)",padding:"14px 16px",cursor:"pointer"}} onClick={()=>{const room = patients.flatMap((patient)=>patient.rooms||[]).find((entry:any)=>entry.id===toastAlert.roomId) || null; setSelectedRoom(room); setMobileView("chat"); setToastAlert(null);}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:"#25D366",flexShrink:0}} />
               <div style={{minWidth:0,flex:1}}>
