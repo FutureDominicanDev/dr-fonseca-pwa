@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
+import { syncPushSubscription } from "@/lib/pushSubscriptions";
 
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
@@ -328,6 +329,7 @@ export default function InboxPage() {
   const [pressedMsgId, setPressedMsgId] = useState<string|null>(null);
   const [unreadRooms, setUnreadRooms] = useState<Set<string>>(new Set());
   const [totalUnread, setTotalUnread] = useState(0);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [showNewRoom, setShowNewRoom] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showQREditor, setShowQREditor] = useState(false);
@@ -385,6 +387,7 @@ export default function InboxPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [patientTyping, setPatientTyping] = useState(false);
+  const [toastAlert, setToastAlert] = useState<{ roomId: string; title: string; body: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedRoomRef = useRef<any>(null);
@@ -403,6 +406,7 @@ export default function InboxPage() {
   const captureRecorderRef = useRef<MediaRecorder | null>(null);
   const captureChunksRef = useRef<Blob[]>([]);
   const discardCaptureRef = useRef(false);
+  const discardAudioRef = useRef(false);
   const notifRef = useRef<string>("default");
   const isSending = useRef(false);
   const typingChannelRef = useRef<any>(null);
@@ -411,6 +415,7 @@ export default function InboxPage() {
   const outgoingTypingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioUnlockedRef = useRef(false);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
@@ -494,28 +499,29 @@ export default function InboxPage() {
   }, [ensureAudioContext]);
 
   const playIncomingTone = useCallback(() => {
-    if (!audioUnlockedRef.current) return;
     const context = ensureAudioContext();
     if (!context) return;
+    const doPlay = () => {
+      const startAt = context.currentTime;
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.05, startAt + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.22);
+      gain.connect(context.destination);
+
+      const oscillator = context.createOscillator();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, startAt);
+      oscillator.frequency.exponentialRampToValueAtTime(660, startAt + 0.22);
+      oscillator.connect(gain);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + 0.24);
+    };
     if (context.state === "suspended") {
-      context.resume().catch(() => {});
-      return;
+      context.resume().then(doPlay).catch(() => {});
+    } else {
+      doPlay();
     }
-
-    const startAt = context.currentTime;
-    const gain = context.createGain();
-    gain.gain.setValueAtTime(0.0001, startAt);
-    gain.gain.exponentialRampToValueAtTime(0.05, startAt + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.22);
-    gain.connect(context.destination);
-
-    const oscillator = context.createOscillator();
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(880, startAt);
-    oscillator.frequency.exponentialRampToValueAtTime(660, startAt + 0.22);
-    oscillator.connect(gain);
-    oscillator.start(startAt);
-    oscillator.stop(startAt + 0.24);
   }, [ensureAudioContext]);
 
   const describeIncomingMessage = useCallback((message: any) => {
@@ -531,6 +537,53 @@ export default function InboxPage() {
     const patient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === roomId));
     return patient?.full_name || t.patientLabel;
   }, [patients, t.patientLabel]);
+
+  const pushNotif = useCallback((title: string, body: string) => {
+    if (notifRef.current==="granted"&&"serviceWorker" in navigator) {
+      navigator.serviceWorker.ready.then((registration) =>
+        registration.showNotification(title,{body,icon:"/apple-touch-icon.png",vibrate:[200,100,200]} as any)
+      );
+    }
+  }, []);
+
+  const showToastAlert = useCallback((roomId: string, title: string, body: string) => {
+    setToastAlert({ roomId, title, body });
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToastAlert(null), 4500);
+  }, []);
+
+  const markRoomAsRead = useCallback((roomId: string) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(`last_seen_${roomId}`, new Date().toISOString());
+      window.localStorage.setItem(`last_alert_${roomId}`, new Date().toISOString());
+    }
+    setUnreadCounts((prev) => {
+      if (!prev[roomId]) return prev;
+      const next = { ...prev };
+      delete next[roomId];
+      return next;
+    });
+  }, []);
+
+  const registerIncomingPatientMessage = useCallback((message: any, options?: { skipUnread?: boolean }) => {
+    const roomId = message.room_id;
+    const title = roomPatientName(roomId);
+    const body = describeIncomingMessage(message);
+    const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
+    const isActiveRoom = selectedRoomRef.current?.id === roomId;
+
+    playIncomingTone();
+
+    if (!options?.skipUnread && (!isVisible || !isActiveRoom)) {
+      setUnreadCounts((prev) => ({ ...prev, [roomId]: (prev[roomId] || 0) + 1 }));
+    }
+
+    if (!isActiveRoom || !isVisible) {
+      if (typeof window !== "undefined") window.localStorage.setItem(`last_alert_${roomId}`, message.created_at || new Date().toISOString());
+      showToastAlert(roomId, title, body);
+      pushNotif(title, body);
+    }
+  }, [describeIncomingMessage, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
 
   const broadcastTypingState = useCallback((isTyping: boolean, roomId: string, name: string) => {
     if (!typingChannelRef.current) return;
@@ -572,7 +625,7 @@ export default function InboxPage() {
       if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); setCurrentUserId(session.user.id); fetchRooms(); fetchProfile(session.user.id); fetchAssignableStaff(); }
     });
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
-    if ("Notification" in window) Notification.requestPermission().then(p=>{notifRef.current=p;});
+    if ("Notification" in window) Notification.requestPermission().then(p=>{notifRef.current=p; if(p==="granted") subscribeStaffToPush();});
     return () => { subscription.unsubscribe(); };
   }, []);
 
@@ -586,6 +639,59 @@ export default function InboxPage() {
       window.removeEventListener("keydown", unlock);
     };
   }, [armAudioAlerts]);
+
+  // --- Web Push subscription for staff ---
+  const urlBase64ToUint8Array = (b64: string) => {
+    const padding = "=".repeat((4-(b64.length%4))%4);
+    const base64 = (b64+padding).replace(/-/g,"+").replace(/_/g,"/");
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+  };
+
+  const subscribeStaffToPush = async () => {
+    try {
+      if (!("serviceWorker" in navigator)||!("PushManager" in window)) return;
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidKey) return;
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      const sub = existing || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlBase64ToUint8Array(vapidKey) });
+      await syncPushSubscription({ subscription: sub.toJSON(), userType: "staff" });
+    } catch(_) {}
+  };
+
+  // --- Unread badge polling: check all rooms every 20s for new patient messages ---
+  // Uses localStorage timestamps so badges survive page refresh
+  const checkUnreadBadges = async () => {
+    const { data: msgs } = await supabase
+      .from("messages")
+      .select("room_id, created_at, content, message_type, file_name")
+      .eq("sender_type", "patient")
+      .eq("is_internal", false)
+      .order("created_at", { ascending: false })
+      .limit(400);
+    if (!msgs) return;
+    const nextCounts: Record<string, number> = {};
+    const latestByRoom: Record<string, any> = {};
+    for (const m of msgs) {
+      const roomId = m.room_id;
+      const lastSeen = localStorage.getItem(`last_seen_${roomId}`) || "0";
+      if (m.created_at > lastSeen) nextCounts[roomId] = (nextCounts[roomId] || 0) + 1;
+      if (!latestByRoom[roomId]) latestByRoom[roomId] = m;
+    }
+    setUnreadCounts(nextCounts);
+
+    for (const [roomId, latestMessage] of Object.entries(latestByRoom)) {
+      if (selectedRoomRef.current?.id === roomId && typeof document !== "undefined" && document.visibilityState === "visible") continue;
+      const lastSeen = localStorage.getItem(`last_seen_${roomId}`) || "0";
+      const lastAlert = localStorage.getItem(`last_alert_${roomId}`) || "0";
+      if (latestMessage.created_at > lastSeen && latestMessage.created_at > lastAlert) {
+        showToastAlert(roomId, roomPatientName(roomId), describeIncomingMessage(latestMessage));
+        pushNotif(roomPatientName(roomId), describeIncomingMessage(latestMessage));
+        localStorage.setItem(`last_alert_${roomId}`, latestMessage.created_at);
+      }
+    }
+  };
 
   const fetchProfile = async (id: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id",id).single();
@@ -656,8 +762,6 @@ export default function InboxPage() {
     const { error } = await supabase.storage.from("chat-files").upload(fn, file, { upsert: true });
     if (!error) { const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn); await supabase.from("profiles").update({ avatar_url: ud.publicUrl }).eq("id",userProfile.id); setUserProfile((p: any)=>({...p,avatar_url:ud.publicUrl})); }
   };
-
-  const pushNotif = (title: string, body: string) => { if (notifRef.current==="granted"&&"serviceWorker" in navigator) navigator.serviceWorker.ready.then(r=>r.showNotification(title,{body,icon:"/apple-touch-icon.png",vibrate:[200,100,200]} as any)); };
 
   useEffect(()=>{ selectedRoomRef.current=selectedRoom; },[selectedRoom]);
 
@@ -736,9 +840,9 @@ export default function InboxPage() {
     const ch = supabase.channel("rt-msgs")
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},({new:m})=>{
         if (m.sender_type==="patient") {
-          playIncomingTone();
           setPatientTyping(false);
           if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+          registerIncomingPatientMessage(m, { skipUnread: selectedRoomRef.current?.id===m.room_id && typeof document !== "undefined" && document.visibilityState === "visible" });
         }
         if (selectedRoomRef.current?.id===m.room_id) {
           setMessages(prev=>{
@@ -747,25 +851,53 @@ export default function InboxPage() {
             if (prev.some(x=>x.id===m.id)) return prev;
             return [...prev,m];
           });
-          if (m.sender_type==="patient" && typeof document !== "undefined" && document.visibilityState === "hidden") {
-            pushNotif(roomPatientName(m.room_id), describeIncomingMessage(m));
-          }
-        } else if (m.sender_type==="patient") {
-          setUnreadRooms(p=>{const n=new Set(p);n.add(m.room_id);return n;});
-          setTotalUnread(p=>p+1);
-          pushNotif(roomPatientName(m.room_id), describeIncomingMessage(m));
         }
       })
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},({new:m})=>{ if (selectedRoomRef.current?.id===m.room_id) setMessages(p=>p.map(x=>x.id===m.id?m:x)); })
       .subscribe();
     return ()=>{ supabase.removeChannel(ch); };
-  },[describeIncomingMessage, playIncomingTone, roomPatientName]);
+  },[registerIncomingPatientMessage]);
+
+  useEffect(() => {
+    const activeRoomId = selectedRoomRef.current?.id;
+    const filteredEntries = Object.entries(unreadCounts).filter(([roomId, count]) => count > 0 && roomId !== activeRoomId);
+    setUnreadRooms(new Set(filteredEntries.map(([roomId]) => roomId)));
+    setTotalUnread(filteredEntries.reduce((sum, [, count]) => sum + count, 0));
+  }, [unreadCounts]);
 
   useEffect(()=>{ document.title=totalUnread>0?`(${totalUnread}) Dr. Fonseca Portal`:"Dr. Fonseca Portal"; },[totalUnread]);
 
+  // Poll for unread badges every 20s and on tab focus
   useEffect(()=>{
-    if (selectedRoom) { fetchMessages(selectedRoom.id); fetchSelectedRoomTeam(selectedRoom.id); setMobileView("chat"); setUnreadRooms(p=>{const n=new Set(p);const w=n.has(selectedRoom.id);n.delete(selectedRoom.id);if(w)setTotalUnread(t=>Math.max(0,t-1));return n;}); }
-  },[selectedRoom]);
+    checkUnreadBadges();
+    const interval = setInterval(checkUnreadBadges, 20000);
+    const onVisible = () => { if (document.visibilityState==="visible") checkUnreadBadges(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return ()=>{ clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
+  },[]);
+
+  useEffect(()=>{
+    if (selectedRoom) {
+      fetchMessages(selectedRoom.id);
+      fetchSelectedRoomTeam(selectedRoom.id);
+      setMobileView("chat");
+      markRoomAsRead(selectedRoom.id);
+    }
+  },[markRoomAsRead, selectedRoom]);
+
+  // Fallback: refresh messages when tab regains focus + every 20s in case realtime drops events
+  useEffect(()=>{
+    const refresh = () => { if (selectedRoomRef.current) fetchMessages(selectedRoomRef.current.id); };
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible") refresh(); });
+    const interval = setInterval(refresh, 20000);
+    return ()=>{ window.removeEventListener("focus", onFocus); clearInterval(interval); };
+  },[]);
+
+  useEffect(() => () => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+  }, []);
 
   useEffect(()=>{ messagesEndRef.current?.scrollIntoView({behavior:"smooth"}); },[messages]);
 
@@ -810,6 +942,12 @@ export default function InboxPage() {
     const { data: nm, error } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:msg,message_type:"text",sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
     if (error) setMessages(p=>p.filter(m=>m.id!==tempId));
     else if (nm) setMessages(p=>p.map(m=>m.id===tempId?nm:m));
+    // Push notification to patient — works even if their PWA is closed
+    fetch("/api/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      roomId:selectedRoom.id, userType:"patient",
+      title: sName, body: msg.length>80?msg.slice(0,80)+"…":msg,
+      url: window.location.href, tag: selectedRoom.id,
+    })}).catch(()=>{});
     isSending.current=false; setSending(false);
   };
 
@@ -994,17 +1132,21 @@ export default function InboxPage() {
       mediaRecorderRef.current=mr; audioChunksRef.current=[];
       mr.ondataavailable=e=>{if(e.data.size>0)audioChunksRef.current.push(e.data);};
       mr.onstop=async()=>{
+        const shouldDiscard = discardAudioRef.current;
         const finalMimeType = mr.mimeType || mimeType || "audio/webm";
         const b=new Blob(audioChunksRef.current,{type:finalMimeType});
         stream.getTracks().forEach(t=>t.stop());
+        audioChunksRef.current=[];
+        discardAudioRef.current=false;
+        if (shouldDiscard || b.size===0) return;
         const ext = extensionForMimeType(finalMimeType, "webm");
         await uploadFile(new File([b],`voice-${Date.now()}.${ext}`,{type:finalMimeType}));
       };
-      mr.start(); setRecording(true); setRecordingSeconds(0);
+      mr.start(); setRecording(true); setRecordingSeconds(0); discardAudioRef.current=false;
       recordingTimerRef.current=setInterval(()=>setRecordingSeconds(s=>s+1),1000);
     } catch {alert("No se pudo acceder al micrófono.");}
   };
-  const stopRec = () => { if (mediaRecorderRef.current&&recording){mediaRecorderRef.current.stop();setRecording(false);clearInterval(recordingTimerRef.current);setRecordingSeconds(0);} };
+  const stopRec = (discard=false) => { if (mediaRecorderRef.current&&recording){discardAudioRef.current=discard;mediaRecorderRef.current.stop();setRecording(false);clearInterval(recordingTimerRef.current);setRecordingSeconds(0);} };
   const stopCaptureStream = () => {
     captureStreamRef.current?.getTracks().forEach((track) => track.stop());
     captureStreamRef.current = null;
@@ -1083,18 +1225,25 @@ export default function InboxPage() {
   };
 
   const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
-  const filtPts = patients.filter(p=>{
-    const q=searchQuery.toLowerCase();
-    return (
-      p.full_name?.toLowerCase().includes(q) ||
-      String(p.phone || "").toLowerCase().includes(q) ||
-      String(p.email || "").toLowerCase().includes(q) ||
-      p.rooms.some((r:any)=>
-        r.procedures?.procedure_name?.toLowerCase().includes(q) ||
-        r.procedures?.office_location?.toLowerCase().includes(q)
-      )
-    );
-  });
+  const filtPts = patients
+    .filter(p=>{
+      const q=searchQuery.toLowerCase();
+      return (
+        p.full_name?.toLowerCase().includes(q) ||
+        String(p.phone || "").toLowerCase().includes(q) ||
+        String(p.email || "").toLowerCase().includes(q) ||
+        p.rooms.some((r:any)=>
+          r.procedures?.procedure_name?.toLowerCase().includes(q) ||
+          r.procedures?.office_location?.toLowerCase().includes(q)
+        )
+      );
+    })
+    .sort((a, b) => {
+      const unreadA = a.rooms.reduce((sum:number, room:any) => sum + (unreadCounts[room.id] || 0), 0);
+      const unreadB = b.rooms.reduce((sum:number, room:any) => sum + (unreadCounts[room.id] || 0), 0);
+      if (unreadA !== unreadB) return unreadB - unreadA;
+      return (a.full_name || "").localeCompare(b.full_name || "", lang==="es" ? "es" : "en");
+    });
 
   const groupedMessages = () => {
     const groups: {date:string;msgs:any[]}[]=[];
@@ -1730,6 +1879,20 @@ export default function InboxPage() {
           </div>
         </div>
 
+        {toastAlert && (
+          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:250,width:"min(360px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.96)":"rgba(255,255,255,0.98)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 46px rgba(15,23,42,0.2)",padding:"14px 16px",cursor:"pointer"}} onClick={()=>{setSelectedRoom(patients.find((patient)=>patient.rooms?.some((room:any)=>room.id===toastAlert.roomId))?.rooms?.[0] || null);setMobileView("chat");setToastAlert(null);}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:"#25D366",flexShrink:0}} />
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#16A34A",marginBottom:2}}>{lang==="es" ? "Nuevo mensaje del paciente" : "New patient message"}</div>
+                <div style={{fontSize:15,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.title}</div>
+                <div style={{fontSize:13,color:subTextColor,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.body}</div>
+              </div>
+              <button onClick={(event)=>{event.stopPropagation();setToastAlert(null);}} style={{border:"none",background:"transparent",color:subTextColor,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
+            </div>
+          </div>
+        )}
+
         <div className="body">
           <div className={`sidebar${mobileView==="chat"?" hidden":""}`}>
             <div className="sidebar-head">
@@ -1757,7 +1920,8 @@ export default function InboxPage() {
                   <p style={{fontSize:14,color:subTextColor,marginTop:6}}>{t.noPatientsHint}</p>
                 </div>
               ):filtPts.map(pt=>{
-                const ptUnread=pt.rooms.some((r:any)=>unreadRooms.has(r.id));
+                const ptUnreadCount=pt.rooms.reduce((sum:number,r:any)=>sum+(unreadCounts[r.id]||0),0);
+                const ptUnread=ptUnreadCount>0;
                 const firstRoom=pt.rooms[0];
                 const proc=firstRoom?.procedures;
                 const surgDate=proc?.surgery_date?new Date(proc.surgery_date).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}):"";
@@ -1776,7 +1940,7 @@ export default function InboxPage() {
                         {proc?.office_location&&<span> · 📍{proc.office_location==="Guadalajara"?"GDL":"TJN"}</span>}
                       </div>
                     </div>
-                    {ptUnread&&<div className="unread-dot"/>}
+                    {ptUnread&&<div style={{minWidth:24,height:24,padding:"0 8px",background:"#25D366",borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:12,fontWeight:800}}>{ptUnreadCount}</div>}
                   </div>
                 );
               })}
@@ -1852,11 +2016,12 @@ export default function InboxPage() {
                 )}
 
                 {recording?(
-                  <div style={{background:inputBg,padding:"10px 12px",display:"flex",alignItems:"center",gap:12,borderTop:`1px solid ${borderColor}`}}>
-                    <div style={{width:10,height:10,borderRadius:"50%",background:"#FF3B30",flexShrink:0}}/>
+                  <div style={{background:inputBg,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,borderTop:`1px solid ${borderColor}`}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:"#FF3B30",flexShrink:0,animation:"pulse 1s infinite"}}/>
                     <span style={{fontSize:17,fontWeight:700,color:"#FF3B30",fontFamily:"monospace",flex:1}}>{fmtRec(recordingSeconds)}</span>
-                    <span style={{fontSize:14,color:subTextColor,flex:1}}>{t.recording}</span>
-                    <button onClick={stopRec} style={{padding:"8px 18px",background:"#FF3B30",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⏹ {t.send}</button>
+                    <span style={{fontSize:14,color:subTextColor}}>{t.recording}</span>
+                    <button onClick={()=>stopRec(true)} style={{padding:"8px 16px",background:"#6B7280",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.cancelCapture}</button>
+                    <button onClick={()=>stopRec(false)} style={{padding:"8px 16px",background:"#FF3B30",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⏹ {lang==="es"?"Detener y enviar":"Stop & send"}</button>
                   </div>
                 ):(
                   <div className="input-area" onClick={e=>e.stopPropagation()}>

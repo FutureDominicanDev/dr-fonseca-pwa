@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { labelPatientLanguage } from "@/lib/patientMeta";
+import { syncPushSubscription } from "@/lib/pushSubscriptions";
 
 type Lang = "es" | "en";
 type FontSizeLevel = "small" | "medium" | "large";
@@ -169,6 +170,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [notificationsPermission, setNotificationsPermission] = useState<NotificationPermission>("default");
   const [isStandalone, setIsStandalone] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(false);
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [setupFeedback, setSetupFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
   const [recordingAudio, setRecordingAudio] = useState(false);
@@ -224,6 +227,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const border = settings.darkMode ? "rgba(255,255,255,0.08)" : "#E5E7EB";
   const prefersNativeCapture =
     typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const isAppleMobile =
+    typeof navigator !== "undefined" && /iPad|iPhone|iPod/i.test(navigator.userAgent);
   const isSchemaColumnError = (error: any) => {
     const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
     return message.includes("column") || message.includes("schema cache") || message.includes("relation");
@@ -292,28 +297,28 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   }, [ensureAudioContext]);
 
   const playIncomingTone = useCallback(() => {
-    if (!audioUnlockedRef.current) return;
     const context = ensureAudioContext();
     if (!context) return;
+    const doPlay = () => {
+      const startAt = context.currentTime;
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.05, startAt + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.22);
+      gain.connect(context.destination);
+      const oscillator = context.createOscillator();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, startAt);
+      oscillator.frequency.exponentialRampToValueAtTime(660, startAt + 0.22);
+      oscillator.connect(gain);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + 0.24);
+    };
     if (context.state === "suspended") {
-      context.resume().catch(() => {});
-      return;
+      context.resume().then(doPlay).catch(() => {});
+    } else {
+      doPlay();
     }
-
-    const startAt = context.currentTime;
-    const gain = context.createGain();
-    gain.gain.setValueAtTime(0.0001, startAt);
-    gain.gain.exponentialRampToValueAtTime(0.05, startAt + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.22);
-    gain.connect(context.destination);
-
-    const oscillator = context.createOscillator();
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(880, startAt);
-    oscillator.frequency.exponentialRampToValueAtTime(660, startAt + 0.22);
-    oscillator.connect(gain);
-    oscillator.start(startAt);
-    oscillator.stop(startAt + 0.24);
   }, [ensureAudioContext]);
 
   const describeIncomingMessage = useCallback((message: any) => {
@@ -410,17 +415,45 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     }
   }, [roomId, settings]);
 
+  // Helper: convert VAPID public key to Uint8Array for push subscription
+  const urlBase64ToUint8Array = (base64String: string) => {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+  };
+
+  // Subscribe this patient device to Web Push and save to Supabase
+  const subscribeToPushNotifications = async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      throw new Error(settings.lang === "es" ? "Este navegador no soporta notificaciones push." : "This browser does not support push notifications.");
+    }
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!vapidKey) {
+      throw new Error(settings.lang === "es" ? "Falta la configuración de notificaciones en el servidor." : "Notification configuration is missing on the server.");
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    const sub = existing || await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    });
+    await syncPushSubscription({ subscription: sub.toJSON(), userType: "patient", roomId });
+    return true;
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
     if ("Notification" in window) {
       setNotificationsPermission(Notification.permission);
       notificationsPermissionRef.current = Notification.permission;
-      // Auto-request notification permission on first open so no message is ever missed
-      if (Notification.permission === "default") {
-        Notification.requestPermission().then((perm) => {
-          setNotificationsPermission(perm);
-          notificationsPermissionRef.current = perm;
+      if (Notification.permission === "granted") {
+        subscribeToPushNotifications().catch((error) => {
+          setSetupFeedback({
+            tone: "error",
+            text: error instanceof Error ? error.message : settings.lang === "es" ? "No pude activar las notificaciones todavía." : "I could not enable notifications yet.",
+          });
         });
       }
     }
@@ -471,6 +504,18 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           if (prev.some((x) => x.id === m.id)) return prev;
           return [...prev, m];
         });
+      })
+      .on("postgres_changes", {
+        // When staff deletes a message, remove it from patient view immediately — no "deleted" indicator shown
+        event: "UPDATE",
+        schema: "public",
+        table: "messages",
+        filter: `room_id=eq.${roomId}`,
+      }, ({ new: m }) => {
+        if (m.deleted_by_staff) {
+          // Completely remove from patient's message list — patient sees nothing
+          setMessages((prev) => prev.filter((x) => x.id !== m.id));
+        }
       })
       .subscribe();
 
@@ -666,6 +711,19 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       setMessages((prev) => prev.map((entry) => entry.id === tempId ? insert.data : entry));
     }
 
+    // Push notification to all staff so they know immediately — even if app is closed
+    fetch("/api/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roomId,
+        userType: "staff",
+        title: patientName || "Paciente",
+        body: content.length > 80 ? content.slice(0, 80) + "…" : content,
+        url: "/inbox",
+      }),
+    }).catch(() => {});
+
     if (override || newMessage.startsWith("/")) {
       setShowSlashMenu(false);
       setSlashFilter("");
@@ -677,25 +735,80 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const requestNotifications = async () => {
     if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (isAppleMobile && !isStandalone) {
+      setShowInstallHelp(true);
+      setSetupFeedback({
+        tone: "info",
+        text: settings.lang === "es"
+          ? "En iPhone y iPad primero abre este chat desde la pantalla de inicio. Después podrás activar notificaciones."
+          : "On iPhone and iPad, first open this chat from the Home Screen. After that you can enable notifications.",
+      });
+      return;
+    }
+
+    setNotificationBusy(true);
+    setSetupFeedback(null);
     const permission = await Notification.requestPermission();
     setNotificationsPermission(permission);
     notificationsPermissionRef.current = permission;
+    if (permission === "granted") {
+      try {
+        await subscribeToPushNotifications();
+        setShowInstallHelp(false);
+        setSetupFeedback({
+          tone: "success",
+          text: settings.lang === "es" ? "Notificaciones activadas en este dispositivo." : "Notifications are enabled on this device.",
+        });
+      } catch (error) {
+        setSetupFeedback({
+          tone: "error",
+          text: error instanceof Error ? error.message : settings.lang === "es" ? "No pude activar las notificaciones todavía." : "I could not enable notifications yet.",
+        });
+      }
+    } else if (permission === "denied") {
+      setSetupFeedback({
+        tone: "error",
+        text: settings.lang === "es" ? "Las notificaciones están bloqueadas. Revísalas en la configuración del navegador." : "Notifications are blocked. Please check your browser settings.",
+      });
+    } else {
+      setSetupFeedback({
+        tone: "info",
+        text: settings.lang === "es" ? "Cuando quieras, vuelve a tocar el botón para activar alertas." : "Whenever you are ready, tap the button again to enable alerts.",
+      });
+    }
+    setNotificationBusy(false);
   };
 
   const promptInstall = async () => {
+    setSetupFeedback(null);
     if (deferredInstallPrompt) {
       await deferredInstallPrompt.prompt();
-      if (deferredInstallPrompt.userChoice) await deferredInstallPrompt.userChoice;
+      const choice = deferredInstallPrompt.userChoice ? await deferredInstallPrompt.userChoice : null;
       setDeferredInstallPrompt(null);
       const standalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
       setIsStandalone(Boolean(standalone));
+      setShowInstallHelp(!standalone);
+      setSetupFeedback({
+        tone: choice?.outcome === "accepted" ? "success" : "info",
+        text:
+          choice?.outcome === "accepted"
+            ? (settings.lang === "es" ? "Instalación iniciada. Abre el chat desde tu pantalla de inicio y luego activa notificaciones." : "Install started. Open the chat from your Home Screen and then enable notifications.")
+            : (settings.lang === "es" ? "Puedes instalar este chat después cuando quieras." : "You can install this chat later whenever you want."),
+      });
       return;
     }
     setShowInstallHelp(true);
+    setSetupFeedback({
+      tone: "info",
+      text: isAppleMobile
+        ? t.installHelpIOS
+        : t.installHelpOther,
+    });
   };
 
   const hideSetupPanel = () => {
     setSetupDismissed(true);
+    setShowInstallHelp(false);
     if (typeof window !== "undefined") window.localStorage.setItem(setupDismissedKeyForRoom(roomId), "1");
   };
 
@@ -946,7 +1059,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         })
       : "";
 
-  const setupComplete = notificationsPermission === "granted" && (isStandalone || deferredInstallPrompt === null);
+  const setupComplete = notificationsPermission === "granted" && (isStandalone || !isAppleMobile);
   const showSetupPanel = !setupDismissed && (!setupComplete || showInstallHelp);
 
   useEffect(() => {
@@ -1266,7 +1379,11 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                 <div style={{ fontWeight: 700, color: "white" }}>{showInstallHelp ? t.installHelpTitle : t.addToHome}</div>
                 <button onClick={hideSetupPanel} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t.dismiss}</button>
               </div>
-              <div style={{ marginTop: 6 }}>{showInstallHelp ? (/iPad|iPhone|iPod/.test(typeof navigator !== "undefined" ? navigator.userAgent : "") ? t.installHelpIOS : t.installHelpOther) : t.installedHint}</div>
+              <div style={{ marginTop: 6 }}>
+                {showInstallHelp
+                  ? (isAppleMobile ? t.installHelpIOS : t.installHelpOther)
+                  : t.addToHome}
+              </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
                 {!isStandalone && (
                   <button onClick={promptInstall} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: "pointer" }}>
@@ -1274,15 +1391,39 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                   </button>
                 )}
                 {notificationsPermission !== "granted" ? (
-                  <button onClick={requestNotifications} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: "pointer" }}>
-                    🔔 {t.enableAlerts}
+                  <button onClick={requestNotifications} disabled={notificationBusy} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: notificationBusy ? "wait" : "pointer", opacity: notificationBusy ? 0.7 : 1 }}>
+                    🔔 {notificationBusy ? (settings.lang === "es" ? "Activando..." : "Enabling...") : t.enableAlerts}
                   </button>
                 ) : (
                   <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 999, background: "rgba(34,197,94,0.16)", color: "white", fontWeight: 700 }}>
                     🔔 {t.alertsReady}
                   </div>
                 )}
+                {showInstallHelp && (
+                  <button onClick={() => { setShowInstallHelp(false); setSetupFeedback({ tone: "success", text: settings.lang === "es" ? "Perfecto. Cuando abras el chat desde tu pantalla de inicio, vuelve a tocar Activar notificaciones." : "Perfect. Once you open the chat from your Home Screen, tap Enable notifications again." }); }} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(59,130,246,0.22)", color: "white", fontWeight: 700, cursor: "pointer" }}>
+                    ✅ {settings.lang === "es" ? "Ya entendí" : "Got it"}
+                  </button>
+                )}
               </div>
+              {setupFeedback && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background:
+                      setupFeedback.tone === "success"
+                        ? "rgba(34,197,94,0.16)"
+                        : setupFeedback.tone === "error"
+                          ? "rgba(239,68,68,0.16)"
+                          : "rgba(59,130,246,0.18)",
+                    color: "white",
+                    fontWeight: 600,
+                  }}
+                >
+                  {setupFeedback.text}
+                </div>
+              )}
               {notificationsPermission === "denied" && <div style={{ marginTop: 6, fontSize: 12 }}>{t.alertsBlocked}</div>}
             </div>
           )}
