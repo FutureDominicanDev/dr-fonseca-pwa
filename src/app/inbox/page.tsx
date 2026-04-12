@@ -388,6 +388,9 @@ export default function InboxPage() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [patientTyping, setPatientTyping] = useState(false);
   const [toastAlert, setToastAlert] = useState<{ roomId: string; title: string; body: string } | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedRoomRef = useRef<any>(null);
@@ -625,7 +628,13 @@ export default function InboxPage() {
       if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); setCurrentUserId(session.user.id); fetchRooms(); fetchProfile(session.user.id); fetchAssignableStaff(); }
     });
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
-    if ("Notification" in window) Notification.requestPermission().then(p=>{notifRef.current=p; if(p==="granted") subscribeStaffToPush();});
+    if ("Notification" in window) {
+      notifRef.current = Notification.permission;
+      setNotificationPermission(Notification.permission);
+      if (Notification.permission==="granted") subscribeStaffToPush();
+    } else {
+      setNotificationPermission("unsupported");
+    }
     return () => { subscription.unsubscribe(); };
   }, []);
 
@@ -659,6 +668,46 @@ export default function InboxPage() {
       await syncPushSubscription({ subscription: sub.toJSON(), userType: "staff" });
     } catch(_) {}
   };
+
+  const requestStaffNotifications = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      setNotificationFeedback({
+        tone: "error",
+        text: lang === "es" ? "Este navegador no soporta notificaciones." : "This browser does not support notifications.",
+      });
+      return;
+    }
+
+    setNotificationBusy(true);
+    setNotificationFeedback(null);
+
+    try {
+      const permission = await Notification.requestPermission();
+      notifRef.current = permission;
+      setNotificationPermission(permission);
+
+      if (permission === "granted") {
+        await subscribeStaffToPush();
+        setNotificationFeedback({
+          tone: "success",
+          text: lang === "es" ? "Alertas activadas en este dispositivo." : "Alerts are enabled on this device.",
+        });
+      } else if (permission === "denied") {
+        setNotificationFeedback({
+          tone: "error",
+          text: lang === "es" ? "Las notificaciones están bloqueadas en este navegador." : "Notifications are blocked in this browser.",
+        });
+      } else {
+        setNotificationFeedback({
+          tone: "info",
+          text: lang === "es" ? "Permiso pendiente. Vuelve a intentarlo cuando el navegador lo permita." : "Permission is still pending. Try again when the browser allows it.",
+        });
+      }
+    } finally {
+      setNotificationBusy(false);
+    }
+  }, [lang]);
 
   // --- Unread badge polling: check all rooms every 20s for new patient messages ---
   // Uses localStorage timestamps so badges survive page refresh
@@ -870,7 +919,7 @@ export default function InboxPage() {
   // Poll for unread badges every 20s and on tab focus
   useEffect(()=>{
     checkUnreadBadges();
-    const interval = setInterval(checkUnreadBadges, 5000);
+    const interval = setInterval(checkUnreadBadges, 2000);
     const onVisible = () => { if (document.visibilityState==="visible") checkUnreadBadges(); };
     document.addEventListener("visibilitychange", onVisible);
     return ()=>{ clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
@@ -895,7 +944,7 @@ export default function InboxPage() {
     const onVisible = () => { if (document.visibilityState==="visible") refresh(); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
-    const interval = setInterval(refresh, 5000);
+    const interval = setInterval(refresh, 2000);
     return ()=>{ window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVisible); clearInterval(interval); };
   },[]);
 
@@ -1874,6 +1923,11 @@ export default function InboxPage() {
           <img src="/fonseca_blue.png" style={{height:52,width:"auto",objectFit:"contain"}} alt="Dr. Fonseca"/>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
+            {notificationPermission !== "granted" && (
+              <button onClick={requestStaffNotifications} disabled={notificationBusy} style={{padding:"0 14px",height:42,borderRadius:99,background:"rgba(255,255,255,0.16)",border:"none",color:"white",fontSize:13,fontWeight:700,cursor:notificationBusy?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",opacity:notificationBusy?0.75:1}}>
+                {notificationBusy ? (lang==="es" ? "Activando..." : "Enabling...") : (lang==="es" ? "Activar alertas" : "Enable alerts")}
+              </button>
+            )}
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.08)",borderRadius:99}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:"#25D366"}}/>
               <span style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)"}}>{t.online}</span>
@@ -1913,6 +1967,11 @@ export default function InboxPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input className="search-input" placeholder={t.search} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
               </div>
+              {notificationFeedback && (
+                <div style={{marginTop:10,padding:"10px 12px",borderRadius:14,background:notificationFeedback.tone==="success"?"#DCFCE7":notificationFeedback.tone==="error"?"#FEE2E2":"#DBEAFE",color:notificationFeedback.tone==="success"?"#166534":notificationFeedback.tone==="error"?"#991B1B":"#1D4ED8",fontSize:13,fontWeight:700,lineHeight:1.4}}>
+                  {notificationFeedback.text}
+                </div>
+              )}
             </div>
             <div className="patient-list">
               {loading?(

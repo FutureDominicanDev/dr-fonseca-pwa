@@ -1105,7 +1105,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       }
     };
 
-    const interval = setInterval(refreshMessagesWithFallback, 5000);
+    const interval = setInterval(refreshMessagesWithFallback, 2000);
     const onVisible = () => {
       if (document.visibilityState === "visible") refreshMessagesWithFallback();
     };
