@@ -545,6 +545,11 @@ export default function InboxPage() {
     const patient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === roomId));
     return patient?.full_name || t.patientLabel;
   }, [patients, t.patientLabel]);
+  const alertMessageStorageKey = useCallback((roomId: string) => `last_alert_message_${roomId}`, []);
+  const incomingMessageKey = useCallback((message: any) => {
+    if (!message) return "";
+    return `${message.room_id || ""}:${message.id || "no-id"}:${message.created_at || ""}:${message.sender_type || ""}:${message.message_type || ""}`;
+  }, []);
 
   const updateAutoScrollPreference = useCallback(() => {
     const container = chatScrollRef.current;
@@ -589,6 +594,13 @@ export default function InboxPage() {
 
   const registerIncomingPatientMessage = useCallback((message: any, options?: { skipUnread?: boolean }) => {
     const roomId = message.room_id;
+    const messageKey = incomingMessageKey(message);
+    if (typeof window !== "undefined" && messageKey) {
+      const lastAlertedMessage = window.localStorage.getItem(alertMessageStorageKey(roomId)) || "";
+      if (lastAlertedMessage === messageKey) return;
+      window.localStorage.setItem(alertMessageStorageKey(roomId), messageKey);
+      window.localStorage.setItem(`last_alert_${roomId}`, message.created_at || new Date().toISOString());
+    }
     const title = roomPatientName(roomId);
     const body = describeIncomingMessage(message);
     const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
@@ -601,11 +613,10 @@ export default function InboxPage() {
     }
 
     if (!isActiveRoom || !isVisible) {
-      if (typeof window !== "undefined") window.localStorage.setItem(`last_alert_${roomId}`, message.created_at || new Date().toISOString());
       showToastAlert(roomId, title, body);
       pushNotif(title, body);
     }
-  }, [describeIncomingMessage, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
+  }, [alertMessageStorageKey, describeIncomingMessage, incomingMessageKey, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
 
   const broadcastTypingState = useCallback((isTyping: boolean, roomId: string, name: string) => {
     if (!typingChannelRef.current) return;
@@ -753,11 +764,15 @@ export default function InboxPage() {
       if (selectedRoomRef.current?.id === roomId && typeof document !== "undefined" && document.visibilityState === "visible") continue;
       const lastSeen = localStorage.getItem(`last_seen_${roomId}`) || "0";
       const lastAlert = localStorage.getItem(`last_alert_${roomId}`) || "0";
+      const latestMessageKey = incomingMessageKey(latestMessage);
+      const lastAlertedMessage = localStorage.getItem(alertMessageStorageKey(roomId)) || "";
+      if (latestMessageKey && latestMessageKey === lastAlertedMessage) continue;
       if (latestMessage.created_at > lastSeen && latestMessage.created_at > lastAlert) {
         playIncomingTone();
         showToastAlert(roomId, roomPatientName(roomId), describeIncomingMessage(latestMessage));
         pushNotif(roomPatientName(roomId), describeIncomingMessage(latestMessage));
         localStorage.setItem(`last_alert_${roomId}`, latestMessage.created_at);
+        if (latestMessageKey) localStorage.setItem(alertMessageStorageKey(roomId), latestMessageKey);
       }
     }
   };

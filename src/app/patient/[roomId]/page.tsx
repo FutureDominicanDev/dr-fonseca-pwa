@@ -155,6 +155,7 @@ const T = {
 const storageKeyForRoom = (roomId: string) => `patient-room-settings-${roomId}`;
 const setupDismissedKeyForRoom = (roomId: string) => `patient-room-setup-dismissed-${roomId}`;
 const setupDismissedGlobalKey = "patient-room-setup-dismissed-global-v1";
+const lastAlertedStaffMessageKeyForRoom = (roomId: string) => `patient-last-alerted-staff-message-${roomId}`;
 
 export default function PatientPage({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = use(params);
@@ -364,6 +365,13 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   }, []);
 
   const notifyIncomingMessage = useCallback(async (message: any) => {
+    const messageKey = messageIdentity(message);
+    if (typeof window !== "undefined" && messageKey) {
+      const lastAlerted = window.localStorage.getItem(lastAlertedStaffMessageKeyForRoom(roomId)) || "";
+      if (lastAlerted === messageKey) return;
+      window.localStorage.setItem(lastAlertedStaffMessageKeyForRoom(roomId), messageKey);
+    }
+
     playIncomingTone();
     showIncomingToast(message.sender_name || staffTypingName || t.careTeamLabel, describeIncomingMessage(message));
     if (typeof window === "undefined" || typeof document === "undefined") return;
@@ -387,7 +395,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     }
 
     if ("Notification" in window) new Notification(title, options);
-  }, [describeIncomingMessage, playIncomingTone, showIncomingToast, staffTypingName, t.careTeamLabel]);
+  }, [describeIncomingMessage, messageIdentity, playIncomingTone, roomId, showIncomingToast, staffTypingName, t.careTeamLabel]);
 
   const broadcastTypingState = useCallback((isTyping: boolean) => {
     if (!typingChannelRef.current) return;
@@ -679,7 +687,15 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     const nextMessages = (msgs || []).filter((message: any) => !message?.is_internal);
     setMessages(nextMessages);
     const latestStaffMessage = [...nextMessages].reverse().find((message: any) => message.sender_type === "staff");
-    lastKnownStaffMessageKeyRef.current = latestStaffMessage ? messageIdentity(latestStaffMessage) : "";
+    const latestStaffMessageKey = latestStaffMessage ? messageIdentity(latestStaffMessage) : "";
+    lastKnownStaffMessageKeyRef.current = latestStaffMessageKey;
+    if (typeof window !== "undefined") {
+      if (latestStaffMessageKey) {
+        window.localStorage.setItem(lastAlertedStaffMessageKeyForRoom(roomId), latestStaffMessageKey);
+      } else {
+        window.localStorage.removeItem(lastAlertedStaffMessageKeyForRoom(roomId));
+      }
+    }
     setLoading(false);
   };
 
