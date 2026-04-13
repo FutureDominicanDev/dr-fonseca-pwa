@@ -735,6 +735,7 @@ export default function InboxPage() {
       const lastSeen = localStorage.getItem(`last_seen_${roomId}`) || "0";
       const lastAlert = localStorage.getItem(`last_alert_${roomId}`) || "0";
       if (latestMessage.created_at > lastSeen && latestMessage.created_at > lastAlert) {
+        playIncomingTone();
         showToastAlert(roomId, roomPatientName(roomId), describeIncomingMessage(latestMessage));
         pushNotif(roomPatientName(roomId), describeIncomingMessage(latestMessage));
         localStorage.setItem(`last_alert_${roomId}`, latestMessage.created_at);

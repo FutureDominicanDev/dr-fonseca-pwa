@@ -1497,24 +1497,25 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           )}
         </header>
 
-        <main style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 14px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
-          {toastAlert && (
-            <div style={{ position: "sticky", top: 0, zIndex: 12, display: "flex", justifyContent: "center" }}>
-              <div style={{ width: "min(100%, 420px)", background: settings.darkMode ? "rgba(17,24,39,0.96)" : "rgba(255,255,255,0.98)", color: textColor, border: `1px solid ${border}`, borderRadius: 18, boxShadow: "0 18px 46px rgba(15,23,42,0.16)", padding: "12px 14px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#2563EB", flexShrink: 0 }} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: settings.darkMode ? "#93C5FD" : "#1D4ED8" }}>
-                      {settings.lang === "es" ? "Nuevo mensaje del equipo" : "New message from the care team"}
-                    </div>
-                    <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{toastAlert.title}</div>
-                    <div style={{ fontSize: 13, color: subText, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{toastAlert.body}</div>
+        {toastAlert && (
+          <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top) + 122px)", left: 12, right: 12, zIndex: 120, display: "flex", justifyContent: "center" }}>
+            <div style={{ width: "min(100%, 420px)", background: settings.darkMode ? "rgba(17,24,39,0.96)" : "rgba(255,255,255,0.98)", color: textColor, border: `1px solid ${border}`, borderRadius: 18, boxShadow: "0 18px 46px rgba(15,23,42,0.16)", padding: "12px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#2563EB", flexShrink: 0 }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: settings.darkMode ? "#93C5FD" : "#1D4ED8" }}>
+                    {settings.lang === "es" ? "Nuevo mensaje del equipo" : "New message from the care team"}
                   </div>
-                  <button onClick={() => setToastAlert(null)} style={{ border: "none", background: "transparent", color: subText, cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+                  <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{toastAlert.title}</div>
+                  <div style={{ fontSize: 13, color: subText, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{toastAlert.body}</div>
                 </div>
+                <button onClick={() => setToastAlert(null)} style={{ border: "none", background: "transparent", color: subText, cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
               </div>
             </div>
-          )}
+          </div>
+        )}
+
+        <main style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 14px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
           {groupedMessages.length === 0 ? (
             <div style={{ marginTop: 36, background: surface, borderRadius: 24, padding: 24, textAlign: "center", boxShadow: "0 10px 30px rgba(15,23,42,0.08)" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
