@@ -1163,7 +1163,9 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const renderMessage = (message: any) => {
     const isPatient = message.sender_type === "patient";
-    const senderDisplayName = isPatient ? patientName : (message.sender_name || t.careTeamLabel);
+    const senderDisplayName = isPatient
+      ? (settings.lang === "es" ? "Tú" : "You")
+      : (message.sender_name || t.careTeamLabel);
     const bubbleStyle: React.CSSProperties = {
       background: isPatient ? bubbleOut : bubbleIn,
       color: isPatient ? "#111827" : textColor,
