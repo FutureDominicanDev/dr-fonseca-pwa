@@ -1136,6 +1136,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const renderMessage = (message: any) => {
     const isPatient = message.sender_type === "patient";
+    const senderDisplayName = isPatient ? patientName : (message.sender_name || t.careTeamLabel);
     const bubbleStyle: React.CSSProperties = {
       background: isPatient ? bubbleOut : bubbleIn,
       color: isPatient ? "#111827" : textColor,
@@ -1150,7 +1151,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       return (
         <div key={message.id} style={{ display: "flex", flexDirection: "column", alignItems: isPatient ? "flex-end" : "flex-start", gap: 4 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: isPatient ? "#166534" : subText }}>
-            {isPatient ? patientName : t.clinic}
+            {senderDisplayName}
           </div>
           <div style={{ ...bubbleStyle, fontStyle: "italic", opacity: 0.68, padding: "11px 14px" }}>
             {t.msgDeleted}
@@ -1181,7 +1182,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     return (
       <div key={message.id} style={{ display: "flex", flexDirection: "column", alignItems: isPatient ? "flex-end" : "flex-start", gap: 4 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: isPatient ? "#166534" : subText }}>
-          {isPatient ? patientName : t.clinic}
+          {senderDisplayName}
         </div>
         <div style={bubbleStyle}>
           {body}
