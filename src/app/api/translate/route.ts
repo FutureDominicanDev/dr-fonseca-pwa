@@ -7,7 +7,10 @@ type TranslateBody = {
 };
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_API_KEY_FALLBACK = process.env.OPENA1_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_TRANSLATE_MODEL || "gpt-4o-mini";
+
+const getApiKey = () => OPENAI_API_KEY || OPENAI_API_KEY_FALLBACK;
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,7 +24,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ translatedText: text, skipped: true });
     }
 
-    if (!OPENAI_API_KEY) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
       // Keep UX safe: no key should never break chat rendering.
       return NextResponse.json({ translatedText: text, skipped: true });
     }
@@ -29,36 +33,56 @@ export async function POST(req: NextRequest) {
     const languageName = targetLang === "es" ? "Spanish" : "English";
     const sourceHint = sourceLang === "auto" ? "auto-detect source language" : `source language is ${sourceLang}`;
 
+    const prompt =
+      `You translate short medical chat messages. ${sourceHint}. Translate into ${languageName}. ` +
+      "Keep names, numbers, medications, dates, and tone. Return only translated text, no quotes.";
+
+    // First try modern Responses API
+    const responsesRequest = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        temperature: 0,
+        input: [
+          { role: "system", content: [{ type: "input_text", text: prompt }] },
+          { role: "user", content: [{ type: "input_text", text }] },
+        ],
+      }),
+    });
+
+    if (responsesRequest.ok) {
+      const json = await responsesRequest.json();
+      const translatedText = `${json?.output_text || ""}`.trim();
+      if (translatedText) return NextResponse.json({ translatedText });
+    }
+
+    // Fallback to chat/completions for compatibility
     const completion = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: OPENAI_MODEL,
         temperature: 0,
         messages: [
-          {
-            role: "system",
-            content:
-              `You translate short medical chat messages. ${sourceHint}. Translate into ${languageName}. ` +
-              "Keep names, numbers, medications, dates, and tone. Return only translated text, no quotes.",
-          },
+          { role: "system", content: prompt },
           { role: "user", content: text },
         ],
       }),
     });
 
-    if (!completion.ok) {
-      return NextResponse.json({ translatedText: text, skipped: true });
-    }
+    if (!completion.ok) return NextResponse.json({ translatedText: text, skipped: true });
 
-    const json = await completion.json();
-    const translatedText = `${json?.choices?.[0]?.message?.content || ""}`.trim() || text;
+    const completionJson = await completion.json();
+    const translatedText = `${completionJson?.choices?.[0]?.message?.content || ""}`.trim() || text;
     return NextResponse.json({ translatedText });
   } catch {
     return NextResponse.json({ translatedText: "", skipped: true });
   }
 }
-
