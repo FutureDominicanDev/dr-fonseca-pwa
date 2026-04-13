@@ -154,6 +154,7 @@ const T = {
 
 const storageKeyForRoom = (roomId: string) => `patient-room-settings-${roomId}`;
 const setupDismissedKeyForRoom = (roomId: string) => `patient-room-setup-dismissed-${roomId}`;
+const setupDismissedGlobalKey = "patient-room-setup-dismissed-global-v1";
 
 export default function PatientPage({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = use(params);
@@ -416,13 +417,14 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKeyForRoom(roomId)) : null;
     const dismissed = typeof window !== "undefined" ? window.localStorage.getItem(setupDismissedKeyForRoom(roomId)) : null;
+    const dismissedGlobal = typeof window !== "undefined" ? window.localStorage.getItem(setupDismissedGlobalKey) : null;
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as PatientSettings;
         setSettings(parsed);
       } catch {}
     }
-    if (dismissed === "1") setSetupDismissed(true);
+    if (dismissed === "1" || dismissedGlobal === "1") setSetupDismissed(true);
   }, [roomId]);
 
   useEffect(() => {
@@ -829,7 +831,10 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const hideSetupPanel = () => {
     setSetupDismissed(true);
     setShowInstallHelp(false);
-    if (typeof window !== "undefined") window.localStorage.setItem(setupDismissedKeyForRoom(roomId), "1");
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(setupDismissedKeyForRoom(roomId), "1");
+      window.localStorage.setItem(setupDismissedGlobalKey, "1");
+    }
   };
 
   const uploadPatientFile = async (file: File) => {
@@ -1080,7 +1085,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       : "";
 
   const setupComplete = notificationsPermission === "granted" && (isStandalone || !isAppleMobile);
-  const showSetupPanel = !setupDismissed && (!setupComplete || showInstallHelp);
+  const showSetupPanel = !setupDismissed && !isStandalone && (!setupComplete || showInstallHelp);
 
   useEffect(() => {
     let cancelled = false;
