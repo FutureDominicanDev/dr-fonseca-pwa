@@ -426,6 +426,7 @@ export default function InboxPage() {
   const audioUnlockedRef = useRef(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const translationCacheRef = useRef<Record<string, string>>({});
+  const pauseBackgroundRefreshRef = useRef(false);
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
@@ -1040,6 +1041,7 @@ export default function InboxPage() {
   // Fallback: refresh sidebar/messages frequently in case realtime drops events on mobile or background tabs
   useEffect(()=>{
     const refresh = () => {
+      if (pauseBackgroundRefreshRef.current) return;
       fetchRooms();
       if (selectedRoomRef.current) fetchMessages(selectedRoomRef.current.id);
     };
@@ -1054,6 +1056,10 @@ export default function InboxPage() {
   useEffect(() => () => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
   }, []);
+
+  useEffect(() => {
+    pauseBackgroundRefreshRef.current = showSettings || showPatientInfo || showNewRoom || showQREditor;
+  }, [showNewRoom, showPatientInfo, showQREditor, showSettings]);
 
   useEffect(()=>{
     if (!shouldAutoScrollRef.current) return;

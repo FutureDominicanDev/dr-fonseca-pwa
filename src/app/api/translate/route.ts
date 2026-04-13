@@ -81,7 +81,23 @@ export async function POST(req: NextRequest) {
 
     const completionJson = await completion.json();
     const translatedText = `${completionJson?.choices?.[0]?.message?.content || ""}`.trim() || text;
-    return NextResponse.json({ translatedText });
+    if (translatedText && translatedText !== text) return NextResponse.json({ translatedText });
+
+    // Final fallback: public Google translate endpoint (no auth) for resiliency.
+    const sl = sourceLang === "auto" ? "auto" : sourceLang;
+    const tl = targetLang;
+    const googleUrl =
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
+    const googleResponse = await fetch(googleUrl);
+    if (!googleResponse.ok) return NextResponse.json({ translatedText: text, skipped: true });
+    const googleJson = await googleResponse.json();
+    const translatedChunks = Array.isArray(googleJson?.[0]) ? googleJson[0] : [];
+    const googleTranslated = translatedChunks
+      .map((chunk: any) => (Array.isArray(chunk) ? `${chunk[0] || ""}` : ""))
+      .join("")
+      .trim();
+
+    return NextResponse.json({ translatedText: googleTranslated || text });
   } catch {
     return NextResponse.json({ translatedText: "", skipped: true });
   }
