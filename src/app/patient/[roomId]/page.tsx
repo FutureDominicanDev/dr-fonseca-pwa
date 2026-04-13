@@ -175,6 +175,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [setupFeedback, setSetupFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   const [toastAlert, setToastAlert] = useState<{ title: string; body: string } | null>(null);
+  const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
+  const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
@@ -224,6 +226,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const audioUnlockedRef = useRef(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastKnownStaffMessageKeyRef = useRef("");
+  const translationCacheRef = useRef<Record<string, string>>({});
 
   const t = T[settings.lang];
   const fontSize = settings.fontSizeLevel === "small" ? 14 : settings.fontSizeLevel === "large" ? 19 : 16;
@@ -343,6 +346,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     if (!message) return "";
     return `${message.id || "no-id"}:${message.created_at || ""}:${message.sender_type || ""}`;
   }, []);
+  const translationKey = useCallback((messageId: string | number, targetLang: "es" | "en") => `incoming_translate_${String(messageId)}_${targetLang}`, []);
 
   const showIncomingToast = useCallback((title: string, body: string) => {
     setToastAlert({ title, body });
@@ -453,12 +457,14 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(storageKeyForRoom(roomId)) : null;
     const dismissed = typeof window !== "undefined" ? window.localStorage.getItem(setupDismissedKeyForRoom(roomId)) : null;
     const dismissedGlobal = typeof window !== "undefined" ? window.localStorage.getItem(setupDismissedGlobalKey) : null;
+    const translatePref = typeof window !== "undefined" ? window.localStorage.getItem(`patient_auto_translate_incoming_${roomId}`) : null;
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as PatientSettings;
         setSettings(parsed);
       } catch {}
     }
+    if (translatePref === "0") setAutoTranslateIncoming(false);
     if (dismissed === "1" || dismissedGlobal === "1") setSetupDismissed(true);
   }, [roomId]);
 
@@ -467,6 +473,61 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       window.localStorage.setItem(storageKeyForRoom(roomId), JSON.stringify(settings));
     }
   }, [roomId, settings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(`patient_auto_translate_incoming_${roomId}`, autoTranslateIncoming ? "1" : "0");
+  }, [autoTranslateIncoming, roomId]);
+
+  useEffect(() => {
+    setTranslatedIncoming({});
+    translationCacheRef.current = {};
+  }, [settings.lang]);
+
+  useEffect(() => {
+    if (!autoTranslateIncoming) return;
+    const candidates = messages.filter(
+      (entry) =>
+        entry?.sender_type === "staff" &&
+        entry?.message_type === "text" &&
+        !entry?.deleted_by_staff &&
+        !entry?.deleted_by_patient &&
+        !entry?.is_internal &&
+        `${entry?.content || ""}`.trim().length > 0 &&
+        entry?.id
+    );
+    if (!candidates.length) return;
+
+    let cancelled = false;
+    const run = async () => {
+      for (const message of candidates) {
+        const key = translationKey(message.id, settings.lang);
+        if (translationCacheRef.current[key]) continue;
+        try {
+          const res = await fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: message.content,
+              targetLang: settings.lang,
+              sourceLang: "auto",
+            }),
+          });
+          const json = await res.json();
+          const translatedText = `${json?.translatedText || ""}`.trim();
+          if (!translatedText || cancelled) continue;
+          translationCacheRef.current[key] = translatedText;
+          setTranslatedIncoming((prev) => ({ ...prev, [key]: translatedText }));
+        } catch {
+          // Silent fallback: keep original text.
+        }
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [autoTranslateIncoming, messages, settings.lang, translationKey]);
 
   // Helper: convert VAPID public key to Uint8Array for push subscription
   const urlBase64ToUint8Array = (base64String: string) => {
@@ -1191,6 +1252,10 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       boxShadow: "0 2px 8px rgba(15,23,42,0.08)",
       border: isPatient ? "none" : `1px solid ${border}`,
     };
+    const translated = !isPatient && autoTranslateIncoming && message.message_type === "text" && message.id
+      ? translatedIncoming[translationKey(message.id, settings.lang)] || ""
+      : "";
+    const contentToRender = translated || message.content;
 
     if (message.deleted_by_patient) {
       return (
@@ -1221,7 +1286,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         </a>
       );
     } else {
-      body = <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize }}>{message.content}</div>;
+      body = <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize }}>{contentToRender}</div>;
     }
 
     return (
@@ -1411,6 +1476,22 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                     <button onClick={() => setSettings((prev) => ({ ...prev, lang: "en", quickReplies: prev.quickReplies.length ? prev.quickReplies : DEFAULT_QUICK_REPLIES.en }))} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: settings.lang === "en" ? "2px solid #2563EB" : `1px solid ${border}`, background: settings.lang === "en" ? "#DBEAFE" : settings.darkMode ? "#0F172A" : "white", color: settings.lang === "en" ? "#2563EB" : textColor, fontWeight: 700, cursor: "pointer" }}>🇺🇸 English</button>
                   </div>
                   <p style={{ margin: "8px 0 0", color: subText, fontSize: 13 }}>{labelPatientLanguage(room?.procedures?.patients?.preferred_language, settings.lang)}</p>
+                </div>
+              </section>
+
+              <section style={{ background: settings.darkMode ? "#111827" : "#F8FAFC", border: `1px solid ${border}`, borderRadius: 18, padding: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div>
+                    <div style={{ color: textColor, fontWeight: 700, fontSize: 15 }}>
+                      {settings.lang === "es" ? "Traducir mensajes del equipo automáticamente" : "Auto-translate care-team messages"}
+                    </div>
+                    <div style={{ color: subText, fontSize: 13, marginTop: 6 }}>
+                      {settings.lang === "es" ? "Solo cambia cómo se muestran tus mensajes recibidos." : "Only changes how incoming messages are displayed."}
+                    </div>
+                  </div>
+                  <button onClick={() => setAutoTranslateIncoming((prev) => !prev)} style={{ width: 52, height: 30, borderRadius: 999, border: "none", cursor: "pointer", position: "relative", background: autoTranslateIncoming ? "#2563EB" : "#D1D5DB" }}>
+                    <div style={{ position: "absolute", top: 2, left: autoTranslateIncoming ? 24 : 2, width: 26, height: 26, borderRadius: "50%", background: "white", transition: "left .2s" }} />
+                  </button>
                 </div>
               </section>
 

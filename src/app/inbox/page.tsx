@@ -392,6 +392,8 @@ export default function InboxPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
+  const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
+  const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -423,6 +425,7 @@ export default function InboxPage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioUnlockedRef = useRef(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const translationCacheRef = useRef<Record<string, string>>({});
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
@@ -545,6 +548,7 @@ export default function InboxPage() {
     const patient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === roomId));
     return patient?.full_name || t.patientLabel;
   }, [patients, t.patientLabel]);
+  const translationKey = useCallback((messageId: string | number, targetLang: "es" | "en") => `incoming_translate_${String(messageId)}_${targetLang}`, []);
   const alertMessageStorageKey = useCallback((roomId: string) => `last_alert_message_${roomId}`, []);
   const incomingMessageKey = useCallback((message: any) => {
     if (!message) return "";
@@ -678,6 +682,67 @@ export default function InboxPage() {
       window.removeEventListener("keydown", unlock);
     };
   }, [armAudioAlerts]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("inbox_auto_translate_incoming");
+    if (stored === "0") setAutoTranslateIncoming(false);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("inbox_auto_translate_incoming", autoTranslateIncoming ? "1" : "0");
+  }, [autoTranslateIncoming]);
+
+  useEffect(() => {
+    setTranslatedIncoming({});
+    translationCacheRef.current = {};
+  }, [lang]);
+
+  useEffect(() => {
+    if (!autoTranslateIncoming) return;
+    const candidates = messages.filter(
+      (entry) =>
+        entry?.sender_type === "patient" &&
+        entry?.message_type === "text" &&
+        !entry?.deleted_by_staff &&
+        !entry?.deleted_by_patient &&
+        !entry?.is_internal &&
+        `${entry?.content || ""}`.trim().length > 0 &&
+        entry?.id
+    );
+    if (!candidates.length) return;
+
+    let cancelled = false;
+    const run = async () => {
+      for (const message of candidates) {
+        const key = translationKey(message.id, lang);
+        if (translationCacheRef.current[key]) continue;
+        try {
+          const res = await fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: message.content,
+              targetLang: lang,
+              sourceLang: "auto",
+            }),
+          });
+          const json = await res.json();
+          const translatedText = `${json?.translatedText || ""}`.trim();
+          if (!translatedText || cancelled) continue;
+          translationCacheRef.current[key] = translatedText;
+          setTranslatedIncoming((prev) => ({ ...prev, [key]: translatedText }));
+        } catch {
+          // Silent fallback: keep original text.
+        }
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [autoTranslateIncoming, lang, messages, translationKey]);
 
   // --- Web Push subscription for staff ---
   const urlBase64ToUint8Array = (b64: string) => {
@@ -1378,6 +1443,10 @@ export default function InboxPage() {
     const sn = isOut && !!currentUserId && msg.sender_id === currentUserId
       ? (lang === "es" ? "Tú" : "You")
       : (msg.sender_name || (isOut ? "Staff" : "Paciente"));
+    const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id
+      ? translatedIncoming[translationKey(msg.id, lang)] || ""
+      : "";
+    const contentToRender = translated || msg.content;
     const effectiveType=msg.message_type==="text"&&isImageUrl(msg.content)?"image":msg.message_type;
 
     if (isSystem) return (
@@ -1422,7 +1491,7 @@ export default function InboxPage() {
           </div>
         ):(
           <div style={{...bubbleStyle,lineHeight:1.6,wordBreak:"break-word",fontSize}}>
-            {msg.content}
+            {contentToRender}
             <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
               {fmtTime(msg.created_at)}
               {isOut&&<span style={{color:"#007AFF"}}>✓✓</span>}
@@ -1516,6 +1585,22 @@ export default function InboxPage() {
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setLang("es")} style={{flex:1,padding:12,borderRadius:10,border:lang==="es"?"2px solid #007AFF":`2px solid ${borderColor}`,background:lang==="es"?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:lang==="es"?"#007AFF":textColor,fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:15}}>🇲🇽 Español</button>
               <button onClick={()=>setLang("en")} style={{flex:1,padding:12,borderRadius:10,border:lang==="en"?"2px solid #007AFF":`2px solid ${borderColor}`,background:lang==="en"?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:lang==="en"?"#007AFF":textColor,fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:15}}>🇺🇸 English</button>
+            </div>
+          </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>🌍 {lang==="es" ? "Traducción" : "Translation"}</p>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+              <div>
+                <p style={{fontSize:15,fontWeight:700,color:textColor,margin:0}}>
+                  {lang==="es" ? "Traducir mensajes de pacientes automáticamente" : "Auto-translate patient messages"}
+                </p>
+                <p style={{fontSize:13,color:subTextColor,marginTop:6}}>
+                  {lang==="es" ? "Solo cambia cómo se muestran tus mensajes entrantes." : "Only changes how incoming messages are displayed."}
+                </p>
+              </div>
+              <button onClick={()=>setAutoTranslateIncoming((prev)=>!prev)} style={{width:52,height:30,borderRadius:99,background:autoTranslateIncoming?"#34C759":"#E5E5EA",border:"none",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
+                <div style={{width:26,height:26,borderRadius:"50%",background:"white",position:"absolute",top:2,left:autoTranslateIncoming?24:2,transition:"left 0.2s",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}}/>
+              </button>
             </div>
           </div>
         </div>
