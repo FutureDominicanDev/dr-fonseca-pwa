@@ -174,6 +174,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [setupFeedback, setSetupFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   const [toastAlert, setToastAlert] = useState<{ title: string; body: string } | null>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
   const [recordingAudio, setRecordingAudio] = useState(false);
@@ -197,6 +198,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
+  const lastMessageCountRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaLibraryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -352,6 +354,13 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     if (!container) return;
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     shouldAutoScrollRef.current = distanceFromBottom < 120;
+    if (shouldAutoScrollRef.current) setShowJumpToLatest(false);
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    shouldAutoScrollRef.current = true;
+    setShowJumpToLatest(false);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   const notifyIncomingMessage = useCallback(async (message: any) => {
@@ -413,8 +422,16 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   useEffect(() => {
     if (!shouldAutoScrollRef.current) return;
+    setShowJumpToLatest(false);
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (messages.length > lastMessageCountRef.current && !shouldAutoScrollRef.current) {
+      setShowJumpToLatest(true);
+    }
+    lastMessageCountRef.current = messages.length;
+  }, [messages.length]);
 
   useEffect(() => {
     return () => {
@@ -1553,6 +1570,27 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           )}
           <div ref={messagesEndRef} />
         </main>
+        {showJumpToLatest && (
+          <button
+            onClick={jumpToLatest}
+            style={{
+              position: "fixed",
+              right: 16,
+              bottom: "calc(env(safe-area-inset-bottom) + 92px)",
+              zIndex: 130,
+              border: "none",
+              borderRadius: 999,
+              padding: "10px 14px",
+              background: "#2563EB",
+              color: "white",
+              fontWeight: 800,
+              boxShadow: "0 10px 24px rgba(37,99,235,0.35)",
+              cursor: "pointer",
+            }}
+          >
+            {settings.lang === "es" ? "Nuevos mensajes ↓" : "New messages ↓"}
+          </button>
+        )}
 
         <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: surface, borderTop: `1px solid ${border}`, padding: "10px 12px calc(env(safe-area-inset-bottom) + 10px)", boxShadow: "0 -10px 30px rgba(15,23,42,0.08)" }}>
           {showSlashMenu && slashMatches.length > 0 && (

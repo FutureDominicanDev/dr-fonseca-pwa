@@ -388,6 +388,7 @@ export default function InboxPage() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [patientTyping, setPatientTyping] = useState(false);
   const [toastAlert, setToastAlert] = useState<{ roomId: string; title: string; body: string } | null>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
@@ -395,6 +396,7 @@ export default function InboxPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
+  const lastMessageCountRef = useRef(0);
   const selectedRoomRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -548,6 +550,13 @@ export default function InboxPage() {
     if (!container) return;
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     shouldAutoScrollRef.current = distanceFromBottom < 120;
+    if (shouldAutoScrollRef.current) setShowJumpToLatest(false);
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    shouldAutoScrollRef.current = true;
+    setShowJumpToLatest(false);
+    messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
   }, []);
 
   const pushNotif = useCallback((title: string, body: string) => {
@@ -938,6 +947,8 @@ export default function InboxPage() {
   useEffect(()=>{
     if (selectedRoom) {
       shouldAutoScrollRef.current = true;
+      setShowJumpToLatest(false);
+      lastMessageCountRef.current = 0;
       fetchMessages(selectedRoom.id);
       fetchSelectedRoomTeam(selectedRoom.id);
       setMobileView("chat");
@@ -965,8 +976,16 @@ export default function InboxPage() {
 
   useEffect(()=>{
     if (!shouldAutoScrollRef.current) return;
+    setShowJumpToLatest(false);
     messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
   },[messages]);
+
+  useEffect(() => {
+    if (messages.length > lastMessageCountRef.current && !shouldAutoScrollRef.current) {
+      setShowJumpToLatest(true);
+    }
+    lastMessageCountRef.current = messages.length;
+  }, [messages.length]);
 
   useEffect(() => {
     if (captureMode && mediaCaptureVideoRef.current && captureStreamRef.current) {
@@ -2081,6 +2100,28 @@ export default function InboxPage() {
                   ))}
                   <div ref={messagesEndRef}/>
                 </div>
+                {showJumpToLatest && (
+                  <button
+                    onClick={jumpToLatest}
+                    style={{
+                      position:"absolute",
+                      right:16,
+                      bottom:"calc(env(safe-area-inset-bottom) + 86px)",
+                      zIndex:35,
+                      border:"none",
+                      borderRadius:999,
+                      padding:"10px 14px",
+                      background:"#2563EB",
+                      color:"white",
+                      fontSize:13,
+                      fontWeight:800,
+                      cursor:"pointer",
+                      boxShadow:"0 10px 24px rgba(37,99,235,0.35)",
+                    }}
+                  >
+                    {lang==="es" ? "Nuevos mensajes ↓" : "New messages ↓"}
+                  </button>
+                )}
 
                 {showSlashMenu&&slashFiltered.length>0&&(
                   <div className="slash-popup" onClick={e=>e.stopPropagation()}>
