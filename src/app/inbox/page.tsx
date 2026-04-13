@@ -305,7 +305,7 @@ export default function InboxPage() {
   const t = T[lang];
   const [darkMode, setDarkMode] = useState(false);
   const [fontSizeLevel, setFontSizeLevel] = useState<"small"|"medium"|"large">("medium");
-  const fontSize = fontSizeLevel === "small" ? 14 : fontSizeLevel === "large" ? 19 : 16;
+  const fontSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 20 : 17;
 
   const bg = darkMode ? "#1C1C1E" : "#ECE5DD";
   const headerBg = darkMode ? "#111" : "#1C1C1E";
@@ -1462,7 +1462,7 @@ export default function InboxPage() {
 
     return (
       <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}>
-        <div style={{fontSize:12,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
+        <div style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
         {msg.deleted_by_patient?(
           <div style={{...bubbleStyle,fontStyle:"italic",opacity:0.72,fontSize}}>{t.msgDeleted}<div style={{fontSize:12,opacity:0.75,marginTop:3,textAlign:"right"}}>{fmtTime(msg.created_at)}</div></div>
         ):effectiveType==="image"?(
@@ -1490,7 +1490,7 @@ export default function InboxPage() {
             <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
-          <div style={{...bubbleStyle,lineHeight:1.6,wordBreak:"break-word",fontSize}}>
+          <div style={{...bubbleStyle,lineHeight:1.75,wordBreak:"break-word",fontSize,fontWeight:500}}>
             {contentToRender}
             <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
               {fmtTime(msg.created_at)}
