@@ -475,6 +475,7 @@ export default function InboxPage() {
     setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   };
   const canOpenAdmin = currentUserEmail.toLowerCase()===OWNER_EMAIL || ["owner","super_admin","admin"].includes(userProfile?.admin_level||"");
+  const canManageCareTeam = (userProfile?.role || "").toLowerCase() === "doctor" || ["owner","super_admin"].includes(userProfile?.admin_level || "");
   const careTeamDirectory = showAllCareTeamOptions
     ? staffDirectory
     : staffDirectory.filter((member) => !member.office_location || member.office_location === newLocation);
@@ -1114,6 +1115,10 @@ export default function InboxPage() {
   };
 
   const saveManagedTeam = async () => {
+    if (!canManageCareTeam) {
+      alert(lang === "es" ? "Solo el doctor o un super admin puede cambiar el equipo asignado." : "Only the doctor or a super admin can change the assigned care team.");
+      return;
+    }
     if (!selectedRoom || savingTeam) return;
     setSavingTeam(true);
     const creatorId = selectedRoom.created_by || currentUserId || null;
@@ -1570,7 +1575,7 @@ export default function InboxPage() {
                   ))}
                 </div>
               )}
-              {canOpenAdmin && (
+              {canManageCareTeam && (
                 <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${borderColor}`}}>
                   <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{t.manageTeam}</p>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
@@ -1931,7 +1936,7 @@ export default function InboxPage() {
       )}
 
       {showSettings&&<SettingsPanel/>}
-      {showPatientInfo&&selectedRoom&&<PatientInfoPanel/>}
+      {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
 
       <QREditor
         show={showQREditor}
