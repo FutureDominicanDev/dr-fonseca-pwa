@@ -195,6 +195,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   });
   const [newQuickReply, setNewQuickReply] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaLibraryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -345,6 +347,13 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     toastTimeoutRef.current = setTimeout(() => setToastAlert(null), 4500);
   }, []);
 
+  const updateAutoScrollPreference = useCallback(() => {
+    const container = chatScrollRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom < 120;
+  }, []);
+
   const notifyIncomingMessage = useCallback(async (message: any) => {
     playIncomingTone();
     showIncomingToast(message.sender_name || staffTypingName || t.careTeamLabel, describeIncomingMessage(message));
@@ -403,6 +412,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   }, [broadcastTypingState]);
 
   useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -1516,7 +1526,11 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           </div>
         )}
 
-        <main style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 14px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <main
+          ref={(node) => { chatScrollRef.current = node; }}
+          onScroll={updateAutoScrollPreference}
+          style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 14px 120px", display: "flex", flexDirection: "column", gap: 14 }}
+        >
           {groupedMessages.length === 0 ? (
             <div style={{ marginTop: 36, background: surface, borderRadius: 24, padding: 24, textAlign: "center", boxShadow: "0 10px 30px rgba(15,23,42,0.08)" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>

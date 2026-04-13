@@ -393,6 +393,8 @@ export default function InboxPage() {
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
   const selectedRoomRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -540,6 +542,13 @@ export default function InboxPage() {
     const patient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === roomId));
     return patient?.full_name || t.patientLabel;
   }, [patients, t.patientLabel]);
+
+  const updateAutoScrollPreference = useCallback(() => {
+    const container = chatScrollRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom < 120;
+  }, []);
 
   const pushNotif = useCallback((title: string, body: string) => {
     if (notifRef.current==="granted"&&"serviceWorker" in navigator) {
@@ -928,6 +937,7 @@ export default function InboxPage() {
 
   useEffect(()=>{
     if (selectedRoom) {
+      shouldAutoScrollRef.current = true;
       fetchMessages(selectedRoom.id);
       fetchSelectedRoomTeam(selectedRoom.id);
       setMobileView("chat");
@@ -953,7 +963,10 @@ export default function InboxPage() {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
   }, []);
 
-  useEffect(()=>{ messagesEndRef.current?.scrollIntoView({behavior:"smooth"}); },[messages]);
+  useEffect(()=>{
+    if (!shouldAutoScrollRef.current) return;
+    messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
+  },[messages]);
 
   useEffect(() => {
     if (captureMode && mediaCaptureVideoRef.current && captureStreamRef.current) {
@@ -2048,7 +2061,12 @@ export default function InboxPage() {
                   <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
                 </div>
 
-                <div className="chat-bg" onClick={()=>setShowSlashMenu(false)}>
+                <div
+                  className="chat-bg"
+                  ref={chatScrollRef}
+                  onScroll={updateAutoScrollPreference}
+                  onClick={()=>setShowSlashMenu(false)}
+                >
                   {messages.filter(m=>!m.deleted_by_staff).length===0?(
                     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:40,textAlign:"center"}}>
                       <div style={{fontSize:44}}>💬</div>
