@@ -25,10 +25,13 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Outfit', sans-serif;
+  font-family: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: #F2F5F9;
+  color: #111827;
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -50,8 +53,13 @@ input, textarea {
 }
 
 ::-webkit-scrollbar {
-  width: 0px;
+  width: 10px;
   background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.38);
+  border-radius: 999px;
 }
 
 * {

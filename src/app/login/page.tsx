@@ -40,7 +40,7 @@ export default function LoginPage() {
         .logo-section { background: white; padding: 36px 28px 24px; display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #E5E5EA; }
         .form-section { padding: 32px 28px 40px; }
         .page-title { font-size: 26px; font-weight: 800; color: #000000; margin-bottom: 6px; }
-        .page-sub { font-size: 15px; color: #000000; font-weight: 500; margin-bottom: 28px; opacity: 0.6; }
+        .page-sub { font-size: 16px; color: #000000; font-weight: 600; margin-bottom: 28px; opacity: 0.82; line-height: 1.5; }
         .form-label { font-size: 13px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block; }
         .form-input { width: 100%; padding: 14px 16px; background: #F2F2F7; border: none; border-radius: 12px; font-size: 16px; font-family: inherit; color: #000000; outline: none; margin-bottom: 16px; font-weight: 600; transition: all 0.15s; }
         .form-input:focus { background: white; box-shadow: 0 0 0 2px rgba(0,122,255,0.3); }
@@ -57,7 +57,7 @@ export default function LoginPage() {
         .back-btn { width: 100%; padding: 13px; background: #F2F2F7; border: none; border-radius: 14px; color: #000000; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 10px; }
         .back-btn:hover { background: #E5E5EA; }
         .error-box { background: #FFF0EE; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; font-weight: 700; color: #FF3B30; text-align: center; }
-        .footer-text { font-size: 14px; color: #000000; text-align: center; margin-top: 20px; font-weight: 600; opacity: 0.6; }
+        .footer-text { font-size: 14px; color: #000000; text-align: center; margin-top: 20px; font-weight: 600; opacity: 0.82; }
         .footer-text span { color: #007AFF; font-weight: 800; cursor: pointer; opacity: 1; }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>

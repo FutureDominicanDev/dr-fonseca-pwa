@@ -170,14 +170,14 @@ export default function RegisterPage() {
         .logo-sec { background: white; padding: 36px 28px 24px; display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #E5E5EA; }
         .form-sec { background: white; padding: 32px 28px 40px; }
         .reg-title { font-size: 26px; font-weight: 800; color: #000; margin-bottom: 6px; text-align: center; }
-        .reg-sub { font-size: 15px; color: #000; font-weight: 500; margin-bottom: 28px; text-align: center; opacity: 0.6; }
+        .reg-sub { font-size: 16px; color: #000; font-weight: 600; margin-bottom: 28px; text-align: center; opacity: 0.82; line-height: 1.5; }
         .flabel { font-size: 13px; font-weight: 800; color: #000; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block; }
         .err { background: #FFF0EE; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; font-weight: 700; color: #FF3B30; text-align: center; }
         .code-inp { width: 100%; padding: 16px; background: #F2F2F7; border: none; border-radius: 12px; font-size: 22px; font-family: inherit; color: #007AFF; outline: none; margin-bottom: 20px; font-weight: 800; text-align: center; letter-spacing: 6px; }
         .code-inp::placeholder { color: #C7C7CC; letter-spacing: 2px; font-size: 16px; font-weight: 500; }
         .rbtn { width: 100%; padding: 16px; background: #007AFF; border: none; border-radius: 14px; color: white; font-size: 16px; font-weight: 800; cursor: pointer; font-family: inherit; margin-top: 8px; }
         .rbtn:disabled { opacity: 0.5; }
-        .llink { font-size: 14px; color: #000; text-align: center; margin-top: 20px; font-weight: 600; opacity: 0.6; }
+        .llink { font-size: 14px; color: #000; text-align: center; margin-top: 20px; font-weight: 600; opacity: 0.82; }
         .llink a { color: #007AFF; font-weight: 800; text-decoration: none; }
       `}</style>
       <div className="code-page">

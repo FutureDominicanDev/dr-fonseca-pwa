@@ -930,7 +930,7 @@ export default function AdminPatientRecordPage() {
         .card, .stat-card, .timeline-card, .media-card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 8px 28px rgba(15,23,42,0.06); }
         .stat-card { padding: 18px 16px; }
         .big-title { font-size: 34px; font-weight: 900; margin: 0 0 8px; }
-        .hero-copy { color: rgba(255,255,255,0.86); font-size: 15px; line-height: 1.6; }
+        .hero-copy { color: rgba(255,255,255,0.94); font-size: 16px; line-height: 1.7; }
         .section-kicker { font-size: 13px; font-weight: 900; color: #6B7280; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 6px; }
         .section-sub { font-size: 14px; color: #64748B; margin: 0; line-height: 1.6; }
         .main-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #007AFF; color: white; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
@@ -939,7 +939,7 @@ export default function AdminPatientRecordPage() {
         .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
         .meta-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; }
         .value-display { font-size: 30px; font-weight: 900; color: #111827; margin-top: 4px; }
-        .muted { color: #6B7280; font-size: 14px; line-height: 1.65; }
+        .muted { color: #4B5563; font-size: 15px; line-height: 1.7; }
         .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
         .procedure-list { display: grid; gap: 12px; }
         .procedure-item { border: 1px solid #E5EDF6; border-radius: 16px; padding: 14px 16px; background: #FCFDFF; }
@@ -960,9 +960,9 @@ export default function AdminPatientRecordPage() {
         .toast { border-radius: 16px; padding: 14px 16px; box-shadow: 0 14px 36px rgba(15,23,42,0.16); font-size: 14px; font-weight: 800; line-height: 1.5; }
         .toast.error { background: #FFF1F2; color: #E11D48; }
         .toast.success { background: #EDFAF1; color: #15803D; }
-        .line-input { width: 100%; padding: 13px 14px; background: #F3F4F6; border: 1px solid transparent; border-radius: 14px; font-size: 15px; color: #111827; font-family: inherit; outline: none; }
+        .line-input { width: 100%; padding: 13px 14px; background: #F3F4F6; border: 1px solid transparent; border-radius: 14px; font-size: 16px; color: #111827; font-family: inherit; outline: none; }
         .line-input:focus { background: white; border-color: rgba(0,122,255,0.4); }
-        .field-label { font-size: 12px; font-weight: 900; color: #64748B; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; display: block; }
+        .field-label { font-size: 13px; font-weight: 900; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; display: block; }
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .photo-card { display: grid; gap: 14px; align-content: start; }
         .patient-photo { width: 124px; height: 124px; border-radius: 22px; object-fit: cover; background: #E5E7EB; box-shadow: 0 10px 24px rgba(15,23,42,0.12); }
@@ -1001,7 +1001,7 @@ export default function AdminPatientRecordPage() {
         <div className="record-topbar">
           <div>
             <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>{t.recordTitle}</p>
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>{t.recordSubtitle}</p>
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.86)", margin: 0 }}>{t.recordSubtitle}</p>
           </div>
           <div className="topbar-right">
             <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
@@ -1076,7 +1076,7 @@ export default function AdminPatientRecordPage() {
                   </div>
 
                   <div className="card" style={{ background: "rgba(255,255,255,0.12)", color: "white", boxShadow: "none" }}>
-                    <p className="section-kicker" style={{ color: "rgba(255,255,255,0.72)" }}>{t.relatedOffices}</p>
+                    <p className="section-kicker" style={{ color: "rgba(255,255,255,0.86)" }}>{t.relatedOffices}</p>
                     <div className="pill-row">
                       {offices.length > 0 ? (
                         offices.map((office) => (

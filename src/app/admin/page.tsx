@@ -504,7 +504,7 @@ export default function AdminPage() {
         .main-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #007AFF; color: white; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
         .main-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .ghost-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
-        .line-input { width: 100%; padding: 14px 16px; background: #F3F4F6; border: 1px solid transparent; border-radius: 14px; font-size: 15px; font-family: inherit; color: #111827; outline: none; font-weight: 600; }
+        .line-input { width: 100%; padding: 14px 16px; background: #F3F4F6; border: 1px solid transparent; border-radius: 14px; font-size: 16px; font-family: inherit; color: #111827; outline: none; font-weight: 600; }
         .line-input:focus { border-color: rgba(0,122,255,0.5); background: white; }
         .grid-2 { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start; }
         .stack { display: grid; gap: 16px; align-content: start; }
@@ -520,7 +520,7 @@ export default function AdminPage() {
         .export-card { background: linear-gradient(135deg, #F8FBFF, #EFF6FF); border: 1px solid #DBEAFE; border-radius: 18px; padding: 16px; }
         .empty-state { text-align: center; padding: 32px 16px; color: #6B7280; border: 1px dashed #D6E0EB; border-radius: 18px; background: #FAFCFF; }
         .value-display { font-size: 30px; font-weight: 900; color: #111827; margin-top: 4px; }
-        .muted { color: #6B7280; font-size: 14px; line-height: 1.6; }
+        .muted { color: #4B5563; font-size: 15px; line-height: 1.65; }
         .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
         .card-title { font-size: 22px; font-weight: 900; color: #111827; margin: 0 0 6px; }
         .helper-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -568,7 +568,7 @@ export default function AdminPage() {
         <div className="admin-topbar">
           <div className="topbar-title">
             <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>{isSpanish ? "Centro de control" : "Control center"}</p>
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", margin: 0 }}>{isSpanish ? "Expedientes, equipo y accesos del portal" : "Records, team, and portal access"}</p>
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.86)", margin: 0 }}>{isSpanish ? "Expedientes, equipo y accesos del portal" : "Records, team, and portal access"}</p>
           </div>
           <div className="topbar-right">
             <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
@@ -617,7 +617,7 @@ export default function AdminPage() {
                 </p>
               </div>
               <div className="hero-note">
-                <p className="section-title" style={{ color: "rgba(255,255,255,0.68)", marginBottom: 8 }}>{isSpanish ? "Cómo usar esta pantalla" : "How to use this screen"}</p>
+                <p className="section-title" style={{ color: "rgba(255,255,255,0.84)", marginBottom: 8 }}>{isSpanish ? "Cómo usar esta pantalla" : "How to use this screen"}</p>
                 <p style={{ margin: 0, fontSize: 16, fontWeight: 800, lineHeight: 1.6 }}>
                   {isSpanish
                     ? "Primero busca. Después abre el expediente. La exportación y el resto de acciones viven dentro de cada expediente."

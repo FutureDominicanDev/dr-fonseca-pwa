@@ -230,10 +230,10 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const bg = settings.darkMode ? "#0F172A" : "#ECE5DD";
   const surface = settings.darkMode ? "#111827" : "#FFFFFF";
   const textColor = settings.darkMode ? "#F8FAFC" : "#111827";
-  const subText = settings.darkMode ? "rgba(248,250,252,0.65)" : "#6B7280";
+  const subText = settings.darkMode ? "rgba(248,250,252,0.82)" : "#4B5563";
   const bubbleOut = "#DCF8C6";
   const bubbleIn = settings.darkMode ? "#1F2937" : "#FFFFFF";
-  const border = settings.darkMode ? "rgba(255,255,255,0.08)" : "#E5E7EB";
+  const border = settings.darkMode ? "rgba(255,255,255,0.16)" : "#D1D9E6";
   const prefersNativeCapture =
     typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   const isAppleMobile =
@@ -1195,12 +1195,12 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     if (message.deleted_by_patient) {
       return (
         <div key={message.id} style={{ display: "flex", flexDirection: "column", alignItems: isPatient ? "flex-end" : "flex-start", gap: 4 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: isPatient ? "#166534" : subText }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: isPatient ? "#166534" : subText }}>
             {senderDisplayName}
           </div>
           <div style={{ ...bubbleStyle, fontStyle: "italic", opacity: 0.68, padding: "11px 14px" }}>
             {t.msgDeleted}
-            <div style={{ fontSize: 11, color: "rgba(17,24,39,0.55)", marginTop: 6, textAlign: "right" }}>{formatTime(message.created_at)}</div>
+            <div style={{ fontSize: 12, color: "rgba(17,24,39,0.75)", marginTop: 6, textAlign: "right" }}>{formatTime(message.created_at)}</div>
           </div>
         </div>
       );
@@ -1226,12 +1226,12 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
     return (
       <div key={message.id} style={{ display: "flex", flexDirection: "column", alignItems: isPatient ? "flex-end" : "flex-start", gap: 4 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: isPatient ? "#166534" : subText }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: isPatient ? "#166534" : subText }}>
           {senderDisplayName}
         </div>
         <div style={bubbleStyle}>
           {body}
-          <div style={{ fontSize: 11, color: "rgba(17,24,39,0.55)", marginTop: 6, textAlign: "right" }}>{formatTime(message.created_at)}</div>
+          <div style={{ fontSize: 12, color: "rgba(17,24,39,0.75)", marginTop: 6, textAlign: "right" }}>{formatTime(message.created_at)}</div>
         </div>
         {isPatient && (
           <button
@@ -1381,7 +1381,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
             <div style={{ display: "grid", gap: 16 }}>
               <section style={{ background: settings.darkMode ? "#111827" : "#F8FAFC", border: `1px solid ${border}`, borderRadius: 18, padding: 16 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: subText, letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 8 }}>{t.displayName}</label>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 800, color: subText, letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 8 }}>{t.displayName}</label>
                 <input value={settings.displayName} onChange={(event) => setSettings((prev) => ({ ...prev, displayName: event.target.value }))} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${border}`, background: settings.darkMode ? "#0F172A" : "white", color: textColor, fontSize: 15 }} />
               </section>
 
@@ -1394,7 +1394,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                 </div>
 
                 <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: subText, letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 8 }}>{t.fontSize}</label>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 800, color: subText, letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 8 }}>{t.fontSize}</label>
                   <div style={{ display: "flex", gap: 8 }}>
                     {(["small", "medium", "large"] as const).map((level) => (
                       <button key={level} onClick={() => setSettings((prev) => ({ ...prev, fontSizeLevel: level }))} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: settings.fontSizeLevel === level ? "2px solid #2563EB" : `1px solid ${border}`, background: settings.fontSizeLevel === level ? "#DBEAFE" : settings.darkMode ? "#0F172A" : "white", color: settings.fontSizeLevel === level ? "#2563EB" : textColor, fontWeight: 700, cursor: "pointer" }}>
@@ -1405,12 +1405,12 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                 </div>
 
                 <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: subText, letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 8 }}>{t.language}</label>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 800, color: subText, letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 8 }}>{t.language}</label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={() => setSettings((prev) => ({ ...prev, lang: "es", quickReplies: prev.quickReplies.length ? prev.quickReplies : DEFAULT_QUICK_REPLIES.es }))} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: settings.lang === "es" ? "2px solid #2563EB" : `1px solid ${border}`, background: settings.lang === "es" ? "#DBEAFE" : settings.darkMode ? "#0F172A" : "white", color: settings.lang === "es" ? "#2563EB" : textColor, fontWeight: 700, cursor: "pointer" }}>🇲🇽 Español</button>
                     <button onClick={() => setSettings((prev) => ({ ...prev, lang: "en", quickReplies: prev.quickReplies.length ? prev.quickReplies : DEFAULT_QUICK_REPLIES.en }))} style={{ flex: 1, padding: "10px 0", borderRadius: 12, border: settings.lang === "en" ? "2px solid #2563EB" : `1px solid ${border}`, background: settings.lang === "en" ? "#DBEAFE" : settings.darkMode ? "#0F172A" : "white", color: settings.lang === "en" ? "#2563EB" : textColor, fontWeight: 700, cursor: "pointer" }}>🇺🇸 English</button>
                   </div>
-                  <p style={{ margin: "8px 0 0", color: subText, fontSize: 12 }}>{labelPatientLanguage(room?.procedures?.patients?.preferred_language, settings.lang)}</p>
+                  <p style={{ margin: "8px 0 0", color: subText, fontSize: 13 }}>{labelPatientLanguage(room?.procedures?.patients?.preferred_language, settings.lang)}</p>
                 </div>
               </section>
 
@@ -1421,7 +1421,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                   </div>
                   <div>
                     <div style={{ color: textColor, fontWeight: 700 }}>{t.profilePhoto}</div>
-                    <div style={{ color: subText, fontSize: 12 }}>{t.photoHelp}</div>
+                    <div style={{ color: subText, fontSize: 13 }}>{t.photoHelp}</div>
                   </div>
                 </div>
                 <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) onSelectProfilePhoto(file); }} />
@@ -1456,7 +1456,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 22, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{patientName}</div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.72)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.86)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {t.secureChat}
               </div>
             </div>
@@ -1485,10 +1485,10 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             )}
           </div>
           {showSetupPanel && (
-            <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 16, background: "rgba(255,255,255,0.08)", fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.5 }}>
+            <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 16, background: "rgba(255,255,255,0.11)", fontSize: 14, color: "rgba(255,255,255,0.92)", lineHeight: 1.5 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                 <div style={{ fontWeight: 700, color: "white" }}>{showInstallHelp ? t.installHelpTitle : t.addToHome}</div>
-                <button onClick={hideSetupPanel} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t.dismiss}</button>
+                <button onClick={hideSetupPanel} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,0.9)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t.dismiss}</button>
               </div>
               <div style={{ marginTop: 6 }}>
                 {showInstallHelp
@@ -1539,7 +1539,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             </div>
           )}
           {!showSetupPanel && setupComplete && (
-            <div style={{ marginTop: 12, fontSize: 12, color: "rgba(255,255,255,0.72)" }}>{t.setupDone}</div>
+            <div style={{ marginTop: 12, fontSize: 13, color: "rgba(255,255,255,0.9)" }}>{t.setupDone}</div>
           )}
         </header>
 
@@ -1576,7 +1576,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             groupedMessages.map((group) => (
               <div key={group.date}>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-                  <div style={{ background: settings.darkMode ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.82)", borderRadius: 999, padding: "5px 14px", fontSize: 12, fontWeight: 700, color: subText }}>
+                  <div style={{ background: settings.darkMode ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.88)", borderRadius: 999, padding: "5px 14px", fontSize: 13, fontWeight: 700, color: subText }}>
                     {formatDateLabel(group.date)}
                   </div>
                 </div>
@@ -1648,7 +1648,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               </button>
             </div>
           )}
-          <div style={{ fontSize: 12, color: subText, margin: "0 0 8px 6px" }}>{t.quickRepliesSlashHint}</div>
+          <div style={{ fontSize: 13, color: subText, margin: "0 0 8px 6px" }}>{t.quickRepliesSlashHint}</div>
           {recordingAudio && (
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "10px 12px", background: settings.darkMode ? "#111827" : "#FFF1F2", border: `1px solid ${border}`, borderRadius: 16 }}>
               <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#DC2626", flexShrink: 0 }} />
@@ -1689,7 +1689,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               {recordingAudio ? "⏹" : t.send}
             </button>
           </div>
-          {uploadingMedia && <div style={{ fontSize: 12, color: subText, margin: "8px 0 0 6px" }}>{settings.lang === "es" ? "Subiendo archivo..." : "Uploading file..."}</div>}
+          {uploadingMedia && <div style={{ fontSize: 13, color: subText, margin: "8px 0 0 6px" }}>{settings.lang === "es" ? "Subiendo archivo..." : "Uploading file..."}</div>}
         </div>
       </div>
     </>

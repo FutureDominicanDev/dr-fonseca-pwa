@@ -183,14 +183,14 @@ export default function AdminAuditPage() {
         .hero, .card { background: white; border-radius: 22px; padding: 22px; box-shadow: 0 8px 28px rgba(15,23,42,0.06); }
         .hero { background: linear-gradient(135deg, #111827 0%, #1E3A8A 100%); color: white; margin-bottom: 16px; }
         .hero h1 { margin: 0 0 8px; font-size: 34px; }
-        .hero p { margin: 0; color: rgba(255,255,255,0.86); line-height: 1.6; }
+        .hero p { margin: 0; color: rgba(255,255,255,0.94); font-size: 16px; line-height: 1.7; }
         .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; margin-top: 16px; }
-        .line-input { width: 100%; padding: 14px 16px; background: #F3F4F6; border: 1px solid transparent; border-radius: 14px; font-size: 15px; font-family: inherit; color: #111827; outline: none; font-weight: 600; }
+        .line-input { width: 100%; padding: 14px 16px; background: #F3F4F6; border: 1px solid transparent; border-radius: 14px; font-size: 16px; font-family: inherit; color: #111827; outline: none; font-weight: 600; }
         .filters { display: flex; gap: 8px; flex-wrap: wrap; }
         .chip { padding: 10px 13px; border-radius: 999px; border: 1px solid #DCE7F5; background: #F8FBFF; color: #334155; font-size: 13px; font-weight: 800; cursor: pointer; }
         .chip.active { background: #1D4ED8; color: white; border-color: #1D4ED8; }
         .card-title { font-size: 24px; font-weight: 900; color: #111827; margin: 0 0 8px; }
-        .muted { color: #6B7280; font-size: 14px; line-height: 1.6; }
+        .muted { color: #4B5563; font-size: 15px; line-height: 1.65; }
         .events { display: grid; gap: 12px; margin-top: 16px; }
         .event-row { display: grid; gap: 10px; padding: 16px; border-radius: 18px; background: #F8FAFC; border: 1px solid #E7EEF7; }
         .event-meta { display: flex; gap: 8px; flex-wrap: wrap; }

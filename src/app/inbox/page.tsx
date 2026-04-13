@@ -312,8 +312,8 @@ export default function InboxPage() {
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
   const inputBg = darkMode ? "#2C2C2E" : "#F0F0F0";
   const textColor = darkMode ? "white" : "#1C1C1E";
-  const subTextColor = darkMode ? "rgba(255,255,255,0.5)" : "#8E8E93";
-  const borderColor = darkMode ? "rgba(255,255,255,0.08)" : "#F2F2F2";
+  const subTextColor = darkMode ? "rgba(255,255,255,0.78)" : "#5F6B7A";
+  const borderColor = darkMode ? "rgba(255,255,255,0.16)" : "#D9E4F2";
   const cardBg = darkMode ? "#3A3A3C" : "#F8F8F8";
 
   const [patients, setPatients] = useState<any[]>([]);
@@ -1395,35 +1395,35 @@ export default function InboxPage() {
       <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}>
         <div style={{fontSize:12,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
         {msg.deleted_by_patient?(
-          <div style={{...bubbleStyle,fontStyle:"italic",opacity:0.6,fontSize}}>{t.msgDeleted}<div style={{fontSize:11,opacity:0.6,marginTop:3,textAlign:"right"}}>{fmtTime(msg.created_at)}</div></div>
+          <div style={{...bubbleStyle,fontStyle:"italic",opacity:0.72,fontSize}}>{t.msgDeleted}<div style={{fontSize:12,opacity:0.75,marginTop:3,textAlign:"right"}}>{fmtTime(msg.created_at)}</div></div>
         ):effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
             <img src={msg.content} alt="" style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
-            <div style={{fontSize:11,opacity:0.6,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="video"?(
           <div style={{...bubbleStyle,padding:4}}>
             <video src={msg.content} controls style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}}/>
-            <div style={{fontSize:11,opacity:0.6,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="audio"?(
           <div style={{...bubbleStyle,minWidth:220}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:20}}>🎤</span><span style={{fontSize:14,fontWeight:600}}>Audio</span></div>
             <audio src={msg.content} controls style={{width:"100%"}}/>
-            <div style={{fontSize:11,opacity:0.6,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="file"?(
           <div style={{...bubbleStyle,cursor:"pointer"}}>
             <a href={msg.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,color:"inherit",textDecoration:"none"}}>
               <span style={{fontSize:28}}>📄</span>
-              <div><div style={{fontSize:14,fontWeight:700}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.6}}>{fmtSize(msg.file_size)}</div></div>
+              <div><div style={{fontSize:14,fontWeight:700}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
             </a>
-            <div style={{fontSize:11,opacity:0.6,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
           <div style={{...bubbleStyle,lineHeight:1.6,wordBreak:"break-word",fontSize}}>
             {msg.content}
-            <div style={{fontSize:11,opacity:0.6,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
+            <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
               {fmtTime(msg.created_at)}
               {isOut&&<span style={{color:"#007AFF"}}>✓✓</span>}
             </div>
@@ -1728,7 +1728,7 @@ export default function InboxPage() {
         .back-btn:hover { background: rgba(255,255,255,0.25); }
         .chat-av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
         .chat-head-name { font-size: 17px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .chat-head-sub { font-size: 13px; color: rgba(255,255,255,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-head-sub { font-size: 13px; color: rgba(255,255,255,0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .input-area { flex-shrink: 0; background: ${inputBg}; padding: 10px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); display: flex; align-items: flex-end; gap: 8px; border-top: 1px solid ${borderColor}; }
         .msg-input { flex: 1; padding: 11px 16px; background: ${darkMode?"#3A3A3C":"white"}; border: none; border-radius: 24px; font-size: ${fontSize}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 120px; resize: none; line-height: 1.5; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .msg-input::placeholder { color: #AEAEB2; }
