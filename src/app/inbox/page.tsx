@@ -8,6 +8,9 @@ import { syncPushSubscription } from "@/lib/pushSubscriptions";
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
 type PhoneCountryOption = { code: string; label: string };
+type MediaTab = "media" | "audio" | "docs";
+
+const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
 
 const PHONE_COUNTRY_OPTIONS: PhoneCountryOption[] = [
   { code: "+52", label: "🇲🇽 +52 México" },
@@ -381,6 +384,9 @@ export default function InboxPage() {
   const [savedQR, setSavedQR] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
+  const [showEmojiMenu, setShowEmojiMenu] = useState(false);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [mediaLibraryTab, setMediaLibraryTab] = useState<MediaTab>("media");
   const [displayNameEdit, setDisplayNameEdit] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [savedName, setSavedName] = useState(false);
@@ -1444,6 +1450,20 @@ export default function InboxPage() {
   };
 
   const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
+  const roomMediaEntries = messages
+    .filter((entry) => !entry.deleted_by_staff && !entry.deleted_by_patient && !entry.is_internal)
+    .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const roomImageVideoEntries = roomMediaEntries.filter((entry) => entry.message_type === "image" || entry.message_type === "video");
+  const roomAudioEntries = roomMediaEntries.filter((entry) => entry.message_type === "audio");
+  const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file");
+  const appendEmojiToDraft = (emoji: string) => {
+    setNewMessage((previous) => {
+      const next = `${previous}${emoji}`;
+      updateTypingState(next);
+      return next;
+    });
+    setShowSlashMenu(false);
+  };
   const filtPts = patients
     .filter(p=>{
       const q=searchQuery.toLowerCase();
@@ -2085,6 +2105,64 @@ export default function InboxPage() {
         </div>
       )}
 
+      {showMediaLibrary && (
+        <div className="modal-overlay" onClick={()=>setShowMediaLibrary(false)}>
+          <div className="modal-scroll" onClick={e=>e.stopPropagation()} style={{maxWidth:760}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <p className="modal-title" style={{margin:0}}>🖼️ {lang==="es"?"Media del paciente":"Patient media"}</p>
+              <button onClick={()=>setShowMediaLibrary(false)} style={{background:cardBg,border:"none",borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+              {([
+                { key:"media", label: lang==="es" ? "Media" : "Media" },
+                { key:"audio", label: lang==="es" ? "Audios" : "Audio" },
+                { key:"docs", label: lang==="es" ? "Archivos" : "Files" },
+              ] as { key: MediaTab; label: string }[]).map((tab)=>(
+                <button key={tab.key} onClick={()=>setMediaLibraryTab(tab.key)} style={{padding:"10px 14px",borderRadius:999,border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:800,background:mediaLibraryTab===tab.key?"#DBEAFE":cardBg,color:mediaLibraryTab===tab.key?"#1D4ED8":textColor}}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {mediaLibraryTab==="media" && (
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
+                {roomImageVideoEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{lang==="es"?"Sin imágenes o videos todavía.":"No images or videos yet."}</div>}
+                {roomImageVideoEntries.map((entry:any)=>(
+                  <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",borderRadius:14,overflow:"hidden",textDecoration:"none",background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
+                    {entry.message_type==="image" ? (
+                      <img src={entry.content} alt="" style={{width:"100%",height:120,objectFit:"cover",display:"block"}} />
+                    ) : (
+                      <video src={entry.content} style={{width:"100%",height:120,objectFit:"cover",display:"block"}} />
+                    )}
+                    <div style={{padding:"8px 10px",fontSize:12,color:subTextColor}}>{fmtDateLabel(entry.created_at)}</div>
+                  </a>
+                ))}
+              </div>
+            )}
+            {mediaLibraryTab==="audio" && (
+              <div style={{display:"grid",gap:10}}>
+                {roomAudioEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{lang==="es"?"Sin audios todavía.":"No audio files yet."}</div>}
+                {roomAudioEntries.map((entry:any)=>(
+                  <div key={entry.id} style={{padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`}}>
+                    <audio src={entry.content} controls style={{width:"100%"}} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {mediaLibraryTab==="docs" && (
+              <div style={{display:"grid",gap:10}}>
+                {roomFileEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{lang==="es"?"Sin archivos todavía.":"No files yet."}</div>}
+                {roomFileEntries.map((entry:any)=>(
+                  <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
+                    <span style={{fontSize:22}}>📄</span>
+                    <div style={{fontWeight:700,fontSize:14}}>{entry.file_name || (lang==="es"?"Archivo":"File")}</div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {showSettings&&<SettingsPanel/>}
       {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
 
@@ -2232,6 +2310,7 @@ export default function InboxPage() {
                   {selectedRoom.procedures?.patients?.phone && (
                     <a href={`tel:${selectedRoom.procedures.patients.phone}`} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",fontSize:18,flexShrink:0}} title={t.callPatient}>📞</a>
                   )}
+                  <button onClick={()=>{setShowMediaLibrary(true);setMediaLibraryTab("media");}} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={lang==="es"?"Media":"Media"}>🖼️</button>
                   <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
                 </div>
 
@@ -2239,7 +2318,11 @@ export default function InboxPage() {
                   className="chat-bg"
                   ref={chatScrollRef}
                   onScroll={updateAutoScrollPreference}
-                  onClick={()=>setShowSlashMenu(false)}
+                  onClick={()=>{
+                    setShowSlashMenu(false);
+                    setShowEmojiMenu(false);
+                    setShowMediaMenu(false);
+                  }}
                 >
                   {messages.filter(m=>!m.deleted_by_staff).length===0?(
                     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:40,textAlign:"center"}}>
@@ -2323,7 +2406,19 @@ export default function InboxPage() {
                         <button onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📁</span>{t.chooseFile}</button>
                       </div>
                     )}
+                    {showEmojiMenu && (
+                      <div style={{position:"absolute",left:64,bottom:`calc(66px + env(safe-area-inset-bottom))`,width:250,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:18,padding:10,boxShadow:"0 14px 34px rgba(15,23,42,0.16)",zIndex:31}}>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:6}}>
+                          {QUICK_EMOJIS.map((emoji)=>(
+                            <button key={emoji} onClick={()=>appendEmojiToDraft(emoji)} style={{border:"none",background:cardBg,borderRadius:10,padding:"8px 0",fontSize:20,cursor:"pointer"}}>
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <button className="icon-btn" onClick={()=>setShowMediaMenu(v=>!v)}>📎</button>
+                    <button className="icon-btn" onClick={()=>setShowEmojiMenu(v=>!v)} title={lang==="es"?"Emojis":"Emojis"}>😊</button>
                     <textarea
                       className="msg-input"
                       placeholder={t.typeMessage}
@@ -2334,6 +2429,7 @@ export default function InboxPage() {
                         setNewMessage(v);
                         updateTypingState(v);
                         setShowMediaMenu(false);
+                        setShowEmojiMenu(false);
                         if(v.startsWith("/")){setShowSlashMenu(true);setSlashFilter(v.slice(1));}
                         else{setShowSlashMenu(false);setSlashFilter("");}
                         e.target.style.height="auto";
@@ -2343,6 +2439,7 @@ export default function InboxPage() {
                       onKeyDown={e=>{
                         if(e.key==="Enter"&&!e.shiftKey){
                           e.preventDefault();
+                          setShowEmojiMenu(false);
                           if(showSlashMenu&&slashFiltered.length>0){sendMessage(slashFiltered[0].message);setShowSlashMenu(false);setSlashFilter("");setNewMessage("");}
                           else sendMessage();
                         }

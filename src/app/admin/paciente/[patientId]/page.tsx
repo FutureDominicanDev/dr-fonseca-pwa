@@ -97,6 +97,7 @@ export default function AdminPatientRecordPage() {
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
   const hasAdminAccess = viewerEmail.toLowerCase() === OWNER_EMAIL || ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
+  const canChangeProcedureStatus = viewerProfile?.role === "doctor" || ["owner", "super_admin"].includes(viewerAdminLevel);
   const staffById = useMemo(() => new Map(staffProfiles.map((member) => [member.id, member])), [staffProfiles]);
   const patientStatus = normalizeRecordStatus(patient?.record_status);
 
@@ -176,6 +177,8 @@ export default function AdminPatientRecordPage() {
     selectStatus: isSpanish ? "Selecciona estatus" : "Select status",
     saveProcedure: isSpanish ? "Guardar procedimiento" : "Save procedure",
     savingProcedure: isSpanish ? "Guardando..." : "Saving...",
+    statusPermissionHint: isSpanish ? "Solo doctor o super admin puede cambiar estatus." : "Only doctor or super admin can change status.",
+    statusPermissionError: isSpanish ? "Solo doctor o super admin puede cambiar el estatus del procedimiento." : "Only doctor or super admin can change procedure status.",
     noProcedures: isSpanish ? "No hay procedimientos registrados para este paciente." : "There are no procedures registered for this patient.",
     roomsRelated: isSpanish ? "Salas relacionadas" : "Related rooms",
     mediaTitle: isSpanish ? "Media y archivos" : "Media and files",
@@ -540,9 +543,16 @@ export default function AdminPatientRecordPage() {
   const saveProcedure = async (procedureId: string) => {
     const draft = procedureDrafts[procedureId];
     if (!draft) return;
+    const currentProcedure = procedures.find((procedure) => procedure.id === procedureId);
+    if (!currentProcedure) return;
     const surgeryDateIso = draft.surgery_date ? displayToIsoDate(draft.surgery_date) : "";
     if (draft.surgery_date && !surgeryDateIso) {
       setPageError(isSpanish ? "La fecha de cirugía debe ir en formato dd/mm/aaaa." : "Surgery date must use dd/mm/yyyy format.");
+      return;
+    }
+    const statusChanged = (draft.status || "") !== (currentProcedure.status || "");
+    if (statusChanged && !canChangeProcedureStatus) {
+      setPageError(t.statusPermissionError);
       return;
     }
 
@@ -550,7 +560,7 @@ export default function AdminPatientRecordPage() {
     const payload = {
       procedure_name: draft.procedure_name.trim() || null,
       office_location: draft.office_location || null,
-      status: draft.status || null,
+      status: canChangeProcedureStatus ? (draft.status || null) : (currentProcedure.status || null),
       surgery_date: surgeryDateIso || null,
     };
 
@@ -563,6 +573,42 @@ export default function AdminPatientRecordPage() {
     }
 
     setProcedures((previous) => previous.map((procedure) => (procedure.id === procedureId ? (data as ProcedureRecord) : procedure)));
+    if (statusChanged) {
+      const relatedRooms = rooms.filter((roomEntry) => roomEntry.procedure_id === procedureId);
+      if (relatedRooms.length > 0) {
+        const previousStatusLabel = procedureStatusLabel(currentProcedure.status, lang);
+        const nextStatusLabel = procedureStatusLabel((data as ProcedureRecord).status, lang);
+        const actorName = viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail || "Staff";
+        const statusMessage =
+          isSpanish
+            ? `⚙️ Estado del procedimiento actualizado: ${previousStatusLabel} → ${nextStatusLabel}. (${actorName})`
+            : `⚙️ Procedure status updated: ${previousStatusLabel} → ${nextStatusLabel}. (${actorName})`;
+
+        for (const roomEntry of relatedRooms) {
+          let statusInsert = await supabase.from("messages").insert({
+            room_id: roomEntry.id,
+            content: statusMessage,
+            message_type: "text",
+            sender_type: "staff",
+            sender_name: "Sistema",
+            sender_role: "system",
+            sender_id: viewerProfile?.id || null,
+            is_internal: false,
+          });
+          if (statusInsert.error && isMissingColumnError(statusInsert.error)) {
+            statusInsert = await supabase.from("messages").insert({
+              room_id: roomEntry.id,
+              content: statusMessage,
+              message_type: "text",
+              sender_type: "staff",
+              sender_name: "Sistema",
+              sender_role: "system",
+              sender_id: viewerProfile?.id || null,
+            });
+          }
+        }
+      }
+    }
     await logAdminEvent({
       action: "procedure_updated",
       entityType: "procedure",
@@ -1272,6 +1318,7 @@ export default function AdminPatientRecordPage() {
                               <select
                                 className="line-input"
                                 value={draft.status}
+                                disabled={!canChangeProcedureStatus}
                                 onChange={(event) =>
                                   setProcedureDrafts((prev) => ({
                                     ...prev,
@@ -1289,6 +1336,9 @@ export default function AdminPatientRecordPage() {
                                   <option value={draft.status}>{procedureStatusLabel(draft.status, lang)}</option>
                                 ) : null}
                               </select>
+                              {!canChangeProcedureStatus && (
+                                <p className="body-muted" style={{ marginTop: 6 }}>{t.statusPermissionHint}</p>
+                              )}
                             </div>
                             <div>
                               <label className="field-label">{isSpanish ? "Fecha de cirugía" : "Surgery date"}</label>

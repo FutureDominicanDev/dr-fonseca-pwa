@@ -7,6 +7,9 @@ import { syncPushSubscription } from "@/lib/pushSubscriptions";
 
 type Lang = "es" | "en";
 type FontSizeLevel = "small" | "medium" | "large";
+type MediaTab = "media" | "audio" | "docs";
+
+const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
 
 type PatientSettings = {
   displayName: string;
@@ -180,6 +183,9 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
+  const [showEmojiMenu, setShowEmojiMenu] = useState(false);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [mediaLibraryTab, setMediaLibraryTab] = useState<MediaTab>("media");
   const [recordingAudio, setRecordingAudio] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [captureMode, setCaptureMode] = useState<"photo" | "video" | null>(null);
@@ -293,6 +299,33 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     });
     return groups;
   }, [messages]);
+  const roomMediaEntries = useMemo(
+    () =>
+      messages
+        .filter((message) => !message.is_internal && !message.deleted_by_staff && !message.deleted_by_patient)
+        .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || "")),
+    [messages]
+  );
+  const roomImageVideoEntries = useMemo(
+    () => roomMediaEntries.filter((message) => message.message_type === "image" || message.message_type === "video"),
+    [roomMediaEntries]
+  );
+  const roomAudioEntries = useMemo(
+    () => roomMediaEntries.filter((message) => message.message_type === "audio"),
+    [roomMediaEntries]
+  );
+  const roomFileEntries = useMemo(
+    () => roomMediaEntries.filter((message) => message.message_type === "file"),
+    [roomMediaEntries]
+  );
+  const appendEmojiToDraft = (emoji: string) => {
+    setNewMessage((previous) => {
+      const next = `${previous}${emoji}`;
+      updateTypingState(next);
+      return next;
+    });
+    setShowSlashMenu(false);
+  };
 
   const ensureAudioContext = useCallback(() => {
     if (typeof window === "undefined") return null;
@@ -1158,6 +1191,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     setNewMessage(value);
     updateTypingState(value);
     setShowAttachMenu(false);
+    setShowEmojiMenu(false);
     if (value.startsWith("/")) {
       setShowSlashMenu(true);
       setSlashFilter(value.slice(1));
@@ -1545,6 +1579,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               <button onClick={() => setSettings((prev) => ({ ...prev, lang: prev.lang === "es" ? "en" : "es" }))} style={{ border: "none", background: "rgba(255,255,255,0.14)", color: "white", borderRadius: 999, padding: "10px 12px", fontWeight: 700, cursor: "pointer" }}>
                 {settings.lang === "es" ? "🇲🇽 ES" : "🇺🇸 EN"}
               </button>
+              <button onClick={() => { setShowMediaLibrary(true); setMediaLibraryTab("media"); }} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 18, flexShrink: 0 }} title={settings.lang === "es" ? "Media" : "Media"}>🖼️</button>
               <button onClick={() => setSettingsOpen(true)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>⚙️</button>
             </div>
           </div>
@@ -1642,6 +1677,64 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           </div>
         )}
 
+        {showMediaLibrary && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 140, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingTop: "max(14px, env(safe-area-inset-top))" }} onClick={() => setShowMediaLibrary(false)}>
+            <div style={{ width: "100%", maxWidth: 760, maxHeight: "92dvh", overflowY: "auto", background: surface, borderRadius: "24px 24px 0 0", padding: "18px 16px calc(30px + env(safe-area-inset-bottom))" }} onClick={(event) => event.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ color: textColor, fontSize: 20, fontWeight: 900 }}>🖼️ {settings.lang === "es" ? "Media del chat" : "Chat media"}</div>
+                <button onClick={() => setShowMediaLibrary(false)} style={{ border: "none", borderRadius: 999, padding: "8px 14px", background: settings.darkMode ? "#1F2937" : "#EEF2F7", color: textColor, fontWeight: 700, cursor: "pointer" }}>✕</button>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                {([
+                  { key: "media", label: settings.lang === "es" ? "Media" : "Media" },
+                  { key: "audio", label: settings.lang === "es" ? "Audios" : "Audio" },
+                  { key: "docs", label: settings.lang === "es" ? "Archivos" : "Files" },
+                ] as { key: MediaTab; label: string }[]).map((tab) => (
+                  <button key={tab.key} onClick={() => setMediaLibraryTab(tab.key)} style={{ border: "none", borderRadius: 999, padding: "10px 14px", cursor: "pointer", fontWeight: 800, background: mediaLibraryTab === tab.key ? "#DBEAFE" : settings.darkMode ? "#1F2937" : "#EEF2F7", color: mediaLibraryTab === tab.key ? "#1D4ED8" : textColor }}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              {mediaLibraryTab === "media" && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+                  {roomImageVideoEntries.length === 0 && <div style={{ color: subText, fontSize: 14 }}>{settings.lang === "es" ? "Sin imágenes o videos todavía." : "No images or videos yet."}</div>}
+                  {roomImageVideoEntries.map((entry: any) => (
+                    <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{ display: "block", borderRadius: 14, overflow: "hidden", textDecoration: "none", background: settings.darkMode ? "#111827" : "#F8FAFC", border: `1px solid ${border}` }}>
+                      {entry.message_type === "image" ? (
+                        <img src={entry.content} alt="" style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
+                      ) : (
+                        <video src={entry.content} style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
+                      )}
+                      <div style={{ padding: "8px 10px", fontSize: 12, color: subText }}>{formatDateLabel(entry.created_at)}</div>
+                    </a>
+                  ))}
+                </div>
+              )}
+              {mediaLibraryTab === "audio" && (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {roomAudioEntries.length === 0 && <div style={{ color: subText, fontSize: 14 }}>{settings.lang === "es" ? "Sin audios todavía." : "No audio files yet."}</div>}
+                  {roomAudioEntries.map((entry: any) => (
+                    <div key={entry.id} style={{ padding: 12, borderRadius: 14, border: `1px solid ${border}`, background: settings.darkMode ? "#111827" : "#F8FAFC" }}>
+                      <audio src={entry.content} controls style={{ width: "100%" }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {mediaLibraryTab === "docs" && (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {roomFileEntries.length === 0 && <div style={{ color: subText, fontSize: 14 }}>{settings.lang === "es" ? "Sin archivos todavía." : "No files yet."}</div>}
+                  {roomFileEntries.map((entry: any) => (
+                    <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: 12, borderRadius: 14, border: `1px solid ${border}`, background: settings.darkMode ? "#111827" : "#F8FAFC", textDecoration: "none", color: textColor }}>
+                      <span style={{ fontSize: 22 }}>📄</span>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{entry.file_name || (settings.lang === "es" ? "Archivo" : "File")}</div>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <main
           ref={(node) => { chatScrollRef.current = node; }}
           onScroll={updateAutoScrollPreference}
@@ -1729,6 +1822,17 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               </button>
             </div>
           )}
+          {showEmojiMenu && (
+            <div style={{ marginBottom: 10, width: 250, marginLeft: 52, background: settings.darkMode ? "#111827" : "#FFFFFF", border: `1px solid ${border}`, borderRadius: 20, padding: 8, boxShadow: "0 14px 34px rgba(15,23,42,0.16)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6 }}>
+                {QUICK_EMOJIS.map((emoji) => (
+                  <button key={emoji} onClick={() => appendEmojiToDraft(emoji)} style={{ border: "none", background: settings.darkMode ? "#1F2937" : "#F3F4F6", borderRadius: 10, padding: "8px 0", fontSize: 20, cursor: "pointer" }}>
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ fontSize: 13, color: subText, margin: "0 0 8px 6px" }}>{t.quickRepliesSlashHint}</div>
           {recordingAudio && (
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "10px 12px", background: settings.darkMode ? "#111827" : "#FFF1F2", border: `1px solid ${border}`, borderRadius: 16 }}>
@@ -1741,6 +1845,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           )}
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
             <button onClick={() => setShowAttachMenu((prev) => !prev)} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: showAttachMenu ? "#2563EB" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.attachmentOptions}>📎</button>
+            <button onClick={() => setShowEmojiMenu((prev) => !prev)} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: showEmojiMenu ? "#2563EB" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title="Emoji">😊</button>
             <textarea
               value={newMessage}
               onChange={(event) => updateDraft(event.target.value, event.currentTarget)}
@@ -1752,6 +1857,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   setShowAttachMenu(false);
+                  setShowEmojiMenu(false);
                   if (showSlashMenu && slashMatches[0]) {
                     sendMessage(slashMatches[0]);
                     return;
