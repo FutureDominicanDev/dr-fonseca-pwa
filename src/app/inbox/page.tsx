@@ -310,10 +310,10 @@ export default function InboxPage() {
   const [fontSizeLevel, setFontSizeLevel] = useState<"small"|"medium"|"large">("medium");
   const fontSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 20 : 17;
 
-  const bg = darkMode ? "#1C1C1E" : "#ECE5DD";
-  const headerBg = darkMode ? "#111" : "#1C1C1E";
+  const bg = darkMode ? "#0B141A" : "#EFEAE2";
+  const headerBg = darkMode ? "#111B21" : "#075E54";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
-  const inputBg = darkMode ? "#2C2C2E" : "#F0F0F0";
+  const inputBg = darkMode ? "#202C33" : "#F0F2F5";
   const textColor = darkMode ? "white" : "#1C1C1E";
   const subTextColor = darkMode ? "rgba(255,255,255,0.78)" : "#5F6B7A";
   const borderColor = darkMode ? "rgba(255,255,255,0.16)" : "#D9E4F2";
@@ -1524,9 +1524,9 @@ export default function InboxPage() {
     );
 
     const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
-    const bubbleBg = !isOut ? "#DCF8C6" : darkMode ? "#2C2C2E" : "#FFFFFF";
-    const bubbleRadius=isOut?"18px 18px 4px 18px":"18px 18px 18px 4px";
-    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"78%",padding:"10px 14px",boxShadow:isOwn?"0 1px 3px rgba(0,0,0,0.12)":"0 1px 2px rgba(0,0,0,0.08)",position:"relative",border:isOut?`1px solid ${isOwn?"#D1D5DB":borderColor}`:"none"};
+    const bubbleBg = isOut ? "#DCF8C6" : darkMode ? "#1F2C34" : "#FFFFFF";
+    const bubbleRadius=isOut?"10px 10px 2px 10px":"10px 10px 10px 2px";
+    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"76%",padding:"9px 12px",boxShadow:"0 1px 1px rgba(0,0,0,0.12)",position:"relative",border:isOut?"none":`1px solid ${borderColor}`};
 
     return (
       <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}>
@@ -1558,7 +1558,7 @@ export default function InboxPage() {
             <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
-          <div style={{...bubbleStyle,lineHeight:1.75,wordBreak:"break-word",fontSize,fontWeight:500}}>
+          <div style={{...bubbleStyle,lineHeight:1.5,wordBreak:"break-word",fontSize,fontWeight:400}}>
             {contentToRender}
             <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
               {fmtTime(msg.created_at)}
@@ -1853,18 +1853,18 @@ export default function InboxPage() {
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
-        .topbar { flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); z-index: 100; height: calc(66px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+        .topbar { flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(62px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; }
-        .sidebar { width: 340px; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid ${borderColor}; }
-        .sidebar-head { padding: 14px 16px; background: ${darkMode?"#2A2A2C":"#F6F6F6"}; border-bottom: 1px solid ${borderColor}; }
+        .sidebar { width: 360px; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid ${borderColor}; }
+        .sidebar-head { padding: 12px 14px; background: ${darkMode?"#1F2C33":"#F6F7F9"}; border-bottom: 1px solid ${borderColor}; }
         .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-        .search-bar { display: flex; align-items: center; gap: 8px; background: ${darkMode?"#3A3A3C":"#EBEBEB"}; border-radius: 10px; padding: 9px 12px; }
+        .search-bar { display: flex; align-items: center; gap: 8px; background: ${darkMode?"#2A3942":"#F0F2F5"}; border-radius: 8px; padding: 8px 10px; }
         .search-input { flex: 1; border: none; background: transparent; font-size: 16px; outline: none; color: ${textColor}; font-family: inherit; }
         .patient-list { flex: 1; overflow-y: auto; }
         .patient-list::-webkit-scrollbar { display: none; }
-        .patient-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; border-bottom: 1px solid ${borderColor}; transition: background 0.1s; }
-        .patient-row:hover { background: ${darkMode?"#3A3A3C":"#F0F7FF"}; }
-        .patient-row.active { background: ${darkMode?"#1C3A5E":"#E3F2FF"}; }
+        .patient-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; border-bottom: 1px solid ${borderColor}; transition: background 0.1s; }
+        .patient-row:hover { background: ${darkMode?"#22303a":"#F7F8FA"}; }
+        .patient-row.active { background: ${darkMode?"#243640":"#EBF5FF"}; }
         .av { width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; position: relative; }
         .av-badge { position: absolute; top: 1px; right: 1px; width: 15px; height: 15px; background: #25D366; border-radius: 50%; border: 2px solid ${sidebarBg}; }
         .patient-info { flex: 1; min-width: 0; }
@@ -1872,22 +1872,22 @@ export default function InboxPage() {
         .patient-meta { font-size: 14px; color: ${subTextColor}; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .unread-dot { width: 13px; height: 13px; background: #25D366; border-radius: 50%; flex-shrink: 0; }
         .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: ${bg}; position: relative; }
-        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${bg}; background-image: radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px); background-size: 18px 18px; }
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 14px 0; }
-        .date-sep-pill { background: ${darkMode?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.92)"}; border-radius: 99px; padding: 5px 16px; font-size: 13px; color: ${darkMode?"white":"#555"}; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-        .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 66px; }
+        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.85)":"rgba(255,255,255,0.92)"}; border-radius: 8px; padding: 4px 10px; font-size: 12px; color: ${darkMode?"#D1D5DB":"#54656F"}; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+        .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 66px; border-left: 1px solid rgba(255,255,255,0.08); }
         .back-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 22px; font-weight: 700; transition: background 0.15s; }
         .back-btn:hover { background: rgba(255,255,255,0.25); }
         .chat-av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
         .chat-head-name { font-size: 17px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chat-head-sub { font-size: 13px; color: rgba(255,255,255,0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .input-area { flex-shrink: 0; background: ${inputBg}; padding: 10px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); display: flex; align-items: flex-end; gap: 8px; border-top: 1px solid ${borderColor}; }
-        .msg-input { flex: 1; padding: 11px 16px; background: ${darkMode?"#3A3A3C":"white"}; border: none; border-radius: 24px; font-size: ${fontSize}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 120px; resize: none; line-height: 1.5; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .msg-input { flex: 1; padding: 11px 16px; background: ${darkMode?"#2A3942":"white"}; border: none; border-radius: 10px; font-size: ${fontSize}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 120px; resize: none; line-height: 1.45; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
-        .icon-btn { width: 46px; height: 46px; border-radius: 50%; background: ${darkMode?"#3A3A3C":"#1C1C1E"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 20px; transition: background 0.15s; }
-        .icon-btn:hover { background: #007AFF; }
-        .send-btn { width: 46px; height: 46px; border-radius: 50%; background: #25D366; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 2px 8px rgba(37,211,102,0.4); }
+        .icon-btn { width: 42px; height: 42px; border-radius: 50%; background: ${darkMode?"#2A3942":"#E9EDEF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 20px; transition: background 0.15s; }
+        .icon-btn:hover { background: ${darkMode?"#334956":"#DDE5EA"}; }
+        .send-btn { width: 42px; height: 42px; border-radius: 50%; background: #00A884; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,168,132,0.35); }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .slash-popup { background: ${darkMode?"#2C2C2E":"white"}; border-top: 1px solid ${borderColor}; max-height: 260px; overflow-y: auto; }
         .slash-header { padding: 10px 16px 6px; font-size: 12px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }

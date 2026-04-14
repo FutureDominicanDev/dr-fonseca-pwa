@@ -236,12 +236,13 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const t = T[settings.lang];
   const fontSize = settings.fontSizeLevel === "small" ? 14 : settings.fontSizeLevel === "large" ? 19 : 16;
-  const bg = settings.darkMode ? "#0F172A" : "#ECE5DD";
+  const bg = settings.darkMode ? "#0B141A" : "#EFEAE2";
   const surface = settings.darkMode ? "#111827" : "#FFFFFF";
+  const inputBg = settings.darkMode ? "#202C33" : "#F0F2F5";
   const textColor = settings.darkMode ? "#F8FAFC" : "#111827";
   const subText = settings.darkMode ? "rgba(248,250,252,0.82)" : "#4B5563";
   const bubbleOut = "#DCF8C6";
-  const bubbleIn = settings.darkMode ? "#1F2937" : "#FFFFFF";
+  const bubbleIn = settings.darkMode ? "#1F2C34" : "#FFFFFF";
   const border = settings.darkMode ? "rgba(255,255,255,0.16)" : "#D1D9E6";
   const prefersNativeCapture =
     typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
@@ -1280,10 +1281,10 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     const bubbleStyle: React.CSSProperties = {
       background: isPatient ? bubbleOut : bubbleIn,
       color: isPatient ? "#111827" : textColor,
-      borderRadius: isPatient ? "18px 18px 6px 18px" : "18px 18px 18px 6px",
-      padding: message.message_type === "text" ? "11px 14px" : "8px",
-      maxWidth: "82%",
-      boxShadow: "0 2px 8px rgba(15,23,42,0.08)",
+      borderRadius: isPatient ? "10px 10px 2px 10px" : "10px 10px 10px 2px",
+      padding: message.message_type === "text" ? "9px 12px" : "8px",
+      maxWidth: "78%",
+      boxShadow: "0 1px 1px rgba(0,0,0,0.12)",
       border: isPatient ? "none" : `1px solid ${border}`,
     };
     const translated = !isPatient && autoTranslateIncoming && message.message_type === "text" && message.id
@@ -1320,7 +1321,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         </a>
       );
     } else {
-      body = <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize }}>{contentToRender}</div>;
+      body = <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize, lineHeight: 1.45 }}>{contentToRender}</div>;
     }
 
     return (
@@ -1564,7 +1565,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       )}
 
       <div style={{ height: "100dvh", minHeight: "100dvh", background: bg, color: textColor, fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <header style={{ background: "#0F172A", color: "white", padding: "calc(env(safe-area-inset-top) + 16px) 18px 16px", boxShadow: "0 10px 30px rgba(15,23,42,0.14)" }}>
+        <header style={{ background: "#075E54", color: "white", padding: "calc(env(safe-area-inset-top) + 12px) 16px 12px", boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#111827,#2563EB)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, flexShrink: 0 }}>
               {settings.avatarDataUrl ? <img src={settings.avatarDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : patientName.slice(0, 1).toUpperCase()}
@@ -1738,7 +1739,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         <main
           ref={(node) => { chatScrollRef.current = node; }}
           onScroll={updateAutoScrollPreference}
-          style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 14px 120px", display: "flex", flexDirection: "column", gap: 14 }}
+          style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "12px 14px 120px", display: "flex", flexDirection: "column", gap: 12, backgroundColor: bg, backgroundImage: "radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px)", backgroundSize: "18px 18px" }}
         >
           {groupedMessages.length === 0 ? (
             <div style={{ marginTop: 36, background: surface, borderRadius: 24, padding: 24, textAlign: "center", boxShadow: "0 10px 30px rgba(15,23,42,0.08)" }}>
@@ -1750,7 +1751,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             groupedMessages.map((group) => (
               <div key={group.date}>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-                  <div style={{ background: settings.darkMode ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.88)", borderRadius: 999, padding: "5px 14px", fontSize: 13, fontWeight: 700, color: subText }}>
+                  <div style={{ background: settings.darkMode ? "rgba(17,27,33,0.85)" : "rgba(255,255,255,0.92)", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: settings.darkMode ? "#D1D5DB" : "#54656F" }}>
                     {formatDateLabel(group.date)}
                   </div>
                 </div>
@@ -1784,7 +1785,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           </button>
         )}
 
-        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: surface, borderTop: `1px solid ${border}`, padding: "10px 12px calc(env(safe-area-inset-bottom) + 10px)", boxShadow: "0 -10px 30px rgba(15,23,42,0.08)" }}>
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: inputBg, borderTop: `1px solid ${border}`, padding: "8px 12px calc(env(safe-area-inset-bottom) + 8px)", boxShadow: "0 -8px 22px rgba(15,23,42,0.08)" }}>
           {showSlashMenu && slashMatches.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, background: settings.darkMode ? "#111827" : "#FFFFFF", border: `1px solid ${border}`, borderRadius: 18, padding: 10, boxShadow: "0 10px 30px rgba(15,23,42,0.12)" }}>
               {slashMatches.map((reply, index) => (
@@ -1844,15 +1845,15 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             </div>
           )}
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
-            <button onClick={() => setShowAttachMenu((prev) => !prev)} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: showAttachMenu ? "#2563EB" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.attachmentOptions}>📎</button>
-            <button onClick={() => setShowEmojiMenu((prev) => !prev)} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: showEmojiMenu ? "#2563EB" : "#0F172A", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title="Emoji">😊</button>
+            <button onClick={() => setShowAttachMenu((prev) => !prev)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: showAttachMenu ? "#00A884" : settings.darkMode ? "#2A3942" : "#E9EDEF", color: settings.darkMode ? "white" : "#54656F", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title={t.attachmentOptions}>📎</button>
+            <button onClick={() => setShowEmojiMenu((prev) => !prev)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: showEmojiMenu ? "#00A884" : settings.darkMode ? "#2A3942" : "#E9EDEF", color: settings.darkMode ? "white" : "#54656F", cursor: "pointer", fontSize: 20, flexShrink: 0 }} title="Emoji">😊</button>
             <textarea
               value={newMessage}
               onChange={(event) => updateDraft(event.target.value, event.currentTarget)}
               onBlur={() => updateTypingState("")}
               placeholder={t.typeMessage}
               rows={1}
-              style={{ flex: 1, resize: "none", minHeight: 46, maxHeight: 120, borderRadius: 20, border: `1px solid ${border}`, background: settings.darkMode ? "#111827" : "white", color: textColor, padding: "12px 14px", fontSize, fontFamily: "inherit", lineHeight: 1.5 }}
+              style={{ flex: 1, resize: "none", minHeight: 42, maxHeight: 120, borderRadius: 10, border: "none", background: settings.darkMode ? "#2A3942" : "white", color: textColor, padding: "10px 14px", fontSize, fontFamily: "inherit", lineHeight: 1.45 }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
@@ -1872,7 +1873,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                 return;
               }
               sendMessage();
-            }} disabled={sending || (!newMessage.trim() && !recordingAudio)} style={{ width: 46, height: 46, borderRadius: "50%", border: "none", background: recordingAudio ? "#DC2626" : "#2563EB", color: "white", cursor: "pointer", fontWeight: 800, flexShrink: 0, opacity: sending || (!newMessage.trim() && !recordingAudio) ? 0.45 : 1 }}>
+            }} disabled={sending || (!newMessage.trim() && !recordingAudio)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: recordingAudio ? "#DC2626" : "#00A884", color: "white", cursor: "pointer", fontWeight: 800, flexShrink: 0, opacity: sending || (!newMessage.trim() && !recordingAudio) ? 0.45 : 1 }}>
               {recordingAudio ? "⏹" : t.send}
             </button>
           </div>
