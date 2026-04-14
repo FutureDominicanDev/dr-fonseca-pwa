@@ -1565,7 +1565,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       )}
 
       <div style={{ height: "100dvh", minHeight: "100dvh", background: bg, color: textColor, fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <header style={{ background: "#075E54", color: "white", padding: "calc(env(safe-area-inset-top) + 12px) 16px 12px", boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>
+        <header style={{ background: "#0F172A", color: "white", padding: "calc(env(safe-area-inset-top) + 12px) 16px 12px", boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#111827,#2563EB)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, flexShrink: 0 }}>
               {settings.avatarDataUrl ? <img src={settings.avatarDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : patientName.slice(0, 1).toUpperCase()}

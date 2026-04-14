@@ -311,7 +311,7 @@ export default function InboxPage() {
   const fontSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 20 : 17;
 
   const bg = darkMode ? "#0B141A" : "#EFEAE2";
-  const headerBg = darkMode ? "#111B21" : "#075E54";
+  const headerBg = darkMode ? "#111" : "#0F172A";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
   const inputBg = darkMode ? "#202C33" : "#F0F2F5";
   const textColor = darkMode ? "white" : "#1C1C1E";
