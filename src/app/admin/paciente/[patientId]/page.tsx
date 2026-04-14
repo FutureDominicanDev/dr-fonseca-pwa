@@ -88,8 +88,12 @@ export default function AdminPatientRecordPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pageError, setPageError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [timelineQuery, setTimelineQuery] = useState("");
+  const [timelineFrom, setTimelineFrom] = useState("");
+  const [timelineTo, setTimelineTo] = useState("");
 
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const timelineSectionRef = useRef<HTMLElement | null>(null);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
   const hasAdminAccess = viewerEmail.toLowerCase() === OWNER_EMAIL || ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
@@ -116,7 +120,7 @@ export default function AdminPatientRecordPage() {
     backToCenter: isSpanish ? "← Volver al centro" : "← Back to control center",
     goToPortal: isSpanish ? "Ir al portal" : "Go to portal",
     exporting: isSpanish ? "Preparando..." : "Preparing...",
-    exportRecord: isSpanish ? "📤 Compartir expediente" : "📤 Share record",
+    exportRecord: isSpanish ? "📤 Exportar PDF" : "📤 Export PDF",
     printRecord: isSpanish ? "🖨️ PDF / Imprimir" : "🖨️ PDF / Print",
     unavailableTitle: isSpanish ? "Expediente no disponible" : "Record unavailable",
     unavailableCopy: isSpanish
@@ -189,6 +193,13 @@ export default function AdminPatientRecordPage() {
     timelineCopy: isSpanish
       ? "Qué pasó, quién escribió, cuándo ocurrió, desde qué sede y con qué procedimiento estaba relacionado."
       : "What happened, who wrote it, when it happened, from which office, and which procedure it was tied to.",
+    timelineSearch: isSpanish ? "Buscar en historial" : "Search history",
+    timelineSearchPH: isSpanish ? "Buscar por texto, remitente, rol o procedimiento..." : "Search by text, sender, role, or procedure...",
+    fromDate: isSpanish ? "Desde" : "From",
+    toDate: isSpanish ? "Hasta" : "To",
+    clearFilters: isSpanish ? "Limpiar filtros" : "Clear filters",
+    showingEntries: isSpanish ? "Mostrando" : "Showing",
+    jumpTop: isSpanish ? "⬆️ Ir arriba" : "⬆️ Back to top",
     noTimeline: isSpanish ? "No hay historial registrado todavía." : "There is no recorded history yet.",
     roomLabel: isSpanish ? "Sala" : "Room",
     procedureLabel: isSpanish ? "Procedimiento" : "Procedure",
@@ -204,7 +215,7 @@ export default function AdminPatientRecordPage() {
       : "The Supabase setup still needs to be run before this new information can be saved.",
     shareOpened: isSpanish ? "Se abrió el menú para compartir el expediente." : "The share menu opened for this record.",
     sharePreview: isSpanish ? "Abrí una vista previa del expediente para que puedas compartirlo desde el navegador." : "I opened a record preview so you can share it from the browser.",
-    recordDownloaded: isSpanish ? "El expediente se descargó en este dispositivo." : "The record was downloaded to this device.",
+    recordDownloaded: isSpanish ? "Abrí el expediente listo para guardarlo como PDF." : "I opened the record ready to save as PDF.",
     pdfOpened: isSpanish ? "Se abrió la versión lista para imprimir o guardar en PDF." : "The print-ready version opened.",
   };
 
@@ -301,10 +312,41 @@ export default function AdminPatientRecordPage() {
 
   const timeline = useMemo(() => (bundle ? getTimelineEntries(bundle) : []), [bundle]);
   const media = useMemo(() => (bundle ? getMediaEntries(bundle) : { images: [], videos: [], audios: [], files: [] }), [bundle]);
+  const filteredTimeline = useMemo(() => {
+    const q = timelineQuery.trim().toLowerCase();
+    const fromMs = timelineFrom ? new Date(`${timelineFrom}T00:00:00`).getTime() : null;
+    const toMs = timelineTo ? new Date(`${timelineTo}T23:59:59.999`).getTime() : null;
+
+    return timeline.filter((entry) => {
+      const createdMs = entry.message.created_at ? new Date(entry.message.created_at).getTime() : 0;
+      if (fromMs && createdMs < fromMs) return false;
+      if (toMs && createdMs > toMs) return false;
+      if (!q) return true;
+
+      const haystack = [
+        entry.message.sender_name,
+        entry.message.sender_role,
+        entry.message.sender_type,
+        entry.message.content,
+        entry.message.file_name,
+        entry.message.message_type,
+        entry.procedure.procedure_name,
+        entry.procedure.office_location,
+        entry.room.id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [timeline, timelineFrom, timelineQuery, timelineTo]);
   const offices = useMemo(() => {
     return [...new Set(procedures.map((procedure) => normalizeOffice(procedure.office_location)).filter(Boolean))];
   }, [procedures]);
   const patientLocalTime = currentTimeInZone(patient?.timezone, lang === "es" ? "es-MX" : "en-US");
+  const scrollTimelineTop = () => {
+    timelineSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   useEffect(() => {
     if (!patient) return;
@@ -648,58 +690,13 @@ export default function AdminPatientRecordPage() {
         staffById,
         generatedBy: viewerProfile?.full_name || viewerEmail,
       });
-
-      const fileName = `expediente-${sanitizeFileName(patient.full_name || "patient")}.html`;
-      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-      const exportFile = new File([blob], fileName, { type: "text/html" });
-      const nav = navigator as Navigator & {
-        canShare?: (data?: ShareData) => boolean;
-      };
-      const isTouchDevice =
-        /iPhone|iPad|Android/i.test(window.navigator.userAgent) ||
-        window.matchMedia("(max-width: 900px)").matches;
-
-      if (typeof nav.share === "function") {
-        const shareData: ShareData = {
-          title: patient.full_name || t.unnamedPatient,
-          text: isSpanish
-            ? `Expediente de ${patient.full_name || t.unnamedPatient}`
-            : `${patient.full_name || t.unnamedPatient} record`,
-        };
-
-        if (typeof nav.canShare === "function" && nav.canShare({ files: [exportFile] })) {
-          shareData.files = [exportFile];
-        }
-
-        try {
-          await nav.share(shareData);
-          await logAdminEvent({
-            action: "record_shared",
-            entityType: "patient",
-            entityId: patient.id,
-            entityName: patient.full_name || t.unnamedPatient,
-            patientId: patient.id,
-            actorId: viewerProfile?.id || null,
-            actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
-            actorEmail: viewerEmail,
-            notes: "Se abrió el menú para compartir el expediente.",
-          });
-          updateSuccess(t.shareOpened);
-          return;
-        } catch (shareError: any) {
-          if (shareError?.name === "AbortError") {
-            setExporting(false);
-            return;
-          }
-        }
-      }
-
-      if (isTouchDevice) {
-        const previewUrl = URL.createObjectURL(blob);
-        window.open(previewUrl, "_blank", "noopener,noreferrer");
-        window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60_000);
+      const opened = openPrintPreview({
+        title: patient.full_name || t.unnamedPatient,
+        html,
+      });
+      if (opened) {
         await logAdminEvent({
-          action: "record_preview_opened",
+          action: "record_pdf_export_opened",
           entityType: "patient",
           entityId: patient.id,
           entityName: patient.full_name || t.unnamedPatient,
@@ -707,25 +704,15 @@ export default function AdminPatientRecordPage() {
           actorId: viewerProfile?.id || null,
           actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
           actorEmail: viewerEmail,
-          notes: "Se abrió la vista previa del expediente para compartirlo.",
+          notes: "Se abrió el expediente listo para exportar o guardar en PDF.",
         });
-        updateSuccess(t.sharePreview);
+        updateSuccess(t.recordDownloaded);
         return;
       }
 
+      const fileName = `expediente-${sanitizeFileName(patient.full_name || "patient")}.html`;
       downloadFile(fileName, html, "text/html;charset=utf-8");
-      await logAdminEvent({
-        action: "record_downloaded",
-        entityType: "patient",
-        entityId: patient.id,
-        entityName: patient.full_name || t.unnamedPatient,
-        patientId: patient.id,
-        actorId: viewerProfile?.id || null,
-        actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
-        actorEmail: viewerEmail,
-        notes: "Se descargó el expediente en el dispositivo.",
-      });
-      updateSuccess(t.recordDownloaded);
+      updateSuccess(isSpanish ? "No pude abrir la vista PDF automática. Descargué el respaldo en HTML." : "I could not open the automatic PDF view. I downloaded an HTML backup.");
     } catch (error: any) {
       setPageError(error?.message || (isSpanish ? "No pude exportar este expediente." : "I could not export this record."));
     } finally {
@@ -950,6 +937,12 @@ export default function AdminPatientRecordPage() {
         .timeline-list { display: grid; gap: 14px; }
         .timeline-item { border: 1px solid #E5EDF6; border-radius: 18px; padding: 16px; background: #FCFDFF; }
         .timeline-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+        .timeline-filters { display: grid; gap: 10px; margin-bottom: 14px; }
+        .timeline-filters input { width: 100%; border: 1px solid #D7E2F0; border-radius: 12px; padding: 10px 12px; font-size: 14px; font-family: inherit; background: #FFFFFF; color: #111827; }
+        .timeline-filters input:focus { outline: 2px solid rgba(37,99,235,0.2); border-color: #93C5FD; }
+        .timeline-date-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .timeline-date-grid label { display: grid; gap: 6px; font-size: 12px; color: #64748B; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+        .timeline-filter-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
         .body-copy { color: #111827; font-size: 15px; line-height: 1.7; margin: 0; white-space: pre-wrap; word-break: break-word; }
         .body-muted { color: #6B7280; font-size: 14px; line-height: 1.6; margin: 0; }
         .preview-wrap { display: grid; gap: 10px; }
@@ -982,6 +975,7 @@ export default function AdminPatientRecordPage() {
           .topbar-btn { text-align: center; padding: 12px 12px; font-size: 13px; }
           .toast-stack { right: 12px; left: 12px; width: auto; }
           .timeline-top, .section-head, .media-item { flex-direction: column; }
+          .timeline-date-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -1369,19 +1363,42 @@ export default function AdminPatientRecordPage() {
                 </div>
               </section>
 
-              <section className="card" style={{ marginTop: 16 }}>
+              <section className="card" style={{ marginTop: 16 }} ref={timelineSectionRef}>
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">{t.timelineTitle}</p>
                     <p className="section-sub">{t.timelineCopy}</p>
                   </div>
                 </div>
+                <div className="timeline-filters">
+                  <input
+                    value={timelineQuery}
+                    onChange={(event) => setTimelineQuery(event.target.value)}
+                    placeholder={t.timelineSearchPH}
+                    aria-label={t.timelineSearch}
+                  />
+                  <div className="timeline-date-grid">
+                    <label>
+                      {t.fromDate}
+                      <input type="date" value={timelineFrom} onChange={(event) => setTimelineFrom(event.target.value)} />
+                    </label>
+                    <label>
+                      {t.toDate}
+                      <input type="date" value={timelineTo} onChange={(event) => setTimelineTo(event.target.value)} />
+                    </label>
+                  </div>
+                  <div className="timeline-filter-row">
+                    <span className="body-muted">{t.showingEntries}: {filteredTimeline.length} / {timeline.length}</span>
+                    <button className="ghost-btn" onClick={() => { setTimelineQuery(""); setTimelineFrom(""); setTimelineTo(""); }}>{t.clearFilters}</button>
+                    <button className="ghost-btn" onClick={scrollTimelineTop}>{t.jumpTop}</button>
+                  </div>
+                </div>
 
-                {timeline.length === 0 ? (
+                {filteredTimeline.length === 0 ? (
                   <div className="empty-mini">{t.noTimeline}</div>
                 ) : (
                   <div className="timeline-list">
-                    {timeline.map((entry) => {
+                    {filteredTimeline.map((entry) => {
                       const senderProfile = entry.message.sender_id ? staffById.get(entry.message.sender_id) : null;
                       const senderOffice =
                         normalizeOffice(entry.message.sender_office) ||

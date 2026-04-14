@@ -525,17 +525,29 @@ export const buildExportHtml = ({
 };
 
 export const openPrintPreview = ({ title, html }: { title: string; html: string }) => {
-  const printWindow = window.open("", "_blank", "noopener,noreferrer");
-  if (!printWindow) return false;
+  const htmlWithPrintStyles = html.replace("</head>", `<style>@page { margin: 14mm; }</style></head>`);
+  const blob = new Blob([htmlWithPrintStyles], { type: "text/html;charset=utf-8" });
+  const previewUrl = URL.createObjectURL(blob);
+  const printWindow = window.open(previewUrl, "_blank");
+  if (!printWindow) {
+    URL.revokeObjectURL(previewUrl);
+    return false;
+  }
 
-  printWindow.document.open();
-  printWindow.document.write(html.replace("</head>", `<style>@page { margin: 14mm; }</style></head>`));
-  printWindow.document.close();
   printWindow.document.title = title;
-  printWindow.focus();
-  window.setTimeout(() => {
-    printWindow.print();
-  }, 450);
+  const triggerPrint = () => {
+    try {
+      printWindow.focus();
+      printWindow.print();
+    } catch {
+      // If a browser blocks print(), we still leave the preview tab open.
+    }
+  };
+  printWindow.addEventListener("load", () => {
+    window.setTimeout(triggerPrint, 350);
+  }, { once: true });
+  window.setTimeout(triggerPrint, 1400);
+  window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60_000);
   return true;
 };
 

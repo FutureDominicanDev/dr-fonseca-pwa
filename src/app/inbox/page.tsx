@@ -623,6 +623,32 @@ export default function InboxPage() {
     }
   }, [alertMessageStorageKey, describeIncomingMessage, incomingMessageKey, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
 
+  const registerIncomingInternalNote = useCallback((message: any) => {
+    const roomId = message.room_id;
+    const messageKey = incomingMessageKey(message);
+    if (typeof window !== "undefined" && messageKey) {
+      const lastAlertedMessage = window.localStorage.getItem(alertMessageStorageKey(roomId)) || "";
+      if (lastAlertedMessage === messageKey) return;
+      window.localStorage.setItem(alertMessageStorageKey(roomId), messageKey);
+      window.localStorage.setItem(`last_alert_${roomId}`, message.created_at || new Date().toISOString());
+    }
+
+    const patientName = roomPatientName(roomId);
+    const title = lang === "es" ? `Nota interna · ${patientName}` : `Internal note · ${patientName}`;
+    const rawBody = `${message.content || ""}`.trim();
+    const body = rawBody
+      ? rawBody.slice(0, 120)
+      : (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up.");
+    const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
+    const isActiveRoom = selectedRoomRef.current?.id === roomId;
+
+    playIncomingTone();
+    showToastAlert(roomId, title, body);
+    if (!isVisible || !isActiveRoom) {
+      pushNotif(title, body);
+    }
+  }, [alertMessageStorageKey, incomingMessageKey, lang, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
+
   const broadcastTypingState = useCallback((isTyping: boolean, roomId: string, name: string) => {
     if (!typingChannelRef.current) return;
     outgoingTypingRef.current = isTyping;
@@ -808,6 +834,7 @@ export default function InboxPage() {
   // --- Unread badge polling: check all rooms every 20s for new patient messages ---
   // Uses localStorage timestamps so badges survive page refresh
   const checkUnreadBadges = async () => {
+    if (pauseBackgroundRefreshRef.current) return;
     const { data: msgs } = await supabase
       .from("messages")
       .select("room_id, created_at, content, message_type, file_name")
@@ -994,6 +1021,9 @@ export default function InboxPage() {
           if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
           registerIncomingPatientMessage(m, { skipUnread: selectedRoomRef.current?.id===m.room_id && typeof document !== "undefined" && document.visibilityState === "visible" });
         }
+        if (m.sender_type === "staff" && m.is_internal && m.sender_id && m.sender_id !== currentUserId) {
+          registerIncomingInternalNote(m);
+        }
         if (selectedRoomRef.current?.id===m.room_id) {
           setMessages(prev=>{
             const ti=prev.findIndex(x=>typeof x.id==="string"&&x.id.startsWith("temp-")&&x.content===m.content&&x.sender_type===m.sender_type);
@@ -1006,7 +1036,7 @@ export default function InboxPage() {
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},({new:m})=>{ if (selectedRoomRef.current?.id===m.room_id) setMessages(p=>p.map(x=>x.id===m.id?m:x)); })
       .subscribe();
     return ()=>{ supabase.removeChannel(ch); };
-  },[registerIncomingPatientMessage]);
+  },[currentUserId, registerIncomingInternalNote, registerIncomingPatientMessage]);
 
   useEffect(() => {
     const activeRoomId = selectedRoomRef.current?.id;
@@ -1194,6 +1224,18 @@ export default function InboxPage() {
     } else if (data) {
       setMessages((prev) => prev.map((entry) => entry.id === tempId ? data : entry));
       setInternalNoteDraft("");
+      fetch("/api/push",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          roomId:selectedRoom.id,
+          userType:"staff",
+          title: lang === "es" ? `Nota interna · ${roomPatientName(selectedRoom.id)}` : `Internal note · ${roomPatientName(selectedRoom.id)}`,
+          body: `${data.content || ""}`.trim().slice(0, 120) || (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up."),
+          url: window.location.href,
+          tag: `internal-note-${selectedRoom.id}`,
+        }),
+      }).catch(()=>{});
       alert(t.noteSaved);
     }
 
