@@ -96,6 +96,16 @@ const T = {
     videoCallInvite: "Invitación de videollamada",
     videoCallInviteBody: "Toca para entrar a la videollamada segura.",
     videoCallOpenError: "No pude abrir la videollamada. Revisa si tu navegador bloqueó la ventana.",
+    requestVideoCall: "Solicitar videollamada",
+    incomingCallRequest: "Solicitud de videollamada",
+    callRequestBody: "El paciente está pidiendo iniciar una videollamada.",
+    callRequestSent: "Solicitud enviada. Esperando al equipo clínico…",
+    acceptCall: "Aceptar llamada",
+    shareInvite: "Invitar",
+    inviteCopied: "Enlace copiado",
+    openInChat: "Abrir en chat",
+    endAndReturn: "Terminar y volver al chat",
+    callEndedNote: "Videollamada finalizada",
     patientLocalTime: "Hora Local del Paciente",
     internalNotes: "Notas internas del equipo",
     internalNotesHint: "Solo el equipo asignado puede ver estas notas.",
@@ -194,6 +204,16 @@ const T = {
     videoCallInvite: "Video call invite",
     videoCallInviteBody: "Tap to join the secure video call.",
     videoCallOpenError: "I could not open the video call. Check if your browser blocked the popup.",
+    requestVideoCall: "Request video call",
+    incomingCallRequest: "Video call request",
+    callRequestBody: "The patient is requesting to start a video call.",
+    callRequestSent: "Request sent. Waiting for the care team…",
+    acceptCall: "Accept call",
+    shareInvite: "Invite",
+    inviteCopied: "Link copied",
+    openInChat: "Open in chat",
+    endAndReturn: "End and return to chat",
+    callEndedNote: "Video call ended",
     patientLocalTime: "Patient Local Time",
     internalNotes: "Internal team notes",
     internalNotesHint: "Only the assigned care team can see these notes.",
@@ -237,6 +257,7 @@ const T = {
 };
 
 const VIDEO_CALL_PREFIX = "__VIDEO_CALL__::";
+const CALL_REQUEST_PREFIX = "__CALL_REQUEST__::";
 
 const normalizeCallRoomId = (roomId: string) =>
   String(roomId || "")
@@ -257,6 +278,14 @@ const parseVideoCallMessage = (content: string | null | undefined) => {
   const url = text.slice(VIDEO_CALL_PREFIX.length).trim();
   if (!url.startsWith("https://")) return null;
   return url;
+};
+
+const buildCallRequestMessage = () => `${CALL_REQUEST_PREFIX}${new Date().toISOString()}`;
+
+const parseCallRequestMessage = (content: string | null | undefined) => {
+  const text = `${content || ""}`.trim();
+  if (!text.startsWith(CALL_REQUEST_PREFIX)) return null;
+  return text.slice(CALL_REQUEST_PREFIX.length).trim() || "request";
 };
 
 interface QuickReply { shortcut: string; message: string; }
@@ -435,6 +464,9 @@ export default function InboxPage() {
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
+  const [callOverlayOpen, setCallOverlayOpen] = useState(false);
+  const [activeCallUrl, setActiveCallUrl] = useState<string | null>(null);
+  const [callInviteFeedback, setCallInviteFeedback] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -578,6 +610,7 @@ export default function InboxPage() {
   }, [ensureAudioContext]);
 
   const describeIncomingMessage = useCallback((message: any) => {
+    if (parseCallRequestMessage(message.content)) return t.incomingCallRequest;
     if (message.message_type === "audio") return lang==="es" ? "Nuevo audio" : "New audio";
     if (message.message_type === "video") return lang==="es" ? "Nuevo video" : "New video";
     if (message.message_type === "image") return lang==="es" ? "Nueva imagen" : "New image";
@@ -778,6 +811,7 @@ export default function InboxPage() {
         !entry?.deleted_by_patient &&
         !entry?.is_internal &&
         !parseVideoCallMessage(entry?.content) &&
+        !parseCallRequestMessage(entry?.content) &&
         `${entry?.content || ""}`.trim().length > 0 &&
         entry?.id
     );
@@ -1154,6 +1188,25 @@ export default function InboxPage() {
     }
   }, [captureMode]);
 
+  useEffect(() => {
+    if (!callOverlayOpen) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data;
+      const serialized =
+        typeof data === "string"
+          ? data
+          : (() => {
+              try { return JSON.stringify(data); } catch { return ""; }
+            })();
+      const marker = serialized.toLowerCase();
+      if (marker.includes("videoconferenceleft") || marker.includes("readytoclose") || marker.includes("hangup")) {
+        closeCallOverlay().catch(() => {});
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [callOverlayOpen]);
+
   const fetchRooms = async () => {
     const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications))";
     const fallbackSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, profile_picture_url, birthdate))";
@@ -1195,6 +1248,75 @@ export default function InboxPage() {
       url: window.location.href, tag: selectedRoom.id,
     })}).catch(()=>{});
     isSending.current=false; setSending(false);
+  };
+
+  const postSystemMessage = async (roomId: string, text: string) => {
+    if (!roomId || !text.trim()) return;
+    const tempId = "temp-system-" + Date.now();
+    const tempMessage = {
+      id: tempId,
+      room_id: roomId,
+      content: text,
+      message_type: "text",
+      sender_type: "staff",
+      sender_name: "Sistema",
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMessage]);
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        room_id: roomId,
+        content: text,
+        message_type: "text",
+        sender_type: "staff",
+        sender_id: currentUserId || null,
+        sender_name: "Sistema",
+        sender_role: userProfile?.role || "staff",
+      })
+      .select()
+      .single();
+    if (error) {
+      setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
+      return;
+    }
+    if (data) {
+      setMessages((prev) => prev.map((entry) => (entry.id === tempId ? data : entry)));
+    }
+  };
+
+  const openCallOverlay = (url: string) => {
+    setActiveCallUrl(url);
+    setCallOverlayOpen(true);
+    setCallInviteFeedback("");
+  };
+
+  const closeCallOverlay = async () => {
+    const roomId = selectedRoom?.id;
+    setCallOverlayOpen(false);
+    setActiveCallUrl(null);
+    if (roomId) {
+      const now = new Date();
+      const time = now.toLocaleTimeString(lang === "es" ? "es-MX" : "en-US", { hour: "2-digit", minute: "2-digit" });
+      await postSystemMessage(roomId, `📴 ${t.callEndedNote} · ${time}`);
+    }
+  };
+
+  const shareCallInvite = async (url: string) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: t.videoCallInvite, text: t.videoCallInviteBody, url });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        throw new Error("clipboard-unavailable");
+      }
+      setCallInviteFeedback(t.inviteCopied);
+      window.setTimeout(() => setCallInviteFeedback(""), 1800);
+    } catch {
+      setCallInviteFeedback(t.videoCallOpenError);
+      window.setTimeout(() => setCallInviteFeedback(""), 2200);
+    }
   };
 
   const startVideoCall = async () => {
@@ -1261,11 +1383,7 @@ export default function InboxPage() {
         tag: selectedRoom.id,
       }),
     }).catch(() => {});
-
-    const popup = window.open(callUrl, "_blank", "noopener,noreferrer");
-    if (!popup) {
-      window.location.href = callUrl;
-    }
+    openCallOverlay(callUrl);
     isSending.current = false;
     setSending(false);
   };
@@ -1622,7 +1740,8 @@ export default function InboxPage() {
       ? (lang === "es" ? "Tú" : "You")
       : (msg.sender_name || (isOut ? "Staff" : "Paciente"));
     const videoCallUrl = parseVideoCallMessage(msg.content);
-    const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id && !videoCallUrl
+    const callRequestToken = parseCallRequestMessage(msg.content);
+    const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id && !videoCallUrl && !callRequestToken
       ? translatedIncoming[translationKey(msg.id, lang)] || ""
       : "";
     const contentToRender = translated || msg.content;
@@ -1668,6 +1787,38 @@ export default function InboxPage() {
             </a>
             <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
+        ):callRequestToken ? (
+          <div style={{ ...bubbleStyle, padding: 12, minWidth: 250 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 20 }}>📲</span>
+              <span style={{ fontSize: 14, fontWeight: 800 }}>{isOut ? t.callRequestSent : t.incomingCallRequest}</span>
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>
+              {isOut ? t.callRequestSent : t.callRequestBody}
+            </div>
+            {!isOut && (
+              <button
+                onClick={startVideoCall}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: "9px 12px",
+                  borderRadius: 10,
+                  background: "#2563EB",
+                  border: "none",
+                  color: "white",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                🎥 {t.acceptCall}
+              </button>
+            )}
+            <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+          </div>
         ):videoCallUrl ? (
           <div style={{ ...bubbleStyle, padding: 12, minWidth: 240 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -1675,10 +1826,8 @@ export default function InboxPage() {
               <span style={{ fontSize: 14, fontWeight: 800 }}>{t.videoCallInvite}</span>
             </div>
             <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>{t.videoCallInviteBody}</div>
-            <a
-              href={videoCallUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={() => openCallOverlay(videoCallUrl)}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -1687,14 +1836,35 @@ export default function InboxPage() {
                 padding: "9px 12px",
                 borderRadius: 10,
                 background: "#2563EB",
+                border: "none",
                 color: "white",
                 fontSize: 13,
                 fontWeight: 800,
-                textDecoration: "none",
+                cursor: "pointer",
               }}
             >
-              🎬 {t.joinVideoCall}
-            </a>
+              🎬 {t.openInChat}
+            </button>
+            <button
+              onClick={() => shareCallInvite(videoCallUrl)}
+              style={{
+                marginLeft: 8,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                padding: "9px 12px",
+                borderRadius: 10,
+                background: "rgba(37,99,235,0.12)",
+                border: "1px solid rgba(37,99,235,0.35)",
+                color: "#1D4ED8",
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              🔗 {t.shareInvite}
+            </button>
             <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
@@ -2241,6 +2411,31 @@ export default function InboxPage() {
             <button onClick={copyLink} style={{width:"100%",padding:14,background:linkCopied?"#34C759":"#007AFF",border:"none",borderRadius:14,color:"white",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>{linkCopied?t.copied:t.copyLink}</button>
             <button onClick={whatsAppLink} style={{width:"100%",padding:14,background:"#25D366",border:"none",borderRadius:14,color:"white",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>{t.whatsapp}</button>
             <button onClick={()=>setCreatedRoomLink(null)} className="sbtn">{t.done}</button>
+          </div>
+        </div>
+      )}
+
+      {callOverlayOpen && activeCallUrl && (
+        <div style={{position:"fixed",inset:0,zIndex:260,background:"rgba(2,6,23,0.82)",display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
+          <div style={{width:"min(1180px,100%)",height:"min(92dvh,900px)",background:"#020617",borderRadius:18,overflow:"hidden",display:"flex",flexDirection:"column",border:"1px solid rgba(148,163,184,0.35)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"10px 12px",background:"rgba(15,23,42,0.95)",borderBottom:"1px solid rgba(148,163,184,0.2)"}}>
+              <div style={{color:"white",fontSize:14,fontWeight:800}}>🎥 {t.videoCall}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <button onClick={()=>shareCallInvite(activeCallUrl)} style={{border:"none",borderRadius:10,padding:"8px 10px",background:"rgba(37,99,235,0.2)",color:"white",fontSize:12,fontWeight:800,cursor:"pointer"}}>🔗 {t.shareInvite}</button>
+                <button onClick={()=>closeCallOverlay()} style={{border:"none",borderRadius:10,padding:"8px 10px",background:"#DC2626",color:"white",fontSize:12,fontWeight:800,cursor:"pointer"}}>📴 {t.endAndReturn}</button>
+              </div>
+            </div>
+            {callInviteFeedback && (
+              <div style={{padding:"8px 12px",fontSize:12,fontWeight:700,color:"#BFDBFE",background:"rgba(30,58,138,0.45)"}}>
+                {callInviteFeedback}
+              </div>
+            )}
+            <iframe
+              src={activeCallUrl}
+              allow="camera; microphone; fullscreen; display-capture; autoplay"
+              style={{border:"none",width:"100%",height:"100%",background:"#000"}}
+              title="Video Call"
+            />
           </div>
         </div>
       )}
