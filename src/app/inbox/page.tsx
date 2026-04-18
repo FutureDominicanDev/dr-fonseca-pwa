@@ -90,6 +90,12 @@ const T = {
     patientInfo: "Ficha del Paciente",
     patientInfoHint: "Datos clínicos y operativos del caso",
     callPatient: "Llamar paciente",
+    videoCall: "Videollamada",
+    startVideoCall: "Iniciar videollamada",
+    joinVideoCall: "Unirse a videollamada",
+    videoCallInvite: "Invitación de videollamada",
+    videoCallInviteBody: "Toca para entrar a la videollamada segura.",
+    videoCallOpenError: "No pude abrir la videollamada. Revisa si tu navegador bloqueó la ventana.",
     patientLocalTime: "Hora Local del Paciente",
     internalNotes: "Notas internas del equipo",
     internalNotesHint: "Solo el equipo asignado puede ver estas notas.",
@@ -182,6 +188,12 @@ const T = {
     patientInfo: "Patient Info",
     patientInfoHint: "Clinical and operational case details",
     callPatient: "Call patient",
+    videoCall: "Video call",
+    startVideoCall: "Start video call",
+    joinVideoCall: "Join video call",
+    videoCallInvite: "Video call invite",
+    videoCallInviteBody: "Tap to join the secure video call.",
+    videoCallOpenError: "I could not open the video call. Check if your browser blocked the popup.",
     patientLocalTime: "Patient Local Time",
     internalNotes: "Internal team notes",
     internalNotesHint: "Only the assigned care team can see these notes.",
@@ -222,6 +234,29 @@ const T = {
     small: "Small", medium: "Normal", large: "Large",
     editReply: "Edit Reply", deleteConfirm: "Delete this reply?",
   }
+};
+
+const VIDEO_CALL_PREFIX = "__VIDEO_CALL__::";
+
+const normalizeCallRoomId = (roomId: string) =>
+  String(roomId || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 36) || "room";
+
+const buildVideoCallUrl = (roomId: string) => {
+  const roomCode = normalizeCallRoomId(roomId);
+  const subject = encodeURIComponent("Dr Fonseca Video Call");
+  return `https://meet.jit.si/DrFonsecaPWA-${roomCode}#config.prejoinPageEnabled=true&interfaceConfig.DISABLE_JOIN_LEAVE_NOTIFICATIONS=true&config.subject=${subject}`;
+};
+
+const buildVideoCallMessage = (roomId: string) => `${VIDEO_CALL_PREFIX}${buildVideoCallUrl(roomId)}`;
+
+const parseVideoCallMessage = (content: string | null | undefined) => {
+  const text = `${content || ""}`.trim();
+  if (!text.startsWith(VIDEO_CALL_PREFIX)) return null;
+  const url = text.slice(VIDEO_CALL_PREFIX.length).trim();
+  if (!url.startsWith("https://")) return null;
+  return url;
 };
 
 interface QuickReply { shortcut: string; message: string; }
@@ -547,9 +582,10 @@ export default function InboxPage() {
     if (message.message_type === "video") return lang==="es" ? "Nuevo video" : "New video";
     if (message.message_type === "image") return lang==="es" ? "Nueva imagen" : "New image";
     if (message.message_type === "file") return lang==="es" ? "Nuevo archivo" : "New file";
+    if (parseVideoCallMessage(message.content)) return t.videoCallInvite;
     const text = `${message.content || ""}`.trim();
     return text ? text.slice(0, 120) : lang==="es" ? "Nuevo mensaje" : "New message";
-  }, [lang]);
+  }, [lang, t.videoCallInvite]);
 
   const roomPatientName = useCallback((roomId: string) => {
     const patient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === roomId));
@@ -741,6 +777,7 @@ export default function InboxPage() {
         !entry?.deleted_by_staff &&
         !entry?.deleted_by_patient &&
         !entry?.is_internal &&
+        !parseVideoCallMessage(entry?.content) &&
         `${entry?.content || ""}`.trim().length > 0 &&
         entry?.id
     );
@@ -1160,6 +1197,79 @@ export default function InboxPage() {
     isSending.current=false; setSending(false);
   };
 
+  const startVideoCall = async () => {
+    if (!selectedRoom || isSending.current) return;
+    updateTypingState("", selectedRoom.id);
+    isSending.current = true;
+    setSending(true);
+
+    const callUrl = buildVideoCallUrl(selectedRoom.id);
+    const messageContent = buildVideoCallMessage(selectedRoom.id);
+    const sName = userProfile?.full_name || userProfile?.display_name || "Staff";
+    const sRole = userProfile?.role || "staff";
+    const sOffice = userProfile?.office_location || selectedRoom?.procedures?.office_location || null;
+    const tempId = "temp-call-" + Date.now();
+    const tempMessage = {
+      id: tempId,
+      room_id: selectedRoom.id,
+      content: messageContent,
+      message_type: "text",
+      sender_type: "staff",
+      sender_name: sName,
+      sender_role: sRole,
+      created_at: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, tempMessage]);
+
+    const { data: inserted, error } = await supabase
+      .from("messages")
+      .insert({
+        room_id: selectedRoom.id,
+        content: messageContent,
+        message_type: "text",
+        sender_type: "staff",
+        sender_id: currentUserId || null,
+        sender_name: sName,
+        sender_role: sRole,
+        sender_office: sOffice,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
+      isSending.current = false;
+      setSending(false);
+      alert(error.message || t.videoCallOpenError);
+      return;
+    }
+
+    if (inserted) {
+      setMessages((prev) => prev.map((entry) => (entry.id === tempId ? inserted : entry)));
+    }
+
+    fetch("/api/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roomId: selectedRoom.id,
+        userType: "patient",
+        title: sName,
+        body: t.videoCallInvite,
+        url: window.location.href,
+        tag: selectedRoom.id,
+      }),
+    }).catch(() => {});
+
+    const popup = window.open(callUrl, "_blank", "noopener,noreferrer");
+    if (!popup) {
+      window.location.href = callUrl;
+    }
+    isSending.current = false;
+    setSending(false);
+  };
+
   const confirmUpload = async (cat: FileCategory) => { if (!pendingFile) return; setShowUploadMenu(false); await uploadFile(pendingFile,cat); setPendingFile(null); };
 
   const uploadFile = async (file: File, cat: FileCategory="general") => {
@@ -1511,7 +1621,8 @@ export default function InboxPage() {
     const sn = isOut && !!currentUserId && msg.sender_id === currentUserId
       ? (lang === "es" ? "Tú" : "You")
       : (msg.sender_name || (isOut ? "Staff" : "Paciente"));
-    const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id
+    const videoCallUrl = parseVideoCallMessage(msg.content);
+    const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id && !videoCallUrl
       ? translatedIncoming[translationKey(msg.id, lang)] || ""
       : "";
     const contentToRender = translated || msg.content;
@@ -1556,6 +1667,35 @@ export default function InboxPage() {
               <div><div style={{fontSize:14,fontWeight:700}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
             </a>
             <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+          </div>
+        ):videoCallUrl ? (
+          <div style={{ ...bubbleStyle, padding: 12, minWidth: 240 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 20 }}>🎥</span>
+              <span style={{ fontSize: 14, fontWeight: 800 }}>{t.videoCallInvite}</span>
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>{t.videoCallInviteBody}</div>
+            <a
+              href={videoCallUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                padding: "9px 12px",
+                borderRadius: 10,
+                background: "#2563EB",
+                color: "white",
+                fontSize: 13,
+                fontWeight: 800,
+                textDecoration: "none",
+              }}
+            >
+              🎬 {t.joinVideoCall}
+            </a>
+            <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
           <div style={{...bubbleStyle,lineHeight:1.5,wordBreak:"break-word",fontSize,fontWeight:400}}>
@@ -2310,6 +2450,13 @@ export default function InboxPage() {
                   {selectedRoom.procedures?.patients?.phone && (
                     <a href={`tel:${selectedRoom.procedures.patients.phone}`} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",fontSize:18,flexShrink:0}} title={t.callPatient}>📞</a>
                   )}
+                  <button
+                    onClick={startVideoCall}
+                    style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                    title={t.startVideoCall}
+                  >
+                    🎥
+                  </button>
                   <button onClick={()=>{setShowMediaLibrary(true);setMediaLibraryTab("media");}} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={lang==="es"?"Media":"Media"}>🖼️</button>
                   <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
                 </div>

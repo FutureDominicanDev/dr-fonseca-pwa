@@ -83,6 +83,11 @@ const T = {
     photoHelp: "Esta foto solo se guarda en este dispositivo.",
     callOffice: "Llamar a la oficina",
     callOfficeHint: "Si necesitas ayuda inmediata, llama a la sede asignada.",
+    startVideoCall: "Iniciar videollamada",
+    joinVideoCall: "Unirse a videollamada",
+    videoCallInvite: "Invitación de videollamada",
+    videoCallInviteBody: "Toca para entrar a la videollamada segura.",
+    videoCallOpenError: "No pude abrir la videollamada. Revisa si tu navegador bloqueó la ventana.",
     stopAndSendAudio: "Detener y enviar audio",
     stopAndSendVideo: "Detener y enviar video",
     preparingCamera: "Abriendo cámara...",
@@ -144,6 +149,11 @@ const T = {
     photoHelp: "This photo only stays on this device.",
     callOffice: "Call office",
     callOfficeHint: "If you need immediate help, call the assigned office.",
+    startVideoCall: "Start video call",
+    joinVideoCall: "Join video call",
+    videoCallInvite: "Video call invite",
+    videoCallInviteBody: "Tap to join the secure video call.",
+    videoCallOpenError: "I could not open the video call. Check if your browser blocked the popup.",
     stopAndSendAudio: "Stop and send audio",
     stopAndSendVideo: "Stop and send video",
     preparingCamera: "Opening camera...",
@@ -154,6 +164,29 @@ const T = {
     deleteAction: "Delete",
   },
 } as const;
+
+const VIDEO_CALL_PREFIX = "__VIDEO_CALL__::";
+
+const normalizeCallRoomId = (roomId: string) =>
+  String(roomId || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 36) || "room";
+
+const buildVideoCallUrl = (roomId: string) => {
+  const roomCode = normalizeCallRoomId(roomId);
+  const subject = encodeURIComponent("Dr Fonseca Video Call");
+  return `https://meet.jit.si/DrFonsecaPWA-${roomCode}#config.prejoinPageEnabled=true&interfaceConfig.DISABLE_JOIN_LEAVE_NOTIFICATIONS=true&config.subject=${subject}`;
+};
+
+const buildVideoCallMessage = (roomId: string) => `${VIDEO_CALL_PREFIX}${buildVideoCallUrl(roomId)}`;
+
+const parseVideoCallMessage = (content: string | null | undefined) => {
+  const text = `${content || ""}`.trim();
+  if (!text.startsWith(VIDEO_CALL_PREFIX)) return null;
+  const url = text.slice(VIDEO_CALL_PREFIX.length).trim();
+  if (!url.startsWith("https://")) return null;
+  return url;
+};
 
 const storageKeyForRoom = (roomId: string) => `patient-room-settings-${roomId}`;
 const setupDismissedKeyForRoom = (roomId: string) => `patient-room-setup-dismissed-${roomId}`;
@@ -372,9 +405,10 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     if (message.message_type === "video") return settings.lang === "es" ? "Nuevo video" : "New video";
     if (message.message_type === "image") return settings.lang === "es" ? "Nueva imagen" : "New image";
     if (message.message_type === "file") return settings.lang === "es" ? "Nuevo archivo" : "New file";
+    if (parseVideoCallMessage(message.content)) return t.videoCallInvite;
     const text = `${message.content || ""}`.trim();
     return text ? text.slice(0, 120) : settings.lang === "es" ? "Nuevo mensaje" : "New message";
-  }, [settings.lang]);
+  }, [settings.lang, t.videoCallInvite]);
 
   const messageIdentity = useCallback((message: any) => {
     if (!message) return "";
@@ -527,6 +561,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         !entry?.deleted_by_staff &&
         !entry?.deleted_by_patient &&
         !entry?.is_internal &&
+        !parseVideoCallMessage(entry?.content) &&
         `${entry?.content || ""}`.trim().length > 0 &&
         entry?.id
     );
@@ -889,6 +924,79 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       setSlashFilter("");
     }
     if (!override) setNewMessage("");
+    setSending(false);
+    isSending.current = false;
+  };
+
+  const startVideoCall = async () => {
+    if (isSending.current) return;
+    updateTypingState("");
+    isSending.current = true;
+    setSending(true);
+
+    const callUrl = buildVideoCallUrl(roomId);
+    const messageContent = buildVideoCallMessage(roomId);
+    const tempId = `temp-call-${Date.now()}`;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        room_id: roomId,
+        content: messageContent,
+        message_type: "text",
+        sender_type: "patient",
+        sender_name: patientName,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    let insert = await supabase.from("messages").insert({
+      room_id: roomId,
+      content: messageContent,
+      message_type: "text",
+      sender_type: "patient",
+      sender_name: patientName,
+      is_internal: false,
+    }).select().single();
+
+    if (insert.error && isSchemaColumnError(insert.error)) {
+      insert = await supabase.from("messages").insert({
+        room_id: roomId,
+        content: messageContent,
+        message_type: "text",
+        sender_type: "patient",
+        sender_name: patientName,
+      }).select().single();
+    }
+
+    if (insert.error) {
+      setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
+      isSending.current = false;
+      setSending(false);
+      alert(insert.error.message || t.videoCallOpenError);
+      return;
+    } else if (insert.data) {
+      setMessages((prev) => prev.map((entry) => (entry.id === tempId ? insert.data : entry)));
+    }
+
+    fetch("/api/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roomId,
+        userType: "staff",
+        title: patientName || (settings.lang === "es" ? "Paciente" : "Patient"),
+        body: t.videoCallInvite,
+        url: "/inbox",
+      }),
+    }).catch(() => {});
+
+    const popup = window.open(callUrl, "_blank", "noopener,noreferrer");
+    if (!popup) {
+      window.location.href = callUrl;
+    }
+
     setSending(false);
     isSending.current = false;
   };
@@ -1275,6 +1383,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const renderMessage = (message: any) => {
     const isPatient = message.sender_type === "patient";
+    const videoCallUrl = parseVideoCallMessage(message.content);
     const senderDisplayName = isPatient
       ? (settings.lang === "es" ? "Tú" : "You")
       : (message.sender_name || t.careTeamLabel);
@@ -1287,7 +1396,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       boxShadow: "0 1px 1px rgba(0,0,0,0.12)",
       border: isPatient ? "none" : `1px solid ${border}`,
     };
-    const translated = !isPatient && autoTranslateIncoming && message.message_type === "text" && message.id
+    const translated = !isPatient && autoTranslateIncoming && message.message_type === "text" && message.id && !videoCallUrl
       ? translatedIncoming[translationKey(message.id, settings.lang)] || ""
       : "";
     const contentToRender = translated || message.content;
@@ -1319,6 +1428,36 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           <span style={{ fontSize: 24 }}>📄</span>
           <span style={{ fontSize: 14, fontWeight: 700 }}>{message.file_name || (settings.lang === "es" ? "Archivo" : "File")}</span>
         </a>
+      );
+    } else if (videoCallUrl) {
+      body = (
+        <div style={{ minWidth: 240 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 20 }}>🎥</span>
+            <span style={{ fontSize: 14, fontWeight: 800 }}>{t.videoCallInvite}</span>
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>{t.videoCallInviteBody}</div>
+          <a
+            href={videoCallUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "9px 12px",
+              borderRadius: 10,
+              background: "#2563EB",
+              color: "white",
+              fontSize: 13,
+              fontWeight: 800,
+              textDecoration: "none",
+            }}
+          >
+            🎬 {t.joinVideoCall}
+          </a>
+        </div>
       );
     } else {
       body = <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize, lineHeight: 1.45 }}>{contentToRender}</div>;
@@ -1580,6 +1719,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               <button onClick={() => setSettings((prev) => ({ ...prev, lang: prev.lang === "es" ? "en" : "es" }))} style={{ border: "none", background: "rgba(255,255,255,0.14)", color: "white", borderRadius: 999, padding: "10px 12px", fontWeight: 700, cursor: "pointer" }}>
                 {settings.lang === "es" ? "🇲🇽 ES" : "🇺🇸 EN"}
               </button>
+              <button onClick={startVideoCall} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 18, flexShrink: 0 }} title={t.startVideoCall}>🎥</button>
               <button onClick={() => { setShowMediaLibrary(true); setMediaLibraryTab("media"); }} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 18, flexShrink: 0 }} title={settings.lang === "es" ? "Media" : "Media"}>🖼️</button>
               <button onClick={() => setSettingsOpen(true)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>⚙️</button>
             </div>
