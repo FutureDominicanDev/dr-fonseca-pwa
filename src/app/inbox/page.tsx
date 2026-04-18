@@ -367,7 +367,7 @@ export default function InboxPage() {
   const t = T[lang];
   const [darkMode, setDarkMode] = useState(false);
   const [fontSizeLevel, setFontSizeLevel] = useState<"small"|"medium"|"large">("medium");
-  const fontSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 20 : 17;
+  const fontSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 21 : 18;
 
   const bg = darkMode ? "#0B141A" : "#EFEAE2";
   const headerBg = darkMode ? "#111" : "#0F172A";
@@ -1907,7 +1907,7 @@ export default function InboxPage() {
             <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
-          <div style={{...bubbleStyle,lineHeight:1.5,wordBreak:"break-word",fontSize,fontWeight:400}}>
+          <div style={{...bubbleStyle,lineHeight:1.58,wordBreak:"break-word",fontSize,fontWeight:500,letterSpacing:"0.01em"}}>
             {contentToRender}
             <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
               {fmtTime(msg.created_at)}

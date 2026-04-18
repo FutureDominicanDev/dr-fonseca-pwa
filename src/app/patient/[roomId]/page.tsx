@@ -294,7 +294,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const translationCacheRef = useRef<Record<string, string>>({});
 
   const t = T[settings.lang];
-  const fontSize = settings.fontSizeLevel === "small" ? 14 : settings.fontSizeLevel === "large" ? 19 : 16;
+  const fontSize = settings.fontSizeLevel === "small" ? 15 : settings.fontSizeLevel === "large" ? 21 : 18;
   const bg = settings.darkMode ? "#0B141A" : "#EFEAE2";
   const surface = settings.darkMode ? "#111827" : "#FFFFFF";
   const inputBg = settings.darkMode ? "#202C33" : "#F0F2F5";
@@ -1645,7 +1645,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
         </div>
       );
     } else {
-      body = <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize, lineHeight: 1.45 }}>{contentToRender}</div>;
+      body = <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize, lineHeight: 1.58, letterSpacing: "0.01em", fontWeight: 500 }}>{contentToRender}</div>;
     }
 
     return (
@@ -2203,7 +2203,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               onBlur={() => updateTypingState("")}
               placeholder={t.typeMessage}
               rows={1}
-              style={{ flex: 1, resize: "none", minHeight: 42, maxHeight: 120, borderRadius: 10, border: "none", background: settings.darkMode ? "#2A3942" : "white", color: textColor, padding: "10px 14px", fontSize, fontFamily: "inherit", lineHeight: 1.45 }}
+              style={{ flex: 1, resize: "none", minHeight: 42, maxHeight: 120, borderRadius: 10, border: "none", background: settings.darkMode ? "#2A3942" : "white", color: textColor, padding: "10px 14px", fontSize, fontFamily: "inherit", lineHeight: 1.58, letterSpacing: "0.01em" }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
