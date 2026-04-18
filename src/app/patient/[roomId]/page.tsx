@@ -191,20 +191,15 @@ const normalizeCallRoomId = (roomId: string) =>
     .replace(/[^a-zA-Z0-9]/g, "")
     .slice(0, 36) || "room";
 
-const buildVideoCallUrl = (roomId: string) => {
-  const roomCode = normalizeCallRoomId(roomId);
-  const subject = encodeURIComponent("Dr Fonseca Video Call");
-  return `https://meet.jit.si/DrFonsecaPWA-${roomCode}#config.prejoinPageEnabled=true&interfaceConfig.DISABLE_JOIN_LEAVE_NOTIFICATIONS=true&config.subject=${subject}`;
-};
-
-const buildVideoCallMessage = (roomId: string) => `${VIDEO_CALL_PREFIX}${buildVideoCallUrl(roomId)}`;
+const buildProviderRoomName = (roomId: string) => `dr-fonseca-${normalizeCallRoomId(roomId).toLowerCase()}`;
+const buildVideoCallMessage = (providerRoomName: string) => `${VIDEO_CALL_PREFIX}${providerRoomName}`;
 
 const parseVideoCallMessage = (content: string | null | undefined) => {
   const text = `${content || ""}`.trim();
   if (!text.startsWith(VIDEO_CALL_PREFIX)) return null;
-  const url = text.slice(VIDEO_CALL_PREFIX.length).trim();
-  if (!url.startsWith("https://")) return null;
-  return url;
+  const roomName = text.slice(VIDEO_CALL_PREFIX.length).trim().toLowerCase();
+  if (!/^[a-z0-9-]{3,80}$/.test(roomName)) return null;
+  return roomName;
 };
 
 const buildCallRequestMessage = () => `${CALL_REQUEST_PREFIX}${new Date().toISOString()}`;
@@ -243,6 +238,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [callOverlayOpen, setCallOverlayOpen] = useState(false);
   const [activeCallUrl, setActiveCallUrl] = useState<string | null>(null);
+  const [activeCallRoomName, setActiveCallRoomName] = useState<string | null>(null);
   const [callInviteFeedback, setCallInviteFeedback] = useState("");
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
@@ -1004,26 +1000,63 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     }
   };
 
-  const openCallOverlay = (url: string) => {
+  const openCallOverlay = (url: string, providerRoomName: string) => {
     setActiveCallUrl(url);
+    setActiveCallRoomName(providerRoomName);
     setCallOverlayOpen(true);
     setCallInviteFeedback("");
+  };
+
+  const joinVideoCall = async (providerRoomName: string) => {
+    try {
+      const response = await fetch("/api/video/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId,
+          providerRoomName,
+          actorType: "patient",
+          actorName: patientName || (settings.lang === "es" ? "Paciente" : "Patient"),
+        }),
+      });
+      const json = await response.json();
+      const joinUrl = `${json?.joinUrl || ""}`.trim();
+      if (!response.ok || !joinUrl) throw new Error(json?.error || t.videoCallOpenError);
+      openCallOverlay(joinUrl, providerRoomName);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : t.videoCallOpenError);
+    }
   };
 
   const closeCallOverlay = async () => {
     setCallOverlayOpen(false);
     setActiveCallUrl(null);
+    setActiveCallRoomName(null);
     const now = new Date();
     const time = now.toLocaleTimeString(settings.lang === "es" ? "es-MX" : "en-US", { hour: "2-digit", minute: "2-digit" });
     await postSystemMessage(`📴 ${t.callEndedNote} · ${time}`);
   };
 
-  const shareCallInvite = async (url: string) => {
+  const shareCallInvite = async (providerRoomName: string) => {
     try {
+      const response = await fetch("/api/video/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId,
+          providerRoomName,
+          actorType: "patient",
+          actorName: patientName || (settings.lang === "es" ? "Paciente" : "Patient"),
+        }),
+      });
+      const json = await response.json();
+      const joinUrl = `${json?.joinUrl || ""}`.trim();
+      if (!response.ok || !joinUrl) throw new Error(json?.error || t.videoCallOpenError);
+
       if (navigator.share) {
-        await navigator.share({ title: t.videoCallInvite, text: t.videoCallInviteBody, url });
+        await navigator.share({ title: t.videoCallInvite, text: t.videoCallInviteBody, url: joinUrl });
       } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(joinUrl);
       } else {
         throw new Error("clipboard-unavailable");
       }
@@ -1503,7 +1536,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const renderMessage = (message: any) => {
     const isPatient = message.sender_type === "patient";
-    const videoCallUrl = parseVideoCallMessage(message.content);
+    const videoCallRoomName = parseVideoCallMessage(message.content);
     const callRequestToken = parseCallRequestMessage(message.content);
     const senderDisplayName = isPatient
       ? (settings.lang === "es" ? "Tú" : "You")
@@ -1517,7 +1550,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       boxShadow: "0 1px 1px rgba(0,0,0,0.12)",
       border: isPatient ? "none" : `1px solid ${border}`,
     };
-    const translated = !isPatient && autoTranslateIncoming && message.message_type === "text" && message.id && !videoCallUrl && !callRequestToken
+    const translated = !isPatient && autoTranslateIncoming && message.message_type === "text" && message.id && !videoCallRoomName && !callRequestToken
       ? translatedIncoming[translationKey(message.id, settings.lang)] || ""
       : "";
     const contentToRender = translated || message.content;
@@ -1562,7 +1595,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           </div>
         </div>
       );
-    } else if (videoCallUrl) {
+    } else if (videoCallRoomName) {
       body = (
         <div style={{ minWidth: 240 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -1571,7 +1604,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           </div>
           <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>{t.videoCallInviteBody}</div>
           <button
-            onClick={() => openCallOverlay(videoCallUrl)}
+            onClick={() => joinVideoCall(videoCallRoomName)}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -1590,7 +1623,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             🎬 {t.openInChat}
           </button>
           <button
-            onClick={() => shareCallInvite(videoCallUrl)}
+            onClick={() => shareCallInvite(videoCallRoomName)}
             style={{
               marginLeft: 8,
               display: "inline-flex",
@@ -1976,7 +2009,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", background: "rgba(15,23,42,0.95)", borderBottom: "1px solid rgba(148,163,184,0.2)" }}>
                 <div style={{ color: "white", fontSize: 14, fontWeight: 800 }}>🎥 {t.startVideoCall}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button onClick={() => shareCallInvite(activeCallUrl)} style={{ border: "none", borderRadius: 10, padding: "8px 10px", background: "rgba(37,99,235,0.2)", color: "white", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🔗 {t.shareInvite}</button>
+                  <button onClick={() => { if (activeCallRoomName) shareCallInvite(activeCallRoomName); }} style={{ border: "none", borderRadius: 10, padding: "8px 10px", background: "rgba(37,99,235,0.2)", color: "white", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🔗 {t.shareInvite}</button>
                   <button onClick={() => closeCallOverlay()} style={{ border: "none", borderRadius: 10, padding: "8px 10px", background: "#DC2626", color: "white", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>📴 {t.endAndReturn}</button>
                 </div>
               </div>
