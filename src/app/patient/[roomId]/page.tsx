@@ -61,7 +61,7 @@ const T = {
     recordVideoOption: "Grabar video",
     chooseFile: "Elegir archivo",
     send: "Enviar",
-    online: "Equipo clínico en línea",
+    online: "Clínica en línea",
     addToHome: "Guarda este enlace para volver fácilmente a tu chat.",
     noMessages: "Todavía no hay mensajes.",
     noMessagesHint: "Cuando escribas, el equipo verá tu mensaje en su panel.",
@@ -1007,6 +1007,15 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     setCallInviteFeedback("");
   };
 
+  const getVideoCallFeedback = (error: unknown) => {
+    const fallback = settings.lang === "es" ? "La videollamada no está disponible por ahora." : "Video call is unavailable right now.";
+    if (!(error instanceof Error)) return fallback;
+    const message = `${error.message || ""}`.trim();
+    if (!message) return fallback;
+    if (message.includes("DAILY_API_KEY")) return fallback;
+    return message;
+  };
+
   const joinVideoCall = async (providerRoomName: string) => {
     try {
       const response = await fetch("/api/video/session", {
@@ -1024,7 +1033,8 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       if (!response.ok || !joinUrl) throw new Error(json?.error || t.videoCallOpenError);
       openCallOverlay(joinUrl, providerRoomName);
     } catch (error) {
-      alert(error instanceof Error ? error.message : t.videoCallOpenError);
+      setCallInviteFeedback(getVideoCallFeedback(error));
+      window.setTimeout(() => setCallInviteFeedback(""), 2600);
     }
   };
 
@@ -1942,6 +1952,14 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
                 </div>
                 <button onClick={() => setToastAlert(null)} style={{ border: "none", background: "transparent", color: subText, cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {!callOverlayOpen && callInviteFeedback && (
+          <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top) + 122px)", left: 12, right: 12, zIndex: 121, display: "flex", justifyContent: "center" }}>
+            <div style={{ width: "min(100%, 420px)", background: settings.darkMode ? "rgba(17,24,39,0.96)" : "rgba(255,255,255,0.98)", color: textColor, border: `1px solid ${border}`, borderRadius: 14, boxShadow: "0 18px 46px rgba(15,23,42,0.16)", padding: "10px 12px", fontSize: 13, fontWeight: 700 }}>
+              {callInviteFeedback}
             </div>
           </div>
         )}

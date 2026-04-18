@@ -1288,6 +1288,15 @@ export default function InboxPage() {
     setCallInviteFeedback("");
   };
 
+  const getVideoCallFeedback = (error: unknown) => {
+    const fallback = lang === "es" ? "La videollamada no está disponible por ahora." : "Video call is unavailable right now.";
+    if (!(error instanceof Error)) return fallback;
+    const message = `${error.message || ""}`.trim();
+    if (!message) return fallback;
+    if (message.includes("DAILY_API_KEY")) return fallback;
+    return message;
+  };
+
   const joinVideoCall = async (providerRoomName: string) => {
     if (!selectedRoom?.id) return;
     try {
@@ -1309,7 +1318,8 @@ export default function InboxPage() {
       }
       openCallOverlay(joinUrl, providerRoomName);
     } catch (error) {
-      alert(error instanceof Error ? error.message : t.videoCallOpenError);
+      setCallInviteFeedback(getVideoCallFeedback(error));
+      window.setTimeout(() => setCallInviteFeedback(""), 2600);
     }
   };
 
@@ -2583,6 +2593,12 @@ export default function InboxPage() {
               </div>
               <button onClick={(event)=>{event.stopPropagation();setToastAlert(null);}} style={{border:"none",background:"transparent",color:subTextColor,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
             </div>
+          </div>
+        )}
+
+        {!callOverlayOpen && callInviteFeedback && (
+          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",left:16,zIndex:240,maxWidth:"min(420px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.97)":"rgba(255,255,255,0.99)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:14,boxShadow:"0 10px 28px rgba(15,23,42,0.22)",padding:"10px 12px",fontSize:13,fontWeight:700}}>
+            {callInviteFeedback}
           </div>
         )}
 
