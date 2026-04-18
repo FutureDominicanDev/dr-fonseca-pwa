@@ -2563,11 +2563,6 @@ export default function InboxPage() {
           <img src="/fonseca_blue.png" style={{height:52,width:"auto",objectFit:"contain"}} alt="Dr. Fonseca"/>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
-            {notificationPermission !== "granted" && (
-              <button onClick={requestStaffNotifications} disabled={notificationBusy} style={{padding:"0 14px",height:42,borderRadius:99,background:"rgba(255,255,255,0.16)",border:"none",color:"white",fontSize:13,fontWeight:700,cursor:notificationBusy?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",opacity:notificationBusy?0.75:1}}>
-                {notificationBusy ? (lang==="es" ? "Activando..." : "Enabling...") : (lang==="es" ? "Activar alertas" : "Enable alerts")}
-              </button>
-            )}
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.08)",borderRadius:99}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:"#25D366"}}/>
               <span style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)"}}>{t.online}</span>

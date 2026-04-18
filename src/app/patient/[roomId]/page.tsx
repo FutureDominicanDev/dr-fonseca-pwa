@@ -1926,63 +1926,6 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               </a>
             )}
           </div>
-          {showSetupPanel && (
-            <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 16, background: "rgba(255,255,255,0.11)", fontSize: 14, color: "rgba(255,255,255,0.92)", lineHeight: 1.5 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                <div style={{ fontWeight: 700, color: "white" }}>{showInstallHelp ? t.installHelpTitle : t.addToHome}</div>
-                <button onClick={hideSetupPanel} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,0.9)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{t.dismiss}</button>
-              </div>
-              <div style={{ marginTop: 6 }}>
-                {showInstallHelp
-                  ? (isAppleMobile ? t.installHelpIOS : t.installHelpOther)
-                  : t.addToHome}
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-                {!isStandalone && (
-                  <button onClick={promptInstall} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: "pointer" }}>
-                    ⬇️ {t.installApp}
-                  </button>
-                )}
-                {notificationsPermission !== "granted" ? (
-                  <button onClick={isAppleMobile && !isStandalone ? promptInstall : requestNotifications} disabled={notificationBusy} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(255,255,255,0.14)", color: "white", fontWeight: 700, cursor: notificationBusy ? "wait" : "pointer", opacity: notificationBusy ? 0.7 : 1 }}>
-                    🔔 {notificationBusy ? (settings.lang === "es" ? "Activando..." : "Enabling...") : isAppleMobile && !isStandalone ? (settings.lang === "es" ? "Abre desde inicio primero" : "Open from Home Screen first") : t.enableAlerts}
-                  </button>
-                ) : (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 999, background: "rgba(34,197,94,0.16)", color: "white", fontWeight: 700 }}>
-                    🔔 {t.alertsReady}
-                  </div>
-                )}
-                {showInstallHelp && (
-                  <button onClick={hideSetupPanel} style={{ border: "none", borderRadius: 999, padding: "10px 12px", background: "rgba(59,130,246,0.22)", color: "white", fontWeight: 700, cursor: "pointer" }}>
-                    ✅ {settings.lang === "es" ? "Ya entendí" : "Got it"}
-                  </button>
-                )}
-              </div>
-              {setupFeedback && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    background:
-                      setupFeedback.tone === "success"
-                        ? "rgba(34,197,94,0.16)"
-                        : setupFeedback.tone === "error"
-                          ? "rgba(239,68,68,0.16)"
-                          : "rgba(59,130,246,0.18)",
-                    color: "white",
-                    fontWeight: 600,
-                  }}
-                >
-                  {setupFeedback.text}
-                </div>
-              )}
-              {notificationsPermission === "denied" && <div style={{ marginTop: 6, fontSize: 12 }}>{t.alertsBlocked}</div>}
-            </div>
-          )}
-          {!showSetupPanel && setupComplete && (
-            <div style={{ marginTop: 12, fontSize: 13, color: "rgba(255,255,255,0.9)" }}>{t.setupDone}</div>
-          )}
         </header>
 
         {toastAlert && (
