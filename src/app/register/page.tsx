@@ -9,16 +9,25 @@ const isMissingColumnError = (error: any) => {
   return message.includes("column") || message.includes("schema cache");
 };
 
+const parseEmails = (value: unknown): string[] => {
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[,\n;]/g)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+};
+
 export default function RegisterPage() {
   const [step, setStep] = useState<"code" | "details">("code");
   const [inviteCode, setInviteCode] = useState("");
+  const [inviteTrack, setInviteTrack] = useState<"clinical" | "staff">("staff");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [officeLocation, setOfficeLocation] = useState<"Guadalajara" | "Tijuana">("Guadalajara");
+  const [officeLocation, setOfficeLocation] = useState<"Guadalajara" | "Tijuana" | "Both">("Guadalajara");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -51,8 +60,16 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const codeFromLink = (new URLSearchParams(window.location.search).get("code") || "").trim().toUpperCase();
+    const params = new URLSearchParams(window.location.search);
+    const codeFromLink = (params.get("code") || "").trim().toUpperCase();
+    const trackFromLink = (params.get("track") || "").trim().toLowerCase();
+    const officeFromLink = (params.get("office") || "").trim().toLowerCase();
     if (!codeFromLink) return;
+
+    setInviteTrack(trackFromLink === "clinical" ? "clinical" : "staff");
+    if (officeFromLink === "both") setOfficeLocation("Both");
+    if (officeFromLink === "gdl") setOfficeLocation("Guadalajara");
+    if (officeFromLink === "tjn") setOfficeLocation("Tijuana");
 
     setInviteCode(codeFromLink);
 
@@ -103,8 +120,17 @@ export default function RegisterPage() {
     setError("");
 
     const normalizedEmail = email.trim().toLowerCase();
+
+    const { data: blockedSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle();
+    const blockedEmails = new Set(parseEmails(blockedSetting?.value));
+    if (blockedEmails.has(normalizedEmail)) {
+      setError("Este correo ya no tiene acceso. Contacta al administrador.");
+      setLoading(false);
+      return;
+    }
+
     const assignedRole = normalizedEmail === OWNER_EMAIL ? "doctor" : "staff";
-    const persistedOfficeLocation = assignedRole === "doctor" ? null : officeLocation;
+    const persistedOfficeLocation = officeLocation === "Both" ? null : officeLocation;
     const baseProfile = {
       full_name: fullName.trim(),
       role: assignedRole,
@@ -119,6 +145,7 @@ export default function RegisterPage() {
           full_name: fullName.trim(),
           role: assignedRole,
           office_location: persistedOfficeLocation,
+          onboarding_track: inviteTrack,
         },
       },
     });
@@ -260,7 +287,7 @@ export default function RegisterPage() {
               <input className="finput" placeholder="Dr. Ana García" value={fullName} onChange={e => setFullName(e.target.value)} />
               <label className="flabel2">Tu función</label>
               <div className="ropt sel" style={{ marginBottom: 16, minHeight: 48, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                👤 Personal
+                {inviteTrack === "clinical" ? "🩺 Equipo clínico (asignación por admin)" : "👤 Personal (asignación por admin)"}
               </div>
               <p style={{ fontSize: 12, color: "#6B7280", margin: "-6px 0 16px", lineHeight: 1.45, fontWeight: 600 }}>
                 Seguridad: tu rol clínico y permisos avanzados los asigna el administrador después de crear la cuenta.
@@ -270,8 +297,9 @@ export default function RegisterPage() {
                 {[
                   { id: "Guadalajara", label: "🏙️ Guadalajara" },
                   { id: "Tijuana", label: "🌊 Tijuana" },
+                  { id: "Both", label: "🌐 Ambas sedes" },
                 ].map((office) => (
-                  <div key={office.id} className={`ropt${officeLocation === office.id ? " sel" : ""}`} onClick={() => setOfficeLocation(office.id as "Guadalajara" | "Tijuana")}>
+                  <div key={office.id} className={`ropt${officeLocation === office.id ? " sel" : ""}`} onClick={() => setOfficeLocation(office.id as "Guadalajara" | "Tijuana" | "Both")}>
                     {office.label}
                   </div>
                 ))}

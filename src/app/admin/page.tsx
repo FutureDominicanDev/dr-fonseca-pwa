@@ -369,28 +369,44 @@ export default function AdminPage() {
 
   const deleteStaff = async (member: StaffProfile) => {
     const name = member.full_name || "este usuario";
-    if (!confirm(isSpanish ? `¿Eliminar la cuenta de ${name}?\n\nEsta acción solo borra el perfil visible en el portal.` : `Delete ${name}'s account?\n\nThis only removes the visible profile from the portal.`)) return;
+    if (!confirm(isSpanish ? `¿Revocar y eliminar la cuenta de ${name}?\n\nEsto bloqueará su correo y rotará automáticamente el código de invitación por seguridad.` : `Revoke and remove ${name}'s account?\n\nThis will block their email and automatically rotate the invitation code for security.`)) return;
     setDeletingId(member.id);
-    const { error } = await supabase.from("profiles").delete().eq("id", member.id);
+    const response = await fetch("/api/staff/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: member.id }),
+    });
+    const payload = await response.json().catch(() => ({}));
     setDeletingId(null);
 
-    if (error) {
-      setPageError(error.message || "No pude eliminar la cuenta.");
+    if (!response.ok) {
+      setPageError(payload?.error || "No pude revocar la cuenta.");
       return;
     }
 
     setStaff((previous) => previous.filter((item) => item.id !== member.id));
+    if (typeof payload?.newInviteCode === "string" && payload.newInviteCode.trim()) {
+      setInviteCode(payload.newInviteCode.trim());
+    }
     await logAdminEvent({
-      action: "staff_profile_deleted",
-      entityType: "staff_profile",
+      action: "staff_revoked",
+      entityType: "staff_auth_profile",
       entityId: member.id,
       entityName: member.full_name || member.display_name || "Personal",
       actorId: viewerId,
       actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
       actorEmail: viewerEmail,
-      notes: `Se eliminó el perfil visible de ${name}.`,
+      notes: isSpanish ? `Cuenta revocada para ${name}.` : `Account revoked for ${name}.`,
+      metadata: {
+        blocked_email: payload?.removedEmail || null,
+        invite_code_rotated: true,
+      },
     });
-    updateSuccess(`Cuenta de ${name} eliminada.`);
+    updateSuccess(
+      isSpanish
+        ? `Cuenta de ${name} revocada. Correo bloqueado y código renovado.`
+        : `${name}'s account revoked. Email blocked and invite code rotated.`,
+    );
   };
 
   if (!sessionChecked || loading) {
@@ -804,11 +820,10 @@ export default function AdminPage() {
 
                 <div className="export-card" style={{ marginBottom: 14 }}>
                   <p className="section-title">{isSpanish ? "Enlace de invitación" : "Invitation link"}</p>
-                  <p style={{ fontSize: 14, fontWeight: 800, color: "#1D4ED8", margin: 0, wordBreak: "break-word", lineHeight: 1.6 }}>{inviteLink || (isSpanish ? "Primero carga un código de invitación." : "Load an invitation code first.")}</p>
-                </div>
-
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div className="inline-actions">
+                  <p style={{ fontSize: 14, fontWeight: 800, color: "#1D4ED8", margin: 0, wordBreak: "break-word", lineHeight: 1.6 }}>
+                    {inviteLink || (isSpanish ? "Primero carga un código de invitación." : "Load an invitation code first.")}
+                  </p>
+                  <div className="inline-actions" style={{ marginTop: 10 }}>
                     <button className="main-btn" onClick={copyInviteLink} disabled={!inviteLink}>
                       {isSpanish ? "Copiar enlace" : "Copy link"}
                     </button>
@@ -816,6 +831,9 @@ export default function AdminPage() {
                       {isSpanish ? "Compartir" : "Share"}
                     </button>
                   </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 10 }}>
                   <p className="group-label" style={{ marginBottom: -2 }}>{isSpanish ? "Si quieres cambiar el código actual" : "If you want to change the current code"}</p>
                   <input
                     className="line-input"
@@ -881,6 +899,8 @@ export default function AdminPage() {
                 const memberEmail = member.id === viewerId ? viewerEmail : "";
                 const level = normalizeAdminLevel(member.admin_level, memberEmail);
                 const memberOffice = normalizeOffice(member.office_location);
+                const memberWorksBoth = member.office_location === null;
+                const memberOfficeText = memberWorksBoth ? (isSpanish ? "🌐 Ambas sedes" : "🌐 Both offices") : officeLabel(memberOffice);
                 const canEditThisMember = canManageAdmins && !(level === "owner" && !canManageOwner);
                 const accessKey = `${member.id}-admin_level`;
                 const officeKey = `${member.id}-office_location`;
@@ -899,27 +919,37 @@ export default function AdminPage() {
                       <div>
                         <span className="meta-badge" style={{ color: roleColor(member.role), background: `${roleColor(member.role)}18` }}>{roleText(member.role)}</span>
                         <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>{adminText(level)}</span>
-                        <span className="meta-badge" style={{ color: memberOffice ? "#1D4ED8" : "#6B7280", background: memberOffice ? "#EFF6FF" : "#F3F4F6" }}>
-                          {officeLabel(memberOffice)}
+                        <span className="meta-badge" style={{ color: memberWorksBoth || memberOffice ? "#1D4ED8" : "#6B7280", background: memberWorksBoth || memberOffice ? "#EFF6FF" : "#F3F4F6" }}>
+                          {memberOfficeText}
                         </span>
                       </div>
 
                       <div className="setting-group">
                         <p className="group-label">{isSpanish ? "Sede del equipo" : "Team office"}</p>
                         <div className="mini-actions">
-                          {(["Guadalajara", "Tijuana"] as Office[]).map((office) => (
+                          {[
+                            { value: "Guadalajara" as Office, label: "🏙️ Guadalajara", active: memberOffice === "Guadalajara" && !memberWorksBoth },
+                            { value: "Tijuana" as Office, label: "🌊 Tijuana", active: memberOffice === "Tijuana" && !memberWorksBoth },
+                            { value: null as string | null, label: isSpanish ? "🌐 Ambas sedes" : "🌐 Both offices", active: memberWorksBoth },
+                          ].map((officeOption) => (
                             <button
-                              key={`${member.id}-${office}`}
+                              key={`${member.id}-${officeOption.label}`}
                               className="mini-btn"
                               style={{
-                                background: memberOffice === office ? "#DBEAFE" : "#EFF3F8",
-                                color: memberOffice === office ? "#1D4ED8" : "#374151",
+                                background: officeOption.active ? "#DBEAFE" : "#EFF3F8",
+                                color: officeOption.active ? "#1D4ED8" : "#374151",
                                 opacity: savingKey === officeKey ? 0.6 : 1,
                               }}
                               disabled={savingKey === officeKey}
-                              onClick={() => updateStaffField(member, { office_location: office }, `Sede de ${member.full_name || "staff"} actualizada a ${office}.`)}
+                              onClick={() => updateStaffField(
+                                member,
+                                { office_location: officeOption.value },
+                                isSpanish
+                                  ? `Sede de ${member.full_name || "staff"} actualizada a ${officeOption.value || "Ambas sedes"}.`
+                                  : `Office for ${member.full_name || "staff"} updated to ${officeOption.value || "Both offices"}.`,
+                              )}
                             >
-                              {office === "Guadalajara" ? "🏙️ Guadalajara" : "🌊 Tijuana"}
+                              {officeOption.label}
                             </button>
                           ))}
                         </div>
@@ -952,7 +982,7 @@ export default function AdminPage() {
                       </div>
 
                       <p className="small-note" style={{ marginTop: 10 }}>
-                        {isSpanish ? "Estado actual" : "Current status"}: {memberOffice || (isSpanish ? "Sin sede" : "No office")} · {adminText(level)}
+                        {isSpanish ? "Estado actual" : "Current status"}: {memberWorksBoth ? (isSpanish ? "Ambas sedes" : "Both offices") : (memberOffice || (isSpanish ? "Sin sede" : "No office"))} · {adminText(level)}
                       </p>
                     </div>
 
