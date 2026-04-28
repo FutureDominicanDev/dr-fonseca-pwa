@@ -549,6 +549,9 @@ export default function InboxPage() {
   };
   const canOpenAdmin = isOwnerEmail(currentUserEmail);
   const canManageCareTeam = (userProfile?.role || "").toLowerCase() === "doctor" || ["owner","super_admin"].includes(userProfile?.admin_level || "");
+  const canCreatePatientRooms =
+    isOwnerEmail(currentUserEmail) ||
+    ["owner", "super_admin", "admin"].includes((userProfile?.admin_level || "").toLowerCase());
   const careTeamDirectory = showAllCareTeamOptions
     ? staffDirectory
     : staffDirectory.filter((member) => !member.office_location || member.office_location === newLocation);
@@ -1559,6 +1562,14 @@ export default function InboxPage() {
   };
 
   const createRoom = async () => {
+    if (!canCreatePatientRooms) {
+      setNewRoomError(
+        lang === "es"
+          ? "No tienes permiso para crear salas de pacientes. Pide a Dr. Fonseca que te habilite en Admin."
+          : "You do not have permission to create patient rooms. Ask Dr. Fonseca to enable you in Admin."
+      );
+      return;
+    }
     setNewRoomError("");
     if (!newPatientFirstName.trim()||!newPatientLastName.trim()||!newProcedureName.trim()){setNewRoomError(t.required);return;}
     if (newPatientEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatientEmail.trim())) { setNewRoomError(t.invalidEmail); return; }
@@ -2387,6 +2398,11 @@ export default function InboxPage() {
               {beforePhotosFiles.length===0?t.tapBeforePhotos:`📷 ${beforePhotosFiles.length} foto(s)`}
             </div>
             <button className="pbtn" onClick={createRoom} disabled={creatingRoom}>{creatingRoom?t.creating:t.createRoom}</button>
+            {newRoomError && (
+              <div style={{background:"#FFF1F2",color:"#E11D48",borderRadius:12,padding:"10px 12px",fontSize:13,fontWeight:800,marginTop:8,marginBottom:4}}>
+                ⚠️ {newRoomError}
+              </div>
+            )}
             <button className="sbtn" onClick={()=>setShowNewRoom(false)}>{t.cancel}</button>
           </div>
         </div>
@@ -2491,7 +2507,7 @@ export default function InboxPage() {
         </div>
       )}
 
-      {showSettings&&<SettingsPanel/>}
+      {showSettings && SettingsPanel()}
       {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
 
       <QREditor
@@ -2554,7 +2570,23 @@ export default function InboxPage() {
                   <span style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patients}</span>
                   {totalUnread>0&&<span style={{background:"#25D366",color:"white",fontSize:12,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{totalUnread}</span>}
                 </div>
-                <button onClick={()=>setShowNewRoom(true)} style={{width:38,height:38,borderRadius:"50%",background:"#007AFF",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,122,255,0.3)"}}>
+                <button
+                  onClick={() => {
+                    if (!canCreatePatientRooms) {
+                      setNotificationFeedback({
+                        tone: "error",
+                        text:
+                          lang === "es"
+                            ? "No tienes permiso para crear pacientes. Solo el personal habilitado por Admin puede hacerlo."
+                            : "You do not have permission to create patients. Only admin-enabled staff can do this.",
+                      });
+                      return;
+                    }
+                    setShowNewRoom(true);
+                  }}
+                  style={{width:38,height:38,borderRadius:"50%",background:"#007AFF",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,122,255,0.3)"}}
+                  title={canCreatePatientRooms ? (lang === "es" ? "Crear paciente" : "Create patient") : (lang === "es" ? "Permiso requerido" : "Permission required")}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </button>
               </div>

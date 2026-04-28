@@ -273,8 +273,28 @@ export default function RegisterPage() {
   if (step === "code") return (
     <>
       <style>{`
-        .code-page { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(160deg, #1C1C1E 0%, #2C2C2E 50%, #1a1a2e 100%); }
-        .reg-card { width: 100%; max-width: 420px; background: white; border-radius: 24px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+        .code-page {
+          position: fixed;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: flex-start;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          padding: calc(env(safe-area-inset-top) + 20px) 24px calc(env(safe-area-inset-bottom) + 40px);
+          background: linear-gradient(160deg, #1C1C1E 0%, #2C2C2E 50%, #1a1a2e 100%);
+        }
+        .reg-card {
+          width: 100%;
+          max-width: 420px;
+          max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 34px);
+          background: white;
+          border-radius: 24px;
+          overflow-y: auto;
+          box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+          margin: auto 0 14px;
+        }
         .logo-sec { background: white; padding: 36px 28px 24px; display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #E5E5EA; }
         .form-sec { background: white; padding: 32px 28px 40px; }
         .reg-title { font-size: 26px; font-weight: 800; color: #000; margin-bottom: 6px; text-align: center; }
