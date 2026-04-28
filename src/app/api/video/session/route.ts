@@ -100,6 +100,11 @@ const createMeetingToken = async (roomName: string, actorType: ActorType, actorN
 
 export async function POST(req: NextRequest) {
   try {
+    return NextResponse.json(
+      { error: "Video calls are temporarily disabled." },
+      { status: 410 }
+    );
+
     if (!DAILY_API_KEY) {
       return NextResponse.json(
         { error: "Missing DAILY_API_KEY. Add it in Vercel environment variables." },

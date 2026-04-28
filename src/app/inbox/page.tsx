@@ -1845,27 +1845,9 @@ export default function InboxPage() {
             <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>
               {isOut ? t.callRequestSent : t.callRequestBody}
             </div>
-            {!isOut && (
-              <button
-                onClick={startVideoCall}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  padding: "9px 12px",
-                  borderRadius: 10,
-                  background: "#2563EB",
-                  border: "none",
-                  color: "white",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  cursor: "pointer",
-                }}
-              >
-                🎥 {t.acceptCall}
-              </button>
-            )}
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
+              {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
+            </div>
             <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):videoCallRoomName ? (
@@ -1875,45 +1857,9 @@ export default function InboxPage() {
               <span style={{ fontSize: 14, fontWeight: 800 }}>{t.videoCallInvite}</span>
             </div>
             <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>{t.videoCallInviteBody}</div>
-            <button
-              onClick={() => joinVideoCall(videoCallRoomName)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                padding: "9px 12px",
-                borderRadius: 10,
-                background: "#2563EB",
-                border: "none",
-                color: "white",
-                fontSize: 13,
-                fontWeight: 800,
-                cursor: "pointer",
-              }}
-            >
-              🎬 {t.openInChat}
-            </button>
-            <button
-              onClick={() => shareCallInvite(videoCallRoomName)}
-              style={{
-                marginLeft: 8,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                padding: "9px 12px",
-                borderRadius: 10,
-                background: "rgba(37,99,235,0.12)",
-                border: "1px solid rgba(37,99,235,0.35)",
-                color: "#1D4ED8",
-                fontSize: 13,
-                fontWeight: 800,
-                cursor: "pointer",
-              }}
-            >
-              🔗 {t.shareInvite}
-            </button>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
+              {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
+            </div>
             <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
@@ -2695,13 +2641,6 @@ export default function InboxPage() {
                   {selectedRoom.procedures?.patients?.phone && (
                     <a href={`tel:${selectedRoom.procedures.patients.phone}`} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",fontSize:18,flexShrink:0}} title={t.callPatient}>📞</a>
                   )}
-                  <button
-                    onClick={startVideoCall}
-                    style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-                    title={t.startVideoCall}
-                  >
-                    🎥
-                  </button>
                   <button onClick={()=>{setShowMediaLibrary(true);setMediaLibraryTab("media");}} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={lang==="es"?"Media":"Media"}>🖼️</button>
                   <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
                 </div>

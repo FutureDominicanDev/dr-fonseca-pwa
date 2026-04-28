@@ -1603,6 +1603,9 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
           <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>
             {isPatient ? t.callRequestSent : t.callRequestBody}
           </div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
+            {settings.lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
+          </div>
         </div>
       );
     } else if (videoCallRoomName) {
@@ -1613,45 +1616,9 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             <span style={{ fontSize: 14, fontWeight: 800 }}>{t.videoCallInvite}</span>
           </div>
           <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>{t.videoCallInviteBody}</div>
-          <button
-            onClick={() => joinVideoCall(videoCallRoomName)}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              padding: "9px 12px",
-              borderRadius: 10,
-              background: "#2563EB",
-              border: "none",
-              color: "white",
-              fontSize: 13,
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            🎬 {t.openInChat}
-          </button>
-          <button
-            onClick={() => shareCallInvite(videoCallRoomName)}
-            style={{
-              marginLeft: 8,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              padding: "9px 12px",
-              borderRadius: 10,
-              background: "rgba(37,99,235,0.12)",
-              border: "1px solid rgba(37,99,235,0.35)",
-              color: "#1D4ED8",
-              fontSize: 13,
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            🔗 {t.shareInvite}
-          </button>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
+            {settings.lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
+          </div>
         </div>
       );
     } else {
@@ -1914,7 +1881,6 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               <button onClick={() => setSettings((prev) => ({ ...prev, lang: prev.lang === "es" ? "en" : "es" }))} style={{ border: "none", background: "rgba(255,255,255,0.14)", color: "white", borderRadius: 999, padding: "10px 12px", fontWeight: 700, cursor: "pointer" }}>
                 {settings.lang === "es" ? "🇲🇽 ES" : "🇺🇸 EN"}
               </button>
-              <button onClick={requestVideoCall} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 18, flexShrink: 0 }} title={t.requestVideoCall}>🎥</button>
               <button onClick={() => { setShowMediaLibrary(true); setMediaLibraryTab("media"); }} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 18, flexShrink: 0 }} title={settings.lang === "es" ? "Media" : "Media"}>🖼️</button>
               <button onClick={() => setSettingsOpen(true)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.14)", color: "white", cursor: "pointer", fontSize: 20, flexShrink: 0 }}>⚙️</button>
             </div>
