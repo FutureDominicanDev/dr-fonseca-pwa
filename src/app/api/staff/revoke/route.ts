@@ -15,6 +15,21 @@ const parseEmails = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
+const parsePhones = (value: unknown): string[] => {
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[,\n;]/g)
+    .map((entry) => entry.replace(/[^\d+]/g, "").trim())
+    .filter(Boolean);
+};
+
+const normalizePhone = (value: string) => {
+  const cleaned = value.replace(/[^\d+]/g, "").trim();
+  if (!cleaned) return "";
+  if (cleaned.startsWith("+")) return `+${cleaned.slice(1).replace(/\D/g, "")}`;
+  return `+${cleaned.replace(/\D/g, "")}`;
+};
+
 const createInviteCode = () => {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let suffix = "";
@@ -34,20 +49,36 @@ export async function POST(request: NextRequest) {
 
     const authUserRes = await supabase.auth.admin.getUserById(userId);
     const targetEmail = authUserRes.data?.user?.email?.trim().toLowerCase() || "";
-    if (!targetEmail) return NextResponse.json({ error: "Could not resolve staff email." }, { status: 404 });
+    const targetPhoneFromAuth = normalizePhone(authUserRes.data?.user?.phone || "");
     if (targetEmail === OWNER_EMAIL) {
       return NextResponse.json({ error: "Owner account is protected and cannot be revoked." }, { status: 403 });
     }
 
-    const { data: blockedSetting } = await supabase
+    const { data: profileRow } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    const targetPhoneFromProfile = normalizePhone((profileRow as any)?.phone || "");
+    const targetPhone = targetPhoneFromAuth || targetPhoneFromProfile;
+
+    if (!targetEmail && !targetPhone) {
+      return NextResponse.json({ error: "Could not resolve staff email/phone." }, { status: 404 });
+    }
+
+    const { data: blockedEmailSetting } = await supabase
       .from("app_settings")
       .select("value")
       .eq("key", "blocked_signup_emails")
       .maybeSingle();
+    const { data: blockedPhoneSetting } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "blocked_signup_phones")
+      .maybeSingle();
 
-    const blocked = new Set(parseEmails(blockedSetting?.value));
-    blocked.add(targetEmail);
-    const nextBlocked = Array.from(blocked).sort().join(", ");
+    const blockedEmails = new Set(parseEmails(blockedEmailSetting?.value));
+    if (targetEmail) blockedEmails.add(targetEmail);
+    const blockedPhones = new Set(parsePhones(blockedPhoneSetting?.value));
+    if (targetPhone) blockedPhones.add(targetPhone);
+    const nextBlockedEmails = Array.from(blockedEmails).sort().join(", ");
+    const nextBlockedPhones = Array.from(blockedPhones).sort().join(", ");
     const nextInviteCode = createInviteCode();
     const nowIso = new Date().toISOString();
 
@@ -55,7 +86,8 @@ export async function POST(request: NextRequest) {
       .from("app_settings")
       .upsert(
         [
-          { key: "blocked_signup_emails", value: nextBlocked, updated_at: nowIso },
+          { key: "blocked_signup_emails", value: nextBlockedEmails, updated_at: nowIso },
+          { key: "blocked_signup_phones", value: nextBlockedPhones, updated_at: nowIso },
           { key: "invite_code", value: nextInviteCode, updated_at: nowIso },
         ],
         { onConflict: "key" },
@@ -73,6 +105,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       removedEmail: targetEmail,
+      removedPhone: targetPhone,
       newInviteCode: nextInviteCode,
     });
   } catch (error: any) {

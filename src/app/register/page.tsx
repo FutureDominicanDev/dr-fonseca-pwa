@@ -17,12 +17,29 @@ const parseEmails = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
+const parsePhones = (value: unknown): string[] => {
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[,\n;]/g)
+    .map((entry) => entry.replace(/[^\d+]/g, "").trim())
+    .filter(Boolean);
+};
+
+const normalizePhone = (value: string) => {
+  const cleaned = value.replace(/[^\d+]/g, "").trim();
+  if (!cleaned) return "";
+  if (cleaned.startsWith("+")) return `+${cleaned.slice(1).replace(/\D/g, "")}`;
+  return `+${cleaned.replace(/\D/g, "")}`;
+};
+
 export default function RegisterPage() {
   const [step, setStep] = useState<"code" | "details">("code");
   const [inviteCode, setInviteCode] = useState("");
-  const [inviteTrack, setInviteTrack] = useState<"clinical" | "staff">("staff");
+  const [authMethod, setAuthMethod] = useState<"email" | "phone">("email");
   const [fullName, setFullName] = useState("");
+  const [role, setRole] = useState<"doctor" | "enfermeria" | "coordinacion" | "post_quirofano" | "staff">("staff");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -62,11 +79,9 @@ export default function RegisterPage() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const codeFromLink = (params.get("code") || "").trim().toUpperCase();
-    const trackFromLink = (params.get("track") || "").trim().toLowerCase();
     const officeFromLink = (params.get("office") || "").trim().toLowerCase();
     if (!codeFromLink) return;
 
-    setInviteTrack(trackFromLink === "clinical" ? "clinical" : "staff");
     if (officeFromLink === "both") setOfficeLocation("Both");
     if (officeFromLink === "gdl") setOfficeLocation("Guadalajara");
     if (officeFromLink === "tjn") setOfficeLocation("Tijuana");
@@ -103,8 +118,12 @@ export default function RegisterPage() {
       setError("Por favor ingresa tu nombre completo.");
       return;
     }
-    if (!email.trim()) {
+    if (authMethod === "email" && !email.trim()) {
       setError("Por favor ingresa tu correo.");
+      return;
+    }
+    if (authMethod === "phone" && !phone.trim()) {
+      setError("Por favor ingresa tu teléfono.");
       return;
     }
     if (password.length < 6) {
@@ -120,35 +139,60 @@ export default function RegisterPage() {
     setError("");
 
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = normalizePhone(phone);
 
-    const { data: blockedSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle();
-    const blockedEmails = new Set(parseEmails(blockedSetting?.value));
-    if (blockedEmails.has(normalizedEmail)) {
+    const { data: blockedEmailSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle();
+    const { data: blockedPhoneSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle();
+    const blockedEmails = new Set(parseEmails(blockedEmailSetting?.value));
+    const blockedPhones = new Set(parsePhones(blockedPhoneSetting?.value));
+    if (authMethod === "email" && blockedEmails.has(normalizedEmail)) {
       setError("Este correo ya no tiene acceso. Contacta al administrador.");
       setLoading(false);
       return;
     }
+    if (authMethod === "phone" && blockedPhones.has(normalizedPhone)) {
+      setError("Este teléfono ya no tiene acceso. Contacta al administrador.");
+      setLoading(false);
+      return;
+    }
 
-    const assignedRole = normalizedEmail === OWNER_EMAIL ? "doctor" : "staff";
+    const assignedRole = normalizedEmail === OWNER_EMAIL ? "doctor" : role;
     const persistedOfficeLocation = officeLocation === "Both" ? null : officeLocation;
     const baseProfile = {
       full_name: fullName.trim(),
       role: assignedRole,
       display_name: fullName.trim(),
+      phone: normalizedPhone || null,
     };
 
-    const { data: authData, error: authErr } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-        data: {
-          full_name: fullName.trim(),
-          role: assignedRole,
-          office_location: persistedOfficeLocation,
-          onboarding_track: inviteTrack,
-        },
-      },
-    });
+    const signUpPayload =
+      authMethod === "phone"
+        ? {
+            phone: normalizedPhone,
+            password,
+            options: {
+              data: {
+                full_name: fullName.trim(),
+                role: assignedRole,
+                office_location: persistedOfficeLocation,
+                phone: normalizedPhone,
+              },
+            },
+          }
+        : {
+            email: normalizedEmail,
+            password,
+            options: {
+              data: {
+                full_name: fullName.trim(),
+                role: assignedRole,
+                office_location: persistedOfficeLocation,
+                phone: normalizedPhone || null,
+              },
+            },
+          };
+
+    const { data: authData, error: authErr } = await supabase.auth.signUp(signUpPayload as any);
 
     if (authErr) {
       setError(authErr.message);
@@ -175,7 +219,9 @@ export default function RegisterPage() {
 
         const { error: fallbackErr } = await supabase.from("profiles").upsert({
           id: authData.user.id,
-          ...baseProfile,
+          full_name: fullName.trim(),
+          role: assignedRole,
+          display_name: fullName.trim(),
         });
 
         if (fallbackErr) {
@@ -285,12 +331,31 @@ export default function RegisterPage() {
               {error && <div className="err2">⚠️ {error}</div>}
               <label className="flabel2">Nombre Completo</label>
               <input className="finput" placeholder="Dr. Ana García" value={fullName} onChange={e => setFullName(e.target.value)} />
+              <label className="flabel2">Método de acceso</label>
+              <div className="rgroup">
+                <div className={`ropt${authMethod === "email" ? " sel" : ""}`} onClick={() => setAuthMethod("email")}>📧 Correo</div>
+                <div className={`ropt${authMethod === "phone" ? " sel" : ""}`} onClick={() => setAuthMethod("phone")}>📱 Teléfono</div>
+              </div>
               <label className="flabel2">Tu función</label>
-              <div className="ropt sel" style={{ marginBottom: 16, minHeight: 48, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {inviteTrack === "clinical" ? "🩺 Equipo clínico (asignación por admin)" : "👤 Personal (asignación por admin)"}
+              <div className="rgroup">
+                {[
+                  { id: "doctor", label: "👩‍⚕️ Doctora/👨‍⚕️ Doctor" },
+                  { id: "enfermeria", label: "💉 Enfermería" },
+                  { id: "coordinacion", label: "📋 Coordinación" },
+                  { id: "post_quirofano", label: "🏥 Post-Q" },
+                  { id: "staff", label: "🏢 Personal de oficina" },
+                ].map((roleOption) => (
+                  <div
+                    key={roleOption.id}
+                    className={`ropt${role === roleOption.id ? " sel" : ""}`}
+                    onClick={() => setRole(roleOption.id as "doctor" | "enfermeria" | "coordinacion" | "post_quirofano" | "staff")}
+                  >
+                    {roleOption.label}
+                  </div>
+                ))}
               </div>
               <p style={{ fontSize: 12, color: "#6B7280", margin: "-6px 0 16px", lineHeight: 1.45, fontWeight: 600 }}>
-                Seguridad: tu rol clínico y permisos avanzados los asigna el administrador después de crear la cuenta.
+                Seguridad: el sistema nunca te da permisos de administrador automáticamente.
               </p>
               <label className="flabel2">Tu Sede</label>
               <div className="rgroup">
@@ -304,8 +369,19 @@ export default function RegisterPage() {
                   </div>
                 ))}
               </div>
-              <label className="flabel2">Correo Electrónico</label>
-              <input className="finput" type="email" placeholder="tu@correo.com" value={email} onChange={e => setEmail(e.target.value)} />
+              {authMethod === "email" ? (
+                <>
+                  <label className="flabel2">Correo Electrónico</label>
+                  <input className="finput" type="email" placeholder="tu@correo.com" value={email} onChange={e => setEmail(e.target.value)} />
+                  <label className="flabel2">Teléfono (opcional)</label>
+                  <input className="finput" inputMode="tel" placeholder="+52 664 123 4567" value={phone} onChange={e => setPhone(e.target.value)} />
+                </>
+              ) : (
+                <>
+                  <label className="flabel2">Teléfono</label>
+                  <input className="finput" inputMode="tel" placeholder="+52 664 123 4567" value={phone} onChange={e => setPhone(e.target.value)} />
+                </>
+              )}
               <label className="flabel2">Contraseña</label>
               <div className="pwrap">
                 <input className="pinput" type={showPassword ? "text" : "password"} placeholder="Mínimo 6 caracteres" value={password} onChange={e => setPassword(e.target.value)} />

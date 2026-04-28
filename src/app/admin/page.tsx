@@ -52,12 +52,15 @@ export default function AdminPage() {
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [inviteCode, setInviteCode] = useState("");
   const [newInviteCode, setNewInviteCode] = useState("");
+  const [blockedEmails, setBlockedEmails] = useState<string[]>([]);
+  const [blockedPhones, setBlockedPhones] = useState<string[]>([]);
   const [officePhoneGdl, setOfficePhoneGdl] = useState("");
   const [officePhoneTjn, setOfficePhoneTjn] = useState("");
   const [savingCode, setSavingCode] = useState(false);
   const [savingPhones, setSavingPhones] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [unblockBusyKey, setUnblockBusyKey] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [pageError, setPageError] = useState("");
@@ -88,6 +91,14 @@ export default function AdminPage() {
             system: "⚙️ System",
           } as Record<string, string>
         )[role || ""] || "👤 Staff";
+
+  const parseSettingList = (value: unknown) => {
+    if (typeof value !== "string") return [] as string[];
+    return value
+      .split(/[,\n;]/g)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  };
 
   const adminText = (level: AdminLevel) =>
     isSpanish
@@ -173,12 +184,14 @@ export default function AdminPage() {
   const fetchData = async () => {
     setPageError("");
 
-    const [staffRes, patientsRes, proceduresRes, roomsRes, inviteRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
+    const [staffRes, patientsRes, proceduresRes, roomsRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("patients").select("*").order("full_name"),
       supabase.from("procedures").select("*"),
       supabase.from("rooms").select("*").order("created_at", { ascending: false }),
       supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "office_phone_guadalajara").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "office_phone_tijuana").maybeSingle(),
     ]);
@@ -189,6 +202,8 @@ export default function AdminPage() {
       proceduresRes.error ? "No pude cargar los procedimientos." : "",
       roomsRes.error ? "No pude cargar las salas." : "",
       inviteRes.error ? "No pude cargar el código de invitación." : "",
+      blockedEmailsRes.error ? "No pude cargar correos bloqueados." : "",
+      blockedPhonesRes.error ? "No pude cargar teléfonos bloqueados." : "",
       gdlPhoneRes.error ? "No pude cargar el teléfono de Guadalajara." : "",
       tjnPhoneRes.error ? "No pude cargar el teléfono de Tijuana." : "",
     ].filter(Boolean);
@@ -198,6 +213,8 @@ export default function AdminPage() {
     setProcedures((proceduresRes.data || []) as ProcedureRecord[]);
     setRooms((roomsRes.data || []) as RoomRecord[]);
     setInviteCode((inviteRes.data?.value as string) || "");
+    setBlockedEmails(parseSettingList(blockedEmailsRes.data?.value).map((item) => item.toLowerCase()));
+    setBlockedPhones(parseSettingList(blockedPhonesRes.data?.value));
     setOfficePhoneGdl((gdlPhoneRes.data?.value as string) || "");
     setOfficePhoneTjn((tjnPhoneRes.data?.value as string) || "");
 
@@ -399,6 +416,7 @@ export default function AdminPage() {
       notes: isSpanish ? `Cuenta revocada para ${name}.` : `Account revoked for ${name}.`,
       metadata: {
         blocked_email: payload?.removedEmail || null,
+        blocked_phone: payload?.removedPhone || null,
         invite_code_rotated: true,
       },
     });
@@ -407,6 +425,38 @@ export default function AdminPage() {
         ? `Cuenta de ${name} revocada. Correo bloqueado y código renovado.`
         : `${name}'s account revoked. Email blocked and invite code rotated.`,
     );
+    setBlockedEmails((previous) => {
+      const next = new Set(previous);
+      if (typeof payload?.removedEmail === "string" && payload.removedEmail.trim()) next.add(payload.removedEmail.trim().toLowerCase());
+      return Array.from(next).sort();
+    });
+    setBlockedPhones((previous) => {
+      const next = new Set(previous);
+      if (typeof payload?.removedPhone === "string" && payload.removedPhone.trim()) next.add(payload.removedPhone.trim());
+      return Array.from(next).sort();
+    });
+  };
+
+  const unblockAccess = async (type: "email" | "phone", value: string) => {
+    const key = `${type}:${value}`;
+    setUnblockBusyKey(key);
+    const response = await fetch("/api/staff/unblock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, value }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setUnblockBusyKey("");
+    if (!response.ok) {
+      setPageError(payload?.error || (isSpanish ? "No pude quitar el bloqueo." : "I could not remove the block."));
+      return;
+    }
+    if (type === "email") {
+      setBlockedEmails((previous) => previous.filter((item) => item.toLowerCase() !== value.toLowerCase()));
+    } else {
+      setBlockedPhones((previous) => previous.filter((item) => item !== value));
+    }
+    updateSuccess(isSpanish ? "Acceso restablecido." : "Access restored.");
   };
 
   if (!sessionChecked || loading) {
@@ -807,6 +857,63 @@ export default function AdminPage() {
                   <button className="ghost-btn" onClick={() => goTo("/admin/papelera")}>
                     {isSpanish ? "🗂️ Papelera y archivo" : "🗂️ Trash and archive"}
                   </button>
+                </div>
+              </section>
+
+              <section className="card">
+                <div className="header-row">
+                  <div>
+                    <p className="card-title">{isSpanish ? "Accesos bloqueados" : "Blocked access"}</p>
+                    <p className="muted">
+                      {isSpanish
+                        ? "Si alguien regresa al equipo, quítalo de esta lista para permitir su registro nuevamente."
+                        : "If someone rejoins the team, remove them here to allow registration again."}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 12 }}>
+                  <div>
+                    <p className="group-label">{isSpanish ? "Correos bloqueados" : "Blocked emails"}</p>
+                    {blockedEmails.length === 0 ? (
+                      <p className="small-note">{isSpanish ? "Sin correos bloqueados." : "No blocked emails."}</p>
+                    ) : (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {blockedEmails.map((emailValue) => {
+                          const busy = unblockBusyKey === `email:${emailValue}`;
+                          return (
+                            <div key={emailValue} style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 10, padding: "8px 10px" }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", wordBreak: "break-all" }}>{emailValue}</span>
+                              <button className="mini-btn" disabled={busy} onClick={() => unblockAccess("email", emailValue)}>
+                                {busy ? (isSpanish ? "..." : "...") : (isSpanish ? "Permitir" : "Allow")}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="group-label">{isSpanish ? "Teléfonos bloqueados" : "Blocked phones"}</p>
+                    {blockedPhones.length === 0 ? (
+                      <p className="small-note">{isSpanish ? "Sin teléfonos bloqueados." : "No blocked phones."}</p>
+                    ) : (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {blockedPhones.map((phoneValue) => {
+                          const busy = unblockBusyKey === `phone:${phoneValue}`;
+                          return (
+                            <div key={phoneValue} style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 10, padding: "8px 10px" }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", wordBreak: "break-all" }}>{phoneValue}</span>
+                              <button className="mini-btn" disabled={busy} onClick={() => unblockAccess("phone", phoneValue)}>
+                                {busy ? (isSpanish ? "..." : "...") : (isSpanish ? "Permitir" : "Allow")}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
 

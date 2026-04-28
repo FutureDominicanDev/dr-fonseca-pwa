@@ -9,6 +9,9 @@ alter table public.profiles
 alter table public.profiles
   add column if not exists admin_level text not null default 'none';
 
+alter table public.profiles
+  add column if not exists phone text;
+
 -- 2) Campos nuevos en patients para controlar el ciclo de vida del expediente
 alter table public.patients
   add column if not exists record_status text not null default 'active';
@@ -98,6 +101,7 @@ end $$;
 -- 6) Indices utiles para panel y exportaciones
 create index if not exists profiles_admin_level_idx on public.profiles(admin_level);
 create index if not exists profiles_office_location_idx on public.profiles(office_location);
+create index if not exists profiles_phone_idx on public.profiles(phone);
 create index if not exists patients_record_status_idx on public.patients(record_status);
 create index if not exists messages_sender_office_idx on public.messages(sender_office);
 create index if not exists procedures_patient_id_idx on public.procedures(patient_id);

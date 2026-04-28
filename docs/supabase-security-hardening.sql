@@ -102,7 +102,7 @@ create policy "profiles insert own row"
     and (
       (
         coalesce(admin_level, 'none') = 'none'
-        and coalesce(role, 'staff') = 'staff'
+        and coalesce(role, 'staff') in ('doctor', 'enfermeria', 'coordinacion', 'post_quirofano', 'staff')
       )
       or (
         public.current_user_email() = 'mrdiazsr@icloud.com'

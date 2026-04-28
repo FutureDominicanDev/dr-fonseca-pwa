@@ -6,18 +6,29 @@ type View = "login" | "forgot" | "sent";
 
 export default function LoginPage() {
   const [view, setView] = useState<View>("login");
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [resetEmail, setResetEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const normalizePhone = (value: string) => {
+    const cleaned = value.replace(/[^\d+]/g, "").trim();
+    if (!cleaned) return "";
+    if (cleaned.startsWith("+")) return `+${cleaned.slice(1).replace(/\D/g, "")}`;
+    return `+${cleaned.replace(/\D/g, "")}`;
+  };
+
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) { setError("Por favor ingresa tu correo y contraseña."); return; }
+    if (!identifier.trim() || !password.trim()) { setError("Por favor ingresa tu correo/teléfono y contraseña."); return; }
     setLoading(true); setError("");
-    const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (err) { setError("Correo o contraseña incorrectos."); setLoading(false); return; }
+    const isEmailLogin = identifier.includes("@");
+    const payload = isEmailLogin
+      ? { email: identifier.trim().toLowerCase(), password }
+      : { phone: normalizePhone(identifier), password };
+    const { error: err } = await supabase.auth.signInWithPassword(payload as any);
+    if (err) { setError("Correo/teléfono o contraseña incorrectos."); setLoading(false); return; }
     window.location.href = "/inbox";
   };
 
@@ -77,8 +88,8 @@ export default function LoginPage() {
                 <p className="page-title">Bienvenido 👋</p>
                 <p className="page-sub">Ingresa tus credenciales para continuar</p>
                 {error && <div className="error-box">⚠️ {error}</div>}
-                <label className="form-label">Correo Electrónico</label>
-                <input className="form-input" type="email" placeholder="correo@drmiguelfonseca.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleLogin(); }} autoComplete="email" />
+                <label className="form-label">Correo o Teléfono</label>
+                <input className="form-input" type="text" placeholder="correo@drmiguelfonseca.com o +52 664 123 4567" value={identifier} onChange={e => setIdentifier(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleLogin(); }} autoComplete="username" />
                 <label className="form-label">Contraseña</label>
                 <div className="pw-wrap">
                   <input className="pw-input" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleLogin(); }} autoComplete="current-password" />
