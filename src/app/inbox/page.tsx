@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
+import { isOwnerEmail } from "@/lib/securityConfig";
 
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
@@ -362,7 +363,6 @@ function QREditor({ show, onClose, quickReplies, onSave, savingQR, savedQR, dark
 }
 
 export default function InboxPage() {
-  const OWNER_EMAIL = "mrdiazsr@icloud.com";
   const [lang, setLang] = useState<Lang>("es");
   const t = T[lang];
   const [darkMode, setDarkMode] = useState(false);
@@ -547,7 +547,7 @@ export default function InboxPage() {
   const toggleCareTeamMember = (id: string) => {
     setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   };
-  const canOpenAdmin = currentUserEmail.toLowerCase()===OWNER_EMAIL || ["owner","super_admin","admin"].includes(userProfile?.admin_level||"");
+  const canOpenAdmin = isOwnerEmail(currentUserEmail);
   const canManageCareTeam = (userProfile?.role || "").toLowerCase() === "doctor" || ["owner","super_admin"].includes(userProfile?.admin_level || "");
   const careTeamDirectory = showAllCareTeamOptions
     ? staffDirectory
@@ -2160,7 +2160,7 @@ export default function InboxPage() {
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
         .topbar { flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(62px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; }
-        .sidebar { width: 360px; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid ${borderColor}; }
+        .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 12px 14px; background: ${darkMode?"#1F2C33":"#F6F7F9"}; border-bottom: 1px solid ${borderColor}; }
         .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
         .search-bar { display: flex; align-items: center; gap: 8px; background: ${darkMode?"#2A3942":"#F0F2F5"}; border-radius: 8px; padding: 8px 10px; }
@@ -2176,7 +2176,9 @@ export default function InboxPage() {
         .patient-name { font-size: 17px; font-weight: 600; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .patient-meta { font-size: 14px; color: ${subTextColor}; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .unread-dot { width: 13px; height: 13px; background: #25D366; border-radius: 50%; flex-shrink: 0; }
-        .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: ${bg}; position: relative; }
+        .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${bg}; transition: transform 0.25s ease; z-index: 20; }
+        .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
+        .main-area.hidden { transform: translateX(100%); pointer-events: none; }
         .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${bg}; background-image: radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px); background-size: 18px 18px; }
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 14px 0; }
@@ -2217,10 +2219,6 @@ export default function InboxPage() {
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 700px) {
-          .sidebar { position: absolute; inset: 0; z-index: 10; width: 100%; transition: transform 0.25s ease; }
-          .main-area { position: absolute; inset: 0; z-index: 20; transition: transform 0.25s ease; }
-          .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
-          .main-area.hidden { transform: translateX(100%); pointer-events: none; }
           .chat-head { padding-top: max(14px, env(safe-area-inset-top)); min-height: calc(66px + env(safe-area-inset-top)); }
         }
       `}</style>

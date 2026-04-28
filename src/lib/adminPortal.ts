@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { PRIMARY_OWNER_EMAIL, isOwnerEmail } from "@/lib/securityConfig";
 
 export type AdminLevel = "owner" | "super_admin" | "admin" | "none";
 export type Office = "Guadalajara" | "Tijuana" | "";
@@ -120,7 +121,7 @@ export type TimelineEntry = {
   room: RoomRecord;
 };
 
-export const OWNER_EMAIL = "mrdiazsr@icloud.com";
+export const OWNER_EMAIL = PRIMARY_OWNER_EMAIL;
 
 export const adminLabel = (level: AdminLevel) =>
   (
@@ -180,7 +181,7 @@ export const procedureStatusLabel = (status: string | null | undefined, lang: "e
 };
 
 export const normalizeAdminLevel = (value: unknown, email = ""): AdminLevel => {
-  if (email.toLowerCase() === OWNER_EMAIL) return "owner";
+  if (isOwnerEmail(email)) return "owner";
   if (value === "owner" || value === "super_admin" || value === "admin" || value === "none") return value;
   return "none";
 };

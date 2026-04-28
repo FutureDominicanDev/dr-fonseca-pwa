@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { isOwnerEmail } from "@/lib/securityConfig";
 
-const OWNER_EMAIL = "mrdiazsr@icloud.com";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://pdebkexayomjaougrlhr.supabase.co";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     const authUserRes = await supabase.auth.admin.getUserById(userId);
     const targetEmail = authUserRes.data?.user?.email?.trim().toLowerCase() || "";
     const targetPhoneFromAuth = normalizePhone(authUserRes.data?.user?.phone || "");
-    if (targetEmail === OWNER_EMAIL) {
+    if (isOwnerEmail(targetEmail)) {
       return NextResponse.json({ error: "Owner account is protected and cannot be revoked." }, { status: 403 });
     }
 

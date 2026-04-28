@@ -4,18 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
-  OWNER_EMAIL,
   formatDate,
   initials,
   isMissingColumnError,
   logAdminEvent,
-  normalizeAdminLevel,
   normalizeRecordStatus,
   type PatientRecord,
   type PatientRecordStatus,
   type ProcedureRecord,
   type StaffProfile,
 } from "@/lib/adminPortal";
+import { isOwnerEmail } from "@/lib/securityConfig";
 
 type TrashView = "archived" | "trash";
 
@@ -34,9 +33,7 @@ export default function AdminTrashPage() {
   const [view, setView] = useState<TrashView>("archived");
   const [savingId, setSavingId] = useState("");
 
-  const hasAdminAccess =
-    viewerEmail.toLowerCase() === OWNER_EMAIL ||
-    ["owner", "super_admin", "admin"].includes(normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail));
+  const hasAdminAccess = isOwnerEmail(viewerEmail);
 
   const goTo = (path: string) => {
     setMobileMenuOpen(false);
@@ -80,9 +77,7 @@ export default function AdminTrashPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    const computedAccess =
-      email === OWNER_EMAIL ||
-      ["owner", "super_admin", "admin"].includes(normalizeAdminLevel(profile?.admin_level, email));
+    const computedAccess = isOwnerEmail(email);
 
     if (!computedAccess) {
       setSessionChecked(true);

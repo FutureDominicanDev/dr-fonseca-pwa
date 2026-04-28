@@ -1,13 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-
-const OWNER_EMAIL = "mrdiazsr@icloud.com";
-
-const isMissingColumnError = (error: any) => {
-  const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
-  return message.includes("column") || message.includes("schema cache");
-};
+import { isOwnerEmail } from "@/lib/securityConfig";
+import { normalizePhone, phoneAliasEmail } from "@/lib/authIdentity";
 
 const parseEmails = (value: unknown): string[] => {
   if (typeof value !== "string") return [];
@@ -25,12 +20,15 @@ const parsePhones = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
-const normalizePhone = (value: string) => {
-  const cleaned = value.replace(/[^\d+]/g, "").trim();
-  if (!cleaned) return "";
-  if (cleaned.startsWith("+")) return `+${cleaned.slice(1).replace(/\D/g, "")}`;
-  return `+${cleaned.replace(/\D/g, "")}`;
-};
+const PHONE_COUNTRY_OPTIONS = [
+  { code: "+52", label: "🇲🇽 +52 México" },
+  { code: "+1", label: "🇺🇸 +1 USA/Canadá" },
+  { code: "+34", label: "🇪🇸 +34 España" },
+  { code: "+57", label: "🇨🇴 +57 Colombia" },
+  { code: "+51", label: "🇵🇪 +51 Perú" },
+  { code: "+54", label: "🇦🇷 +54 Argentina" },
+  { code: "+56", label: "🇨🇱 +56 Chile" },
+];
 
 export default function RegisterPage() {
   const [step, setStep] = useState<"code" | "details">("code");
@@ -39,7 +37,8 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<"doctor" | "enfermeria" | "coordinacion" | "post_quirofano" | "staff">("staff");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phoneCountryCode, setPhoneCountryCode] = useState("+52");
+  const [phoneLocal, setPhoneLocal] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -50,16 +49,8 @@ export default function RegisterPage() {
   const [checkedInitialCode, setCheckedInitialCode] = useState(false);
 
   const applyPhoneInput = (value: string) => {
-    const digits = value.replace(/\D/g, "");
-    if (!digits) {
-      setPhone("");
-      return;
-    }
-    if (digits.startsWith("52")) {
-      setPhone(`+${digits}`);
-      return;
-    }
-    setPhone(`+52${digits}`);
+    const digits = value.replace(/\D/g, "").slice(0, 14);
+    setPhoneLocal(digits);
   };
 
   const checkCode = async () => {
@@ -138,7 +129,7 @@ export default function RegisterPage() {
       return;
     }
     const normalizedEmail = email.trim().toLowerCase();
-    const normalizedPhone = normalizePhone(phone);
+    const normalizedPhone = normalizePhone(`${phoneCountryCode}${phoneLocal}`);
     const hasEmail = normalizedEmail.length > 0;
     const hasPhone = normalizedPhone.length > 0;
 
@@ -159,6 +150,13 @@ export default function RegisterPage() {
     setError("");
 
     const usingPhone = authMethod === "phone" ? hasPhone : !hasEmail && hasPhone;
+    const effectiveEmail = hasEmail ? normalizedEmail : (usingPhone ? phoneAliasEmail(normalizedPhone) : "");
+
+    if (!effectiveEmail) {
+      setError("No pude preparar el acceso. Revisa correo/teléfono.");
+      setLoading(false);
+      return;
+    }
 
     const { data: blockedEmailSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle();
     const { data: blockedPhoneSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle();
@@ -175,7 +173,7 @@ export default function RegisterPage() {
       return;
     }
 
-    const assignedRole = normalizedEmail === OWNER_EMAIL ? "doctor" : role;
+    const assignedRole = isOwnerEmail(normalizedEmail) ? "doctor" : role;
     const persistedOfficeLocation = officeLocation === "Both" ? null : officeLocation;
     const baseProfile = {
       full_name: fullName.trim(),
@@ -184,32 +182,20 @@ export default function RegisterPage() {
       phone: normalizedPhone || null,
     };
 
-    const signUpPayload =
-      usingPhone
-        ? {
-            phone: normalizedPhone,
-            password,
-            options: {
-              data: {
-                full_name: fullName.trim(),
-                role: assignedRole,
-                office_location: persistedOfficeLocation,
-                phone: normalizedPhone,
-              },
-            },
-          }
-        : {
-            email: normalizedEmail,
-            password,
-            options: {
-              data: {
-                full_name: fullName.trim(),
-                role: assignedRole,
-                office_location: persistedOfficeLocation,
-                phone: normalizedPhone || null,
-              },
-            },
-          };
+    const signUpPayload = {
+      email: effectiveEmail,
+      password,
+      options: {
+        data: {
+          full_name: fullName.trim(),
+          role: assignedRole,
+          office_location: persistedOfficeLocation,
+          phone: normalizedPhone || null,
+          login_method: usingPhone ? "phone" : "email",
+          real_email: hasEmail ? normalizedEmail : null,
+        },
+      },
+    };
 
     const { data: authData, error: authErr } = await supabase.auth.signUp(signUpPayload as any);
 
@@ -225,14 +211,14 @@ export default function RegisterPage() {
           id: authData.user.id,
           ...baseProfile,
           office_location: persistedOfficeLocation,
-          admin_level: normalizedEmail === OWNER_EMAIL ? "owner" : "none",
+          admin_level: isOwnerEmail(normalizedEmail) ? "owner" : "none",
         },
         {
           id: authData.user.id,
           full_name: fullName.trim(),
           role: assignedRole,
           office_location: persistedOfficeLocation,
-          admin_level: normalizedEmail === OWNER_EMAIL ? "owner" : "none",
+          admin_level: isOwnerEmail(normalizedEmail) ? "owner" : "none",
         },
         {
           id: authData.user.id,
@@ -251,19 +237,24 @@ export default function RegisterPage() {
         },
       ];
 
-      let profileSaveError: any = null;
-      for (const candidate of profileCandidates) {
-        const { error: attemptError } = await supabase.from("profiles").upsert(candidate);
-        if (!attemptError) {
-          profileSaveError = null;
-          break;
-        }
-        profileSaveError = attemptError;
-        if (!isMissingColumnError(attemptError)) break;
-      }
+      const bootstrapRes = await fetch("/api/staff/bootstrap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inviteCode: inviteCode.trim().toUpperCase(),
+          userId: authData.user.id,
+          fullName: fullName.trim(),
+          role: assignedRole,
+          officeLocation: persistedOfficeLocation,
+          phone: normalizedPhone || null,
+          email: hasEmail ? normalizedEmail : null,
+          adminLevel: isOwnerEmail(normalizedEmail) ? "owner" : "none",
+        }),
+      });
 
-      if (profileSaveError) {
-        setError(profileSaveError.message || "No pude guardar el perfil.");
+      if (!bootstrapRes.ok) {
+        const payload = await bootstrapRes.json().catch(() => ({}));
+        setError(payload?.error || "No pude guardar el perfil.");
         setLoading(false);
         return;
       }
@@ -345,6 +336,7 @@ export default function RegisterPage() {
         .reg-sub2 { font-size: 15px; color: #000; font-weight: 500; margin-bottom: 28px; text-align: center; opacity: 0.6; }
         .flabel2 { font-size: 13px; font-weight: 800; color: #000; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block; }
         .finput { width: 100%; padding: 14px 16px; background: #F2F2F7; border: none; border-radius: 12px; font-size: 16px; font-family: inherit; color: #000; outline: none; margin-bottom: 16px; font-weight: 600; }
+        .fselect { width: 100%; padding: 14px 16px; background: #F2F2F7; border: none; border-radius: 12px; font-size: 15px; font-family: inherit; color: #000; outline: none; margin-bottom: 10px; font-weight: 700; }
         .finput::placeholder { color: #AEAEB2; font-weight: 400; }
         .pwrap { position: relative; margin-bottom: 16px; }
         .pinput { width: 100%; padding: 14px 48px 14px 16px; background: #F2F2F7; border: none; border-radius: 12px; font-size: 16px; font-family: inherit; color: #000; outline: none; font-weight: 600; }
@@ -419,7 +411,14 @@ export default function RegisterPage() {
               <label className="flabel2">Correo Electrónico (opcional)</label>
               <input className="finput" type="email" placeholder="tu@correo.com" value={email} onChange={e => setEmail(e.target.value)} />
               <label className="flabel2">Teléfono (opcional)</label>
-              <input className="finput" inputMode="tel" placeholder="+52 664 123 4567" value={phone} onFocus={() => { if (!phone.trim()) setPhone("+52"); }} onChange={e => applyPhoneInput(e.target.value)} />
+              <select className="fselect" value={phoneCountryCode} onChange={(event) => setPhoneCountryCode(event.target.value)}>
+                {PHONE_COUNTRY_OPTIONS.map((entry) => (
+                  <option key={entry.code} value={entry.code}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+              <input className="finput" inputMode="tel" placeholder="Ej: 6641234567" value={phoneLocal} onChange={e => applyPhoneInput(e.target.value)} />
               <label className="flabel2">Contraseña</label>
               <div className="pwrap">
                 <input className="pinput" type={showPassword ? "text" : "password"} placeholder="Mínimo 6 caracteres" value={password} onChange={e => setPassword(e.target.value)} />

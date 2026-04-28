@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { normalizePhone, phoneAliasEmail } from "@/lib/authIdentity";
 
 type View = "login" | "forgot" | "sent";
 
@@ -23,20 +24,13 @@ export default function LoginPage() {
     loadRegisterLink();
   }, []);
 
-  const normalizePhone = (value: string) => {
-    const cleaned = value.replace(/[^\d+]/g, "").trim();
-    if (!cleaned) return "";
-    if (cleaned.startsWith("+")) return `+${cleaned.slice(1).replace(/\D/g, "")}`;
-    return `+${cleaned.replace(/\D/g, "")}`;
-  };
-
   const handleLogin = async () => {
     if (!identifier.trim() || !password.trim()) { setError("Por favor ingresa tu correo/teléfono y contraseña."); return; }
     setLoading(true); setError("");
     const isEmailLogin = identifier.includes("@");
     const payload = isEmailLogin
       ? { email: identifier.trim().toLowerCase(), password }
-      : { phone: normalizePhone(identifier), password };
+      : { email: phoneAliasEmail(normalizePhone(identifier)), password };
     const { error: err } = await supabase.auth.signInWithPassword(payload as any);
     if (err) { setError("Correo/teléfono o contraseña incorrectos."); setLoading(false); return; }
     window.location.href = "/inbox";

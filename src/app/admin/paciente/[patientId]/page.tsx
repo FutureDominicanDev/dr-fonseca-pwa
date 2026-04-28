@@ -7,7 +7,6 @@ import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/date
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone } from "@/lib/patientMeta";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
-  OWNER_EMAIL,
   PROCEDURE_STATUS_OPTIONS,
   buildExportHtml,
   buildPatientBundles,
@@ -36,6 +35,7 @@ import {
   type RoomRecord,
   type StaffProfile,
 } from "@/lib/adminPortal";
+import { isOwnerEmail } from "@/lib/securityConfig";
 
 type PatientDraft = {
   full_name: string;
@@ -96,7 +96,7 @@ export default function AdminPatientRecordPage() {
   const timelineSectionRef = useRef<HTMLElement | null>(null);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
-  const hasAdminAccess = viewerEmail.toLowerCase() === OWNER_EMAIL || ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
+  const hasAdminAccess = isOwnerEmail(viewerEmail);
   const canChangeProcedureStatus = viewerProfile?.role === "doctor" || ["owner", "super_admin"].includes(viewerAdminLevel);
   const staffById = useMemo(() => new Map(staffProfiles.map((member) => [member.id, member])), [staffProfiles]);
   const patientStatus = normalizeRecordStatus(patient?.record_status);
@@ -409,7 +409,7 @@ export default function AdminPatientRecordPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    const computedAccess = email === OWNER_EMAIL || ["owner", "super_admin", "admin"].includes(normalizeAdminLevel(profile?.admin_level, email));
+    const computedAccess = isOwnerEmail(email);
     if (!computedAccess) {
       setSessionChecked(true);
       setLoading(false);

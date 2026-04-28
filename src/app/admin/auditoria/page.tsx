@@ -4,13 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
-  OWNER_EMAIL,
   formatDateTime,
   isMissingColumnError,
   normalizeAdminLevel,
   type AdminAuditEvent,
   type StaffProfile,
 } from "@/lib/adminPortal";
+import { isOwnerEmail } from "@/lib/securityConfig";
 
 type AuditFilter = "all" | "patient" | "staff" | "system";
 
@@ -27,9 +27,7 @@ export default function AdminAuditPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<AuditFilter>("all");
 
-  const hasAdminAccess =
-    viewerEmail.toLowerCase() === OWNER_EMAIL ||
-    ["owner", "super_admin", "admin"].includes(normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail));
+  const hasAdminAccess = isOwnerEmail(viewerEmail);
 
   const goTo = (path: string) => {
     setMobileMenuOpen(false);
@@ -113,9 +111,7 @@ export default function AdminAuditPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    const computedAccess =
-      email === OWNER_EMAIL ||
-      ["owner", "super_admin", "admin"].includes(normalizeAdminLevel(profile?.admin_level, email));
+    const computedAccess = isOwnerEmail(email);
 
     if (!computedAccess) {
       setSessionChecked(true);

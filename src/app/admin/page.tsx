@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
-  OWNER_EMAIL,
   adminColor,
   adminLabel,
   formatDate,
@@ -27,6 +26,7 @@ import {
   type RoomRecord,
   type StaffProfile,
 } from "@/lib/adminPortal";
+import { isOwnerEmail } from "@/lib/securityConfig";
 
 type PatientCard = {
   patient: PatientRecord;
@@ -67,9 +67,9 @@ export default function AdminPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
-  const hasAdminAccess = viewerEmail.toLowerCase() === OWNER_EMAIL || ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
-  const canManageAdmins = viewerAdminLevel === "owner" || viewerAdminLevel === "super_admin";
-  const canManageOwner = viewerEmail.toLowerCase() === OWNER_EMAIL || viewerAdminLevel === "owner";
+  const hasAdminAccess = isOwnerEmail(viewerEmail);
+  const canManageAdmins = isOwnerEmail(viewerEmail);
+  const canManageOwner = isOwnerEmail(viewerEmail);
 
   const officeText = (office: Office) => {
     if (office === "Guadalajara") return "📍 Guadalajara";
@@ -250,14 +250,14 @@ export default function AdminPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    if (email === OWNER_EMAIL) {
+    if (isOwnerEmail(email)) {
       const { error } = await supabase.from("profiles").update({ admin_level: "owner" }).eq("id", user.id);
       if (!error) {
         setViewerProfile((prev) => ({ ...(prev || { id: user.id }), admin_level: "owner" }));
       }
     }
 
-    const computedAccess = email === OWNER_EMAIL || ["owner", "super_admin", "admin"].includes(normalizeAdminLevel(profile?.admin_level, email));
+    const computedAccess = isOwnerEmail(email);
     if (!computedAccess) {
       setSessionChecked(true);
       setLoading(false);
