@@ -9,6 +9,7 @@ type TranslateBody = {
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_API_KEY_FALLBACK = process.env.OPENA1_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_TRANSLATE_MODEL || "gpt-4o-mini";
+const MAX_TRANSLATE_CHARS = 1200;
 
 const getApiKey = () => OPENAI_API_KEY || OPENAI_API_KEY_FALLBACK;
 
@@ -20,6 +21,9 @@ export async function POST(req: NextRequest) {
     const sourceLang = body?.sourceLang === "en" || body?.sourceLang === "es" ? body.sourceLang : "auto";
 
     if (!text) return NextResponse.json({ translatedText: "" });
+    if (text.length > MAX_TRANSLATE_CHARS) {
+      return NextResponse.json({ translatedText: text.slice(0, MAX_TRANSLATE_CHARS), skipped: true, reason: "text-too-long" });
+    }
     if (sourceLang !== "auto" && sourceLang === targetLang) {
       return NextResponse.json({ translatedText: text, skipped: true });
     }
@@ -27,23 +31,7 @@ export async function POST(req: NextRequest) {
     const languageName = targetLang === "es" ? "Spanish" : "English";
     const sourceHint = sourceLang === "auto" ? "auto-detect source language" : `source language is ${sourceLang}`;
 
-    // First: public Google translate endpoint (no auth) for resiliency.
-    const sl = sourceLang === "auto" ? "auto" : sourceLang;
-    const tl = targetLang;
-    const googleUrl =
-      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
-    const googleResponse = await fetch(googleUrl).catch(() => null);
-    if (googleResponse?.ok) {
-      const googleJson = await googleResponse.json();
-      const translatedChunks = Array.isArray(googleJson?.[0]) ? googleJson[0] : [];
-      const googleTranslated = translatedChunks
-        .map((chunk: any) => (Array.isArray(chunk) ? `${chunk[0] || ""}` : ""))
-        .join("")
-        .trim();
-      if (googleTranslated) return NextResponse.json({ translatedText: googleTranslated });
-    }
-
-    // Then optional OpenAI fallback if key exists.
+    // Use only configured provider path for safer handling of medical chat text.
     const apiKey = getApiKey();
     if (!apiKey) return NextResponse.json({ translatedText: text, skipped: true });
 

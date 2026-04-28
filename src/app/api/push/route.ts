@@ -2,18 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+const VAPID_EMAIL = process.env.VAPID_EMAIL || "";
+const VAPID_PUBLIC = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || "";
+const vapidConfigured = Boolean(VAPID_EMAIL && VAPID_PUBLIC && VAPID_PRIVATE);
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://pdebkexayomjaougrlhr.supabase.co",
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkZWJrZXhheW9tamFvdWdybGhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NTU0MTMsImV4cCI6MjA4NDAzMTQxM30.eCJ98ZX1pnl8fOyZk6IrviaKXHt4ZJXK2mXOtN__ITs"
-);
+if (vapidConfigured) {
+  webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
+}
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://pdebkexayomjaougrlhr.supabase.co";
+const SUPABASE_SERVER_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_SERVER_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY || "missing-key");
 
 const subscriptionEndpoint = (subscription: webpush.PushSubscription | Record<string, any> | null | undefined) =>
   typeof subscription?.endpoint === "string" ? subscription.endpoint : "";
@@ -71,13 +72,32 @@ async function storeSubscription(body: any) {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!supabaseConfigured) {
+      return NextResponse.json({ error: "Push is not configured on server." }, { status: 503 });
+    }
     const body = await req.json();
 
     if (body?.action === "subscribe") {
       return await storeSubscription(body);
     }
 
+    if (!vapidConfigured) {
+      return NextResponse.json({ error: "Push VAPID credentials are not configured." }, { status: 503 });
+    }
+
     const { roomId, title, body: messageBody, url, userType } = body;
+    if (userType !== "patient" && userType !== "staff") {
+      return NextResponse.json({ error: "Invalid userType." }, { status: 400 });
+    }
+    if (typeof title !== "string" || typeof messageBody !== "string" || !title.trim() || !messageBody.trim()) {
+      return NextResponse.json({ error: "Invalid push message payload." }, { status: 400 });
+    }
+    if (title.length > 120 || messageBody.length > 300) {
+      return NextResponse.json({ error: "Push message is too long." }, { status: 400 });
+    }
+    if (userType === "patient" && (typeof roomId !== "string" || !roomId.trim())) {
+      return NextResponse.json({ error: "roomId is required for patient notifications." }, { status: 400 });
+    }
 
     // Fetch matching push subscriptions
     let query = supabase.from("push_subscriptions").select("id, subscription");
