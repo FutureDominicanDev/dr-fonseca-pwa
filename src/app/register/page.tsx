@@ -19,7 +19,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [role, setRole] = useState("staff");
-  const [officeLocation, setOfficeLocation] = useState<"Guadalajara" | "Tijuana">("Guadalajara");
+  const [officeLocation, setOfficeLocation] = useState<"Guadalajara" | "Tijuana" | "Both">("Guadalajara");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -104,6 +104,8 @@ export default function RegisterPage() {
     setError("");
 
     const normalizedEmail = email.trim().toLowerCase();
+    const persistedOfficeLocation =
+      role === "doctor" && officeLocation === "Both" ? null : officeLocation;
     const baseProfile = {
       full_name: fullName.trim(),
       role,
@@ -117,7 +119,7 @@ export default function RegisterPage() {
         data: {
           full_name: fullName.trim(),
           role,
-          office_location: officeLocation,
+          office_location: persistedOfficeLocation,
         },
       },
     });
@@ -132,7 +134,7 @@ export default function RegisterPage() {
       const extendedProfile = {
         id: authData.user.id,
         ...baseProfile,
-        office_location: officeLocation,
+        office_location: persistedOfficeLocation,
         admin_level: normalizedEmail === OWNER_EMAIL ? "owner" : "none",
       };
 
@@ -161,6 +163,12 @@ export default function RegisterPage() {
     setLoading(false);
     window.location.href = "/inbox";
   };
+
+  useEffect(() => {
+    if (role !== "doctor" && officeLocation === "Both") {
+      setOfficeLocation("Guadalajara");
+    }
+  }, [role, officeLocation]);
 
   if (step === "code") return (
     <>
@@ -269,13 +277,14 @@ export default function RegisterPage() {
                   <div key={r.id} className={`ropt${role === r.id ? " sel" : ""}`} onClick={() => setRole(r.id)}>{r.label}</div>
                 ))}
               </div>
-              <label className="flabel2">Tu Sede</label>
+              <label className="flabel2">{role === "doctor" ? "Tu Sede (puedes elegir ambas)" : "Tu Sede"}</label>
               <div className="rgroup">
                 {[
                   { id: "Guadalajara", label: "🏙️ Guadalajara" },
                   { id: "Tijuana", label: "🌊 Tijuana" },
+                  ...(role === "doctor" ? [{ id: "Both", label: "🌐 Ambas sedes" }] : []),
                 ].map((office) => (
-                  <div key={office.id} className={`ropt${officeLocation === office.id ? " sel" : ""}`} onClick={() => setOfficeLocation(office.id as "Guadalajara" | "Tijuana")}>
+                  <div key={office.id} className={`ropt${officeLocation === office.id ? " sel" : ""}`} onClick={() => setOfficeLocation(office.id as "Guadalajara" | "Tijuana" | "Both")}>
                     {office.label}
                   </div>
                 ))}
