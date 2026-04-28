@@ -67,13 +67,13 @@ const T = {
     surgeryDate: "Fecha de Cirugía", location: "Sede *",
     surgeryDatePH: "dd/mm/aaaa",
     preferredLanguage: "Idioma Preferido",
-    timezone: "Zona Horaria",
+    timezone: "Zona horaria del paciente",
     allergies: "Alergias",
     allergiesPH: "Ej: Penicilina, látex, anestesia...",
     medications: "Medicamentos Actuales",
     medicationsPH: "Ej: Ibuprofeno, metformina, vitaminas...",
     careTeam: "Equipo Asignado",
-    careTeamHint: "Selecciona quién debe tener acceso y alertas para este paciente.",
+    careTeamHint: "Selecciona quién tendrá acceso y alertas. Al crear la sala, el equipo seleccionado verá el paciente como no leído.",
     careTeamFocused: "Mostrando primero personal de la sede elegida para evitar errores.",
     careTeamShowAll: "Mostrar todo el personal",
     careTeamShowOffice: "Ver solo sede elegida",
@@ -175,13 +175,13 @@ const T = {
     surgeryDate: "Surgery Date", location: "Location *",
     surgeryDatePH: "dd/mm/yyyy",
     preferredLanguage: "Preferred Language",
-    timezone: "Time Zone",
+    timezone: "Patient time zone",
     allergies: "Allergies",
     allergiesPH: "e.g. Penicillin, latex, anesthesia...",
     medications: "Current Medications",
     medicationsPH: "e.g. Ibuprofen, metformin, vitamins...",
     careTeam: "Assigned Care Team",
-    careTeamHint: "Choose who should have access and alerts for this patient.",
+    careTeamHint: "Choose who gets access and alerts. When the room is created, selected staff will see it as unread.",
     careTeamFocused: "Showing staff from the selected office first to avoid assignment mistakes.",
     careTeamShowAll: "Show all staff",
     careTeamShowOffice: "Show selected office only",
@@ -1562,6 +1562,7 @@ export default function InboxPage() {
   };
 
   const createRoom = async () => {
+    if (creatingRoom) return;
     if (!canCreatePatientRooms) {
       setNewRoomError(
         lang === "es"
@@ -1624,6 +1625,16 @@ export default function InboxPage() {
 
         await supabase.from("room_members").insert(rows);
       }
+      await supabase.from("messages").insert({
+        room_id: rm.id,
+        content: lang === "es" ? "✅ Sala creada y equipo asignado." : "✅ Room created and care team assigned.",
+        message_type: "text",
+        sender_type: "staff",
+        sender_id: creatorId,
+        sender_name: "Sistema",
+        sender_role: creatorRole,
+        sender_office: newLocation,
+      });
       for (let i=0;i<beforePhotosFiles.length;i++){const f=beforePhotosFiles[i];const fn2=`patient-photos/${pt.id}/before/${Date.now()}-${i}.${f.name.split(".").pop()||"jpg"}`;const{error:ue2}=await supabase.storage.from("chat-files").upload(fn2,f,{upsert:true});if(!ue2){const{data:ud2}=supabase.storage.from("chat-files").getPublicUrl(fn2);await supabase.from("messages").insert({room_id:rm.id,content:ud2.publicUrl,message_type:"image",file_name:`[BEFORE] Foto Pre-Op ${i+1}`,sender_type:"staff",sender_id:creatorId,sender_name:"Sistema",sender_role:creatorRole,sender_office:newLocation});}}
       setCreatedRoomLink(`${window.location.origin}/patient/${rm.id}`);
       setCreatedPatientName(patientFullName);
@@ -2328,6 +2339,11 @@ export default function InboxPage() {
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
+            <p style={{fontSize:12,color:subTextColor,margin:"-6px 0 12px"}}>
+              {lang==="es"
+                ? "Este horario se muestra al equipo médico para evitar confusiones al responder."
+                : "This is shown to the care team to avoid timing confusion when replying."}
+            </p>
             <label className="flabel">{t.allergies}</label>
             <textarea className="finput" placeholder={t.allergiesPH} value={newPatientAllergies} onChange={e=>setNewPatientAllergies(e.target.value)} rows={3} style={{resize:"vertical"}}/>
             <label className="flabel">{t.medications}</label>
