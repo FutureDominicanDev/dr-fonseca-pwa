@@ -8,6 +8,11 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missing-key");
 
+const isMissingColumnError = (error: any) => {
+  const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+  return message.includes("column") || message.includes("schema cache");
+};
+
 export async function POST(request: NextRequest) {
   try {
     if (!SUPABASE_SERVICE_ROLE_KEY) {
@@ -34,19 +39,55 @@ export async function POST(request: NextRequest) {
     }
 
     const adminLevel = isOwnerEmail(email) ? "owner" : "none";
-    const payload = {
-      id: userId,
-      full_name: fullName,
-      display_name: fullName,
-      role,
-      office_location: officeLocation,
-      phone: phone || null,
-      admin_level: adminLevel,
-    };
+    const candidates = [
+      {
+        id: userId,
+        full_name: fullName,
+        display_name: fullName,
+        role,
+        office_location: officeLocation,
+        phone: phone || null,
+        admin_level: adminLevel,
+      },
+      {
+        id: userId,
+        full_name: fullName,
+        role,
+        office_location: officeLocation,
+        phone: phone || null,
+        admin_level: adminLevel,
+      },
+      {
+        id: userId,
+        full_name: fullName,
+        role,
+        office_location: officeLocation,
+        phone: phone || null,
+      },
+      {
+        id: userId,
+        full_name: fullName,
+        role,
+        office_location: officeLocation,
+      },
+      {
+        id: userId,
+        full_name: fullName,
+      },
+    ];
 
-    const { error } = await supabase.from("profiles").upsert(payload);
-    if (error) {
-      return NextResponse.json({ error: error.message || "Profile bootstrap failed." }, { status: 500 });
+    let saveError: any = null;
+    for (const payload of candidates) {
+      const { error } = await supabase.from("profiles").upsert(payload);
+      if (!error) {
+        saveError = null;
+        break;
+      }
+      saveError = error;
+      if (!isMissingColumnError(error)) break;
+    }
+    if (saveError) {
+      return NextResponse.json({ error: saveError.message || "Profile bootstrap failed." }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });
