@@ -37,6 +37,7 @@ const T = {
     invalidLinkHint: "Pide un enlace actualizado al equipo del Dr. Fonseca.",
     roomTitle: "Chat del paciente",
     secureChat: "Conversación privada con tu equipo médico",
+    clinicBrand: "Dr. Fonseca",
     settings: "Ajustes",
     displayName: "Tu nombre visible",
     darkMode: "Modo oscuro",
@@ -112,6 +113,7 @@ const T = {
     invalidLinkHint: "Ask Dr. Fonseca's team for an updated link.",
     roomTitle: "Patient chat",
     secureChat: "Private conversation with your care team",
+    clinicBrand: "Dr. Fonseca",
     settings: "Settings",
     displayName: "Your visible name",
     darkMode: "Dark mode",
@@ -1875,11 +1877,11 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       <div style={{ height: "100dvh", minHeight: "100dvh", background: bg, color: textColor, fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <header style={{ background: "#0F172A", color: "white", padding: "calc(env(safe-area-inset-top) + 12px) 16px 12px", boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", background: "linear-gradient(135deg,#111827,#2563EB)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, flexShrink: 0 }}>
-              {settings.avatarDataUrl ? <img src={settings.avatarDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : patientName.slice(0, 1).toUpperCase()}
+            <div style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", background: "white", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 7 }}>
+              <img src="/fonseca_blue.png" alt={t.clinicBrand} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 22, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{patientName}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.clinicBrand}</div>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.86)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {t.secureChat}
               </div>
@@ -1904,8 +1906,9 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
               </div>
             )}
             {officePhone && (
-              <a href={`tel:${officePhone}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 999, background: "rgba(255,255,255,0.08)", color: "white", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>
-                📞 {t.callOffice}
+              <a href={`tel:${officePhone}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 999, background: "#22C55E", color: "#052E16", textDecoration: "none", fontSize: 14, fontWeight: 800, boxShadow: "0 8px 20px rgba(34,197,94,0.35)" }}>
+                <span style={{ width: 22, height: 22, borderRadius: "50%", background: "white", color: "#15803D", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>📞</span>
+                {t.callOffice}
               </a>
             )}
           </div>
@@ -2160,6 +2163,13 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             }} disabled={sending || (!newMessage.trim() && !recordingAudio)} style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: recordingAudio ? "#DC2626" : "#00A884", color: "white", cursor: "pointer", fontWeight: 800, flexShrink: 0, opacity: sending || (!newMessage.trim() && !recordingAudio) ? 0.45 : 1 }}>
               {recordingAudio ? "⏹" : t.send}
             </button>
+          </div>
+          <div style={{ marginTop: 12, borderRadius: 18, border: `1px solid ${border}`, background: settings.darkMode ? "#1F2937" : "#F3F4F6", padding: "8px 10px", display: "flex", justifyContent: "space-between", gap: 6 }}>
+            <button style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>🔔</span>Updates</button>
+            <button onClick={() => officePhone && window.open(`tel:${officePhone}`, "_self")} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>📞</span>Calls</button>
+            <button onClick={() => setShowAttachMenu((prev) => !prev)} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>🧰</span>Tools</button>
+            <button style={{ border: "none", background: "transparent", color: settings.darkMode ? "#D1FAE5" : "#065F46", fontSize: 12, fontWeight: 800, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>💬</span>Chats</button>
+            <button onClick={() => setSettingsOpen(true)} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>⚙️</span>Settings</button>
           </div>
           {uploadingMedia && <div style={{ fontSize: 13, color: subText, margin: "8px 0 0 6px" }}>{settings.lang === "es" ? "Subiendo archivo..." : "Uploading file..."}</div>}
         </div>
