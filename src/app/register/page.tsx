@@ -201,34 +201,52 @@ export default function RegisterPage() {
     }
 
     if (authData.user) {
-      const extendedProfile = {
-        id: authData.user.id,
-        ...baseProfile,
-        office_location: persistedOfficeLocation,
-        admin_level: normalizedEmail === OWNER_EMAIL ? "owner" : "none",
-      };
-
-      const { error: profileErr } = await supabase.from("profiles").upsert(extendedProfile);
-
-      if (profileErr) {
-        if (!isMissingColumnError(profileErr)) {
-          setError(profileErr.message || "No pude guardar el perfil.");
-          setLoading(false);
-          return;
-        }
-
-        const { error: fallbackErr } = await supabase.from("profiles").upsert({
+      const profileCandidates = [
+        {
+          id: authData.user.id,
+          ...baseProfile,
+          office_location: persistedOfficeLocation,
+          admin_level: normalizedEmail === OWNER_EMAIL ? "owner" : "none",
+        },
+        {
           id: authData.user.id,
           full_name: fullName.trim(),
           role: assignedRole,
-          display_name: fullName.trim(),
-        });
+          office_location: persistedOfficeLocation,
+          admin_level: normalizedEmail === OWNER_EMAIL ? "owner" : "none",
+        },
+        {
+          id: authData.user.id,
+          full_name: fullName.trim(),
+          role: assignedRole,
+          office_location: persistedOfficeLocation,
+        },
+        {
+          id: authData.user.id,
+          full_name: fullName.trim(),
+          role: assignedRole,
+        },
+        {
+          id: authData.user.id,
+          full_name: fullName.trim(),
+        },
+      ];
 
-        if (fallbackErr) {
-          setError(fallbackErr.message || "No pude guardar el perfil.");
-          setLoading(false);
-          return;
+      let profileSaveError: any = null;
+      for (const candidate of profileCandidates) {
+        const { error: attemptError } = await supabase.from("profiles").upsert(candidate);
+        if (!attemptError) {
+          profileSaveError = null;
+          break;
         }
+        profileSaveError = attemptError;
+        if (!isMissingColumnError(attemptError)) break;
+      }
+
+      if (profileSaveError) {
+        setError(profileSaveError.message || "No pude guardar el perfil.");
+        setLoading(false);
+        return;
       }
     }
 
