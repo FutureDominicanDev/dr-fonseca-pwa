@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 type View = "login" | "forgot" | "sent";
@@ -12,6 +12,16 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [registerLink, setRegisterLink] = useState("/register");
+
+  useEffect(() => {
+    const loadRegisterLink = async () => {
+      const { data } = await supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle();
+      const code = `${data?.value || ""}`.trim().toUpperCase();
+      if (code) setRegisterLink(`/register?code=${encodeURIComponent(code)}`);
+    };
+    loadRegisterLink();
+  }, []);
 
   const normalizePhone = (value: string) => {
     const cleaned = value.replace(/[^\d+]/g, "").trim();
@@ -104,7 +114,7 @@ export default function LoginPage() {
                     </div>
                   ) : "Ingresar al Portal →"}
                 </button>
-                <p className="footer-text">¿Eres nuevo? <span onClick={() => window.location.href = "/register"}>Regístrate aquí</span></p>
+                <p className="footer-text">¿Eres nuevo? <span onClick={() => window.location.href = registerLink}>Regístrate aquí</span></p>
               </>
             )}
 

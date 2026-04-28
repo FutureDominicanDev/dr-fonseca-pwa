@@ -47,6 +47,20 @@ export default function RegisterPage() {
   const [officeLocation, setOfficeLocation] = useState<"Guadalajara" | "Tijuana" | "Both">("Guadalajara");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [checkedInitialCode, setCheckedInitialCode] = useState(false);
+
+  const applyPhoneInput = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    if (!digits) {
+      setPhone("");
+      return;
+    }
+    if (digits.startsWith("52")) {
+      setPhone(`+${digits}`);
+      return;
+    }
+    setPhone(`+52${digits}`);
+  };
 
   const checkCode = async () => {
     if (!inviteCode.trim()) {
@@ -77,40 +91,45 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const codeFromLink = (params.get("code") || "").trim().toUpperCase();
-    const officeFromLink = (params.get("office") || "").trim().toLowerCase();
-    if (!codeFromLink) return;
 
-    if (officeFromLink === "both") setOfficeLocation("Both");
-    if (officeFromLink === "gdl") setOfficeLocation("Guadalajara");
-    if (officeFromLink === "tjn") setOfficeLocation("Tijuana");
+    const verifyInviteFlow = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const codeFromLink = (params.get("code") || "").trim().toUpperCase();
+      const officeFromLink = (params.get("office") || "").trim().toLowerCase();
 
-    setInviteCode(codeFromLink);
+      if (officeFromLink === "both") setOfficeLocation("Both");
+      if (officeFromLink === "gdl") setOfficeLocation("Guadalajara");
+      if (officeFromLink === "tjn") setOfficeLocation("Tijuana");
 
-    const verifyPrefilledCode = async () => {
       setLoading(true);
       setError("");
 
       const { data, error: err } = await supabase.from("app_settings").select("value").eq("key", "invite_code").single();
+      const currentCode = (data?.value || "").trim().toUpperCase();
 
-      if (err || !data) {
+      if (err || !currentCode) {
         setError("Error verificando el código.");
         setLoading(false);
+        setCheckedInitialCode(true);
         return;
       }
 
-      if (data.value.trim().toUpperCase() !== codeFromLink) {
+      if (codeFromLink && currentCode !== codeFromLink) {
         setError("Este enlace ya no es válido. Pide un enlace nuevo.");
+        setInviteCode(codeFromLink);
+        setStep("code");
         setLoading(false);
+        setCheckedInitialCode(true);
         return;
       }
 
-      setLoading(false);
+      setInviteCode(codeFromLink || currentCode);
       setStep("details");
+      setLoading(false);
+      setCheckedInitialCode(true);
     };
 
-    verifyPrefilledCode();
+    verifyInviteFlow();
   }, []);
 
   const handleRegister = async () => {
@@ -118,12 +137,13 @@ export default function RegisterPage() {
       setError("Por favor ingresa tu nombre completo.");
       return;
     }
-    if (authMethod === "email" && !email.trim()) {
-      setError("Por favor ingresa tu correo.");
-      return;
-    }
-    if (authMethod === "phone" && !phone.trim()) {
-      setError("Por favor ingresa tu teléfono.");
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = normalizePhone(phone);
+    const hasEmail = normalizedEmail.length > 0;
+    const hasPhone = normalizedPhone.length > 0;
+
+    if (!hasEmail && !hasPhone) {
+      setError("Ingresa al menos un método de acceso: correo o teléfono.");
       return;
     }
     if (password.length < 6) {
@@ -138,19 +158,18 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const normalizedPhone = normalizePhone(phone);
+    const usingPhone = authMethod === "phone" ? hasPhone : !hasEmail && hasPhone;
 
     const { data: blockedEmailSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle();
     const { data: blockedPhoneSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle();
     const blockedEmails = new Set(parseEmails(blockedEmailSetting?.value));
     const blockedPhones = new Set(parsePhones(blockedPhoneSetting?.value));
-    if (authMethod === "email" && blockedEmails.has(normalizedEmail)) {
+    if (hasEmail && blockedEmails.has(normalizedEmail)) {
       setError("Este correo ya no tiene acceso. Contacta al administrador.");
       setLoading(false);
       return;
     }
-    if (authMethod === "phone" && blockedPhones.has(normalizedPhone)) {
+    if (hasPhone && blockedPhones.has(normalizedPhone)) {
       setError("Este teléfono ya no tiene acceso. Contacta al administrador.");
       setLoading(false);
       return;
@@ -166,7 +185,7 @@ export default function RegisterPage() {
     };
 
     const signUpPayload =
-      authMethod === "phone"
+      usingPhone
         ? {
             phone: normalizedPhone,
             password,
@@ -254,6 +273,12 @@ export default function RegisterPage() {
     window.location.href = "/inbox";
   };
 
+  if (!checkedInitialCode && loading) return (
+    <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", background: "linear-gradient(160deg, #1C1C1E 0%, #2C2C2E 50%, #1a1a2e 100%)", color: "white", fontWeight: 700 }}>
+      Verificando acceso...
+    </div>
+  );
+
   if (step === "code") return (
     <>
       <style>{`
@@ -332,6 +357,7 @@ export default function RegisterPage() {
         .rgroup { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
         .ropt { flex: 1; min-width: 70px; padding: 10px 6px; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 800; color: #000; background: #F2F2F7; border: 2px solid transparent; text-align: center; }
         .ropt.sel { background: #EBF5FF; color: #007AFF; border-color: #007AFF; }
+        .role-opt { min-height: 94px; display: flex; align-items: center; justify-content: center; line-height: 1.2; white-space: normal; word-break: break-word; overflow: hidden; padding: 10px 8px; font-size: 11px; }
       `}</style>
       <div className="details-page">
         <div className="details-inner">
@@ -354,6 +380,9 @@ export default function RegisterPage() {
                 <div className={`ropt${authMethod === "email" ? " sel" : ""}`} onClick={() => setAuthMethod("email")}>📧 Correo</div>
                 <div className={`ropt${authMethod === "phone" ? " sel" : ""}`} onClick={() => setAuthMethod("phone")}>📱 Teléfono</div>
               </div>
+              <p style={{ fontSize: 12, color: "#6B7280", margin: "-6px 0 16px", lineHeight: 1.45, fontWeight: 600 }}>
+                Puedes usar correo o teléfono (o ambos). Solo necesitas uno.
+              </p>
               <label className="flabel2">Tu función</label>
               <div className="rgroup">
                 {[
@@ -365,7 +394,7 @@ export default function RegisterPage() {
                 ].map((roleOption) => (
                   <div
                     key={roleOption.id}
-                    className={`ropt${role === roleOption.id ? " sel" : ""}`}
+                    className={`ropt role-opt${role === roleOption.id ? " sel" : ""}`}
                     onClick={() => setRole(roleOption.id as "doctor" | "enfermeria" | "coordinacion" | "post_quirofano" | "staff")}
                   >
                     {roleOption.label}
@@ -387,19 +416,10 @@ export default function RegisterPage() {
                   </div>
                 ))}
               </div>
-              {authMethod === "email" ? (
-                <>
-                  <label className="flabel2">Correo Electrónico</label>
-                  <input className="finput" type="email" placeholder="tu@correo.com" value={email} onChange={e => setEmail(e.target.value)} />
-                  <label className="flabel2">Teléfono (opcional)</label>
-                  <input className="finput" inputMode="tel" placeholder="+52 664 123 4567" value={phone} onChange={e => setPhone(e.target.value)} />
-                </>
-              ) : (
-                <>
-                  <label className="flabel2">Teléfono</label>
-                  <input className="finput" inputMode="tel" placeholder="+52 664 123 4567" value={phone} onChange={e => setPhone(e.target.value)} />
-                </>
-              )}
+              <label className="flabel2">Correo Electrónico (opcional)</label>
+              <input className="finput" type="email" placeholder="tu@correo.com" value={email} onChange={e => setEmail(e.target.value)} />
+              <label className="flabel2">Teléfono (opcional)</label>
+              <input className="finput" inputMode="tel" placeholder="+52 664 123 4567" value={phone} onFocus={() => { if (!phone.trim()) setPhone("+52"); }} onChange={e => applyPhoneInput(e.target.value)} />
               <label className="flabel2">Contraseña</label>
               <div className="pwrap">
                 <input className="pinput" type={showPassword ? "text" : "password"} placeholder="Mínimo 6 caracteres" value={password} onChange={e => setPassword(e.target.value)} />
