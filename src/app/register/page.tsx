@@ -18,8 +18,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [role, setRole] = useState("staff");
-  const [officeLocation, setOfficeLocation] = useState<"Guadalajara" | "Tijuana" | "Both">("Guadalajara");
+  const [officeLocation, setOfficeLocation] = useState<"Guadalajara" | "Tijuana">("Guadalajara");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -104,11 +103,11 @@ export default function RegisterPage() {
     setError("");
 
     const normalizedEmail = email.trim().toLowerCase();
-    const persistedOfficeLocation =
-      role === "doctor" && officeLocation === "Both" ? null : officeLocation;
+    const assignedRole = normalizedEmail === OWNER_EMAIL ? "doctor" : "staff";
+    const persistedOfficeLocation = assignedRole === "doctor" ? null : officeLocation;
     const baseProfile = {
       full_name: fullName.trim(),
-      role,
+      role: assignedRole,
       display_name: fullName.trim(),
     };
 
@@ -118,7 +117,7 @@ export default function RegisterPage() {
       options: {
         data: {
           full_name: fullName.trim(),
-          role,
+          role: assignedRole,
           office_location: persistedOfficeLocation,
         },
       },
@@ -163,12 +162,6 @@ export default function RegisterPage() {
     setLoading(false);
     window.location.href = "/inbox";
   };
-
-  useEffect(() => {
-    if (role !== "doctor" && officeLocation === "Both") {
-      setOfficeLocation("Guadalajara");
-    }
-  }, [role, officeLocation]);
 
   if (step === "code") return (
     <>
@@ -265,26 +258,20 @@ export default function RegisterPage() {
               {error && <div className="err2">⚠️ {error}</div>}
               <label className="flabel2">Nombre Completo</label>
               <input className="finput" placeholder="Dr. Ana García" value={fullName} onChange={e => setFullName(e.target.value)} />
-              <label className="flabel2">Tu Rol</label>
-              <div className="rgroup">
-                {[
-                  { id: "doctor", label: "👨‍⚕️ Doctor" },
-                  { id: "enfermeria", label: "💉 Enfermería" },
-                  { id: "coordinacion", label: "📋 Coordinación" },
-                  { id: "post_quirofano", label: "🏥 Post-Q" },
-                  { id: "staff", label: "👤 Personal" },
-                ].map(r => (
-                  <div key={r.id} className={`ropt${role === r.id ? " sel" : ""}`} onClick={() => setRole(r.id)}>{r.label}</div>
-                ))}
+              <label className="flabel2">Tu función</label>
+              <div className="ropt sel" style={{ marginBottom: 16, minHeight: 48, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                👤 Personal
               </div>
-              <label className="flabel2">{role === "doctor" ? "Tu Sede (puedes elegir ambas)" : "Tu Sede"}</label>
+              <p style={{ fontSize: 12, color: "#6B7280", margin: "-6px 0 16px", lineHeight: 1.45, fontWeight: 600 }}>
+                Seguridad: tu rol clínico y permisos avanzados los asigna el administrador después de crear la cuenta.
+              </p>
+              <label className="flabel2">Tu Sede</label>
               <div className="rgroup">
                 {[
                   { id: "Guadalajara", label: "🏙️ Guadalajara" },
                   { id: "Tijuana", label: "🌊 Tijuana" },
-                  ...(role === "doctor" ? [{ id: "Both", label: "🌐 Ambas sedes" }] : []),
                 ].map((office) => (
-                  <div key={office.id} className={`ropt${officeLocation === office.id ? " sel" : ""}`} onClick={() => setOfficeLocation(office.id as "Guadalajara" | "Tijuana" | "Both")}>
+                  <div key={office.id} className={`ropt${officeLocation === office.id ? " sel" : ""}`} onClick={() => setOfficeLocation(office.id as "Guadalajara" | "Tijuana")}>
                     {office.label}
                   </div>
                 ))}

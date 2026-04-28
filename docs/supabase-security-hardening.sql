@@ -100,10 +100,14 @@ create policy "profiles insert own row"
   with check (
     auth.uid() = id
     and (
-      coalesce(admin_level, 'none') = 'none'
+      (
+        coalesce(admin_level, 'none') = 'none'
+        and coalesce(role, 'staff') = 'staff'
+      )
       or (
         public.current_user_email() = 'mrdiazsr@icloud.com'
         and admin_level = 'owner'
+        and coalesce(role, 'doctor') = 'doctor'
       )
     )
   );
