@@ -181,6 +181,15 @@ export default function AdminPage() {
     window.location.href = path;
   };
 
+  const scrollAdminToTop = () => {
+    const shell = document.querySelector(".admin-shell");
+    if (shell instanceof HTMLElement) {
+      shell.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const fetchData = async () => {
     setPageError("");
 
@@ -599,6 +608,9 @@ export default function AdminPage() {
         .toast.success { background: #EDFAF1; color: #15803D; }
         .result-count { font-size: 13px; color: #64748B; font-weight: 700; }
         .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .admin-bottom-actions { margin-top: 16px; display: flex; justify-content: center; }
+        .back-top-inline-btn { padding: 12px 20px; border-radius: 999px; border: 1px solid #DBEAFE; background: #EFF6FF; color: #1D4ED8; font-size: 14px; font-weight: 800; font-family: inherit; cursor: pointer; }
+        .back-top-inline-btn:hover { background: #DBEAFE; }
         @media (max-width: 980px) {
           .hero-grid, .workspace-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
           .stats-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -1108,6 +1120,12 @@ export default function AdminPage() {
               })
             )}
           </section>
+
+          <div className="admin-bottom-actions">
+            <button type="button" className="back-top-inline-btn" onClick={scrollAdminToTop}>
+              {isSpanish ? "⬆️ Volver arriba" : "⬆️ Back to top"}
+            </button>
+          </div>
         </div>
 
         <div className="toast-stack" aria-live="polite">
