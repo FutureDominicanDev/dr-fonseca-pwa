@@ -204,6 +204,13 @@ const parseVideoCallMessage = (content: string | null | undefined) => {
 
 const buildCallRequestMessage = () => `${CALL_REQUEST_PREFIX}${new Date().toISOString()}`;
 
+const isStaffOnlyMedia = (message: any) => `${message?.file_name || ""}`.startsWith("[BEFORE]");
+const isVisibleToPatient = (message: any) =>
+  !message?.is_internal &&
+  !message?.deleted_by_staff &&
+  !message?.deleted_by_patient &&
+  !isStaffOnlyMedia(message);
+
 const parseCallRequestMessage = (content: string | null | undefined) => {
   const text = `${content || ""}`.trim();
   if (!text.startsWith(CALL_REQUEST_PREFIX)) return null;
@@ -349,7 +356,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     const groups: { date: string; msgs: any[] }[] = [];
     let currentDate = "";
     messages.forEach((message) => {
-      if (message.is_internal || message.deleted_by_staff) return;
+      if (!isVisibleToPatient(message)) return;
       const key = new Date(message.created_at).toDateString();
       if (key !== currentDate) {
         currentDate = key;
@@ -362,7 +369,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
   const roomMediaEntries = useMemo(
     () =>
       messages
-        .filter((message) => !message.is_internal && !message.deleted_by_staff && !message.deleted_by_patient)
+        .filter((message) => isVisibleToPatient(message))
         .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || "")),
     [messages]
   );
@@ -842,7 +849,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
     });
 
     const { data: msgs } = await loadMessages();
-    const nextMessages = (msgs || []).filter((message: any) => !message?.is_internal);
+    const nextMessages = (msgs || []).filter((message: any) => isVisibleToPatient(message));
     setMessages(nextMessages);
     const latestStaffMessage = [...nextMessages].reverse().find((message: any) => message.sender_type === "staff");
     const latestStaffMessageKey = latestStaffMessage ? messageIdentity(latestStaffMessage) : "";
@@ -859,7 +866,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
 
   const refreshMessages = async () => {
     const { data: msgs } = await loadMessages();
-    setMessages((msgs || []).filter((message: any) => !message?.is_internal));
+    setMessages((msgs || []).filter((message: any) => isVisibleToPatient(message)));
   };
 
   const deletePatientMessage = async (messageId: string) => {
@@ -1485,7 +1492,7 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
       if (loading || notFound) return;
       const { data: msgs } = await loadMessages();
       if (cancelled || !msgs) return;
-      const nextMessages = msgs.filter((message: any) => !message?.is_internal);
+      const nextMessages = msgs.filter((message: any) => isVisibleToPatient(message));
       setMessages(nextMessages);
       const latestStaffMessage = [...nextMessages].reverse().find((message: any) => message.sender_type === "staff");
       const latestKey = latestStaffMessage ? messageIdentity(latestStaffMessage) : "";

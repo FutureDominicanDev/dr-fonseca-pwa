@@ -1635,7 +1635,26 @@ export default function InboxPage() {
         sender_role: creatorRole,
         sender_office: newLocation,
       });
-      for (let i=0;i<beforePhotosFiles.length;i++){const f=beforePhotosFiles[i];const fn2=`patient-photos/${pt.id}/before/${Date.now()}-${i}.${f.name.split(".").pop()||"jpg"}`;const{error:ue2}=await supabase.storage.from("chat-files").upload(fn2,f,{upsert:true});if(!ue2){const{data:ud2}=supabase.storage.from("chat-files").getPublicUrl(fn2);await supabase.from("messages").insert({room_id:rm.id,content:ud2.publicUrl,message_type:"image",file_name:`[BEFORE] Foto Pre-Op ${i+1}`,sender_type:"staff",sender_id:creatorId,sender_name:"Sistema",sender_role:creatorRole,sender_office:newLocation});}}
+      for (let i = 0; i < beforePhotosFiles.length; i++) {
+        const f = beforePhotosFiles[i];
+        const fn2 = `patient-photos/${pt.id}/before/${Date.now()}-${i}.${f.name.split(".").pop() || "jpg"}`;
+        const { error: ue2 } = await supabase.storage.from("chat-files").upload(fn2, f, { upsert: true });
+        if (!ue2) {
+          const { data: ud2 } = supabase.storage.from("chat-files").getPublicUrl(fn2);
+          await supabase.from("messages").insert({
+            room_id: rm.id,
+            content: ud2.publicUrl,
+            message_type: "image",
+            file_name: `[BEFORE] Foto Pre-Op ${i + 1}`,
+            sender_type: "staff",
+            sender_id: creatorId,
+            sender_name: "Sistema",
+            sender_role: creatorRole,
+            sender_office: newLocation,
+            is_internal: true,
+          });
+        }
+      }
       setCreatedRoomLink(`${window.location.origin}/patient/${rm.id}`);
       setCreatedPatientName(patientFullName);
       setCreatedPatientLanguage(newPatientLanguage);
