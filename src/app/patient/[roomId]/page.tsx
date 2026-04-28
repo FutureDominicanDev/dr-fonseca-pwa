@@ -106,6 +106,10 @@ const T = {
     deleteMsg: "¿Eliminar este mensaje?",
     msgDeleted: "Mensaje eliminado",
     deleteAction: "Eliminar",
+    navUpdates: "Novedades",
+    navCalls: "Llamadas",
+    navTools: "Herramientas",
+    navChats: "Chats",
   },
   en: {
     loading: "Opening private chat...",
@@ -182,6 +186,10 @@ const T = {
     deleteMsg: "Delete this message?",
     msgDeleted: "Message deleted",
     deleteAction: "Delete",
+    navUpdates: "Updates",
+    navCalls: "Calls",
+    navTools: "Tools",
+    navChats: "Chats",
   },
 } as const;
 
@@ -2165,11 +2173,11 @@ export default function PatientPage({ params }: { params: Promise<{ roomId: stri
             </button>
           </div>
           <div style={{ marginTop: 12, borderRadius: 18, border: `1px solid ${border}`, background: settings.darkMode ? "#1F2937" : "#F3F4F6", padding: "8px 10px", display: "flex", justifyContent: "space-between", gap: 6 }}>
-            <button style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>🔔</span>Updates</button>
-            <button onClick={() => officePhone && window.open(`tel:${officePhone}`, "_self")} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>📞</span>Calls</button>
-            <button onClick={() => setShowAttachMenu((prev) => !prev)} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>🧰</span>Tools</button>
-            <button style={{ border: "none", background: "transparent", color: settings.darkMode ? "#D1FAE5" : "#065F46", fontSize: 12, fontWeight: 800, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>💬</span>Chats</button>
-            <button onClick={() => setSettingsOpen(true)} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>⚙️</span>Settings</button>
+            <button aria-label={t.navUpdates} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>🔔</span>{t.navUpdates}</button>
+            <button aria-label={t.navCalls} onClick={() => officePhone && window.open(`tel:${officePhone}`, "_self")} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>📞</span>{t.navCalls}</button>
+            <button aria-label={t.navTools} onClick={() => setShowAttachMenu((prev) => !prev)} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>🧰</span>{t.navTools}</button>
+            <button aria-label={t.navChats} style={{ border: "none", background: "transparent", color: settings.darkMode ? "#D1FAE5" : "#065F46", fontSize: 12, fontWeight: 800, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>💬</span>{t.navChats}</button>
+            <button aria-label={t.settings} onClick={() => setSettingsOpen(true)} style={{ border: "none", background: "transparent", color: subText, fontSize: 12, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}><span style={{ fontSize: 19 }}>⚙️</span>{t.settings}</button>
           </div>
           {uploadingMedia && <div style={{ fontSize: 13, color: subText, margin: "8px 0 0 6px" }}>{settings.lang === "es" ? "Subiendo archivo..." : "Uploading file..."}</div>}
         </div>
