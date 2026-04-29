@@ -441,7 +441,7 @@ export default function InboxPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [pendingFile, setPendingFile] = useState<File|null>(null);
-  const [showMediaMenu, setShowMediaMenu] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [captureMode, setCaptureMode] = useState<"photo" | "video" | null>(null);
   const [preparingCapture, setPreparingCapture] = useState(false);
   const [recordingVideo, setRecordingVideo] = useState(false);
@@ -1729,7 +1729,7 @@ export default function InboxPage() {
   const openCapture = async (mode: "photo" | "video") => {
     try {
       setPreparingCapture(true);
-      setShowMediaMenu(false);
+      setMenuOpen(false);
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: mode === "video" });
       captureStreamRef.current = stream;
       setCaptureMode(mode);
@@ -1809,7 +1809,7 @@ export default function InboxPage() {
     if (prefersNativeCapture) cameraInputRef.current?.click();
     else openCapture("photo");
   };
-  const handlePlus = () => setShowMediaMenu((value) => !value);
+  const handlePlus = () => setMenuOpen((value) => !value);
 
   const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
   const roomMediaEntries = messages
@@ -2571,6 +2571,7 @@ export default function InboxPage() {
                 onCamera={handleCamera}
                 onChange={setMessage}
                 onPlusClick={handlePlus}
+                menuOpen={menuOpen}
                 onQuickReply={sendMessage}
               />
             )}
