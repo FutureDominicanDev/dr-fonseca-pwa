@@ -1017,8 +1017,8 @@ export default function InboxPage() {
 
   const uploadProfilePhoto = async (file: File) => {
     if (!userProfile?.id) return;
-    const fn = `profile-photos/${userProfile.id}/avatar.${file.name.split(".").pop()||"jpg"}`;
-    const { error } = await supabase.storage.from("chat-files").upload(fn, file, { upsert: true });
+    const fn = `profile-photos/${userProfile.id}/${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from("chat-files").upload(fn, file);
     if (!error) { const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn); await supabase.from("profiles").update({ avatar_url: ud.publicUrl }).eq("id",userProfile.id); setUserProfile((p: any)=>({...p,avatar_url:ud.publicUrl})); }
   };
 
@@ -1451,9 +1451,8 @@ export default function InboxPage() {
   const uploadFile = async (file: File, cat: FileCategory="general") => {
     if (!selectedRoom) return; setSending(true);
     try {
-      const ext=file.name.split(".").pop()||"bin";
-      const fn=`${selectedRoom.id}/${Date.now()}.${ext}`;
-      const { error: ue } = await supabase.storage.from("chat-files").upload(fn,file,{upsert:true});
+      const fn=`patients/${selectedRoom.id}/${Date.now()}-${file.name}`;
+      const { error: ue } = await supabase.storage.from("chat-files").upload(fn,file);
       if (ue){setSending(false);return;}
       const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn);
       let mt="file";
@@ -1611,7 +1610,7 @@ export default function InboxPage() {
 
       const { data: pt, error: pe } = patientInsert;
       if (pe) throw pe;
-      if (profilePicFile){const fn=`patient-profiles/${pt.id}/profile.${profilePicFile.name.split(".").pop()||"jpg"}`;const{error:ue}=await supabase.storage.from("chat-files").upload(fn,profilePicFile,{upsert:true});if(!ue){const{data:ud}=supabase.storage.from("chat-files").getPublicUrl(fn);await supabase.from("patients").update({profile_picture_url:ud.publicUrl}).eq("id",pt.id);}}
+      if (profilePicFile){const fn=`patients/${pt.id}/${Date.now()}-${profilePicFile.name}`;const{error:ue}=await supabase.storage.from("chat-files").upload(fn,profilePicFile);if(!ue){const{data:ud}=supabase.storage.from("chat-files").getPublicUrl(fn);await supabase.from("patients").update({profile_picture_url:ud.publicUrl}).eq("id",pt.id);}}
       const { data: pr, error: pre } = await supabase.from("procedures").insert({patient_id:pt.id,procedure_name:newProcedureName.trim(),surgery_date:surgeryDateIso||null,office_location:newLocation,status:"scheduled"}).select().single();
       if (pre) throw pre;
       const patientAccessToken = createPatientAccessToken();
@@ -1661,8 +1660,8 @@ export default function InboxPage() {
       });
       for (let i = 0; i < beforePhotosFiles.length; i++) {
         const f = beforePhotosFiles[i];
-        const fn2 = `patient-photos/${pt.id}/before/${Date.now()}-${i}.${f.name.split(".").pop() || "jpg"}`;
-        const { error: ue2 } = await supabase.storage.from("chat-files").upload(fn2, f, { upsert: true });
+        const fn2 = `patients/${rm.id}/${Date.now()}-${i}-${f.name}`;
+        const { error: ue2 } = await supabase.storage.from("chat-files").upload(fn2, f);
         if (!ue2) {
           const { data: ud2 } = supabase.storage.from("chat-files").getPublicUrl(fn2);
           await supabase.from("messages").insert({
