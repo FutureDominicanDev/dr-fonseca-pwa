@@ -2720,123 +2720,20 @@ export default function InboxPage() {
                 <p style={{fontSize:16,color:subTextColor,maxWidth:280,lineHeight:1.6,textAlign:"center"}}>{t.selectPatientHint}</p>
               </div>
             ):(
-              <>
-                <div className="chat-head">
-                  <button className="back-btn" onClick={()=>{setMobileView("list");setSelectedRoom(null);setShowQREditor(false);}}>←</button>
-                  <div className="chat-av">
-                    {selectedRoom.procedures?.patients?.profile_picture_url
-                      ?<img src={selectedRoom.procedures.patients.profile_picture_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
-                      :ini(selectedRoom.procedures?.patients?.full_name||"P")}
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div className="chat-head-name">{selectedRoom.procedures?.patients?.full_name||"Paciente"}</div>
-                    {patientTyping && (
-                      <div style={{fontSize:12,color:"#93C5FD",fontWeight:700,marginTop:4}}>
-                        {(selectedRoom.procedures?.patients?.full_name || t.patientLabel)} {t.typingSuffix}
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
-                </div>
-
-                <ChatShell
-                  messages={messages.filter((entry) => !entry.deleted_by_staff && !entry.is_internal)}
-                  message={newMessage}
-                  onChange={(value) => {
-                    setNewMessage(value);
-                    updateTypingState(value);
-                    setShowMediaMenu(false);
-                    setShowEmojiMenu(false);
-                    if (value.startsWith("/")) {
-                      setShowSlashMenu(true);
-                      setSlashFilter(value.slice(1));
-                    } else {
-                      setShowSlashMenu(false);
-                      setSlashFilter("");
-                    }
-                  }}
-                  onSend={() => {
-                    if (showSlashMenu && slashFiltered.length > 0) {
-                      sendMessage(slashFiltered[0].message);
-                      setShowSlashMenu(false);
-                      setSlashFilter("");
-                      setNewMessage("");
-                    } else {
-                      sendMessage();
-                    }
-                  }}
-                  onMic={startRec}
-                  onCamera={() => {
-                    if (prefersNativeCapture) cameraInputRef.current?.click();
-                    else openCapture("photo");
-                  }}
-                  onPlusClick={() => setShowMediaMenu((value) => !value)}
-                  onQuickReply={(reply) => {
-                    sendMessage(reply);
-                    setShowSlashMenu(false);
-                    setSlashFilter("");
-                    setNewMessage("");
-                  }}
-                  mode="staff"
-                  menuOpen={showMediaMenu}
-                  quickRepliesOpen={showSlashMenu && slashFiltered.length > 0}
-                  quickReplies={slashFiltered.map((reply) => reply.message)}
-                  labels={{
-                    messagePlaceholder: t.typeMessage,
-                    photos: "Photos",
-                    video: "Video",
-                    documents: "Prescriptions",
-                    quickReplies: t.quickReplies,
-                    settings: t.settings,
-                  }}
-                  onPhotos={() => {
-                    setShowMediaMenu(false);
-                    if (prefersNativeCapture) cameraInputRef.current?.click();
-                    else openCapture("photo");
-                  }}
-                  onVideo={() => {
-                    setShowMediaMenu(false);
-                    if (prefersNativeCapture) videoInputRef.current?.click();
-                    else openCapture("video");
-                  }}
-                  onDocuments={() => {
-                    setShowMediaMenu(false);
-                    fileInputRef.current?.click();
-                  }}
-                  onQuickRepliesOpen={() => {
-                    setShowMediaMenu(false);
-                    setShowQREditor(true);
-                  }}
-                  onSettings={() => {
-                    setShowMediaMenu(false);
-                    setShowSettings(true);
-                  }}
-                />
-                <div ref={messagesEndRef}/>
-                {showJumpToLatest && (
-                  <button
-                    onClick={jumpToLatest}
-                    style={{
-                      position:"absolute",
-                      right:16,
-                      bottom:"calc(env(safe-area-inset-bottom) + 86px)",
-                      zIndex:35,
-                      border:"none",
-                      borderRadius:999,
-                      padding:"10px 14px",
-                      background:"#2563EB",
-                      color:"white",
-                      fontSize:13,
-                      fontWeight:800,
-                      cursor:"pointer",
-                      boxShadow:"0 10px 24px rgba(37,99,235,0.35)",
-                    }}
-                  >
-                    {lang==="es" ? "Nuevos mensajes ↓" : "New messages ↓"}
-                  </button>
-                )}
-
-              </>
+              <ChatShell
+                mode="staff"
+                messages={messages}
+                message={newMessage}
+                onSend={sendMessage}
+                onMic={startRec}
+                onCamera={() => {
+                  if (prefersNativeCapture) cameraInputRef.current?.click();
+                  else openCapture("photo");
+                }}
+                onChange={setNewMessage}
+                onPlusClick={() => setShowMediaMenu((value) => !value)}
+                onQuickReply={sendMessage}
+              />
             )}
           </div>
         </div>
