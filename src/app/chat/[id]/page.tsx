@@ -50,8 +50,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [uiLang, setUiLang] = useState<"es" | "en">("en");
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState("");
-  const [videoPreviewFile, setVideoPreviewFile] = useState<File | null>(null);
   const [accessReady, setAccessReady] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [room, setRoom] = useState<RoomAccess | null>(null);
@@ -356,34 +354,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     event.target.value = "";
   };
 
-  const handleVideoCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
       event.target.value = "";
       return;
     }
-    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
-    setVideoPreviewFile(file);
-    setVideoPreviewUrl(URL.createObjectURL(file));
     setMenuOpen(false);
+    await uploadFile(file, "video");
     event.target.value = "";
-  };
-
-  const sendVideoPreview = async () => {
-    if (!videoPreviewFile) return;
-    const uploadedUrl = await uploadFile(videoPreviewFile, "video");
-    if (!uploadedUrl) return;
-    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
-    setVideoPreviewFile(null);
-    setVideoPreviewUrl("");
-    if (videoCaptureRef.current) videoCaptureRef.current.value = "";
-  };
-
-  const cancelVideoPreview = () => {
-    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
-    setVideoPreviewFile(null);
-    setVideoPreviewUrl("");
-    if (videoCaptureRef.current) videoCaptureRef.current.value = "";
   };
 
   const startRecording = async () => {
@@ -643,18 +622,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
         <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
       </footer>
-
-      {videoPreviewUrl && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", display: "grid", placeItems: "center", padding: 18, zIndex: 25 }}>
-          <div style={{ width: "100%", maxWidth: 460, background: panelBg, color: textPrimary, borderRadius: 18, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35)" }}>
-            <video src={videoPreviewUrl} controls playsInline style={{ width: "100%", maxHeight: "58dvh", borderRadius: 14, background: "#000", display: "block", marginBottom: 14 }} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={cancelVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
-              <button onClick={sendVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {audioPreviewUrl && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", display: "grid", placeItems: "center", padding: 18, zIndex: 25 }}>
