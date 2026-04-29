@@ -2228,8 +2228,9 @@ export default function InboxPage() {
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
-        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(62px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
-        .topbar-logo { height: 58px; width: min(420px, 54vw); object-fit: contain; object-position: center; display: block; }
+        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(90px, 1fr) minmax(240px, 520px) minmax(90px, 1fr); align-items: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(66px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
+        .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.16); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
+        .topbar-logo { grid-column: 2; justify-self: center; height: 62px; width: min(500px, 100%); object-fit: contain; object-position: center; display: block; }
         .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 31px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
@@ -2299,8 +2300,8 @@ export default function InboxPage() {
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 700px) {
-          .topbar { height: calc(78px + env(safe-area-inset-top)); justify-content: flex-start; padding-left: max(30px, env(safe-area-inset-left)); padding-right: max(30px, env(safe-area-inset-right)); }
-          .topbar-logo { height: 58px; width: min(360px, 64vw); }
+          .topbar { height: calc(82px + env(safe-area-inset-top)); grid-template-columns: 1fr auto; padding-left: max(30px, env(safe-area-inset-left)); padding-right: max(30px, env(safe-area-inset-right)); column-gap: 12px; }
+          .topbar-logo { grid-column: 1; justify-self: center; height: 66px; width: min(420px, 64vw); }
           .topbar-actions { right: max(30px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 39px); }
           .chat-head { padding-top: 9px; min-height: 58px; }
           .input-area { gap: 10px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
