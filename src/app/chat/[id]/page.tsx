@@ -423,8 +423,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   if (accessDenied) {
     return (
       <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#fff", color: "#111", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-        <header style={{ height: 60, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "3px 16px" }}>
-          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={330} height={54} priority style={{ width: "min(330px, 86vw)", height: 54, objectFit: "contain", objectPosition: "center" }} />
+        <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 16px" }}>
+          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "min(430px, 92vw)", height: 78, objectFit: "contain", objectPosition: "center" }} />
         </header>
         <section style={{ flex: 1, display: "grid", placeItems: "center", padding: 24 }}>
           <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 18, boxShadow: "0 10px 36px rgba(0,0,0,0.14)", padding: 24, textAlign: "center" }}>
@@ -444,8 +444,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   return (
     <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-      <header style={{ height: 60, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "3px 16px" }}>
-        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={330} height={54} priority style={{ width: "min(330px, 86vw)", height: 54, objectFit: "contain", objectPosition: "center" }} />
+      <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 16px" }}>
+        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "min(430px, 92vw)", height: 78, objectFit: "contain", objectPosition: "center" }} />
       </header>
 
       <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => setMenuOpen(false)}>
@@ -460,7 +460,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               : message.sender_type === "staff" ? softBlue : "#fff";
           return (
             <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8 }}>
-              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#111", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 1px 2px rgba(0,0,0,0.12)", fontSize: messageFontSize, lineHeight: 1.45 }}>
+              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 4px 14px rgba(15,23,42,0.14), 0 1px 3px rgba(15,23,42,0.12)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45 }}>
                 {renderMessage(message)}
               </div>
             </div>
