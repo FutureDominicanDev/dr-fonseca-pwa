@@ -2060,20 +2060,172 @@ export default function InboxPage() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden">
-      <ChatShell
-        mode="staff"
-        messages={messages}
-        message={message}
-        onChange={setMessage}
-        onSend={handleSend}
-        onMic={handleMic}
-        onCamera={handleCamera}
-        onVideo={handleVideo}
-        onPlusClick={handlePlus}
-        onCall={handleCall}
-        menuOpen={menuOpen}
-      />
-    </div>
+    <>
+      <style>{`
+        * { box-sizing: border-box; }
+        .page { height: 100dvh; width: 100vw; background: ${bg}; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        .topbar { height: 64px; background: ${headerBg}; color: white; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; padding-top: env(safe-area-inset-top); box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+        .body { height: calc(100dvh - 64px); display: flex; overflow: hidden; }
+        .sidebar { width: 370px; max-width: 42vw; background: ${sidebarBg}; border-right: 1px solid ${borderColor}; display: flex; flex-direction: column; min-width: 300px; }
+        .sidebar-head { padding: 18px; border-bottom: 1px solid ${borderColor}; }
+        .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+        .search-bar { height: 42px; background: ${inputBg}; border-radius: 14px; display: flex; align-items: center; gap: 10px; padding: 0 13px; }
+        .search-input { flex: 1; border: none; outline: none; background: transparent; color: ${textColor}; font-size: 15px; font-family: inherit; }
+        .patient-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .patient-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid ${borderColor}; cursor: pointer; transition: background 0.12s ease; }
+        .patient-row:hover, .patient-row.active { background: ${darkMode ? "#1F2937" : "#EFF6FF"}; }
+        .av { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg,#007AFF,#34C759); color: white; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 900; position: relative; overflow: hidden; flex-shrink: 0; }
+        .av-badge { position: absolute; right: 0; bottom: 0; width: 13px; height: 13px; border-radius: 50%; background: #25D366; border: 2px solid ${sidebarBg}; }
+        .patient-info { min-width: 0; flex: 1; }
+        .patient-name { color: ${textColor}; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .patient-meta { color: ${subTextColor}; font-size: 12px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .main-area { flex: 1; min-width: 0; height: 100%; background: ${bg}; display: flex; flex-direction: column; }
+        .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 28px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 820px) {
+          .body { display: block; }
+          .sidebar { width: 100%; max-width: none; height: 100%; min-width: 0; border-right: none; }
+          .main-area { height: 100%; }
+          .hidden { display: none !important; }
+        }
+      `}</style>
+
+      <div className="page">
+        <div className="topbar">
+          <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+            {mobileView==="chat"&&(
+              <button onClick={()=>setMobileView("list")} style={{width:38,height:38,borderRadius:"50%",border:"none",background:"rgba(255,255,255,0.12)",color:"white",fontSize:22,cursor:"pointer"}} aria-label="Back">‹</button>
+            )}
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:18,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                {selectedRoom?.patients?.full_name || "Dr. Fonseca Portal"}
+              </div>
+              <div style={{fontSize:12,opacity:0.76,fontWeight:700}}>
+                {selectedRoom ? t.online : "Staff"}
+              </div>
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
+            {canOpenAdmin&&<button onClick={()=>window.location.href="/admin"} style={{padding:"0 14px",height:42,borderRadius:99,background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>Admin</button>}
+          </div>
+        </div>
+
+        {toastAlert && (
+          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:250,width:"min(360px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.96)":"rgba(255,255,255,0.98)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 46px rgba(15,23,42,0.2)",padding:"14px 16px",cursor:"pointer"}} onClick={()=>{const room = patients.flatMap((patient)=>patient.rooms||[]).find((entry:any)=>entry.id===toastAlert.roomId) || null; setSelectedRoom(room); setMobileView("chat"); setToastAlert(null);}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:"#25D366",flexShrink:0}} />
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#16A34A",marginBottom:2}}>{lang==="es" ? "Nuevo mensaje del paciente" : "New patient message"}</div>
+                <div style={{fontSize:15,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.title}</div>
+                <div style={{fontSize:13,color:subTextColor,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.body}</div>
+              </div>
+              <button onClick={(event)=>{event.stopPropagation();setToastAlert(null);}} style={{border:"none",background:"transparent",color:subTextColor,cursor:"pointer",fontSize:18,lineHeight:1}}>x</button>
+            </div>
+          </div>
+        )}
+
+        <div className="body">
+          <div className={`sidebar${mobileView==="chat"?" hidden":""}`}>
+            <div className="sidebar-head">
+              <div className="sidebar-title-row">
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patients}</span>
+                  {totalUnread>0&&<span style={{background:"#25D366",color:"white",fontSize:12,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{totalUnread}</span>}
+                </div>
+                <button
+                  onClick={() => {
+                    if (!canCreatePatientRooms) {
+                      setNotificationFeedback({
+                        tone: "error",
+                        text: lang === "es"
+                          ? "No tienes permiso para crear pacientes. Solo el personal habilitado por Admin puede hacerlo."
+                          : "You do not have permission to create patients. Only admin-enabled staff can do this.",
+                      });
+                      return;
+                    }
+                    setShowNewRoom(true);
+                  }}
+                  style={{width:38,height:38,borderRadius:"50%",background:"#007AFF",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,122,255,0.3)"}}
+                  title={canCreatePatientRooms ? (lang === "es" ? "Crear paciente" : "Create patient") : (lang === "es" ? "Permiso requerido" : "Permission required")}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+              </div>
+              <div className="search-bar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <input className="search-input" placeholder={t.search} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
+              </div>
+              {notificationFeedback && (
+                <div style={{marginTop:10,padding:"10px 12px",borderRadius:14,background:notificationFeedback.tone==="success"?"#DCFCE7":notificationFeedback.tone==="error"?"#FEE2E2":"#DBEAFE",color:notificationFeedback.tone==="success"?"#166534":notificationFeedback.tone==="error"?"#991B1B":"#1D4ED8",fontSize:13,fontWeight:700,lineHeight:1.4}}>
+                  {notificationFeedback.text}
+                </div>
+              )}
+            </div>
+            <div className="patient-list">
+              {loading?(
+                <div style={{display:"flex",justifyContent:"center",padding:40}}><div style={{width:28,height:28,border:"2px solid #E5E5EA",borderTopColor:"#007AFF",borderRadius:"50%",animation:"spin 0.6s linear infinite"}}/></div>
+              ):filtPts.length===0?(
+                <div style={{padding:"60px 20px",textAlign:"center"}}>
+                  <div style={{fontSize:48,marginBottom:12}}>+</div>
+                  <p style={{fontSize:17,fontWeight:600,color:textColor}}>{t.noPatients}</p>
+                  <p style={{fontSize:14,color:subTextColor,marginTop:6}}>{t.noPatientsHint}</p>
+                </div>
+              ):filtPts.map(pt=>{
+                const ptUnreadCount=pt.rooms.reduce((sum:number,r:any)=>sum+(unreadCounts[r.id]||0),0);
+                const ptUnread=ptUnreadCount>0;
+                const firstRoom=pt.rooms[0];
+                const proc=firstRoom?.procedures;
+                const surgDate=proc?.surgery_date?new Date(proc.surgery_date).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}):"";
+                const isActive=pt.rooms.some((r:any)=>r.id===selectedRoom?.id);
+                return (
+                  <div key={pt.id} className={`patient-row${isActive?" active":""}`} onClick={()=>{setSelectedRoom(firstRoom);setMobileView("chat");}}>
+                    <div className="av">
+                      {pt.profile_picture_url?<img src={pt.profile_picture_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:ini(pt.full_name)}
+                      {ptUnread&&<div className="av-badge"/>}
+                    </div>
+                    <div className="patient-info">
+                      <div className="patient-name">{pt.full_name}</div>
+                      <div className="patient-meta">
+                        {proc?.procedure_name&&<span>{proc.procedure_name}</span>}
+                        {surgDate&&<span> - {surgDate}</span>}
+                        {proc?.office_location&&<span> - {proc.office_location==="Guadalajara"?"GDL":"TJN"}</span>}
+                      </div>
+                    </div>
+                    {ptUnread&&<div style={{minWidth:24,height:24,padding:"0 8px",background:"#25D366",borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:12,fontWeight:800}}>{ptUnreadCount}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className={`main-area${mobileView==="list"?" hidden":""}`}>
+            {!selectedRoom?(
+              <div className="welcome">
+                <div style={{width:90,height:90,borderRadius:"50%",background:"linear-gradient(135deg,#2C2C2E,#007AFF)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </div>
+                <p style={{fontSize:24,fontWeight:700,color:textColor}}>{t.selectPatient}</p>
+                <p style={{fontSize:16,color:subTextColor,maxWidth:280,lineHeight:1.6,textAlign:"center"}}>{t.selectPatientHint}</p>
+              </div>
+            ):(
+              <ChatShell
+                mode="staff"
+                messages={messages}
+                message={message}
+                onChange={setMessage}
+                onSend={handleSend}
+                onMic={handleMic}
+                onCamera={handleCamera}
+                onVideo={handleVideo}
+                onPlusClick={handlePlus}
+                onCall={handleCall}
+                menuOpen={menuOpen}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
