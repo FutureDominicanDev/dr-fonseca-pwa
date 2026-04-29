@@ -1798,6 +1798,18 @@ export default function InboxPage() {
       captureRecorderRef.current.stop();
     }
   };
+  const message = newMessage;
+  const setMessage = (value: string) => setNewMessage(value);
+  const handleSend = () => sendMessage();
+  const handleMic = () => {
+    if (recording) stopRec();
+    else startRec();
+  };
+  const handleCamera = () => {
+    if (prefersNativeCapture) cameraInputRef.current?.click();
+    else openCapture("photo");
+  };
+  const handlePlus = () => setShowMediaMenu((value) => !value);
 
   const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
   const roomMediaEntries = messages
@@ -2553,15 +2565,12 @@ export default function InboxPage() {
               <ChatShell
                 mode="staff"
                 messages={messages}
-                message={newMessage}
-                onSend={sendMessage}
-                onMic={startRec}
-                onCamera={() => {
-                  if (prefersNativeCapture) cameraInputRef.current?.click();
-                  else openCapture("photo");
-                }}
-                onChange={setNewMessage}
-                onPlusClick={() => setShowMediaMenu((value) => !value)}
+                message={message}
+                onSend={handleSend}
+                onMic={handleMic}
+                onCamera={handleCamera}
+                onChange={setMessage}
+                onPlusClick={handlePlus}
                 onQuickReply={sendMessage}
               />
             )}
