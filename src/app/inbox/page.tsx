@@ -376,7 +376,7 @@ export default function InboxPage() {
   const fontSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 21 : 18;
 
   const bg = darkMode ? "#0B141A" : "#EFEAE2";
-  const headerBg = darkMode ? "#111" : "#0F172A";
+  const headerBg = "#0B3D5A";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
   const inputBg = darkMode ? "#202C33" : "#F0F2F5";
   const textColor = darkMode ? "white" : "#1C1C1E";
@@ -2228,7 +2228,9 @@ export default function InboxPage() {
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
-        .topbar { flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(62px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(96px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
+        .topbar-logo { height: 72px; width: min(430px, 78vw); object-fit: contain; object-position: center; display: block; }
+        .topbar-actions { position: absolute; right: max(14px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 50%); transform: translateY(-50%); display: flex; align-items: center; gap: 10px; }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 12px 14px; background: ${darkMode?"#1F2C33":"#F6F7F9"}; border-bottom: 1px solid ${borderColor}; }
@@ -2606,13 +2608,9 @@ export default function InboxPage() {
 
       <div className="shell" onClick={()=>{setPressedMsgId(null);setShowSlashMenu(false);}}>
         <div className="topbar">
-          <img src="/fonseca_blue.png" style={{height:52,width:"auto",objectFit:"contain"}} alt="Dr. Fonseca"/>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
+          <div className="topbar-actions">
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
-            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.08)",borderRadius:99}}>
-              <div style={{width:8,height:8,borderRadius:"50%",background:"#25D366"}}/>
-              <span style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)"}}>{t.online}</span>
-            </div>
             {canOpenAdmin&&<button onClick={()=>window.location.href="/admin"} style={{padding:"0 14px",height:42,borderRadius:99,background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>Admin</button>}
             <button onClick={()=>setShowSettings(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>⚙️</button>
           </div>
@@ -2744,9 +2742,6 @@ export default function InboxPage() {
                       </div>
                     )}
                   </div>
-                  {selectedRoom.procedures?.patients?.phone && (
-                    <a href={`tel:${selectedRoom.procedures.patients.phone}`} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",fontSize:18,flexShrink:0}} title={t.callPatient}>📞</a>
-                  )}
                   <button onClick={()=>{setShowMediaLibrary(true);setMediaLibraryTab("media");}} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={lang==="es"?"Media":"Media"}>🖼️</button>
                   <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
                 </div>
