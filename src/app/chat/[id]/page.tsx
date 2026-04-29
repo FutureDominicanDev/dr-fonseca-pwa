@@ -66,6 +66,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
+    window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior, block: "end" }));
+  };
 
   useEffect(() => {
     const lang = typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "en";
@@ -76,6 +79,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const updateAppHeight = () => {
       const height = window.visualViewport?.height || window.innerHeight;
       document.documentElement.style.setProperty("--app-height", `${height}px`);
+      document.body.style.height = `${height}px`;
     };
     updateAppHeight();
     window.visualViewport?.addEventListener("resize", updateAppHeight);
@@ -205,7 +209,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }, [id, token]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToLatest();
   }, [messages]);
 
   const generateMessageHash = async (content: string, createdAt: string, senderId: string | null) => {
@@ -653,7 +657,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           {menuOpen ? "×" : "+"}
         </button>
 
-        <input value={text} onFocus={() => setDeleteMenuMessageId(null)} onChange={(event) => { const next = event.target.value; setText(next); setQuickRepliesOpen(next.startsWith("/")); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
+        <input value={text} onFocus={() => { setDeleteMenuMessageId(null); scrollToLatest(); setTimeout(() => scrollToLatest("auto"), 250); }} onChange={(event) => { const next = event.target.value; setText(next); setQuickRepliesOpen(next.startsWith("/")); scrollToLatest(); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
 
         <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
 

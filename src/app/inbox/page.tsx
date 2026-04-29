@@ -577,6 +577,7 @@ export default function InboxPage() {
     const updateAppHeight = () => {
       const height = window.visualViewport?.height || window.innerHeight;
       document.documentElement.style.setProperty("--app-height", `${height}px`);
+      document.body.style.height = `${height}px`;
     };
     updateAppHeight();
     window.visualViewport?.addEventListener("resize", updateAppHeight);
@@ -1212,15 +1213,13 @@ export default function InboxPage() {
   }, [showNewRoom, showPatientInfo, showQREditor, showSettings]);
 
   useEffect(()=>{
-    if (!shouldAutoScrollRef.current) return;
+    shouldAutoScrollRef.current = true;
     setShowJumpToLatest(false);
     messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
   },[messages]);
 
   useEffect(() => {
-    if (messages.length > lastMessageCountRef.current && !shouldAutoScrollRef.current) {
-      setShowJumpToLatest(true);
-    }
+    setShowJumpToLatest(false);
     lastMessageCountRef.current = messages.length;
   }, [messages.length]);
 
@@ -2894,29 +2893,6 @@ export default function InboxPage() {
                   ))}
                   <div ref={messagesEndRef}/>
                 </div>
-                {showJumpToLatest && (
-                  <button
-                    onClick={jumpToLatest}
-                    style={{
-                      position:"absolute",
-                      right:16,
-                      bottom:"calc(env(safe-area-inset-bottom) + 86px)",
-                      zIndex:35,
-                      border:"none",
-                      borderRadius:999,
-                      padding:"10px 14px",
-                      background:"#2563EB",
-                      color:"white",
-                      fontSize:13,
-                      fontWeight:800,
-                      cursor:"pointer",
-                      boxShadow:"0 10px 24px rgba(37,99,235,0.35)",
-                    }}
-                  >
-                    {lang==="es" ? "Nuevos mensajes ↓" : "New messages ↓"}
-                  </button>
-                )}
-
                 {showSlashMenu&&slashFiltered.length>0&&(
                   <div className="slash-popup" onClick={e=>e.stopPropagation()}>
                     {slashFiltered.map((r,i)=>(
@@ -2972,10 +2948,11 @@ export default function InboxPage() {
                       placeholder={lang==="es" ? "Mensaje" : "Message"}
                       value={newMessage}
                       rows={1}
-                      onFocus={()=>setPressedMsgId(null)}
+                      onFocus={()=>{setPressedMsgId(null);jumpToLatest();setTimeout(()=>jumpToLatest(),250);}}
                       onChange={e=>{
                         const v=e.target.value;
                         setNewMessage(v);
+                        jumpToLatest();
                         updateTypingState(v);
                         setShowMediaMenu(false);
                         setShowEmojiMenu(false);
