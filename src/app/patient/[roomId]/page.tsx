@@ -62,7 +62,7 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
   useEffect(() => {
     (async () => {
       const { data } = await supabase
-        .from("patient_rooms")
+        .from("rooms")
         .select("*, procedures(procedure_name, surgery_date, patients(full_name))")
         .eq("id", roomId)
         .single();
