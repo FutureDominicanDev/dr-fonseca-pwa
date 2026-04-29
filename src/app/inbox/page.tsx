@@ -1874,7 +1874,7 @@ export default function InboxPage() {
     const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
     const bubbleBg = isOut ? "#FFFFFF" : darkMode ? "#1F2C34" : "#D8EDF8";
     const bubbleRadius=isOut?"18px 18px 4px 18px":"18px 18px 18px 4px";
-    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"76%",padding:"13px 16px",boxShadow:"0 8px 22px rgba(15,23,42,0.12)",position:"relative",border:isOut?`1px solid ${borderColor}`:"none"};
+    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"72%",padding:"12px 15px",boxShadow:"0 6px 18px rgba(15,23,42,0.10)",position:"relative",border:isOut?`1px solid ${borderColor}`:"none"};
     const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
 
     return (
@@ -1882,13 +1882,13 @@ export default function InboxPage() {
         <div style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
         {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
-            <img src={msg.content} alt="" style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
+            <img src={msg.content} alt="" style={{width:"100%",maxWidth:220,maxHeight:220,borderRadius:14,display:"block",objectFit:"cover"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
             {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="video"?(
           <div style={{...bubbleStyle,padding:4}}>
-            <video src={msg.content} controls style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}}/>
+            <video src={msg.content} controls style={{width:"100%",maxWidth:220,maxHeight:220,borderRadius:14,display:"block",objectFit:"cover"}}/>
             {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
@@ -1937,7 +1937,7 @@ export default function InboxPage() {
             <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
-          <div style={{...bubbleStyle,lineHeight:1.58,wordBreak:"break-word",fontSize:Math.max(fontSize,18),fontWeight:800,letterSpacing:"0.01em"}}>
+          <div style={{...bubbleStyle,lineHeight:1.5,wordBreak:"break-word",fontSize:Math.max(fontSize,17),fontWeight:650,letterSpacing:0}}>
             {contentToRender}
             {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
@@ -2235,7 +2235,7 @@ export default function InboxPage() {
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
         .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(90px, 1fr) minmax(260px, 680px) minmax(90px, 1fr); align-items: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(92px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.16); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
-        .topbar-logo { grid-column: 2; justify-self: center; height: 88px; width: min(660px, 100%); object-fit: contain; object-position: center; display: block; }
+        .topbar-logo { grid-column: 2; justify-self: center; align-self: start; margin-top: -4px; height: 88px; width: min(660px, 100%); object-fit: contain; object-position: center; display: block; }
         .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
         .admin-inline-btn { padding: 0 12px; height: 38px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: 13px; font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; }
@@ -2310,7 +2310,7 @@ export default function InboxPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 700px) {
           .topbar { height: calc(106px + env(safe-area-inset-top)); grid-template-columns: 1fr auto; padding-left: max(30px, env(safe-area-inset-left)); padding-right: max(30px, env(safe-area-inset-right)); column-gap: 12px; }
-          .topbar-logo { grid-column: 1; justify-self: center; height: 92px; width: min(520px, 72vw); }
+          .topbar-logo { grid-column: 1; justify-self: center; align-self: start; margin-top: -2px; height: 92px; width: min(520px, 72vw); }
           .topbar-actions { right: max(30px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 53px); }
           .chat-head { padding-top: 9px; min-height: 58px; }
           .input-area { gap: 10px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
