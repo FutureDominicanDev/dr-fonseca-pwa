@@ -255,7 +255,37 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   const sendVideoPreview = async () => {
     if (!videoPreviewFile) return;
-    await uploadFile(videoPreviewFile, "video");
+    const localId = `local-video-${Date.now()}`;
+    const localMessage: Message = {
+      id: localId,
+      content: videoPreviewUrl,
+      sender_type: "patient",
+      message_type: "video",
+      file_url: videoPreviewUrl,
+      file_name: videoPreviewFile.name,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((current) => [...current, localMessage]);
+
+    const path = `chat/${id}/${Date.now()}-${videoPreviewFile.name}`;
+    const { error } = await supabase.storage.from("chat-files").upload(path, videoPreviewFile);
+    if (!error) {
+      const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
+      const url = data.publicUrl;
+      const { data: message } = await supabase
+        .from("messages")
+        .insert({
+          room_id: id,
+          content: url,
+          sender_type: "patient",
+          message_type: "video",
+          file_url: url,
+          file_name: videoPreviewFile.name,
+        })
+        .select("*")
+        .single();
+      if (message) setMessages((current) => current.map((item) => item.id === localId ? message as Message : item));
+    }
     if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
     setVideoPreviewFile(null);
     setVideoPreviewUrl("");
