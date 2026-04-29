@@ -1447,6 +1447,11 @@ export default function InboxPage() {
   };
 
   const confirmUpload = async (cat: FileCategory) => { if (!pendingFile) return; setShowUploadMenu(false); await uploadFile(pendingFile,cat); setPendingFile(null); };
+  const uploadSelectedFile = async (file: File, cat: FileCategory = "general") => {
+    setPendingFile(null);
+    setShowUploadMenu(false);
+    await uploadFile(file, cat);
+  };
 
   const uploadFile = async (file: File, cat: FileCategory="general") => {
     if (!selectedRoom) return; setSending(true);
@@ -2316,10 +2321,10 @@ export default function InboxPage() {
         }
       `}</style>
 
-      <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
-      <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
-      <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
-      <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
+      <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadSelectedFile(f,"medication");e.target.value="";}}/>
+      <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadSelectedFile(f);e.target.value="";}}/>
+      <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadSelectedFile(f);e.target.value="";}}/>
+      <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadSelectedFile(f);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
 
@@ -2353,7 +2358,7 @@ export default function InboxPage() {
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxHeight:"50vh"}}>
             <p style={{fontSize:18,fontWeight:700,marginBottom:6,color:textColor}}>{t.fileCategory}</p>
             <p style={{fontSize:13,color:subTextColor,marginBottom:16}}>{pendingFile.name}</p>
-            {([{c:"general" as FileCategory,icon:"💬",label:t.general,sub:t.generalSub},{c:"medication" as FileCategory,icon:"💊",label:t.medication,sub:t.medicationSub},{c:"before_photo" as FileCategory,icon:"📸",label:t.beforePhoto,sub:t.beforeSub}]).map(opt=>(
+            {([{c:"medication" as FileCategory,icon:"💊",label:t.medication,sub:t.medicationSub}]).map(opt=>(
               <button key={opt.c} onClick={()=>confirmUpload(opt.c)} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"13px 14px",background:cardBg,border:`1px solid ${borderColor}`,borderRadius:14,cursor:"pointer",marginBottom:8,fontFamily:"inherit"}}>
                 <span style={{fontSize:28}}>{opt.icon}</span>
                 <div style={{textAlign:"left"}}><p style={{fontSize:15,fontWeight:700,color:textColor,margin:0}}>{opt.label}</p><p style={{fontSize:12,color:subTextColor,margin:0}}>{opt.sub}</p></div>
