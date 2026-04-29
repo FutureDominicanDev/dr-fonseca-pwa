@@ -2084,7 +2084,7 @@ export default function InboxPage() {
               <p style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patientInfo}</p>
               <p style={{fontSize:13,color:subTextColor,marginTop:4}}>{t.patientInfoHint}</p>
             </div>
-            <button onClick={()=>setShowPatientInfo(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
+            <button onClick={()=>setShowPatientInfo(false)} style={{width:44,height:44,background:"#0B3C5D",border:"none",borderRadius:"50%",fontSize:24,fontWeight:900,cursor:"pointer",color:"#fff",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 18px rgba(11,60,93,0.28)"}}>×</button>
           </div>
           <div style={{padding:"0 20px calc(40px + env(safe-area-inset-bottom))",display:"grid",gap:14,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)) - 84px)",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",touchAction:"pan-y"}}>
             <div style={{background:cardBg,borderRadius:18,padding:16,display:"grid",gridTemplateColumns:"88px 1fr",gap:14,alignItems:"center"}}>
