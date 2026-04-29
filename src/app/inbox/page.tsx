@@ -2275,9 +2275,9 @@ export default function InboxPage() {
         .input-area { position: relative; flex-shrink: 0; background: ${inputBg}; padding: 12px max(14px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 12px; border-top: 1px solid ${borderColor}; }
         .msg-input { flex: 1; height: 58px; padding: 17px 20px; background: ${darkMode?"#2A3942":"white"}; border: none; border-radius: 29px; font-size: ${fontSize}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 120px; resize: none; line-height: 1.45; box-shadow: none; }
         .msg-input::placeholder { color: #AEAEB2; }
-        .icon-btn { width: 58px; height: 58px; border-radius: 50%; background: ${darkMode?"#2A3942":"#E9EDEF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 24px; transition: background 0.15s; }
+        .icon-btn { width: 58px; height: 58px; border-radius: 50%; background: ${darkMode?"#2A3942":"#E9EDEF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 24px; transition: background 0.15s; overflow: hidden; }
         .icon-btn:hover { background: ${darkMode?"#334956":"#DDE5EA"}; }
-        .send-btn { width: 58px; height: 58px; border-radius: 50%; background: #0B3C5D; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 10px rgba(11,60,93,0.22); }
+        .send-btn { width: 58px; height: 58px; border-radius: 50%; background: #EEF6FF; color: #0B4EA2; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 10px rgba(11,60,93,0.10); font-size: 22px; }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .slash-popup { background: ${darkMode?"#2C2C2E":"white"}; border-top: 1px solid ${borderColor}; max-height: 260px; overflow-y: auto; }
         .slash-header { padding: 10px 16px 6px; font-size: 12px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
@@ -2825,23 +2825,20 @@ export default function InboxPage() {
                 ):(
                   <div className="input-area" onClick={e=>e.stopPropagation()}>
                     {showMediaMenu&&(
-                      <div style={{position:"absolute",left:12,bottom:`calc(66px + env(safe-area-inset-bottom))`,width:220,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:18,padding:8,boxShadow:"0 14px 34px rgba(15,23,42,0.16)",zIndex:30}}>
-                        <button onClick={()=>{
-                          setShowMediaMenu(false);
-                          if (prefersNativeCapture) audioInputRef.current?.click();
-                          else startRec();
-                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎤</span>{t.recordAudio}</button>
-                        <button onClick={()=>{
-                          setShowMediaMenu(false);
-                          if (prefersNativeCapture) videoInputRef.current?.click();
-                          else openCapture("video");
-                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎥</span>{t.recordVideoOption}</button>
+                      <div style={{position:"absolute",left:14,bottom:`calc(78px + env(safe-area-inset-bottom))`,width:248,overflow:"hidden",background:"white",border:"1px solid rgba(0,0,0,0.1)",borderRadius:16,boxShadow:"0 10px 30px rgba(0,0,0,0.18)",zIndex:30,animation:"menuIn 160ms ease-out",transformOrigin:"left bottom"}}>
                         <button onClick={()=>{
                           setShowMediaMenu(false);
                           if (prefersNativeCapture) cameraInputRef.current?.click();
                           else openCapture("photo");
-                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📷</span>{t.takePhoto}</button>
-                        <button onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📁</span>{t.chooseFile}</button>
+                        }} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Photos</button>
+                        <button onClick={()=>{
+                          setShowMediaMenu(false);
+                          if (prefersNativeCapture) videoInputRef.current?.click();
+                          else openCapture("video");
+                        }} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Video</button>
+                        <button onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Prescriptions</button>
+                        <button onClick={()=>{setShowMediaMenu(false);setShowQREditor(true);}} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Quick Replies</button>
+                        <button onClick={()=>{setShowMediaMenu(false);setShowSettings(true);}} style={{display:"block",width:"100%",border:"none",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Settings</button>
                       </div>
                     )}
                     {showEmojiMenu && (
@@ -2883,15 +2880,19 @@ export default function InboxPage() {
                         if(e.key==="Escape")setShowSlashMenu(false);
                       }}
                     />
-                    <button className="send-btn" onClick={()=>sendMessage()} disabled={sending || !newMessage.trim()}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                    </button>
+                    <button className="send-btn" onClick={()=>sendMessage()} disabled={sending || !newMessage.trim()}>➤</button>
                     {selectedRoom.procedures?.patients?.phone ? (
-                      <a className="icon-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} style={{textDecoration:"none",color:"#0B5FA5",fontSize:28}}>☎</a>
+                      <a className="icon-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} style={{textDecoration:"none",color:"#0B5FA5"}}>
+                        <img src="/Phone_icon.png" alt="" style={{width:34,height:34,objectFit:"contain"}} />
+                      </a>
                     ) : (
-                      <button className="icon-btn" disabled title={t.callPatient} style={{color:"#94A3B8",fontSize:28}}>☎</button>
+                      <button className="icon-btn" disabled title={t.callPatient} style={{opacity:0.45}}>
+                        <img src="/Phone_icon.png" alt="" style={{width:34,height:34,objectFit:"contain"}} />
+                      </button>
                     )}
-                    <button className="icon-btn" onPointerDown={e=>{e.preventDefault();startRec();}}>🎤</button>
+                    <button className="icon-btn" onPointerDown={e=>{e.preventDefault();startRec();}}>
+                      <img src="/Microphone_icon.png" alt="" style={{width:42,height:42,objectFit:"contain"}} />
+                    </button>
                   </div>
                 )}
               </>
