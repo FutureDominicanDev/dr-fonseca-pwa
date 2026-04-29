@@ -2241,7 +2241,7 @@ export default function InboxPage() {
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
-        .topbar { flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(62px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: flex-end; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(62px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 12px 14px; background: ${darkMode?"#1F2C33":"#F6F7F9"}; border-bottom: 1px solid ${borderColor}; }
@@ -2607,7 +2607,7 @@ export default function InboxPage() {
 
       <div className="shell" onClick={()=>{setPressedMsgId(null);setShowSlashMenu(false);}}>
         <div className="topbar">
-          <img src="/fonseca_blue.png" style={{height:52,width:"auto",objectFit:"contain"}} alt="Dr. Fonseca"/>
+          <img src="/fonseca_blue.png" style={{position:"absolute",left:"50%",transform:"translateX(-50%)",height:58,width:"auto",maxWidth:"58%",objectFit:"contain"}} alt="Dr. Fonseca"/>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
             {canOpenAdmin&&<button onClick={()=>window.location.href="/admin"} style={{padding:"0 14px",height:42,borderRadius:99,background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>Admin</button>}
