@@ -480,6 +480,21 @@ export default function AdminPage() {
       return;
     }
 
+    const escapeHtml = (value: unknown) =>
+      `${value ?? ""}`
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    const extensionFrom = (fileName: string | null, fileType: string | null, url: string, fallback: string) => {
+      const fromName = fileName?.split(".").pop();
+      if (fromName && fromName.length <= 5) return fromName.toLowerCase();
+      const fromType = fileType?.split("/").pop()?.split(";")[0];
+      if (fromType) return fromType === "mpeg" ? "mp3" : fromType;
+      const fromUrl = url.split("?")[0].split(".").pop();
+      return fromUrl && fromUrl.length <= 5 ? fromUrl.toLowerCase() : fallback;
+    };
     const exportData = {
       patient_id: patientId,
       export_date: new Date().toISOString(),
@@ -491,7 +506,112 @@ export default function AdminPage() {
       })),
     };
 
-    void exportData;
+    const textEncoder = new TextEncoder();
+    const crcTable = Array.from({ length: 256 }, (_, index) => {
+      let value = index;
+      for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+      return value >>> 0;
+    });
+    const crc32 = (bytes: Uint8Array) => {
+      let crc = 0xffffffff;
+      for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+      return (crc ^ 0xffffffff) >>> 0;
+    };
+    const u16 = (value: number) => new Uint8Array([value & 0xff, (value >>> 8) & 0xff]);
+    const u32 = (value: number) => new Uint8Array([value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff]);
+    const dosTime = (date: Date) => ((date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2)) & 0xffff;
+    const dosDate = (date: Date) => (((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()) & 0xffff;
+    const createZip = (entries: Array<{ path: string; data: Uint8Array }>) => {
+      const localParts: Uint8Array[] = [];
+      const centralParts: Uint8Array[] = [];
+      let offset = 0;
+      const now = new Date();
+
+      for (const entry of entries) {
+        const name = textEncoder.encode(entry.path);
+        const crc = crc32(entry.data);
+        const localHeader = [
+          u32(0x04034b50), u16(20), u16(0), u16(0), u16(dosTime(now)), u16(dosDate(now)),
+          u32(crc), u32(entry.data.length), u32(entry.data.length), u16(name.length), u16(0), name,
+        ];
+        const localSize = localHeader.reduce((sum, part) => sum + part.length, 0) + entry.data.length;
+        localParts.push(...localHeader, entry.data);
+        centralParts.push(
+          u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(dosTime(now)), u16(dosDate(now)),
+          u32(crc), u32(entry.data.length), u32(entry.data.length), u16(name.length), u16(0), u16(0),
+          u16(0), u16(0), u32(0), u32(offset), name,
+        );
+        offset += localSize;
+      }
+
+      const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+      const end = [
+        u32(0x06054b50), u16(0), u16(0), u16(entries.length), u16(entries.length),
+        u32(centralSize), u32(offset), u16(0),
+      ];
+      return new Blob([...localParts, ...centralParts, ...end] as BlobPart[], { type: "application/zip" });
+    };
+    const zipEntries: Array<{ path: string; data: Uint8Array }> = [];
+    const mediaFiles: Record<string, string> = {};
+
+    for (const [index, message] of exportData.messages.entries()) {
+      const isMedia = ["image", "video", "audio", "file"].includes(message.type || "");
+      if (!isMedia || !message.content) continue;
+      try {
+        const response = await fetch(message.content);
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        const extension = extensionFrom(message.file_name, blob.type || null, message.content, message.type || "file");
+        const mediaName = `${message.type}${index + 1}.${extension}`;
+        mediaFiles[message.content] = `media/${mediaName}`;
+        zipEntries.push({ path: `patient-${patientId}/media/${mediaName}`, data: new Uint8Array(await blob.arrayBuffer()) });
+      } catch {
+      }
+    }
+
+    const reportRows = exportData.messages.map((message) => {
+      const mediaPath = mediaFiles[message.content || ""];
+      const content = mediaPath
+        ? `<a href="${escapeHtml(mediaPath)}">${escapeHtml(message.file_name || mediaPath)}</a>`
+        : `<div class="text">${escapeHtml(message.content)}</div>`;
+      return `<tr><td>${escapeHtml(message.created_at)}</td><td>${escapeHtml(message.type)}</td><td>${content}</td></tr>`;
+    }).join("");
+    const reportHtml = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Patient Export ${escapeHtml(patientId)}</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #111827; margin: 32px; line-height: 1.5; }
+    h1 { margin-bottom: 4px; }
+    .meta { color: #4B5563; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #E5E7EB; padding: 10px; vertical-align: top; text-align: left; }
+    th { background: #F3F4F6; }
+    .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <h1>Patient Export</h1>
+  <div class="meta">Patient ID: ${escapeHtml(patientId)}<br />Export date: ${escapeHtml(exportData.export_date)}</div>
+  <table>
+    <thead><tr><th>Timestamp</th><th>Type</th><th>Content</th></tr></thead>
+    <tbody>${reportRows}</tbody>
+  </table>
+</body>
+</html>`;
+
+    zipEntries.push({ path: `patient-${patientId}/report.html`, data: textEncoder.encode(reportHtml) });
+    zipEntries.push({ path: `patient-${patientId}/data.json`, data: textEncoder.encode(JSON.stringify(exportData, null, 2)) });
+    const zipBlob = createZip(zipEntries);
+    const downloadUrl = URL.createObjectURL(zipBlob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = `patient-${patientId}-export.zip`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(downloadUrl);
   };
 
   if (!sessionChecked || loading) {
