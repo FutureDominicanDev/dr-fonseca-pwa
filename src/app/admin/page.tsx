@@ -468,8 +468,31 @@ export default function AdminPage() {
     updateSuccess(isSpanish ? "Acceso restablecido." : "Access restored.");
   };
 
-  const handleExport = (patientId: string) => {
-    void patientId;
+  const handleExport = async (patientId: string) => {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, content, file_url, file_name, file_type, message_type, type, created_at")
+      .eq("room_id", patientId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      setPageError(error.message || "No pude preparar la exportación.");
+      return;
+    }
+
+    const exportData = {
+      messages: data || [],
+      mediaUrls: (data || [])
+        .filter((message) => message.file_url || ["image", "video", "audio", "file"].includes(message.message_type || message.type || ""))
+        .map((message) => ({
+          url: message.file_url || message.content,
+          timestamp: message.created_at,
+          fileType: message.file_type || message.message_type || message.type,
+          fileName: message.file_name || null,
+        })),
+    };
+
+    void exportData;
   };
 
   if (!sessionChecked || loading) {
