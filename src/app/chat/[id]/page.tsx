@@ -55,6 +55,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [room, setRoom] = useState<RoomAccess | null>(null);
   const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
   const [fileAccept, setFileAccept] = useState("*");
+  const [fileUploadMode, setFileUploadMode] = useState<"chat" | "prescription">("chat");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [deleteMenuMessageId, setDeleteMenuMessageId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -279,7 +280,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setEditingReplyIndex(null);
   };
 
-  const openPicker = (accept: string) => {
+  const openPicker = (accept: string, mode: "chat" | "prescription" = "chat") => {
+    setFileUploadMode(mode);
     setFileAccept(accept);
     if (!fileRef.current) return;
     fileRef.current.accept = accept;
@@ -356,11 +358,48 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     return url;
   };
 
+  const uploadPrescription = async (file: File) => {
+    if (accessDenied || !accessReady) return null;
+
+    const timestamp = new Date().toISOString();
+    const storageTimestamp = Date.now();
+    const safeFileName = file.name || `prescription-${storageTimestamp}`;
+    const path = `prescriptions/${id}/${storageTimestamp}-${safeFileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+    const { error } = await supabase.storage.from("chat-files").upload(path, file, {
+      contentType: file.type || "application/octet-stream",
+    });
+    if (error) {
+      console.error("prescription upload failed", error);
+      window.alert(`No pude guardar la receta: ${error.message}`);
+      return null;
+    }
+
+    const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
+    const { error: insertError } = await supabase.from("prescriptions").insert({
+      room_id: id,
+      file_url: data.publicUrl,
+      file_path: path,
+      file_name: file.name,
+      file_type: file.type || "application/octet-stream",
+      uploaded_by: currentUserId,
+      created_at: timestamp,
+    });
+    if (insertError) {
+      console.error("prescription record insert failed", insertError);
+      window.alert(`La receta se subió, pero no pude guardarla en el expediente: ${insertError.message}`);
+      return null;
+    }
+
+    return data.publicUrl;
+  };
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    await uploadFile(file);
+    if (fileUploadMode === "prescription") await uploadPrescription(file);
+    else await uploadFile(file);
     event.target.value = "";
+    setFileUploadMode("chat");
   };
 
   const handleVideoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -488,7 +527,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       quickReplies: "Quick Replies",
       photos: "Photos",
       video: "Video",
-      documents: "Documents",
+      documents: "Prescriptions",
       createReply: "Create quick reply",
       saveReply: "Save Reply",
       saveChanges: "Save Changes",
@@ -508,7 +547,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       quickReplies: "Respuestas rápidas",
       photos: "Fotos",
       video: "Video",
-      documents: "Documentos",
+      documents: "Recetas",
       createReply: "Crear respuesta rápida",
       saveReply: "Guardar respuesta",
       saveChanges: "Guardar cambios",
@@ -606,7 +645,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
             <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
             <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
-            <button onClick={() => openPicker("*")} style={menuButtonStyle}>{labels.documents}</button>
+            <button onClick={() => openPicker("*", "prescription")} style={menuButtonStyle}>{labels.documents}</button>
             <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
             <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
           </div>
