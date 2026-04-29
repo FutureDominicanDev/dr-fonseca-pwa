@@ -495,8 +495,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
         <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
 
-        <button onClick={() => openPicker("image/*")} aria-label="Camera" style={roundButtonStyle}>📷</button>
-
         <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#2d9cff" : "#dbeafe", color: recording ? "#fff" : "#0b4ea2", fontWeight: 900, fontSize: 30, animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>🎙</button>
 
         <button onClick={sendText} aria-label="Send" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 26, display: "grid", placeItems: "center", flexShrink: 0, boxShadow: "0 3px 10px rgba(7,94,84,0.22)" }}>➤</button>
