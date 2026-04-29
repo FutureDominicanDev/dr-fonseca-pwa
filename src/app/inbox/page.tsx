@@ -2577,6 +2577,7 @@ export default function InboxPage() {
                 onMic={handleMic}
                 onCamera={handleCamera}
                 onVideo={handleVideo}
+                onCall={() => window.location.href = "tel:+YOUR_NUMBER"}
                 onPlusClick={handlePlus}
                 menuOpen={menuOpen}
               />
