@@ -325,23 +325,7 @@ function QREditor({ show, onClose, quickReplies, onSave, savingQR, savedQR, dark
 
   if (!show) return null;
 
-  return (
-  <div className="h-screen w-screen overflow-hidden">
-    <ChatShell
-      mode="staff"
-      messages={messages}
-      message={message}
-      onChange={setMessage}
-      onSend={handleSend}
-      onMic={handleMic}
-      onCamera={handleCamera}
-      onVideo={handleVideo}
-      onPlusClick={handlePlus}
-      onCall={handleCall}
-      menuOpen={menuOpen}
-    />
-  </div>
-);
+  return null;
 }
 
 export default function InboxPage() {

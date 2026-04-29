@@ -16,8 +16,10 @@ type ChatShellProps = {
   onCamera?: () => void;
   onVideo?: () => void;
   onPlusClick?: () => void;
+  onQuickReply?: (reply: string) => void;
   onCall?: () => void;
   menuOpen?: boolean;
+  [key: string]: unknown;
 };
 
 export default function ChatShell({
