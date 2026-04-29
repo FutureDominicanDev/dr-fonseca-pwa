@@ -275,7 +275,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       setAudioPreviewUrl("");
       setAudioPreviewFile(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const preferredMimeType = ["audio/mp4", "audio/aac"].find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = preferredMimeType ? new MediaRecorder(stream, { mimeType: preferredMimeType }) : new MediaRecorder(stream);
       chunksRef.current = [];
 
       recorder.ondataavailable = (event) => {
@@ -283,12 +284,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       };
 
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const file = new File([blob], `audio-${Date.now()}.webm`, { type: "audio/webm" });
+        const mimeType = recorder.mimeType || preferredMimeType || "audio/mp4";
+        const extension = mimeType.includes("aac") ? "aac" : mimeType.includes("mp4") ? "m4a" : "audio";
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        if (!blob.size) {
+          stream.getTracks().forEach((track) => track.stop());
+          recorderRef.current = null;
+          return;
+        }
+        const file = new File([blob], `audio-${Date.now()}.${extension}`, { type: mimeType });
         if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
         setAudioPreviewFile(file);
         setAudioPreviewUrl(URL.createObjectURL(file));
         stream.getTracks().forEach((track) => track.stop());
+        recorderRef.current = null;
       };
 
       recorderRef.current = recorder;
@@ -296,16 +305,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       setRecording(true);
     } catch {
       setRecording(false);
+      recorderRef.current = null;
+      alert("Microphone access required");
     }
   };
 
   const stopRecording = () => {
-    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    if (!recorderRef.current || recorderRef.current.state !== "recording") return;
+    recorderRef.current.stop();
     setRecording(false);
   };
 
   const toggleRecording = () => {
-    if (recording) {
+    if (recorderRef.current?.state === "recording") {
       stopRecording();
       return;
     }
