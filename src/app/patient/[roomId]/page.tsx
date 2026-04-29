@@ -1,12 +1,150 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 import Image from "next/image";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+type Message = {
+  id: string;
+  content: string;
+  sender_type: "patient" | "staff";
+  message_type: "text" | "image" | "audio" | "file" | "video";
+  file_url?: string;
+  file_name?: string;
+  created_at: string;
+};
+
+type QuickReply = { shortcut: string; message: string };
+
+export default function PatientPage({ params }: { params: { roomId: string } }) {
+  const roomId = params.roomId;
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [text, setText] = useState("");
+  const [room, setRoom] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const [fontSize, setFontSize] = useState(15);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showQR, setShowQR] = useState(false);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [qrShortcut, setQrShortcut] = useState("");
+  const [qrMessage, setQrMessage] = useState("");
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [showSlash, setShowSlash] = useState(false);
+  const [slashFilter, setSlashFilter] = useState("");
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const isSending = useRef(false);
+
+  const bg = darkMode ? "#111" : "#ECE5DD";
+  const headerBg = darkMode ? "#1C1C1E" : "#ffffff";
+  const headerBorder = darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  const inputBarBg = darkMode ? "#1C1C1E" : "#f0f0f0";
+  const inputBg = darkMode ? "#2C2C2E" : "#ffffff";
+  const textColor = darkMode ? "#fff" : "#111";
+  const subText = darkMode ? "#aaa" : "#555";
+  const menuBg = darkMode ? "#2C2C2E" : "#ffffff";
+  const menuBorder = darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)";
+  const panelBg = darkMode ? "#1C1C1E" : "#ffffff";
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: roomData, error: roomErr } = await supabase
+          .from("rooms")
+          .select("id")
+          .eq("id", roomId)
+          .single();
+        if (roomErr || !roomData) {
+          setNotFound(true);
+          setLoading(false);
+          return;
+        }
+        setRoom(roomData);
+        const { data: msgs } = await supabase
+          .from("messages")
+          .select("*")
+          .eq("room_id", roomId)
+          .order("created_at", { ascending: true });
+        setMessages(msgs || []);
+        setLoading(false);
+      } catch (e) {
+        console.error(e);
+        setNotFound(true);
+        setLoading(false);
+      }
+    })();
+  }, [roomId]);
+
+  useEffect(() => {
+    const ch = supabase.channel("patient-" + roomId)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "messages",
+        filter: "room_id=eq." + roomId
+      }, ({ new: m }: any) => {
+        setMessages(prev => {
+          if (prev.some((x: any) => x.id === m.id)) return prev;
+          return [...prev, m];
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [roomId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("patient-qr-" + roomId);
+    if (saved) setQuickReplies(JSON.parse(saved));
+  }, [roomId]);
+
+  const saveQR = (list: QuickReply[]) => {
+    setQuickReplies(list);
+    localStorage.setItem("patient-qr-" + roomId, JSON.stringify(list));
+  };
+
+  const sendText = useCallback(async (content: string) => {
+    if (!content.trim() || isSending.current) return;
+    isSending.current = true;
+    setText("");
+    setShowSlash(false);
+    await supabase.from("messages").insert({
+      room_id: roomId,
+      content,
+      sender_type: "patient",
+      message_type: "text",
+    });
+    isSending.current = false;
+  }, [roomId]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(text); }
+  };
+
+  const handleInput = (val: string) => {
+    setText(val);
+    if (val.startsWith("/")) {
+      setShowSlash(true);
+      setSlashFilter(val.slice(1).toLowerCase());
+    } else {
+      setShowSlash(false);
+    }
+  };
+
+  const openPicker = (accept: string) => {
+    if (!fileRef.cu
+cat > src/app/patient/\[roomId\]/page.tsx << 'EOF'
+"use client";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import Image from "next/image";
 
 type Message = {
   id: string;
