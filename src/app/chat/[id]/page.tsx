@@ -292,13 +292,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     const timestamp = new Date().toISOString();
     const storageTimestamp = Date.now();
-    const path = `patients/${id}/${storageTimestamp}-${file.name}`;
-    const { error } = await supabase.storage.from("chat-media").upload(path, file, {
+    const safeFileName = file.name || `${overrideType || "upload"}-${storageTimestamp}.${overrideType === "video" ? "mp4" : "bin"}`;
+    const path = `patients/${id}/${storageTimestamp}-${safeFileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+    const { error } = await supabase.storage.from("chat-files").upload(path, file, {
       contentType: overrideType === "video" && !file.type ? "video/mp4" : file.type || "application/octet-stream",
     });
     if (error) return null;
 
-    const { data } = supabase.storage.from("chat-media").getPublicUrl(path);
+    const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
     const url = data.publicUrl;
     const messageType =
       overrideType ||
