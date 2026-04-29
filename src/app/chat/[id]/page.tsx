@@ -40,6 +40,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [menuOpen, setMenuOpen] = useState(false);
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
   const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
+  const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>(["Gracias", "Tengo una pregunta", "Voy en camino"]);
   const [replyDraft, setReplyDraft] = useState("");
@@ -55,7 +56,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [room, setRoom] = useState<RoomAccess | null>(null);
   const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
   const [fileAccept, setFileAccept] = useState("*");
-  const [fileUploadMode, setFileUploadMode] = useState<"chat" | "prescription">("chat");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [deleteMenuMessageId, setDeleteMenuMessageId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -280,8 +280,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setEditingReplyIndex(null);
   };
 
-  const openPicker = (accept: string, mode: "chat" | "prescription" = "chat") => {
-    setFileUploadMode(mode);
+  const openPicker = (accept: string) => {
     setFileAccept(accept);
     if (!fileRef.current) return;
     fileRef.current.accept = accept;
@@ -358,48 +357,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     return url;
   };
 
-  const uploadPrescription = async (file: File) => {
-    if (accessDenied || !accessReady) return null;
-
-    const timestamp = new Date().toISOString();
-    const storageTimestamp = Date.now();
-    const safeFileName = file.name || `prescription-${storageTimestamp}`;
-    const path = `prescriptions/${id}/${storageTimestamp}-${safeFileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
-    const { error } = await supabase.storage.from("chat-files").upload(path, file, {
-      contentType: file.type || "application/octet-stream",
-    });
-    if (error) {
-      console.error("prescription upload failed", error);
-      window.alert(`No pude guardar la receta: ${error.message}`);
-      return null;
-    }
-
-    const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
-    const { error: insertError } = await supabase.from("prescriptions").insert({
-      room_id: id,
-      file_url: data.publicUrl,
-      file_path: path,
-      file_name: file.name,
-      file_type: file.type || "application/octet-stream",
-      uploaded_by: currentUserId,
-      created_at: timestamp,
-    });
-    if (insertError) {
-      console.error("prescription record insert failed", insertError);
-      window.alert(`La receta se subió, pero no pude guardarla en el expediente: ${insertError.message}`);
-      return null;
-    }
-
-    return data.publicUrl;
-  };
-
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (fileUploadMode === "prescription") await uploadPrescription(file);
-    else await uploadFile(file);
+    await uploadFile(file);
     event.target.value = "";
-    setFileUploadMode("chat");
   };
 
   const handleVideoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -528,6 +490,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       photos: "Photos",
       video: "Video",
       documents: "Prescriptions",
+      noPrescriptions: "No prescriptions yet.",
       createReply: "Create quick reply",
       saveReply: "Save Reply",
       saveChanges: "Save Changes",
@@ -548,6 +511,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       photos: "Fotos",
       video: "Video",
       documents: "Recetas",
+      noPrescriptions: "Todavía no hay recetas.",
       createReply: "Crear respuesta rápida",
       saveReply: "Guardar respuesta",
       saveChanges: "Guardar cambios",
@@ -561,6 +525,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     },
   };
   const labels = translations[uiLang] || translations.en;
+  const prescriptionMessages = messages.filter((message) => `${message.file_name || ""}`.startsWith("[MED]"));
 
   if (!accessReady) {
     return (
@@ -611,7 +576,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
         {messages.map((message) => {
           const fileName = `${message.file_name || ""}`;
-          if (fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
+          if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
           const mine = message.sender_type !== "staff";
           const deletedByPatient = !!message.deleted_by_patient;
           if (viewerType === "patient" && deletedByPatient) return null;
@@ -645,7 +610,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
             <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
             <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
-            <button onClick={() => openPicker("*", "prescription")} style={menuButtonStyle}>{labels.documents}</button>
+            <button onClick={() => { setPrescriptionsOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.documents}</button>
             <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
             <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
           </div>
@@ -711,6 +676,32 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             </div>
             <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder={labels.createReply} style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
             <button onClick={saveQuickReply} style={{ width: "100%", height: 48, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 700 }}>{editingReplyIndex === null ? labels.saveReply : labels.saveChanges}</button>
+          </div>
+        </div>
+      )}
+
+      {prescriptionsOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <strong style={{ fontSize: 18 }}>{labels.documents}</strong>
+              <button onClick={() => setPrescriptionsOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {prescriptionMessages.length === 0 && (
+                <div style={{ border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.noPrescriptions}</div>
+              )}
+              {prescriptionMessages.map((message) => {
+                const url = message.file_url || message.content;
+                const fileName = `${message.file_name || labels.documents}`.replace(/^\[MED\]\s*/i, "");
+                return (
+                  <a key={message.id} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textDecoration: "none", fontSize: 16, fontWeight: 700 }}>
+                    <span style={{ fontSize: 22 }}>📄</span>
+                    <span style={{ wordBreak: "break-word" }}>{fileName}</span>
+                  </a>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
