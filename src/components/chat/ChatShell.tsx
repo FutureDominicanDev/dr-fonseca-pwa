@@ -26,6 +26,7 @@ type ChatShellProps = {
   onMic: () => void;
   onCamera: () => void;
   onVideo?: () => void;
+  onCall?: () => void;
   onPlusClick: () => void;
   mode: "patient" | "staff";
   menuOpen?: boolean;
@@ -47,6 +48,7 @@ export default function ChatShell({
   onMic,
   onCamera,
   onVideo,
+  onCall,
   onPlusClick,
   mode,
   menuOpen = false,
@@ -152,6 +154,7 @@ export default function ChatShell({
         <button onClick={onSend} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 22 }}>➤</button>
         <button onClick={onCamera} aria-label="Camera" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>📷</button>
         <button onClick={onMic} aria-label="Record audio" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>🎤</button>
+        <button onClick={onCall} aria-label="Call" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>☎</button>
       </footer>
 
       {quickRepliesOpen && onQuickReply && (
