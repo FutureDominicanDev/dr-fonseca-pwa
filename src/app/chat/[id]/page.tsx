@@ -444,6 +444,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   return (
     <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
+      <style>{`
+        button { transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
+        button:active { transform: scale(0.96); opacity: 0.86; }
+        input { transition: box-shadow 170ms ease, background-color 170ms ease; }
+        input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
+        @keyframes messageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        @keyframes micPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(30,136,229,0.28); } 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(30,136,229,0); } }
+      `}</style>
       <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 16px" }}>
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "min(430px, 92vw)", height: 78, objectFit: "contain", objectPosition: "center" }} />
       </header>
@@ -459,8 +468,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               ? message.sender_type === "patient" ? softBlue : "#fff"
               : message.sender_type === "staff" ? softBlue : "#fff";
           return (
-            <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8 }}>
-              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 4px 14px rgba(15,23,42,0.14), 0 1px 3px rgba(15,23,42,0.12)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45 }}>
+            <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
+              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease" }}>
                 {renderMessage(message)}
               </div>
             </div>
@@ -471,7 +480,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
       <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px calc(12px + env(safe-area-inset-bottom))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
         {menuOpen && (
-          <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5 }}>
+          <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
             <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
             <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
             <button onClick={() => openPicker("*")} style={menuButtonStyle}>{labels.documents}</button>
@@ -488,9 +497,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
         <button onClick={() => openPicker("image/*")} aria-label="Camera" style={roundButtonStyle}>📷</button>
 
-        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#1e88e5" : "#dbeafe", color: recording ? "#fff" : "#0b4ea2", fontWeight: 900, fontSize: 30 }}>🎙</button>
+        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#2d9cff" : "#dbeafe", color: recording ? "#fff" : "#0b4ea2", fontWeight: 900, fontSize: 30, animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>🎙</button>
 
-        <button onClick={sendText} aria-label="Send" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>➤</button>
+        <button onClick={sendText} aria-label="Send" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 26, display: "grid", placeItems: "center", flexShrink: 0, boxShadow: "0 3px 10px rgba(7,94,84,0.22)" }}>➤</button>
 
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
         <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
