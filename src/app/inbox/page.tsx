@@ -396,7 +396,9 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
-  const [newMessage, setNewMessage] = useState("");
+  const [message, setMessage] = useState("");
+  const newMessage = message;
+  const setNewMessage = setMessage;
   const [searchQuery, setSearchQuery] = useState("");
   const [sending, setSending] = useState(false);
   const [mobileView, setMobileView] = useState<"list"|"chat">("list");
@@ -1798,8 +1800,6 @@ export default function InboxPage() {
       captureRecorderRef.current.stop();
     }
   };
-  const message = newMessage;
-  const setMessage = (value: string) => setNewMessage(value);
   const handleSend = () => sendMessage();
   const handleMic = () => {
     if (recording) stopRec();
@@ -1809,7 +1809,9 @@ export default function InboxPage() {
     if (prefersNativeCapture) cameraInputRef.current?.click();
     else openCapture("photo");
   };
-  const handlePlus = () => setMenuOpen((value) => !value);
+  const handlePlus = () => {
+    setMenuOpen(prev => !prev);
+  };
 
   const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
   const roomMediaEntries = messages
@@ -2566,10 +2568,10 @@ export default function InboxPage() {
                 mode="staff"
                 messages={messages}
                 message={message}
+                onChange={setMessage}
                 onSend={handleSend}
                 onMic={handleMic}
                 onCamera={handleCamera}
-                onChange={setMessage}
                 onPlusClick={handlePlus}
                 menuOpen={menuOpen}
                 onQuickReply={sendMessage}
