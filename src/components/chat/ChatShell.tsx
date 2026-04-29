@@ -1,7 +1,5 @@
 "use client";
 
-import Image from "next/image";
-
 export type ChatShellMessage = {
   id: string;
   content: string;
@@ -28,9 +26,9 @@ type ChatShellProps = {
   onMic: () => void;
   onCamera: () => void;
   onPlusClick: () => void;
-  onQuickReply: (reply: string) => void;
   mode: "patient" | "staff";
   menuOpen?: boolean;
+  onQuickReply?: (reply: string) => void;
   quickRepliesOpen?: boolean;
   quickReplies?: string[];
   labels?: ChatShellLabels;
@@ -49,20 +47,14 @@ export default function ChatShell({
   onMic,
   onCamera,
   onPlusClick,
-  onQuickReply,
   mode,
   menuOpen = false,
+  onQuickReply,
   quickRepliesOpen = false,
   quickReplies = [],
   labels = {},
-  onPhotos,
-  onVideo,
-  onDocuments,
-  onQuickRepliesOpen,
-  onSettings,
 }: ChatShellProps) {
   const textPrimary = "#111";
-  const panelBg = "#fff";
   const footerBg = "#ededed";
   const inputPanelBg = "#fff";
   const messageFontSize = 16;
@@ -87,11 +79,6 @@ export default function ChatShell({
     fontSize: 17,
     fontWeight: 800,
   };
-  const handlePhotos = onPhotos || onCamera;
-  const handleVideo = onVideo || onCamera;
-  const handleDocuments = onDocuments || onPlusClick;
-  const handleQuickRepliesOpen = onQuickRepliesOpen || onPlusClick;
-  const handleSettings = onSettings || onPlusClick;
 
   const renderMessage = (entry: ChatShellMessage) => {
     const url = entry.file_url || entry.content;
@@ -135,9 +122,10 @@ export default function ChatShell({
         {messages.map((entry) => {
           const outgoing = mode === "staff" ? entry.sender_type === "staff" : entry.sender_type !== "staff";
           const bubbleBg = outgoing ? "#fff" : "#d9ecf7";
+
           return (
             <div key={entry.id} style={{ display: "flex", justifyContent: outgoing ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
-              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: outgoing ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
+              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: outgoing ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, userSelect: "none" }}>
                 {renderMessage(entry)}
               </div>
             </div>
@@ -148,11 +136,9 @@ export default function ChatShell({
       <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px calc(12px + env(safe-area-inset-bottom))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
         {menuOpen && (
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
-            <button onClick={handlePhotos} style={menuButtonStyle}>{labels.photos || "Photos"}</button>
-            <button onClick={handleVideo} style={menuButtonStyle}>{labels.video || "Video"}</button>
-            <button onClick={handleDocuments} style={menuButtonStyle}>{labels.documents || "Prescriptions"}</button>
-            <button onClick={handleQuickRepliesOpen} style={menuButtonStyle}>{labels.quickReplies || "Quick Replies"}</button>
-            <button onClick={handleSettings} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings || "Settings"}</button>
+            <button onClick={onCamera} style={menuButtonStyle}>{labels.photos || "Photos"}</button>
+            <button onClick={onCamera} style={menuButtonStyle}>{labels.video || "Video"}</button>
+            <button onClick={onPlusClick} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.quickReplies || "Quick Replies"}</button>
           </div>
         )}
 
@@ -163,19 +149,15 @@ export default function ChatShell({
         <input value={message} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) onSend(); }} placeholder={labels.messagePlaceholder || "Message"} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
 
         <button onClick={onSend} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 22 }}>➤</button>
-
         <button onClick={onCamera} aria-label="Camera" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>📷</button>
-
-        <button onClick={onMic} aria-label="Record audio" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2" }}>
-          <Image src="/Microphone_icon.png" alt="" width={42} height={42} style={{ width: 42, height: 42, objectFit: "contain" }} />
-        </button>
+        <button onClick={onMic} aria-label="Record audio" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>🎤</button>
       </footer>
 
-      {quickRepliesOpen && (
+      {quickRepliesOpen && onQuickReply && (
         <div style={{ position: "fixed", left: 10, right: 10, bottom: 92, zIndex: 20, pointerEvents: "none" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
             {quickReplies.map((reply, index) => (
-              <button key={`${reply}-${index}`} onClick={() => onQuickReply(reply)} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: panelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
+              <button key={`${reply}-${index}`} onClick={() => onQuickReply(reply)} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: "#fff", color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
             ))}
           </div>
         </div>
