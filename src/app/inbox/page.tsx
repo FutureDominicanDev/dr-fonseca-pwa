@@ -330,53 +330,43 @@ function QREditor({ show, onClose, quickReplies, onSave, savingQR, savedQR, dark
   if (!show) return null;
 
   return (
-    <>
-      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.35)",zIndex:59}} onClick={onClose}/>
-      <div style={{position:"absolute",top:0,right:0,width:"min(400px,100%)",height:"100%",background:sidebarBg,zIndex:60,boxShadow:"-4px 0 20px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column"}}>
-        <div style={{background:headerBg,padding:"14px 16px",paddingTop:"max(14px, env(safe-area-inset-top))",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
-          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",padding:"8px 14px",borderRadius:20,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>← {t.back}</button>
-          <span style={{color:"white",fontSize:17,fontWeight:700,flex:1}}>⚡ {t.quickReplies}</span>
-          {savingQR&&<span style={{color:"rgba(255,255,255,0.6)",fontSize:13}}>{t.saving}</span>}
-          {savedQR&&<span style={{color:"#25D366",fontSize:13,fontWeight:700}}>{t.saved}</span>}
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:260,display:"grid",placeItems:"center",padding:"18px max(18px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left))"}} onClick={onClose}>
+      <div style={{width:"100%",maxWidth:420,maxHeight:"82dvh",background:darkMode?sidebarBg:"#FFFFFF",color:textColor,borderRadius:18,padding:18,boxShadow:"0 18px 50px rgba(0,0,0,0.28)",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <strong style={{fontSize:18,fontWeight:650}}>{t.quickReplies}</strong>
+          <button onClick={onClose} style={{border:"none",background:"transparent",color:textColor,fontSize:28,lineHeight:1,cursor:"pointer"}}>×</button>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:16}}>
-          <p style={{fontSize:13,color:subTextColor,marginBottom:14}}>{t.typeSlash}</p>
-          {quickReplies.length===0&&<p style={{color:subTextColor,fontSize:14,textAlign:"center",padding:"30px 0"}}>{t.noReplies}</p>}
+        {(savingQR || savedQR) && (
+          <div style={{fontSize:13,color:savedQR?"#16A34A":subTextColor,fontWeight:600,marginBottom:10}}>{savedQR ? t.saved : t.saving}</div>
+        )}
+        <div style={{display:"grid",gap:8,marginBottom:14}}>
+          {quickReplies.length===0&&<div style={{border:`1px solid ${borderColor}`,background:cardBg,borderRadius:12,padding:"12px 14px",fontSize:15,color:subTextColor}}>{t.noReplies}</div>}
           {quickReplies.map((qr,i)=>(
-            <div key={i}>
-              {editingIndex===i?(
-                <div style={{background:darkMode?"#2C2C2E":"#EBF5FF",borderRadius:14,padding:14,marginBottom:10,border:"2px solid #007AFF"}}>
-                  <p style={{fontSize:12,fontWeight:700,color:"#007AFF",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>✏️ {t.editReply}</p>
-                  <input value={editingShortcut} onChange={e=>setEditingShortcut(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder={t.shortcut} style={{width:"100%",padding:"9px 12px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:9,fontSize:14,fontFamily:"inherit",color:textColor,outline:"none",marginBottom:8}}/>
-                  <textarea value={editingMessage} onChange={e=>setEditingMessage(e.target.value)} placeholder={t.message} rows={3} style={{width:"100%",padding:"9px 12px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:9,fontSize:14,fontFamily:"inherit",color:textColor,outline:"none",resize:"none",marginBottom:10}}/>
-                  <div style={{display:"flex",gap:8}}>
-                    <button onClick={()=>{if(!editingShortcut.trim()||!editingMessage.trim())return;const updated=[...quickReplies];updated[i]={shortcut:editingShortcut.trim(),message:editingMessage.trim()};onSave(updated);setEditingIndex(null);}} style={{flex:1,padding:"10px 0",background:"#007AFF",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✅ {t.save}</button>
-                    <button onClick={()=>setEditingIndex(null)} style={{flex:1,padding:"10px 0",background:cardBg,border:`1px solid ${borderColor}`,borderRadius:10,color:textColor,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✕ {t.cancel}</button>
+            <div key={i} style={{display:"grid",gridTemplateColumns:"1fr auto auto",gap:8,alignItems:"center"}}>
+              {editingIndex===i ? (
+                <div style={{gridColumn:"1 / -1",display:"grid",gap:8,border:`1px solid ${borderColor}`,background:cardBg,borderRadius:12,padding:12}}>
+                  <input value={editingShortcut} onChange={e=>setEditingShortcut(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder={t.shortcut} style={{width:"100%",height:44,border:`1px solid ${borderColor}`,outline:"none",borderRadius:12,background:darkMode?"#253244":"white",color:textColor,padding:"0 12px",fontSize:15,fontFamily:"inherit"}}/>
+                  <textarea value={editingMessage} onChange={e=>setEditingMessage(e.target.value)} placeholder={t.message} rows={2} style={{width:"100%",border:`1px solid ${borderColor}`,outline:"none",borderRadius:12,background:darkMode?"#253244":"white",color:textColor,padding:"10px 12px",fontSize:15,fontFamily:"inherit",resize:"none"}}/>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <button onClick={()=>{if(!editingShortcut.trim()||!editingMessage.trim())return;const updated=[...quickReplies];updated[i]={shortcut:editingShortcut.trim(),message:editingMessage.trim()};onSave(updated);setEditingIndex(null);}} style={{height:42,border:"none",borderRadius:12,background:"#075e54",color:"#fff",fontSize:15,fontWeight:650,cursor:"pointer",fontFamily:"inherit"}}>{t.save}</button>
+                    <button onClick={()=>setEditingIndex(null)} style={{height:42,border:"none",borderRadius:12,background:darkMode?"#253244":"#F1F5F9",color:textColor,fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t.cancel}</button>
                   </div>
                 </div>
-              ):(
-                <div style={{background:cardBg,borderRadius:14,padding:14,marginBottom:10,border:`1px solid ${borderColor}`}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                    <span style={{background:"#007AFF",color:"white",fontSize:12,fontWeight:700,padding:"2px 10px",borderRadius:99}}>/{qr.shortcut}</span>
-                    <div style={{marginLeft:"auto",display:"flex",gap:6}}>
-                      <button onClick={()=>{setEditingIndex(i);setEditingShortcut(qr.shortcut);setEditingMessage(qr.message);}} style={{background:"#EBF5FF",border:"none",color:"#007AFF",padding:"5px 11px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✏️ {t.edit}</button>
-                      <button onClick={()=>{if(confirm(t.deleteConfirm)){onSave(quickReplies.filter((_,j)=>j!==i));}}} style={{background:"#FFF0EE",border:"none",color:"#FF3B30",padding:"5px 11px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🗑️</button>
-                    </div>
-                  </div>
-                  <p style={{fontSize:14,color:textColor,lineHeight:1.5}}>{qr.message}</p>
-                </div>
+              ) : (
+                <>
+                  <button onClick={()=>{setEditingIndex(i);setEditingShortcut(qr.shortcut);setEditingMessage(qr.message);}} style={{minHeight:46,border:`1px solid ${borderColor}`,background:darkMode?"#253244":"white",color:textColor,borderRadius:12,padding:"10px 12px",textAlign:"left",fontSize:15,fontWeight:600,fontFamily:"inherit",cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{qr.message}</button>
+                  <button onClick={()=>{setEditingIndex(i);setEditingShortcut(qr.shortcut);setEditingMessage(qr.message);}} style={{border:"none",background:"#e8f4ff",color:"#007AFF",borderRadius:12,padding:"0 14px",height:46,fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t.edit}</button>
+                  <button onClick={()=>{if(confirm(t.deleteConfirm)){onSave(quickReplies.filter((_,j)=>j!==i));}}} style={{border:"none",background:"#FEE2E2",color:"#B91C1C",borderRadius:12,padding:"0 14px",height:46,fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{lang==="es"?"Borrar":"Delete"}</button>
+                </>
               )}
             </div>
           ))}
         </div>
-        <div style={{padding:16,borderTop:`1px solid ${borderColor}`,background:darkMode?"#2C2C2E":"#F6F6F6",flexShrink:0}}>
-          <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>➕ {t.addReply}</p>
-          <input value={newShortcut} onChange={e=>setNewShortcut(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder={t.shortcut} style={{width:"100%",padding:"10px 14px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none",marginBottom:8}}/>
-          <textarea value={newMessage} onChange={e=>setNewMessage(e.target.value)} placeholder={t.message} rows={3} style={{width:"100%",padding:"10px 14px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none",resize:"none",marginBottom:8}}/>
-          <button onClick={()=>{if(!newShortcut.trim()||!newMessage.trim())return;onSave([...quickReplies,{shortcut:newShortcut.trim(),message:newMessage.trim()}]);setNewShortcut("");setNewMessage("");}} style={{width:"100%",padding:12,background:"#007AFF",border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ {t.addReply}</button>
-        </div>
+        <input value={newShortcut} onChange={e=>setNewShortcut(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder={lang==="es"?"Atajo (ej: hola)":"Shortcut (ex: hello)"} style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 14px",fontSize:15,fontFamily:"inherit",marginBottom:10}}/>
+        <textarea value={newMessage} onChange={e=>setNewMessage(e.target.value)} placeholder={lang==="es"?"Crear respuesta rápida":"Create quick reply"} rows={2} style={{width:"100%",border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"12px 14px",fontSize:15,fontFamily:"inherit",resize:"none",marginBottom:10}}/>
+        <button onClick={()=>{if(!newShortcut.trim()||!newMessage.trim())return;onSave([...quickReplies,{shortcut:newShortcut.trim(),message:newMessage.trim()}]);setNewShortcut("");setNewMessage("");}} style={{width:"100%",height:52,border:"none",borderRadius:14,background:"#075e54",color:"#fff",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.addReply}</button>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -1926,7 +1916,7 @@ export default function InboxPage() {
 
     return (
       <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}>
-        <div style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
+        <div style={{fontSize:13,fontWeight:600,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
         {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
             <img src={msg.content} alt="" style={{width:"100%",maxWidth:160,maxHeight:160,borderRadius:12,display:"block",objectFit:"cover"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
@@ -1950,7 +1940,7 @@ export default function InboxPage() {
           <div style={{...bubbleStyle,cursor:"pointer"}}>
             <a href={msg.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,color:"inherit",textDecoration:"none"}}>
               <span style={{fontSize:28}}>📄</span>
-              <div><div style={{fontSize:14,fontWeight:700}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
+              <div><div style={{fontSize:14,fontWeight:600}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
             </a>
             {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
@@ -1984,7 +1974,7 @@ export default function InboxPage() {
             <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
-          <div style={{...bubbleStyle,lineHeight:1.5,wordBreak:"break-word",fontSize:Math.max(fontSize,17),fontWeight:650,letterSpacing:0}}>
+          <div style={{...bubbleStyle,lineHeight:1.48,wordBreak:"break-word",fontSize:Math.max(fontSize,16),fontWeight:500,letterSpacing:0}}>
             {contentToRender}
             {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
@@ -2334,7 +2324,7 @@ export default function InboxPage() {
         .mic-btn { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .mic-btn img { width: 36px; height: 36px; object-fit: contain; display: block; }
         .slash-popup { position: fixed; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(74px + env(safe-area-inset-bottom)); z-index: 45; pointer-events: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: 230px; overflow-y: auto; padding: 0 0 6px; }
-        .slash-item { width: fit-content; max-width: calc(100vw - 20px); border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(0,0,0,0.10)"}; background: ${darkMode?"#253244":"white"}; color: ${textColor}; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 16px; font-weight: 800; box-shadow: 0 8px 24px rgba(15,23,42,0.16); pointer-events: auto; cursor: pointer; font-family: inherit; }
+        .slash-item { width: fit-content; max-width: calc(100vw - 20px); border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(0,0,0,0.10)"}; background: ${darkMode?"#253244":"white"}; color: ${textColor}; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 16px; font-weight: 600; box-shadow: 0 8px 24px rgba(15,23,42,0.16); pointer-events: auto; cursor: pointer; font-family: inherit; }
         .slash-item:hover { background: ${darkMode?"#30415A":"#F8FAFC"}; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); }
         .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
