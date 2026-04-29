@@ -507,6 +507,7 @@ export default function InboxPage() {
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const translationCacheRef = useRef<Record<string, string>>({});
   const pauseBackgroundRefreshRef = useRef(false);
+  const messagePressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
@@ -554,6 +555,26 @@ export default function InboxPage() {
       ? { doctor: "Doctor", enfermeria: "Enfermería", coordinacion: "Coordinación", post_quirofano: "Post-Q", staff: "Personal" }
       : { doctor: "Doctor", enfermeria: "Nursing", coordinacion: "Coordination", post_quirofano: "Post-Op", staff: "Staff" };
     return (labels as any)[role || "staff"] || (lang==="es" ? "Personal" : "Staff");
+  };
+  const displaySenderName = (message: any, isOutgoing: boolean) => {
+    if (message.sender_type === "patient") return message.sender_name || t.patientLabel;
+    const name = message.sender_name || (isOutgoing ? roleName(message.sender_role) : "Staff");
+    const role = roleName(message.sender_role);
+    if (!message.sender_role || name.toLowerCase().includes(role.toLowerCase())) return name;
+    return `${name} · ${role}`;
+  };
+  const startStaffMessagePress = (messageId: string, enabled: boolean) => {
+    if (!enabled) return;
+    if (messagePressTimerRef.current) clearTimeout(messagePressTimerRef.current);
+    messagePressTimerRef.current = setTimeout(() => {
+      setPressedMsgId(messageId);
+      messagePressTimerRef.current = null;
+    }, 550);
+  };
+  const cancelStaffMessagePress = () => {
+    if (!messagePressTimerRef.current) return;
+    clearTimeout(messagePressTimerRef.current);
+    messagePressTimerRef.current = null;
   };
   const toggleCareTeamMember = (id: string) => {
     setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
@@ -1891,9 +1912,7 @@ export default function InboxPage() {
       !!msg.sender_id &&
       msg.sender_id === currentUserId;
     const sc=senderColor(msg.sender_type||"staff",msg.sender_role||"staff");
-    const sn = isOut && !!currentUserId && msg.sender_id === currentUserId
-      ? (lang === "es" ? "Tú" : "You")
-      : (msg.sender_name || (isOut ? "Staff" : "Paciente"));
+    const sn = displaySenderName(msg, isOut);
     const videoCallRoomName = parseVideoCallMessage(msg.content);
     const callRequestToken = parseCallRequestMessage(msg.content);
     const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id && !videoCallRoomName && !callRequestToken
@@ -1915,7 +1934,17 @@ export default function InboxPage() {
     const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
 
     return (
-      <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}>
+      <div
+        key={msg.id}
+        onClick={(event)=>event.stopPropagation()}
+        onMouseDown={()=>startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
+        onMouseUp={cancelStaffMessagePress}
+        onMouseLeave={cancelStaffMessagePress}
+        onTouchStart={()=>startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
+        onTouchEnd={cancelStaffMessagePress}
+        onContextMenu={(event)=>{ if (canDeleteOwnStaffMessage) { event.preventDefault(); setPressedMsgId(msg.id); } }}
+        style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}
+      >
         <div style={{fontSize:13,fontWeight:600,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
         {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
@@ -1983,15 +2012,17 @@ export default function InboxPage() {
             </div>
           </div>
         )}
-        {canDeleteOwnStaffMessage && (
+        {canDeleteOwnStaffMessage && pressedMsgId === msg.id && (
           <button
-            onClick={() => {
+            onClick={(event) => {
+              event.stopPropagation();
               if (!confirm(t.deleteMsg)) return;
               supabase
                 .from("messages")
                 .update({ deleted_by_staff: true, deleted_at: new Date().toISOString() })
                 .eq("id", msg.id)
                 .then(() => {
+                  setPressedMsgId(null);
                   setMessages((prev) => prev.map((entry) => (entry.id === msg.id ? { ...entry, deleted_by_staff: true } : entry)));
                 });
             }}
