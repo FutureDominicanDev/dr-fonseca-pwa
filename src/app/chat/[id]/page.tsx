@@ -8,10 +8,14 @@ import { supabase } from "@/lib/supabaseClient";
 type Message = {
   id: string;
   content: string;
+  sender_id?: string | null;
   sender_type?: string;
+  type?: "text" | "image" | "video" | "audio" | "file";
   message_type: "text" | "image" | "video" | "audio" | "file";
   file_url?: string | null;
   file_name?: string | null;
+  file_type?: string | null;
+  message_hash?: string | null;
   created_at?: string;
 };
 
@@ -39,6 +43,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [darkMode, setDarkMode] = useState(false);
   const [textSize, setTextSize] = useState<"normal" | "large">("normal");
   const [recording, setRecording] = useState(false);
+  const [uiLang, setUiLang] = useState<"es" | "en">("en");
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState("");
@@ -48,50 +53,17 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [room, setRoom] = useState<RoomAccess | null>(null);
   const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
   const [fileAccept, setFileAccept] = useState("*");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
-  const isSpanish = typeof navigator !== "undefined" ? navigator.language.toLowerCase().startsWith("es") : true;
-  const labels = {
-    message: isSpanish ? "Mensaje" : "Message",
-    photos: isSpanish ? "Fotos" : "Photos",
-    video: isSpanish ? "Video" : "Video",
-    documents: isSpanish ? "Documentos" : "Documents",
-    quickReplies: isSpanish ? "Respuestas rapidas" : "Quick Replies",
-    settings: isSpanish ? "Ajustes" : "Settings",
-    cancel: isSpanish ? "Cancelar" : "Cancel",
-    send: isSpanish ? "ENVIAR" : "SEND",
-    edit: isSpanish ? "Editar" : "Edit",
-    createQuickReply: isSpanish ? "Crear respuesta rapida" : "Create quick reply",
-    saveReply: isSpanish ? "Guardar respuesta" : "Save Reply",
-    saveChanges: isSpanish ? "Guardar cambios" : "Save Changes",
-    darkMode: isSpanish ? "Modo oscuro" : "Dark mode",
-    textSize: isSpanish ? "Tamano de texto" : "Text size",
-    normal: isSpanish ? "Normal" : "Normal",
-    large: isSpanish ? "Grande" : "Large",
-    openMenu: isSpanish ? "Abrir menu" : "Open menu",
-    camera: isSpanish ? "Camara" : "Camera",
-    micStart: isSpanish ? "Iniciar grabacion de audio" : "Start audio recording",
-    micStop: isSpanish ? "Detener grabacion de audio" : "Stop audio recording",
-  };
 
-  const isSetupMediaMessage = (message: Message) => {
-    const marker = `${message.file_name || ""} ${message.content || ""} ${message.file_url || ""}`.toLowerCase();
-    return (
-      message.message_type === "image" &&
-      message.sender_type === "staff" &&
-      (marker.includes("[profile]") ||
-        marker.includes("[before]") ||
-        marker.includes("profile") ||
-        marker.includes("avatar") ||
-        marker.includes("setup") ||
-        marker.includes("before"))
-    );
-  };
-
-  const visibleMessages = messages.filter((message) => !isSetupMediaMessage(message));
+  useEffect(() => {
+    const lang = typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "en";
+    setUiLang(lang.startsWith("es") ? "es" : "en");
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -114,6 +86,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         Tijuana: data.find((entry) => entry.key === "office_phone_tijuana")?.value || "",
       });
     };
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (mounted) setCurrentUserId(data.user?.id || null);
+    });
 
     const validateRoom = async () => {
       setAccessReady(false);
@@ -160,7 +136,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         .eq("room_id", id)
         .order("created_at", { ascending: true });
 
-      if (mounted) setMessages(((data || []) as Message[]).filter((message) => !isSetupMediaMessage(message)));
+      if (mounted) setMessages((data || []) as Message[]);
     };
 
     loadOfficePhones();
@@ -181,7 +157,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         ({ new: message }: { new: Message }) => {
           setMessages((current) => {
             if (current.some((item) => item.id === message.id)) return current;
-            if (isSetupMediaMessage(message)) return current;
             return [...current, message];
           });
         },
@@ -198,23 +173,52 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const generateMessageHash = async (content: string, createdAt: string, senderId: string | null) => {
+    const input = `${content}${createdAt}${senderId || ""}`;
+    const bytes = new TextEncoder().encode(input);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  };
+
+  const logMessageAudit = async (timestamp: string) => {
+    const { error } = await supabase.from("audit_logs").insert({
+      user_id: currentUserId,
+      action: "message_sent",
+      timestamp,
+      room_id: id,
+    });
+    if (error) console.warn("audit log failed", error.message);
+  };
+
   const sendText = async () => {
     const content = text.trim();
     if (!content || accessDenied || !accessReady) return;
 
     setText("");
-    const { data } = await supabase
+    const createdAt = new Date().toISOString();
+    const messageHash = await generateMessageHash(content, createdAt, currentUserId);
+    const payload = {
+      room_id: id,
+      content,
+      sender_id: currentUserId,
+      sender_type: "patient",
+      message_type: "text",
+      created_at: createdAt,
+      message_hash: messageHash,
+    };
+    let insert = await supabase
       .from("messages")
-      .insert({
-        room_id: id,
-        content,
-        sender_type: "patient",
-        message_type: "text",
-      })
+      .insert(payload)
       .select("*")
       .single();
+    if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
+      const { message_hash: _messageHash, ...compatiblePayload } = payload;
+      insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
+    }
 
+    const data = insert.data;
     if (data) {
+      await logMessageAudit(createdAt);
       setMessages((current) => {
         if (current.some((item) => item.id === data.id)) return current;
         return [...current, data as Message];
@@ -231,13 +235,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const uploadFile = async (file: File, overrideType?: Message["message_type"]) => {
-    if (accessDenied || !accessReady) return;
+    if (accessDenied || !accessReady) return null;
 
-    const path = `chat/${id}/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("chat-files").upload(path, file);
-    if (error) return;
+    const timestamp = new Date().toISOString();
+    const storageTimestamp = Date.now();
+    const path = `patients/${id}/${storageTimestamp}-${file.name}`;
+    const { error } = await supabase.storage.from("chat-media").upload(path, file);
+    if (error) return null;
 
-    const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
+    const { data } = supabase.storage.from("chat-media").getPublicUrl(path);
     const url = data.publicUrl;
     const messageType =
       overrideType ||
@@ -248,26 +254,42 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           : file.type.startsWith("audio/")
             ? "audio"
             : "file");
+    const messageHash = await generateMessageHash(url, timestamp, currentUserId);
+    const payload = {
+      room_id: id,
+      sender_id: currentUserId,
+      sender_type: "patient",
+      type: messageType,
+      message_type: messageType,
+      content: url,
+      file_url: url,
+      file_name: file.name,
+      file_type: file.type || "application/octet-stream",
+      created_at: timestamp,
+      message_hash: messageHash,
+    };
 
-    const { data: message } = await supabase
+    let insert = await supabase
       .from("messages")
-      .insert({
-        room_id: id,
-        content: url,
-        sender_type: "patient",
-        message_type: messageType,
-        file_url: url,
-        file_name: file.name,
-      })
+      .insert(payload)
       .select("*")
       .single();
+    if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
+      const { type: _type, file_type: _fileType, message_hash: _messageHash, ...compatiblePayload } = payload;
+      insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
+    }
+    if (insert.error) return null;
 
+    const message = insert.data;
     if (message) {
+      await logMessageAudit(timestamp);
       setMessages((current) => {
         if (current.some((item) => item.id === message.id)) return current;
         return [...current, message as Message];
       });
     }
+
+    return url;
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -305,8 +327,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (recording) return;
 
     try {
+      if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+      setAudioPreviewUrl("");
+      setAudioPreviewFile(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const preferredMimeType = ["audio/mp4", "audio/aac"].find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = preferredMimeType ? new MediaRecorder(stream, { mimeType: preferredMimeType }) : new MediaRecorder(stream);
       chunksRef.current = [];
 
       recorder.ondataavailable = (event) => {
@@ -314,20 +340,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       };
 
       recorder.onstop = async () => {
-        if (!chunksRef.current.length) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const mimeType = recorder.mimeType || preferredMimeType || "audio/mp4";
+        const extension = mimeType.includes("aac") ? "aac" : mimeType.includes("mp4") ? "m4a" : "audio";
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         if (!blob.size) {
           stream.getTracks().forEach((track) => track.stop());
+          recorderRef.current = null;
           return;
         }
-        const file = new File([blob], `audio-${Date.now()}.webm`, { type: "audio/webm" });
+        const file = new File([blob], `audio-${Date.now()}.${extension}`, { type: mimeType });
         if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
         setAudioPreviewFile(file);
         setAudioPreviewUrl(URL.createObjectURL(file));
         stream.getTracks().forEach((track) => track.stop());
+        recorderRef.current = null;
       };
 
       recorderRef.current = recorder;
@@ -335,17 +361,23 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       setRecording(true);
     } catch {
       setRecording(false);
+      recorderRef.current = null;
+      alert("Microphone access required");
     }
   };
 
   const stopRecording = () => {
-    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    if (!recorderRef.current || recorderRef.current.state !== "recording") return;
+    recorderRef.current.stop();
     setRecording(false);
   };
 
   const toggleRecording = () => {
-    if (recording) stopRecording();
-    else startRecording();
+    if (recorderRef.current?.state === "recording") {
+      stopRecording();
+      return;
+    }
+    startRecording();
   };
 
   const sendAudioPreview = async () => {
@@ -390,12 +422,51 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const emergencyPhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara || officePhones.Tijuana;
-  const appBg = darkMode ? "#0f172a" : "#fff";
+  const appBg = darkMode ? "#0f172a" : "#f7f7f7";
   const textPrimary = darkMode ? "#f8fafc" : "#111";
   const panelBg = darkMode ? "#172033" : "#fff";
-  const footerBg = darkMode ? "#111827" : "#f0f0f0";
+  const footerBg = darkMode ? "#111827" : "#ededed";
   const inputPanelBg = darkMode ? "#1f2937" : "#fff";
   const messageFontSize = textSize === "large" ? 18 : 16;
+  const translations = {
+    en: {
+      messagePlaceholder: "Message",
+      send: "SEND",
+      cancel: "Cancel",
+      settings: "Settings",
+      quickReplies: "Quick Replies",
+      photos: "Photos",
+      video: "Video",
+      documents: "Documents",
+      createReply: "Create quick reply",
+      saveReply: "Save Reply",
+      saveChanges: "Save Changes",
+      edit: "Edit",
+      darkMode: "Dark mode",
+      textSize: "Text size",
+      normal: "Normal",
+      large: "Large",
+    },
+    es: {
+      messagePlaceholder: "Mensaje",
+      send: "ENVIAR",
+      cancel: "Cancelar",
+      settings: "Ajustes",
+      quickReplies: "Respuestas rápidas",
+      photos: "Fotos",
+      video: "Video",
+      documents: "Documentos",
+      createReply: "Crear respuesta rápida",
+      saveReply: "Guardar respuesta",
+      saveChanges: "Guardar cambios",
+      edit: "Editar",
+      darkMode: "Modo oscuro",
+      textSize: "Tamaño de texto",
+      normal: "Normal",
+      large: "Grande",
+    },
+  };
+  const labels = translations[uiLang] || translations.en;
 
   const saveQuickReply = () => {
     const next = replyDraft.trim();
@@ -420,8 +491,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   if (accessDenied) {
     return (
       <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#fff", color: "#111", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-        <header style={{ height: 64, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#120024", borderBottom: "1px solid rgba(17,24,39,0.10)", padding: "4px 16px" }}>
-          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={360} height={60} priority style={{ width: "min(360px, 86vw)", height: 60, objectFit: "contain", objectPosition: "center" }} />
+        <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 16px" }}>
+          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "min(430px, 92vw)", height: 78, objectFit: "contain", objectPosition: "center" }} />
         </header>
         <section style={{ flex: 1, display: "grid", placeItems: "center", padding: 24 }}>
           <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 18, boxShadow: "0 10px 36px rgba(0,0,0,0.14)", padding: 24, textAlign: "center" }}>
@@ -441,21 +512,32 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   return (
     <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-      <header style={{ height: 64, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#120024", borderBottom: "1px solid rgba(17,24,39,0.10)", padding: "4px 16px" }}>
-        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={360} height={60} priority style={{ width: "min(360px, 86vw)", height: 60, objectFit: "contain", objectPosition: "center" }} />
+      <style>{`
+        button { transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
+        button:active { transform: scale(0.96); opacity: 0.86; }
+        input { transition: box-shadow 170ms ease, background-color 170ms ease; }
+        input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
+        @keyframes messageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        @keyframes micPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(30,136,229,0.28); } 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(30,136,229,0); } }
+      `}</style>
+      <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 16px" }}>
+        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "min(430px, 92vw)", height: 78, objectFit: "contain", objectPosition: "center" }} />
       </header>
 
       <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => setMenuOpen(false)}>
-        {visibleMessages.map((message) => {
+        {messages.map((message) => {
+          const fileName = `${message.file_name || ""}`;
+          if (fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
           const mine = message.sender_type !== "staff";
-          const softBlue = "#d4eaff";
+          const softBlue = "#d9ecf7";
           const bubbleBg =
             viewerType === "staff"
               ? message.sender_type === "patient" ? softBlue : "#fff"
               : message.sender_type === "staff" ? softBlue : "#fff";
           return (
-            <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8 }}>
-              <div style={{ maxWidth: "78%", background: bubbleBg, color: "#111", borderRadius: mine ? "16px 4px 16px 16px" : "4px 16px 16px 16px", padding: "10px 12px", boxShadow: "0 1px 2px rgba(0,0,0,0.12)", fontSize: messageFontSize, lineHeight: 1.45 }}>
+            <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
+              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease" }}>
                 {renderMessage(message)}
               </div>
             </div>
@@ -464,9 +546,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <div ref={bottomRef} />
       </section>
 
-      <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 14, padding: "14px 16px calc(14px + env(safe-area-inset-bottom))", background: darkMode ? "#0b1220" : "#d7dee8", borderTop: "1px solid rgba(0,0,0,0.14)", boxShadow: "0 -6px 18px rgba(15,23,42,0.10)" }}>
+      <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px calc(12px + env(safe-area-inset-bottom))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
         {menuOpen && (
-          <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5 }}>
+          <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
             <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
             <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
             <button onClick={() => openPicker("*")} style={menuButtonStyle}>{labels.documents}</button>
@@ -475,22 +557,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           </div>
         )}
 
-        <button onClick={() => setMenuOpen((open) => !open)} aria-label={labels.openMenu} style={{ width: 62, height: 62, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#eef2f7", color: menuOpen ? "#fff" : "#111", fontSize: 34, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <button onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 34, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {menuOpen ? "×" : "+"}
         </button>
 
-        <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.message} style={{ minWidth: 0, flex: 1, height: 62, border: "none", outline: "none", borderRadius: 31, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize, boxShadow: "inset 0 0 0 1px rgba(15,23,42,0.08)" }} />
+        <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
 
-        <button onClick={() => openPicker("image/*")} aria-label={labels.camera} style={roundButtonStyle}>📷</button>
+        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#2d9cff" : "#dbeafe", color: recording ? "#fff" : "#0b4ea2", fontWeight: 900, fontSize: 30, animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>🎙</button>
 
-        <button onClick={toggleRecording} aria-label={recording ? labels.micStop : labels.micStart} style={{ ...roundButtonStyle, background: recording ? "#bfdbfe" : "#eaf2ff", color: "#143b70", fontWeight: 900, boxShadow: recording ? "0 0 0 4px rgba(20,59,112,0.18)" : "none" }}>
-          <svg width="29" height="29" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 14.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 0 0-7 0v5a3.5 3.5 0 0 0 3.5 3.5Z" fill="currentColor" />
-            <path d="M5.5 10.5a1 1 0 0 1 2 0A4.5 4.5 0 0 0 12 15a4.5 4.5 0 0 0 4.5-4.5 1 1 0 1 1 2 0A6.51 6.51 0 0 1 13 16.92V20h2.25a1 1 0 1 1 0 2h-6.5a1 1 0 1 1 0-2H11v-3.08a6.51 6.51 0 0 1-5.5-6.42Z" fill="currentColor" />
-          </svg>
-        </button>
-
-        <button onClick={sendText} aria-label={labels.send} style={{ width: 62, height: 62, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>➤</button>
+        <button onClick={sendText} aria-label="Send" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 26, display: "grid", placeItems: "center", flexShrink: 0, boxShadow: "0 3px 10px rgba(7,94,84,0.22)" }}>➤</button>
 
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
         <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
@@ -501,8 +576,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           <div style={{ width: "100%", maxWidth: 460, background: panelBg, color: textPrimary, borderRadius: 18, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35)" }}>
             <video src={videoPreviewUrl} controls playsInline style={{ width: "100%", maxHeight: "58dvh", borderRadius: 14, background: "#000", display: "block", marginBottom: 14 }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={cancelVideoPreview} style={{ height: 52, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
-              <button onClick={sendVideoPreview} style={{ height: 52, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
+              <button onClick={cancelVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
+              <button onClick={sendVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
             </div>
           </div>
         </div>
@@ -513,8 +588,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.35)" }}>
             <audio src={audioPreviewUrl} controls style={{ width: "100%", marginBottom: 14 }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={cancelAudioPreview} style={{ height: 52, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
-              <button onClick={sendAudioPreview} style={{ height: 52, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
+              <button onClick={cancelAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
+              <button onClick={sendAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
             </div>
           </div>
         </div>
@@ -531,11 +606,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {quickReplies.map((reply, index) => (
                 <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <button onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
-                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#d4eaff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.edit}</button>
+                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.edit}</button>
                 </div>
               ))}
             </div>
-            <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder={labels.createQuickReply} style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
+            <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder={labels.createReply} style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
             <button onClick={saveQuickReply} style={{ width: "100%", height: 48, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 700 }}>{editingReplyIndex === null ? labels.saveReply : labels.saveChanges}</button>
           </div>
         </div>
