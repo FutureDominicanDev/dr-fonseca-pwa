@@ -2270,8 +2270,10 @@ export default function InboxPage() {
         .staff-menu-item:last-child { border-bottom: none; }
         .send-btn { width: 64px; height: 64px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .phone-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#F4F8FF"}; color: #075EA8; border: 4px solid #075EA8; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; text-decoration: none; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
-        .mic-btn { width: 64px; height: 64px; border-radius: 50%; background: #4D91D8; color: white; border: 10px solid rgba(77,145,216,0.18); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 30px; box-shadow: 0 4px 14px rgba(15,23,42,0.10); }
+        .phone-btn { width: 64px; height: 64px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
+        .phone-btn img { width: 64px; height: 64px; object-fit: contain; display: block; }
+        .mic-btn { width: 64px; height: 64px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .mic-btn img { width: 64px; height: 64px; object-fit: contain; display: block; }
         .slash-popup { background: ${darkMode?"#2C2C2E":"white"}; border-top: 1px solid ${borderColor}; max-height: 260px; overflow-y: auto; }
         .slash-header { padding: 10px 16px 6px; font-size: 12px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
         .slash-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid ${borderColor}; display: flex; align-items: center; gap: 12px; transition: background 0.1s; }
@@ -2881,9 +2883,13 @@ export default function InboxPage() {
                       <svg width="29" height="29" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                     </button>
                     {selectedRoom.procedures?.patients?.phone && (
-                      <a className="phone-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} aria-label={t.callPatient}>☎</a>
+                      <a className="phone-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} aria-label={t.callPatient}>
+                        <img src="/Phone_icon.png" alt="" />
+                      </a>
                     )}
-                    <button className="mic-btn" onPointerDown={e=>{e.preventDefault();startRec();}} aria-label={t.recordAudio}>🎙</button>
+                    <button className="mic-btn" onPointerDown={e=>{e.preventDefault();startRec();}} aria-label={t.recordAudio}>
+                      <img src="/Microphone_icon.png" alt="" />
+                    </button>
                   </div>
                 )}
               </>
