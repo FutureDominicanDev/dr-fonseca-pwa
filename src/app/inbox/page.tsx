@@ -375,7 +375,7 @@ export default function InboxPage() {
   const [fontSizeLevel, setFontSizeLevel] = useState<"small"|"medium"|"large">("medium");
   const fontSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 21 : 18;
 
-  const bg = darkMode ? "#0B141A" : "#EFEAE2";
+  const bg = darkMode ? "#0B141A" : "#FFFFFF";
   const headerBg = "#07334D";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
   const inputBg = darkMode ? "#202C33" : "#F0F2F5";
@@ -2233,10 +2233,10 @@ export default function InboxPage() {
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
-        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(90px, 1fr) minmax(240px, 560px) minmax(90px, 1fr); align-items: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(70px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
+        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(90px, 1fr) minmax(260px, 680px) minmax(90px, 1fr); align-items: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(92px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.16); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
-        .topbar-logo { grid-column: 2; justify-self: center; height: 68px; width: min(540px, 100%); object-fit: contain; object-position: center; display: block; }
-        .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 35px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
+        .topbar-logo { grid-column: 2; justify-self: center; height: 88px; width: min(660px, 100%); object-fit: contain; object-position: center; display: block; }
+        .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
         .admin-inline-btn { padding: 0 12px; height: 38px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: 13px; font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
@@ -2261,7 +2261,7 @@ export default function InboxPage() {
         .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${bg}; transition: transform 0.25s ease; z-index: 20; }
         .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
         .main-area.hidden { transform: translateX(100%); pointer-events: none; }
-        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${bg}; background-image: radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px); background-size: 18px 18px; }
+        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${bg}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.045) 1px, transparent 1px)"}; background-size: 18px 18px; }
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 14px 0; }
         .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.85)":"rgba(255,255,255,0.92)"}; border-radius: 8px; padding: 4px 10px; font-size: 12px; color: ${darkMode?"#D1D5DB":"#54656F"}; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
@@ -2309,9 +2309,9 @@ export default function InboxPage() {
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 700px) {
-          .topbar { height: calc(82px + env(safe-area-inset-top)); grid-template-columns: 1fr auto; padding-left: max(30px, env(safe-area-inset-left)); padding-right: max(30px, env(safe-area-inset-right)); column-gap: 12px; }
-          .topbar-logo { grid-column: 1; justify-self: center; height: 66px; width: min(420px, 64vw); }
-          .topbar-actions { right: max(30px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 39px); }
+          .topbar { height: calc(106px + env(safe-area-inset-top)); grid-template-columns: 1fr auto; padding-left: max(30px, env(safe-area-inset-left)); padding-right: max(30px, env(safe-area-inset-right)); column-gap: 12px; }
+          .topbar-logo { grid-column: 1; justify-self: center; height: 92px; width: min(520px, 72vw); }
+          .topbar-actions { right: max(30px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 53px); }
           .chat-head { padding-top: 9px; min-height: 58px; }
           .input-area { gap: 10px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
           .plus-btn { width: 54px; height: 54px; font-size: 36px; }
