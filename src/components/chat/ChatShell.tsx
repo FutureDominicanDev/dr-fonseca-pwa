@@ -58,30 +58,7 @@ export default function ChatShell({
   labels = {},
 }: ChatShellProps) {
   const textPrimary = "#111";
-  const footerBg = "#ededed";
   const inputPanelBg = "#fff";
-  const messageFontSize = 16;
-  const roundButtonStyle = {
-    width: 58,
-    height: 58,
-    borderRadius: "50%",
-    border: "none",
-    display: "grid",
-    placeItems: "center",
-    flexShrink: 0,
-  } as const;
-  const menuButtonStyle = {
-    display: "block",
-    width: "100%",
-    border: "none",
-    borderBottom: "1px solid rgba(0,0,0,0.08)",
-    background: "#fff",
-    color: "#111",
-    padding: "15px 16px",
-    textAlign: "left" as const,
-    fontSize: 17,
-    fontWeight: 800,
-  };
 
   const renderMessage = (entry: ChatShellMessage) => {
     const url = entry.file_url || entry.content;
@@ -111,61 +88,97 @@ export default function ChatShell({
   };
 
   return (
-    <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#f7f7f7", color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-      <style>{`
-        button { transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
-        button:active { transform: scale(0.96); opacity: 0.86; }
-        input { transition: box-shadow 170ms ease, background-color 170ms ease; }
-        input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
-        @keyframes messageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-      `}</style>
-
-      <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }}>
+    <div className="flex flex-col h-screen w-full bg-gray-100">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((entry) => {
           const outgoing = mode === "staff" ? entry.sender_type === "staff" : entry.sender_type !== "staff";
           const bubbleBg = outgoing ? "#fff" : "#d9ecf7";
-
           return (
-            <div key={entry.id} style={{ display: "flex", justifyContent: outgoing ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
-              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: outgoing ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, userSelect: "none" }}>
+            <div
+              key={entry.id}
+              className={`flex ${outgoing ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                style={{
+                  maxWidth: "70%",
+                  background: bubbleBg,
+                  color: textPrimary,
+                  borderRadius: outgoing ? "12px 4px 12px 12px" : "4px 12px 12px 12px",
+                  padding: "11px 13px",
+                  boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)",
+                  fontSize: 16,
+                  fontWeight: 600,
+                  lineHeight: 1.45,
+                  userSelect: "none",
+                }}
+              >
                 {renderMessage(entry)}
               </div>
             </div>
           );
         })}
-      </section>
+      </div>
 
-      <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px calc(12px + env(safe-area-inset-bottom))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
-        {menuOpen && (
-          <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
-            <button onClick={onCamera} style={menuButtonStyle}>{labels.photos || "Photos"}</button>
-            <button onClick={onVideo} style={menuButtonStyle}>{labels.video || "Video"}</button>
-            <button onClick={onPlusClick} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.quickReplies || "Quick Replies"}</button>
+      {menuOpen ? (
+        <div className="px-3 pb-2">
+          <div className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-lg">
+            <button onClick={onCamera} className="w-full px-4 py-3 text-left text-sm font-extrabold text-gray-900 border-b border-black/10">
+              {labels.photos || "Photos"}
+            </button>
+            <button onClick={onVideo} className="w-full px-4 py-3 text-left text-sm font-extrabold text-gray-900 border-b border-black/10">
+              {labels.video || "Video"}
+            </button>
+            <button onClick={onPlusClick} className="w-full px-4 py-3 text-left text-sm font-extrabold text-gray-900">
+              {labels.quickReplies || "Quick Replies"}
+            </button>
           </div>
-        )}
+        </div>
+      ) : null}
 
-        <button onClick={onPlusClick} aria-label="Open menu" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 34, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          {menuOpen ? "×" : "+"}
-        </button>
-
-        <input value={message} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) onSend(); }} placeholder={labels.messagePlaceholder || "Message"} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
-
-        <button onClick={onSend} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 22 }}>➤</button>
-        <button onClick={onCamera} aria-label="Camera" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>📷</button>
-        <button onClick={onMic} aria-label="Record audio" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>🎤</button>
-        <button onClick={onCall} aria-label="Call" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>☎</button>
-      </footer>
-
-      {quickRepliesOpen && onQuickReply && (
-        <div style={{ position: "fixed", left: 10, right: 10, bottom: 92, zIndex: 20, pointerEvents: "none" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+      {quickRepliesOpen && onQuickReply ? (
+        <div className="px-3 pb-2">
+          <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
             {quickReplies.map((reply, index) => (
-              <button key={`${reply}-${index}`} onClick={() => onQuickReply(reply)} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: "#fff", color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
+              <button key={`${reply}-${index}`} onClick={() => onQuickReply(reply)} className="self-start rounded-xl border border-black/10 bg-white px-4 py-3 text-left text-sm font-medium shadow-sm">
+                {reply}
+              </button>
             ))}
           </div>
         </div>
-      )}
-    </main>
+      ) : null}
+
+      <div className="p-3 bg-white border-t flex items-center gap-2">
+        <button onClick={onPlusClick} aria-label="Open menu" className="h-12 w-12 shrink-0 rounded-full bg-gray-300 text-2xl font-semibold text-gray-900">
+          {"+"}
+        </button>
+
+        <input
+          value={message}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              onSend();
+            }
+          }}
+          placeholder={labels.messagePlaceholder || "Message"}
+          className="h-12 flex-1 rounded-full border border-transparent px-4"
+          style={{ background: inputPanelBg, color: textPrimary }}
+        />
+
+        <button onClick={onSend} aria-label="Send" className="h-12 w-12 shrink-0 rounded-full bg-blue-50 text-blue-800 text-xl">
+          ➤
+        </button>
+        <button onClick={onCamera} aria-label="Camera" className="h-12 w-12 shrink-0 rounded-full bg-blue-50 text-blue-800 text-xl">
+          📷
+        </button>
+        <button onClick={onMic} aria-label="Record audio" className="h-12 w-12 shrink-0 rounded-full bg-blue-50 text-blue-800 text-xl">
+          🎤
+        </button>
+        <button onClick={onCall} aria-label="Call" className="h-12 w-12 shrink-0 rounded-full bg-blue-50 text-blue-800 text-xl">
+          ☎
+        </button>
+      </div>
+    </div>
   );
 }

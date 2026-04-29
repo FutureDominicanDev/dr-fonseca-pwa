@@ -2557,7 +2557,7 @@ export default function InboxPage() {
             </div>
           </div>
 
-          <div className="h-screen flex flex-col">
+          <div className="h-screen w-full">
             <ChatShell
               mode="staff"
               messages={messages}
