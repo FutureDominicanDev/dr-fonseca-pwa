@@ -8,10 +8,13 @@ import { supabase } from "@/lib/supabaseClient";
 type Message = {
   id: string;
   content: string;
+  sender_id?: string | null;
   sender_type?: string;
+  type?: "text" | "image" | "video" | "audio" | "file";
   message_type: "text" | "image" | "video" | "audio" | "file";
   file_url?: string | null;
   file_name?: string | null;
+  file_type?: string | null;
   created_at?: string;
 };
 
@@ -49,6 +52,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [room, setRoom] = useState<RoomAccess | null>(null);
   const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
   const [fileAccept, setFileAccept] = useState("*");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -81,6 +85,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         Tijuana: data.find((entry) => entry.key === "office_phone_tijuana")?.value || "",
       });
     };
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (mounted) setCurrentUserId(data.user?.id || null);
+    });
 
     const validateRoom = async () => {
       setAccessReady(false);
@@ -199,7 +207,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const uploadFile = async (file: File, overrideType?: Message["message_type"]) => {
     if (accessDenied || !accessReady) return null;
 
-    const path = `${id}/${Date.now()}-${file.name}`;
+    const timestamp = new Date().toISOString();
+    const storageTimestamp = Date.now();
+    const path = `patients/${id}/${storageTimestamp}-${file.name}`;
     const { error } = await supabase.storage.from("chat-media").upload(path, file);
     if (error) return null;
 
@@ -214,20 +224,31 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           : file.type.startsWith("audio/")
             ? "audio"
             : "file");
+    const payload = {
+      room_id: id,
+      sender_id: currentUserId,
+      sender_type: "patient",
+      type: messageType,
+      message_type: messageType,
+      content: url,
+      file_url: url,
+      file_name: file.name,
+      file_type: file.type || "application/octet-stream",
+      created_at: timestamp,
+    };
 
-    const { data: message } = await supabase
+    let insert = await supabase
       .from("messages")
-      .insert({
-        room_id: id,
-        content: url,
-        sender_type: "patient",
-        message_type: messageType,
-        file_url: url,
-        file_name: file.name,
-      })
+      .insert(payload)
       .select("*")
       .single();
+    if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
+      const { type: _type, file_type: _fileType, ...compatiblePayload } = payload;
+      insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
+    }
+    if (insert.error) return null;
 
+    const message = insert.data;
     if (message) {
       setMessages((current) => {
         if (current.some((item) => item.id === message.id)) return current;
