@@ -38,6 +38,12 @@ const formatPhoneLocal = (value: string) => {
   return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 10)}-${digits.slice(10)}`;
 };
 
+const createPatientAccessToken = () => {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
 const T = {
   es: {
     patients: "Pacientes", search: "Buscar paciente...", noPatients: "Sin pacientes aún",
@@ -1608,8 +1614,26 @@ export default function InboxPage() {
       if (profilePicFile){const fn=`patient-profiles/${pt.id}/profile.${profilePicFile.name.split(".").pop()||"jpg"}`;const{error:ue}=await supabase.storage.from("chat-files").upload(fn,profilePicFile,{upsert:true});if(!ue){const{data:ud}=supabase.storage.from("chat-files").getPublicUrl(fn);await supabase.from("patients").update({profile_picture_url:ud.publicUrl}).eq("id",pt.id);}}
       const { data: pr, error: pre } = await supabase.from("procedures").insert({patient_id:pt.id,procedure_name:newProcedureName.trim(),surgery_date:surgeryDateIso||null,office_location:newLocation,status:"scheduled"}).select().single();
       if (pre) throw pre;
-      const { data: rm, error: re } = await supabase.from("rooms").insert({procedure_id:pr.id,created_by:creatorId}).select().single();
+      const patientAccessToken = createPatientAccessToken();
+      let roomInsert = await supabase
+        .from("rooms")
+        .insert({procedure_id:pr.id,created_by:creatorId,patient_access_token:patientAccessToken})
+        .select()
+        .single();
+
+      if (roomInsert.error && isMissingColumnError(roomInsert.error)) {
+        roomInsert = await supabase
+          .from("rooms")
+          .insert({procedure_id:pr.id,created_by:creatorId})
+          .select()
+          .single();
+      }
+
+      const { data: rm, error: re } = roomInsert;
       if (re) throw re;
+      const roomLinkToken = typeof (rm as { patient_access_token?: unknown })?.patient_access_token === "string"
+        ? (rm as { patient_access_token: string }).patient_access_token
+        : "";
 
       const memberIds = Array.from(new Set([creatorId, ...selectedCareTeamIds].filter(Boolean))) as string[];
       if (memberIds.length) {
@@ -1655,7 +1679,7 @@ export default function InboxPage() {
           });
         }
       }
-      setCreatedRoomLink(`${window.location.origin}/patient/${rm.id}`);
+      setCreatedRoomLink(`${window.location.origin}/patient/${rm.id}${roomLinkToken ? `?token=${encodeURIComponent(roomLinkToken)}` : ""}`);
       setCreatedPatientName(patientFullName);
       setCreatedPatientLanguage(newPatientLanguage);
       setNewPatientFirstName("");setNewPatientLastName("");setNewPatientPhoneCountry("+52");setNewPatientPhoneLocal("");setNewPatientEmail("");setNewProcedureName("");setNewSurgeryDate("");setNewBirthdate("");setNewLocation("Guadalajara");setNewPatientLanguage("es");setNewPatientTimezone("America/Mexico_City");setNewPatientAllergies("");setNewPatientMedications("");setSelectedCareTeamIds([]);setProfilePicFile(null);setBeforePhotosFiles([]);setShowNewRoom(false);

@@ -2,6 +2,7 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 type Message = {
@@ -14,20 +15,91 @@ type Message = {
   created_at?: string;
 };
 
+type RoomAccess = {
+  id: string;
+  patient_access_token?: string | null;
+  procedures?: {
+    office_location?: string | null;
+  } | null;
+};
+
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token") || "";
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [accessReady, setAccessReady] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [room, setRoom] = useState<RoomAccess | null>(null);
+  const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
+  const [fileAccept, setFileAccept] = useState("*");
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const acceptRef = useRef("*");
 
   useEffect(() => {
     let mounted = true;
+
+    const isSchemaColumnError = (error: unknown) => {
+      const value = error as { message?: string; details?: string; hint?: string };
+      const message = `${value?.message || ""} ${value?.details || ""} ${value?.hint || ""}`.toLowerCase();
+      return message.includes("column") || message.includes("schema cache") || message.includes("relation");
+    };
+
+    const loadOfficePhones = async () => {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["office_phone_guadalajara", "office_phone_tijuana"]);
+
+      if (!mounted || !data) return;
+      setOfficePhones({
+        Guadalajara: data.find((entry) => entry.key === "office_phone_guadalajara")?.value || "",
+        Tijuana: data.find((entry) => entry.key === "office_phone_tijuana")?.value || "",
+      });
+    };
+
+    const validateRoom = async () => {
+      setAccessReady(false);
+      setAccessDenied(false);
+
+      let roomQuery = await supabase
+        .from("rooms")
+        .select("id, patient_access_token, procedures(office_location)")
+        .eq("id", id)
+        .single();
+
+      if (roomQuery.error && isSchemaColumnError(roomQuery.error)) {
+        roomQuery = await supabase
+          .from("rooms")
+          .select("id, procedures(office_location)")
+          .eq("id", id)
+          .single();
+      }
+
+      const roomData = roomQuery.data as RoomAccess | null;
+      if (!mounted) return false;
+
+      if (roomQuery.error || !roomData) {
+        setAccessDenied(true);
+        setAccessReady(true);
+        return false;
+      }
+
+      if (roomData.patient_access_token && roomData.patient_access_token !== token) {
+        setAccessDenied(true);
+        setAccessReady(true);
+        return false;
+      }
+
+      setRoom(roomData);
+      setAccessReady(true);
+      return true;
+    };
 
     const loadMessages = async () => {
       const { data } = await supabase
@@ -39,7 +111,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       if (mounted) setMessages((data || []) as Message[]);
     };
 
-    loadMessages();
+    loadOfficePhones();
+    validateRoom().then((allowed) => {
+      if (allowed) loadMessages();
+    });
 
     const channel = supabase
       .channel(`chat-${id}`)
@@ -64,7 +139,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       mounted = false;
       supabase.removeChannel(channel);
     };
-  }, [id]);
+  }, [id, token]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -72,7 +147,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   const sendText = async () => {
     const content = text.trim();
-    if (!content) return;
+    if (!content || accessDenied || !accessReady) return;
 
     setText("");
     const { data } = await supabase
@@ -95,7 +170,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const openPicker = (accept: string) => {
-    acceptRef.current = accept;
+    setFileAccept(accept);
     if (!fileRef.current) return;
     fileRef.current.accept = accept;
     fileRef.current.click();
@@ -103,6 +178,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const uploadFile = async (file: File, overrideType?: Message["message_type"]) => {
+    if (accessDenied || !accessReady) return;
+
     const path = `chat/${id}/${Date.now()}-${file.name}`;
     const { error } = await supabase.storage.from("chat-files").upload(path, file);
     if (error) return;
@@ -206,6 +283,39 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     return <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{message.content}</span>;
   };
 
+  const emergencyPhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara || officePhones.Tijuana;
+
+  if (!accessReady) {
+    return (
+      <main style={{ height: "100dvh", display: "grid", placeItems: "center", background: "#ece5dd", color: "#111", fontFamily: "Arial, Helvetica, sans-serif", padding: 24 }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid rgba(7,94,84,0.18)", borderTopColor: "#075e54", animation: "spin 0.8s linear infinite" }} />
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </main>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#ece5dd", color: "#111", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
+        <header style={{ height: 64, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff", borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
+          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={160} height={44} priority style={{ width: 160, height: 44, objectFit: "contain" }} />
+        </header>
+        <section style={{ flex: 1, display: "grid", placeItems: "center", padding: 24 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 18, boxShadow: "0 10px 36px rgba(0,0,0,0.14)", padding: 24, textAlign: "center" }}>
+            <div style={{ fontSize: 42, marginBottom: 10 }}>🔒</div>
+            <h1 style={{ margin: "0 0 8px", fontSize: 24 }}>No pudimos abrir este chat</h1>
+            <p style={{ margin: "0 0 18px", color: "#555", lineHeight: 1.5 }}>Por seguridad, este enlace no es válido o necesita ser actualizado por el equipo del Dr. Fonseca.</p>
+            {emergencyPhone && (
+              <a href={`tel:${emergencyPhone.replace(/[^\d+]/g, "")}`} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 44, padding: "0 18px", borderRadius: 999, background: "#075e54", color: "#fff", textDecoration: "none", fontWeight: 800 }}>
+                Llamar a la oficina
+              </a>
+            )}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#ece5dd", color: "#111", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
       <header style={{ height: 64, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff", borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
@@ -249,7 +359,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
         <button onClick={sendText} aria-label="Send" style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 18, display: "grid", placeItems: "center", flexShrink: 0 }}>➤</button>
 
-        <input ref={fileRef} type="file" accept={acceptRef.current} onChange={handleFileChange} style={{ display: "none" }} />
+        <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
       </footer>
     </main>
   );
