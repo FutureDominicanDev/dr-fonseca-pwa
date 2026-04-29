@@ -5,6 +5,7 @@ import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/date
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { isOwnerEmail } from "@/lib/securityConfig";
+import ChatShell from "@/components/chat/ChatShell";
 
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
@@ -2738,30 +2739,80 @@ export default function InboxPage() {
                   <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
                 </div>
 
-                <div
-                  className="chat-bg"
-                  ref={chatScrollRef}
-                  onScroll={updateAutoScrollPreference}
-                  onClick={()=>{
-                    setShowSlashMenu(false);
-                    setShowEmojiMenu(false);
+                <ChatShell
+                  messages={messages.filter((entry) => !entry.deleted_by_staff && !entry.is_internal)}
+                  message={newMessage}
+                  onChange={(value) => {
+                    setNewMessage(value);
+                    updateTypingState(value);
                     setShowMediaMenu(false);
+                    setShowEmojiMenu(false);
+                    if (value.startsWith("/")) {
+                      setShowSlashMenu(true);
+                      setSlashFilter(value.slice(1));
+                    } else {
+                      setShowSlashMenu(false);
+                      setSlashFilter("");
+                    }
                   }}
-                >
-                  {messages.filter(m=>!m.deleted_by_staff).length===0?(
-                    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:40,textAlign:"center"}}>
-                      <div style={{fontSize:44}}>💬</div>
-                      <p style={{fontSize:17,fontWeight:600,color:textColor}}>{t.noMessages}</p>
-                      <p style={{fontSize:15,color:subTextColor}}>{t.noMessagesHint}</p>
-                    </div>
-                  ):groupedMessages().map((group,gi)=>(
-                    <div key={gi}>
-                      <div className="date-sep"><div className="date-sep-pill">{fmtDateLabel(group.date)}</div></div>
-                      {group.msgs.map(renderMsg)}
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef}/>
-                </div>
+                  onSend={() => {
+                    if (showSlashMenu && slashFiltered.length > 0) {
+                      sendMessage(slashFiltered[0].message);
+                      setShowSlashMenu(false);
+                      setSlashFilter("");
+                      setNewMessage("");
+                    } else {
+                      sendMessage();
+                    }
+                  }}
+                  onMic={startRec}
+                  onCamera={() => {
+                    if (prefersNativeCapture) cameraInputRef.current?.click();
+                    else openCapture("photo");
+                  }}
+                  onPlusClick={() => setShowMediaMenu((value) => !value)}
+                  onQuickReply={(reply) => {
+                    sendMessage(reply);
+                    setShowSlashMenu(false);
+                    setSlashFilter("");
+                    setNewMessage("");
+                  }}
+                  mode="staff"
+                  menuOpen={showMediaMenu}
+                  quickRepliesOpen={showSlashMenu && slashFiltered.length > 0}
+                  quickReplies={slashFiltered.map((reply) => reply.message)}
+                  labels={{
+                    messagePlaceholder: t.typeMessage,
+                    photos: "Photos",
+                    video: "Video",
+                    documents: "Prescriptions",
+                    quickReplies: t.quickReplies,
+                    settings: t.settings,
+                  }}
+                  onPhotos={() => {
+                    setShowMediaMenu(false);
+                    if (prefersNativeCapture) cameraInputRef.current?.click();
+                    else openCapture("photo");
+                  }}
+                  onVideo={() => {
+                    setShowMediaMenu(false);
+                    if (prefersNativeCapture) videoInputRef.current?.click();
+                    else openCapture("video");
+                  }}
+                  onDocuments={() => {
+                    setShowMediaMenu(false);
+                    fileInputRef.current?.click();
+                  }}
+                  onQuickRepliesOpen={() => {
+                    setShowMediaMenu(false);
+                    setShowQREditor(true);
+                  }}
+                  onSettings={() => {
+                    setShowMediaMenu(false);
+                    setShowSettings(true);
+                  }}
+                />
+                <div ref={messagesEndRef}/>
                 {showJumpToLatest && (
                   <button
                     onClick={jumpToLatest}
@@ -2785,103 +2836,6 @@ export default function InboxPage() {
                   </button>
                 )}
 
-                {showSlashMenu&&slashFiltered.length>0&&(
-                  <div className="slash-popup" onClick={e=>e.stopPropagation()}>
-                    <div className="slash-header">
-                      <span>⚡ {t.quickReplies}</span>
-                      <button onClick={()=>{setShowSlashMenu(false);setShowQREditor(true);}} style={{background:"none",border:"none",color:"#007AFF",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.edit}</button>
-                    </div>
-                    {slashFiltered.map((r,i)=>(
-                      <div key={i} className="slash-item" onClick={()=>{sendMessage(r.message);setShowSlashMenu(false);setSlashFilter("");setNewMessage("");}}>
-                        <span className="slash-shortcut">/{r.shortcut}</span>
-                        <span className="slash-msg">{r.message}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {recording?(
-                  <div style={{background:inputBg,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,borderTop:`1px solid ${borderColor}`}}>
-                    <div style={{width:10,height:10,borderRadius:"50%",background:"#FF3B30",flexShrink:0,animation:"pulse 1s infinite"}}/>
-                    <span style={{fontSize:17,fontWeight:700,color:"#FF3B30",fontFamily:"monospace",flex:1}}>{fmtRec(recordingSeconds)}</span>
-                    <span style={{fontSize:14,color:subTextColor}}>{t.recording}</span>
-                    <button onClick={()=>stopRec(true)} style={{padding:"8px 16px",background:"#6B7280",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.cancelCapture}</button>
-                    <button onClick={()=>stopRec(false)} style={{padding:"8px 16px",background:"#FF3B30",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⏹ {lang==="es"?"Detener y enviar":"Stop & send"}</button>
-                  </div>
-                ):(
-                  <div className="input-area" onClick={e=>e.stopPropagation()}>
-                    {showMediaMenu&&(
-                      <div style={{position:"absolute",left:14,bottom:`calc(78px + env(safe-area-inset-bottom))`,width:248,overflow:"hidden",background:"white",border:"1px solid rgba(0,0,0,0.1)",borderRadius:16,boxShadow:"0 10px 30px rgba(0,0,0,0.18)",zIndex:30,animation:"menuIn 160ms ease-out",transformOrigin:"left bottom"}}>
-                        <button onClick={()=>{
-                          setShowMediaMenu(false);
-                          if (prefersNativeCapture) cameraInputRef.current?.click();
-                          else openCapture("photo");
-                        }} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Photos</button>
-                        <button onClick={()=>{
-                          setShowMediaMenu(false);
-                          if (prefersNativeCapture) videoInputRef.current?.click();
-                          else openCapture("video");
-                        }} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Video</button>
-                        <button onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Prescriptions</button>
-                        <button onClick={()=>{setShowMediaMenu(false);setShowQREditor(true);}} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Quick Replies</button>
-                        <button onClick={()=>{setShowMediaMenu(false);setShowSettings(true);}} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Settings</button>
-                        <button onClick={()=>{setShowMediaMenu(false);setShowMediaLibrary(true);setMediaLibraryTab("media");}} style={{display:"block",width:"100%",border:"none",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Media</button>
-                      </div>
-                    )}
-                    {showEmojiMenu && (
-                      <div style={{position:"absolute",left:64,bottom:`calc(66px + env(safe-area-inset-bottom))`,width:250,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:18,padding:10,boxShadow:"0 14px 34px rgba(15,23,42,0.16)",zIndex:31}}>
-                        <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:6}}>
-                          {QUICK_EMOJIS.map((emoji)=>(
-                            <button key={emoji} onClick={()=>appendEmojiToDraft(emoji)} style={{border:"none",background:cardBg,borderRadius:10,padding:"8px 0",fontSize:20,cursor:"pointer"}}>
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <button className="icon-btn" onClick={()=>setShowMediaMenu(v=>!v)} style={{fontSize:34,lineHeight:1}}>+</button>
-                    <textarea
-                      className="msg-input"
-                      placeholder={t.typeMessage}
-                      value={newMessage}
-                      rows={1}
-                      onChange={e=>{
-                        const v=e.target.value;
-                        setNewMessage(v);
-                        updateTypingState(v);
-                        setShowMediaMenu(false);
-                        setShowEmojiMenu(false);
-                        if(v.startsWith("/")){setShowSlashMenu(true);setSlashFilter(v.slice(1));}
-                        else{setShowSlashMenu(false);setSlashFilter("");}
-                        e.target.style.height="auto";
-                        e.target.style.height=Math.min(e.target.scrollHeight,120)+"px";
-                      }}
-                      onBlur={()=>updateTypingState("")}
-                      onKeyDown={e=>{
-                        if(e.key==="Enter"&&!e.shiftKey){
-                          e.preventDefault();
-                          setShowEmojiMenu(false);
-                          if(showSlashMenu&&slashFiltered.length>0){sendMessage(slashFiltered[0].message);setShowSlashMenu(false);setSlashFilter("");setNewMessage("");}
-                          else sendMessage();
-                        }
-                        if(e.key==="Escape")setShowSlashMenu(false);
-                      }}
-                    />
-                    <button className="send-btn" onClick={()=>sendMessage()} disabled={sending || !newMessage.trim()}>➤</button>
-                    {selectedRoom.procedures?.patients?.phone ? (
-                      <a className="icon-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} style={{textDecoration:"none",color:"#0B5FA5"}}>
-                        <img src="/Phone_icon.png" alt="" style={{width:34,height:34,objectFit:"contain"}} />
-                      </a>
-                    ) : (
-                      <button className="icon-btn" disabled title={t.callPatient} style={{opacity:0.45}}>
-                        <img src="/Phone_icon.png" alt="" style={{width:34,height:34,objectFit:"contain"}} />
-                      </button>
-                    )}
-                    <button className="icon-btn" onPointerDown={e=>{e.preventDefault();startRec();}}>
-                      <img src="/Microphone_icon.png" alt="" style={{width:42,height:42,objectFit:"contain"}} />
-                    </button>
-                  </div>
-                )}
               </>
             )}
           </div>
