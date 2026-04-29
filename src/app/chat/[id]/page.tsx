@@ -297,7 +297,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const { error } = await supabase.storage.from("chat-files").upload(path, file, {
       contentType: overrideType === "video" && !file.type ? "video/mp4" : file.type || "application/octet-stream",
     });
-    if (error) return null;
+    if (error) {
+      console.error("chat file upload failed", error);
+      window.alert(`No pude guardar el archivo: ${error.message}`);
+      return null;
+    }
 
     const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
     const url = data.publicUrl;
@@ -331,10 +335,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       .select("*")
       .single();
     if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
-      const { type: _type, file_type: _fileType, message_hash: _messageHash, ...compatiblePayload } = payload;
+      const { type: _type, file_type: _fileType, file_url: _fileUrl, message_hash: _messageHash, ...compatiblePayload } = payload;
       insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
     }
-    if (insert.error) return null;
+    if (insert.error) {
+      console.error("chat message insert failed", insert.error);
+      window.alert(`El archivo se subió, pero no pude guardar el mensaje: ${insert.error.message}`);
+      return null;
+    }
 
     const message = insert.data;
     if (message) {
