@@ -16,6 +16,9 @@ type Message = {
   file_name?: string | null;
   file_type?: string | null;
   message_hash?: string | null;
+  deleted_by_patient?: boolean | null;
+  deleted_by_staff?: boolean | null;
+  deleted_at?: string | null;
   created_at?: string;
 };
 
@@ -159,6 +162,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           });
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `room_id=eq.${id}`,
+        },
+        ({ new: message }: { new: Message }) => {
+          setMessages((current) => current.map((item) => (item.id === message.id ? message : item)));
+        },
+      )
       .subscribe();
 
     return () => {
@@ -222,6 +237,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         return [...current, data as Message];
       });
     }
+  };
+
+  const deletePatientMessage = async (messageId: string) => {
+    const deletedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("messages")
+      .update({ deleted_by_patient: true, deleted_at: deletedAt })
+      .eq("id", messageId)
+      .eq("room_id", id)
+      .eq("sender_type", "patient");
+
+    if (error) return;
+    setMessages((current) => current.map((message) => (message.id === messageId ? { ...message, deleted_by_patient: true, deleted_at: deletedAt } : message)));
   };
 
   const openPicker = (accept: string) => {
@@ -440,6 +468,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       saveReply: "Save Reply",
       saveChanges: "Save Changes",
       edit: "Edit",
+      delete: "Delete",
+      deletedByUser: "This message was Deleted by user",
       darkMode: "Dark mode",
       textSize: "Text size",
       normal: "Normal",
@@ -458,6 +488,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       saveReply: "Guardar respuesta",
       saveChanges: "Guardar cambios",
       edit: "Editar",
+      delete: "Eliminar",
+      deletedByUser: "This message was Deleted by user",
       darkMode: "Modo oscuro",
       textSize: "Tamaño de texto",
       normal: "Normal",
@@ -517,6 +549,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           const fileName = `${message.file_name || ""}`;
           if (fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
           const mine = message.sender_type !== "staff";
+          const deletedByPatient = !!message.deleted_by_patient;
+          const canDeletePatientMessage = viewerType === "patient" && mine && !deletedByPatient && !message.deleted_by_staff;
           const softBlue = "#d9ecf7";
           const bubbleBg =
             viewerType === "staff"
@@ -525,7 +559,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           return (
             <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
               <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease" }}>
-                {renderMessage(message)}
+                {deletedByPatient && viewerType === "patient" ? (
+                  <span style={{ fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</span>
+                ) : (
+                  renderMessage(message)
+                )}
+                {deletedByPatient && viewerType === "staff" && (
+                  <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
+                )}
+                {canDeletePatientMessage && (
+                  <button onClick={() => deletePatientMessage(message.id)} style={{ display: "block", marginTop: 7, marginLeft: "auto", border: "none", background: "transparent", color: "#b91c1c", fontSize: 12, fontWeight: 800, padding: 0 }}>
+                    {labels.delete}
+                  </button>
+                )}
               </div>
             </div>
           );

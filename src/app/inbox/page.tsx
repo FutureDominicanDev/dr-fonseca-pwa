@@ -1870,26 +1870,28 @@ export default function InboxPage() {
     const bubbleBg = isOut ? "#DCF8C6" : darkMode ? "#1F2C34" : "#FFFFFF";
     const bubbleRadius=isOut?"10px 10px 2px 10px":"10px 10px 10px 2px";
     const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"76%",padding:"9px 12px",boxShadow:"0 1px 1px rgba(0,0,0,0.12)",position:"relative",border:isOut?"none":`1px solid ${borderColor}`};
+    const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
 
     return (
       <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}>
         <div style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
-        {msg.deleted_by_patient?(
-          <div style={{...bubbleStyle,fontStyle:"italic",opacity:0.72,fontSize}}>{t.msgDeleted}<div style={{fontSize:12,opacity:0.75,marginTop:3,textAlign:"right"}}>{fmtTime(msg.created_at)}</div></div>
-        ):effectiveType==="image"?(
+        {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
             <img src={msg.content} alt="" style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
+            {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="video"?(
           <div style={{...bubbleStyle,padding:4}}>
             <video src={msg.content} controls style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}}/>
+            {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="audio"?(
           <div style={{...bubbleStyle,minWidth:220}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:20}}>🎤</span><span style={{fontSize:14,fontWeight:600}}>Audio</span></div>
             <audio src={msg.content} controls style={{width:"100%"}}/>
+            {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="file"?(
@@ -1898,6 +1900,7 @@ export default function InboxPage() {
               <span style={{fontSize:28}}>📄</span>
               <div><div style={{fontSize:14,fontWeight:700}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
             </a>
+            {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):callRequestToken ? (
@@ -1912,6 +1915,7 @@ export default function InboxPage() {
             <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
               {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
             </div>
+            {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):videoCallRoomName ? (
@@ -1924,11 +1928,13 @@ export default function InboxPage() {
             <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
               {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
             </div>
+            {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
           <div style={{...bubbleStyle,lineHeight:1.58,wordBreak:"break-word",fontSize,fontWeight:500,letterSpacing:"0.01em"}}>
             {contentToRender}
+            {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
               {fmtTime(msg.created_at)}
               {isOut&&<span style={{color:"#007AFF"}}>✓✓</span>}
