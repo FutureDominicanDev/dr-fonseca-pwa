@@ -573,7 +573,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
       </header>
 
-      <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => setMenuOpen(false)}>
+      <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
         {messages.map((message) => {
           const fileName = `${message.file_name || ""}`;
           if (fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
@@ -587,7 +587,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               : message.sender_type === "staff" ? softBlue : "#fff";
           return (
             <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
-              <div onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
+              <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
                 {deletedByPatient && viewerType === "patient" ? (
                   <span style={{ fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</span>
                 ) : (
@@ -597,7 +597,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                   <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
                 )}
                 {canDeletePatientMessage && deleteMenuMessageId === message.id && (
-                  <button onClick={() => deletePatientMessage(message.id)} style={{ display: "block", marginTop: 7, marginLeft: "auto", border: "none", background: "transparent", color: "#b91c1c", fontSize: 12, fontWeight: 800, padding: 0 }}>
+                  <button onClick={(event) => { event.stopPropagation(); deletePatientMessage(message.id); }} style={{ display: "block", marginTop: 7, marginLeft: "auto", border: "none", background: "transparent", color: "#b91c1c", fontSize: 12, fontWeight: 800, padding: 0 }}>
                     {labels.delete}
                   </button>
                 )}
