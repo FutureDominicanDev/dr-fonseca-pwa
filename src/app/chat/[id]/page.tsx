@@ -594,7 +594,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
           const mine = message.sender_type !== "staff";
           const deletedByPatient = !!message.deleted_by_patient;
-          if (viewerType === "patient" && deletedByPatient) return null;
+          const deletedByStaff = !!message.deleted_by_staff;
+          if (viewerType === "patient" && (deletedByPatient || deletedByStaff)) return null;
           const canDeletePatientMessage = viewerType === "patient" && mine && !deletedByPatient && !message.deleted_by_staff;
           const softBlue = "#d9ecf7";
           const bubbleBg =
