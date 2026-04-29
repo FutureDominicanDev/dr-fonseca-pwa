@@ -2574,7 +2574,6 @@ export default function InboxPage() {
                 onCamera={handleCamera}
                 onPlusClick={handlePlus}
                 menuOpen={menuOpen}
-                onQuickReply={sendMessage}
               />
             )}
           </div>
