@@ -579,6 +579,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           if (fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
           const mine = message.sender_type !== "staff";
           const deletedByPatient = !!message.deleted_by_patient;
+          if (viewerType === "patient" && deletedByPatient) return null;
           const canDeletePatientMessage = viewerType === "patient" && mine && !deletedByPatient && !message.deleted_by_staff;
           const softBlue = "#d9ecf7";
           const bubbleBg =
@@ -588,11 +589,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           return (
             <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
               <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
-                {deletedByPatient && viewerType === "patient" ? (
-                  <span style={{ fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</span>
-                ) : (
-                  renderMessage(message)
-                )}
+                {renderMessage(message)}
                 {deletedByPatient && viewerType === "staff" && (
                   <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
                 )}
