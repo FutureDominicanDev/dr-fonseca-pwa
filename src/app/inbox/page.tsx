@@ -297,6 +297,9 @@ interface CareTeamMember {
   role?: string | null;
   office_location?: string | null;
   avatar_url?: string | null;
+  phone?: string | null;
+  phone_number?: string | null;
+  mobile_phone?: string | null;
 }
 
 const CARE_TEAM_ROLE_ORDER = ["doctor", "enfermeria", "coordinacion", "post_quirofano", "staff"] as const;
@@ -960,7 +963,7 @@ export default function InboxPage() {
   const fetchAssignableStaff = async () => {
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, role, office_location, avatar_url")
+      .select("*")
       .order("full_name", { ascending: true });
 
     const list = (data || []) as CareTeamMember[];
@@ -970,6 +973,7 @@ export default function InboxPage() {
       role: userProfile.role || "staff",
       office_location: userProfile.office_location || null,
       avatar_url: userProfile.avatar_url || null,
+      phone: userProfile.phone || userProfile.phone_number || userProfile.mobile_phone || null,
     }] : [];
     const merged = [...list];
     fallback.forEach((entry) => {
@@ -992,7 +996,7 @@ export default function InboxPage() {
     const memberIds = Array.from(new Set(members.map((entry: any) => entry.user_id).filter(Boolean)));
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, full_name, role, office_location, avatar_url")
+      .select("*")
       .in("id", memberIds);
 
     setSelectedRoomTeam((profiles || []) as CareTeamMember[]);
@@ -1836,6 +1840,10 @@ export default function InboxPage() {
     });
     return groups;
   };
+  const staffPhoneForMessage = (msg: any) => {
+    const member = staffDirectory.find((entry) => entry.id === msg.sender_id);
+    return member?.phone || member?.phone_number || member?.mobile_phone || null;
+  };
 
   const renderMsg = (msg: any) => {
     const isOut=msg.sender_type==="staff"||!msg.sender_type;
@@ -1859,6 +1867,8 @@ export default function InboxPage() {
       : "";
     const contentToRender = translated || msg.content;
     const effectiveType=msg.message_type==="text"&&isImageUrl(msg.content)?"image":msg.message_type;
+    const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
+    const staffPhone = isOut && !isOwn ? staffPhoneForMessage(msg) : null;
 
     if (isSystem) return (
       <div key={msg.id} style={{display:"flex",justifyContent:"center",margin:"8px 0"}}>
@@ -1866,7 +1876,6 @@ export default function InboxPage() {
       </div>
     );
 
-    const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
     const bubbleBg = isOut ? "#FFFFFF" : "#D9ECF7";
     const bubbleRadius=isOut?"12px 4px 12px 12px":"4px 12px 12px 12px";
     const bubbleStyle:React.CSSProperties={background:bubbleBg,color:"#0F172A",borderRadius:bubbleRadius,maxWidth:"70%",padding:"11px 13px",boxShadow:"0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)",position:"relative",border:"none",fontWeight:600,lineHeight:1.45,transition:"box-shadow 170ms ease, transform 170ms ease"};
@@ -1874,7 +1883,11 @@ export default function InboxPage() {
 
     return (
       <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:8,position:"relative"}}>
-        <div style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
+        {staffPhone ? (
+          <a href={`tel:${staffPhone}`} style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0,textDecoration:"none"}}>{sn}</a>
+        ) : (
+          <div style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
+        )}
         {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
             <img src={msg.content} alt="" style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
@@ -2842,8 +2855,7 @@ export default function InboxPage() {
                         </div>
                       </div>
                     )}
-                    <button className="icon-btn" onClick={()=>setShowMediaMenu(v=>!v)}>📎</button>
-                    <button className="icon-btn" onClick={()=>setShowEmojiMenu(v=>!v)} title={lang==="es"?"Emojis":"Emojis"}>😊</button>
+                    <button className="icon-btn" onClick={()=>setShowMediaMenu(v=>!v)} style={{fontSize:34,lineHeight:1}}>+</button>
                     <textarea
                       className="msg-input"
                       placeholder={t.typeMessage}
@@ -2874,6 +2886,11 @@ export default function InboxPage() {
                     <button className="send-btn" onClick={()=>sendMessage()} disabled={sending || !newMessage.trim()}>
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                     </button>
+                    {selectedRoom.procedures?.patients?.phone ? (
+                      <a className="icon-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} style={{textDecoration:"none",color:"#0B5FA5",fontSize:28}}>☎</a>
+                    ) : (
+                      <button className="icon-btn" disabled title={t.callPatient} style={{color:"#94A3B8",fontSize:28}}>☎</button>
+                    )}
                     <button className="icon-btn" onPointerDown={e=>{e.preventDefault();startRec();}}>🎤</button>
                   </div>
                 )}
