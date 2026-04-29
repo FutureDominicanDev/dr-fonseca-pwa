@@ -2077,8 +2077,8 @@ export default function InboxPage() {
     })).filter((group) => group.members.length > 0);
 
     return (
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:210,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowPatientInfo(false)}>
-        <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:580,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`}} onClick={e=>e.stopPropagation()}>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:210,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))",overflow:"hidden",touchAction:"none",overscrollBehavior:"none"}} onClick={()=>setShowPatientInfo(false)}>
+        <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:580,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflow:"hidden",padding:0,touchAction:"auto"}} onClick={e=>e.stopPropagation()}>
           <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) max(20px, env(safe-area-inset-right)) 16px max(20px, env(safe-area-inset-left))",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
               <p style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patientInfo}</p>
@@ -2086,7 +2086,7 @@ export default function InboxPage() {
             </div>
             <button onClick={()=>setShowPatientInfo(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
           </div>
-          <div style={{padding:"0 20px",display:"grid",gap:14}}>
+          <div style={{padding:"0 20px calc(40px + env(safe-area-inset-bottom))",display:"grid",gap:14,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)) - 84px)",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",touchAction:"pan-y"}}>
             <div style={{background:cardBg,borderRadius:18,padding:16,display:"grid",gridTemplateColumns:"88px 1fr",gap:14,alignItems:"center"}}>
               <div style={{width:88,height:88,borderRadius:20,overflow:"hidden",background:"linear-gradient(135deg,#0F172A,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:28,fontWeight:800}}>
                 {patient?.profile_picture_url ? <img src={patient.profile_picture_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(patient?.full_name || "P")}
@@ -2188,9 +2188,9 @@ export default function InboxPage() {
               {beforeEntries.length===0 ? (
                 <p style={{fontSize:14,color:subTextColor}}>{lang==="es" ? "No hay material preoperatorio cargado todavía." : "No pre-op material has been uploaded yet."}</p>
               ) : (
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(84px, 1fr))",gap:10}}>
+                <div style={{display:"flex",gap:10,overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch",overscrollBehaviorX:"contain",touchAction:"pan-x",paddingBottom:4}}>
                   {beforeEntries.map((entry) => (
-                    <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",textDecoration:"none"}}>
+                    <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",textDecoration:"none",flex:"0 0 92px"}}>
                       <div style={{aspectRatio:"1 / 1",borderRadius:14,overflow:"hidden",background:"#E5E7EB"}}>
                         <img src={entry.content} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                       </div>
