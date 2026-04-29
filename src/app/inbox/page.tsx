@@ -1813,6 +1813,9 @@ export default function InboxPage() {
     if (prefersNativeCapture) videoInputRef.current?.click();
     else openCapture("video");
   };
+  const handleCall = () => {
+    window.location.href = "tel:+YOUR_NUMBER";
+  };
   const handlePlus = () => {
     setMenuOpen(prev => !prev);
   };
@@ -2131,10 +2134,6 @@ export default function InboxPage() {
         .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${bg}; transition: transform 0.25s ease; z-index: 20; }
         .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
         .main-area.hidden { transform: translateX(100%); pointer-events: none; }
-        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 10px 18px; display: flex; flex-direction: column; gap: 0; background-color: ${bg}; background-image: radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px); background-size: 18px 18px; }
-        .chat-bg::-webkit-scrollbar { display: none; }
-        .date-sep { display: flex; justify-content: center; margin: 14px 0; }
-        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.85)":"rgba(255,255,255,0.92)"}; border-radius: 8px; padding: 4px 10px; font-size: 12px; color: ${darkMode?"#D1D5DB":"#54656F"}; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
         .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); }
         .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
         .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
@@ -2577,8 +2576,8 @@ export default function InboxPage() {
                 onMic={handleMic}
                 onCamera={handleCamera}
                 onVideo={handleVideo}
-                onCall={() => window.location.href = "tel:+YOUR_NUMBER"}
                 onPlusClick={handlePlus}
+                onCall={handleCall}
                 menuOpen={menuOpen}
               />
             )}
