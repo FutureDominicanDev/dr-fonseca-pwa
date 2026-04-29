@@ -1915,7 +1915,7 @@ export default function InboxPage() {
     const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
     const bubbleBg = isOut ? "#FFFFFF" : darkMode ? "#1F2C34" : "#D8EDF8";
     const bubbleRadius=isOut?"18px 18px 4px 18px":"18px 18px 18px 4px";
-    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"72%",padding:"12px 15px",boxShadow:"0 6px 18px rgba(15,23,42,0.10)",position:"relative",border:isOut?`1px solid ${borderColor}`:"none"};
+    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"70%",padding:"12px 15px",boxShadow:"0 6px 18px rgba(15,23,42,0.10)",position:"relative",border:isOut?`1px solid ${borderColor}`:"none"};
     const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
 
     return (
@@ -1923,18 +1923,18 @@ export default function InboxPage() {
         <div style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
         {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
-            <img src={msg.content} alt="" style={{width:"100%",maxWidth:220,maxHeight:220,borderRadius:14,display:"block",objectFit:"cover"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
+            <img src={msg.content} alt="" style={{width:"100%",maxWidth:160,maxHeight:160,borderRadius:12,display:"block",objectFit:"cover"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
             {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="video"?(
           <div style={{...bubbleStyle,padding:4}}>
-            <video src={msg.content} controls style={{width:"100%",maxWidth:220,maxHeight:220,borderRadius:14,display:"block",objectFit:"cover"}}/>
+            <video src={msg.content} controls style={{width:"100%",maxWidth:170,maxHeight:170,borderRadius:12,display:"block",objectFit:"cover"}}/>
             {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):effectiveType==="audio"?(
-          <div style={{...bubbleStyle,minWidth:220}}>
+          <div style={{...bubbleStyle,minWidth:180,maxWidth:240}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:20}}>🎤</span><span style={{fontSize:14,fontWeight:600}}>Audio</span></div>
             <audio src={msg.content} controls style={{width:"100%"}}/>
             {patientDeletedNotice}
@@ -2317,16 +2317,16 @@ export default function InboxPage() {
         .msg-input::placeholder { color: #AEAEB2; }
         .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
-        .plus-btn { width: 40px; height: 40px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
+        .plus-btn { width: 38px; height: 38px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
         .staff-menu-popup { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: calc(64px + env(safe-area-inset-bottom)); width: min(310px, calc(100vw - 32px)); background: white; border: 1px solid rgba(15,23,42,0.10); border-radius: 18px; overflow: hidden; box-shadow: 0 18px 45px rgba(15,23,42,0.22); z-index: 40; }
         .staff-menu-item { width: 100%; border: none; border-bottom: 1px solid rgba(15,23,42,0.08); background: white; color: #111827; padding: 18px 24px; text-align: left; cursor: pointer; font-family: inherit; font-size: 20px; font-weight: 900; }
         .staff-menu-item:last-child { border-bottom: none; }
-        .send-btn { width: 40px; height: 40px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
+        .send-btn { width: 38px; height: 38px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .phone-btn { width: 42px; height: 42px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
-        .phone-btn img { width: 34px; height: 34px; object-fit: contain; display: block; }
-        .mic-btn { width: 42px; height: 42px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
-        .mic-btn img { width: 42px; height: 42px; object-fit: contain; display: block; }
+        .phone-btn { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
+        .phone-btn img { width: 30px; height: 30px; object-fit: contain; display: block; }
+        .mic-btn { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .mic-btn img { width: 36px; height: 36px; object-fit: contain; display: block; }
         .slash-popup { background: ${darkMode?"#2C2C2E":"white"}; border-top: 1px solid ${borderColor}; max-height: 260px; overflow-y: auto; }
         .slash-header { padding: 10px 16px 6px; font-size: 12px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
         .slash-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid ${borderColor}; display: flex; align-items: center; gap: 12px; transition: background 0.1s; }
@@ -2355,11 +2355,11 @@ export default function InboxPage() {
           .topbar-actions { right: max(30px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 53px); }
           .chat-head { padding-top: 9px; min-height: 58px; }
           .input-area { gap: 10px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
-          .plus-btn { width: 48px; height: 48px; font-size: 32px; }
-          .icon-btn, .send-btn { width: 46px; height: 46px; font-size: 22px; }
-          .phone-btn, .mic-btn { width: 46px; height: 46px; }
-          .phone-btn img { width: 34px; height: 34px; }
-          .mic-btn img { width: 42px; height: 42px; }
+          .plus-btn { width: 42px; height: 42px; font-size: 28px; }
+          .icon-btn, .send-btn { width: 42px; height: 42px; font-size: 20px; }
+          .phone-btn, .mic-btn { width: 42px; height: 42px; }
+          .phone-btn img { width: 30px; height: 30px; }
+          .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
         }
       `}</style>
@@ -2964,7 +2964,7 @@ export default function InboxPage() {
                       }}
                     />
                     <button className="send-btn" onClick={()=>sendMessage()} disabled={sending || !newMessage.trim()} aria-label={t.send}>
-                      <svg width="29" height="29" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                     </button>
                     {selectedRoom.procedures?.patients?.phone && (
                       <a className="phone-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} aria-label={t.callPatient}>
