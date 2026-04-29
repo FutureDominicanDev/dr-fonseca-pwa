@@ -558,10 +558,7 @@ export default function InboxPage() {
   };
   const displaySenderName = (message: any, isOutgoing: boolean) => {
     if (message.sender_type === "patient") return message.sender_name || t.patientLabel;
-    const name = message.sender_name || (isOutgoing ? roleName(message.sender_role) : "Staff");
-    const role = roleName(message.sender_role);
-    if (!message.sender_role || name.toLowerCase().includes(role.toLowerCase())) return name;
-    return `${name} · ${role}`;
+    return message.sender_name || (isOutgoing ? roleName(message.sender_role) : "Staff");
   };
   const startStaffMessagePress = (messageId: string, enabled: boolean) => {
     if (!enabled) return;

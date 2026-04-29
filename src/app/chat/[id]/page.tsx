@@ -552,10 +552,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
   const senderLabel = (message: Message) => {
     if (message.sender_type !== "staff") return uiLang === "es" ? "Paciente" : "Patient";
-    const name = message.sender_name || roleLabel(message.sender_role);
-    const role = roleLabel(message.sender_role);
-    if (!message.sender_role || name.toLowerCase().includes(role.toLowerCase())) return name;
-    return `${name} · ${role}`;
+    return message.sender_name || roleLabel(message.sender_role);
   };
 
   if (!accessReady) {
