@@ -180,6 +180,16 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     return Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
   };
 
+  const logMessageAudit = async (timestamp: string) => {
+    const { error } = await supabase.from("audit_logs").insert({
+      user_id: currentUserId,
+      action: "message_sent",
+      timestamp,
+      room_id: id,
+    });
+    if (error) console.warn("audit log failed", error.message);
+  };
+
   const sendText = async () => {
     const content = text.trim();
     if (!content || accessDenied || !accessReady) return;
@@ -208,6 +218,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     const data = insert.data;
     if (data) {
+      await logMessageAudit(createdAt);
       setMessages((current) => {
         if (current.some((item) => item.id === data.id)) return current;
         return [...current, data as Message];
@@ -271,6 +282,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     const message = insert.data;
     if (message) {
+      await logMessageAudit(timestamp);
       setMessages((current) => {
         if (current.some((item) => item.id === message.id)) return current;
         return [...current, message as Message];
