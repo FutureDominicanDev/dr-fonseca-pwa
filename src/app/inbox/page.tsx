@@ -2610,12 +2610,7 @@ export default function InboxPage() {
           <img src="/fonseca_blue.png" style={{height:52,width:"auto",objectFit:"contain"}} alt="Dr. Fonseca"/>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
-            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.08)",borderRadius:99}}>
-              <div style={{width:8,height:8,borderRadius:"50%",background:"#25D366"}}/>
-              <span style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)"}}>{t.online}</span>
-            </div>
             {canOpenAdmin&&<button onClick={()=>window.location.href="/admin"} style={{padding:"0 14px",height:42,borderRadius:99,background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>Admin</button>}
-            <button onClick={()=>setShowSettings(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>⚙️</button>
           </div>
         </div>
 
@@ -2734,21 +2729,12 @@ export default function InboxPage() {
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div className="chat-head-name">{selectedRoom.procedures?.patients?.full_name||"Paciente"}</div>
-                    <div className="chat-head-sub">
-                      {selectedRoom.procedures?.procedure_name}
-                      {selectedRoom.procedures?.surgery_date&&` · ${new Date(selectedRoom.procedures.surgery_date).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"})}`}
-                      {selectedRoom.procedures?.office_location&&` · 📍${selectedRoom.procedures.office_location}`}
-                    </div>
                     {patientTyping && (
                       <div style={{fontSize:12,color:"#93C5FD",fontWeight:700,marginTop:4}}>
                         {(selectedRoom.procedures?.patients?.full_name || t.patientLabel)} {t.typingSuffix}
                       </div>
                     )}
                   </div>
-                  {selectedRoom.procedures?.patients?.phone && (
-                    <a href={`tel:${selectedRoom.procedures.patients.phone}`} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",fontSize:18,flexShrink:0}} title={t.callPatient}>📞</a>
-                  )}
-                  <button onClick={()=>{setShowMediaLibrary(true);setMediaLibraryTab("media");}} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={lang==="es"?"Media":"Media"}>🖼️</button>
                   <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
                 </div>
 
@@ -2838,7 +2824,8 @@ export default function InboxPage() {
                         }} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Video</button>
                         <button onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Prescriptions</button>
                         <button onClick={()=>{setShowMediaMenu(false);setShowQREditor(true);}} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Quick Replies</button>
-                        <button onClick={()=>{setShowMediaMenu(false);setShowSettings(true);}} style={{display:"block",width:"100%",border:"none",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Settings</button>
+                        <button onClick={()=>{setShowMediaMenu(false);setShowSettings(true);}} style={{display:"block",width:"100%",border:"none",borderBottom:"1px solid rgba(0,0,0,0.08)",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Settings</button>
+                        <button onClick={()=>{setShowMediaMenu(false);setShowMediaLibrary(true);setMediaLibraryTab("media");}} style={{display:"block",width:"100%",border:"none",background:"#fff",color:"#111",padding:"15px 16px",textAlign:"left",fontSize:17,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>Media</button>
                       </div>
                     )}
                     {showEmojiMenu && (
