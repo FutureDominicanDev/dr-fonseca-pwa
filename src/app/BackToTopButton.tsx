@@ -8,6 +8,7 @@ const SCROLL_CONTAINERS = [".admin-shell", ".record-shell", ".help-shell", ".she
 export default function BackToTopButton() {
   const pathname = usePathname();
   const [visible, setVisible] = useState(false);
+  const isChatPage = pathname.startsWith("/chat/") || pathname.startsWith("/patient/");
 
   const selectors = useMemo(() => SCROLL_CONTAINERS.join(","), []);
 
@@ -54,16 +55,17 @@ export default function BackToTopButton() {
       onClick={scrollToTop}
       style={{
         position: "fixed",
-        right: "max(16px, env(safe-area-inset-right))",
-        bottom: "calc(18px + env(safe-area-inset-bottom))",
+        right: isChatPage ? "max(10px, env(safe-area-inset-right))" : "max(16px, env(safe-area-inset-right))",
+        top: isChatPage ? "calc(102px + env(safe-area-inset-top))" : undefined,
+        bottom: isChatPage ? undefined : "calc(18px + env(safe-area-inset-bottom))",
         zIndex: 500,
-        width: 48,
-        height: 48,
+        width: isChatPage ? 38 : 48,
+        height: isChatPage ? 38 : 48,
         borderRadius: 999,
         border: "none",
         background: "rgba(17,24,39,0.92)",
         color: "white",
-        boxShadow: "0 12px 28px rgba(15,23,42,0.22)",
+        boxShadow: isChatPage ? "0 8px 18px rgba(15,23,42,0.16)" : "0 12px 28px rgba(15,23,42,0.22)",
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
@@ -71,7 +73,7 @@ export default function BackToTopButton() {
         backdropFilter: "blur(12px)",
       }}
     >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg width={isChatPage ? 17 : 20} height={isChatPage ? 17 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 19V5" />
         <path d="m5 12 7-7 7 7" />
       </svg>

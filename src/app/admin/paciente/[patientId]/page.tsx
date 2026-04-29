@@ -681,9 +681,8 @@ export default function AdminPatientRecordPage() {
     if (!patient) return;
     setPhotoUploading(true);
 
-    const extension = file.name.split(".").pop() || "jpg";
-    const storagePath = `patient-profiles/${patient.id}/profile.${extension}`;
-    const { error: uploadError } = await supabase.storage.from("chat-files").upload(storagePath, file, { upsert: true });
+    const storagePath = `patients/${patient.id}/${Date.now()}-${file.name}`;
+    const { error: uploadError } = await supabase.storage.from("chat-files").upload(storagePath, file);
 
     if (uploadError) {
       setPhotoUploading(false);

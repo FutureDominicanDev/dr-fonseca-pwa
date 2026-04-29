@@ -15,6 +15,10 @@ type Message = {
   file_url?: string | null;
   file_name?: string | null;
   file_type?: string | null;
+  message_hash?: string | null;
+  deleted_by_patient?: boolean | null;
+  deleted_by_staff?: boolean | null;
+  deleted_at?: string | null;
   created_at?: string;
 };
 
@@ -35,6 +39,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [text, setText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
+  const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
+  const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>(["Gracias", "Tengo una pregunta", "Voy en camino"]);
   const [replyDraft, setReplyDraft] = useState("");
@@ -45,19 +51,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [uiLang, setUiLang] = useState<"es" | "en">("en");
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState("");
-  const [videoPreviewFile, setVideoPreviewFile] = useState<File | null>(null);
   const [accessReady, setAccessReady] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [room, setRoom] = useState<RoomAccess | null>(null);
   const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
   const [fileAccept, setFileAccept] = useState("*");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [deleteMenuMessageId, setDeleteMenuMessageId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const lang = typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "en";
@@ -160,6 +166,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           });
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `room_id=eq.${id}`,
+        },
+        ({ new: message }: { new: Message }) => {
+          setMessages((current) => current.map((item) => (item.id === message.id ? message : item)));
+        },
+      )
       .subscribe();
 
     return () => {
@@ -172,28 +190,94 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const generateMessageHash = async (content: string, createdAt: string, senderId: string | null) => {
+    const input = `${content}${createdAt}${senderId || ""}`;
+    const bytes = new TextEncoder().encode(input);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  };
+
+  const logMessageAudit = async (timestamp: string) => {
+    const { error } = await supabase.from("audit_logs").insert({
+      user_id: currentUserId,
+      action: "message_sent",
+      timestamp,
+      room_id: id,
+    });
+    if (error) console.warn("audit log failed", error.message);
+  };
+
   const sendText = async () => {
     const content = text.trim();
     if (!content || accessDenied || !accessReady) return;
 
     setText("");
-    const { data } = await supabase
+    const createdAt = new Date().toISOString();
+    const messageHash = await generateMessageHash(content, createdAt, currentUserId);
+    const payload = {
+      room_id: id,
+      content,
+      sender_id: currentUserId,
+      sender_type: "patient",
+      message_type: "text",
+      created_at: createdAt,
+      message_hash: messageHash,
+    };
+    let insert = await supabase
       .from("messages")
-      .insert({
-        room_id: id,
-        content,
-        sender_type: "patient",
-        message_type: "text",
-      })
+      .insert(payload)
       .select("*")
       .single();
+    if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
+      const { message_hash: _messageHash, ...compatiblePayload } = payload;
+      insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
+    }
 
+    const data = insert.data;
     if (data) {
+      await logMessageAudit(createdAt);
       setMessages((current) => {
         if (current.some((item) => item.id === data.id)) return current;
         return [...current, data as Message];
       });
     }
+  };
+
+  const deletePatientMessage = async (messageId: string) => {
+    const deletedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("messages")
+      .update({ deleted_by_patient: true, deleted_at: deletedAt })
+      .eq("id", messageId)
+      .eq("room_id", id)
+      .eq("sender_type", "patient");
+
+    if (error) return;
+    setDeleteMenuMessageId(null);
+    setMessages((current) => current.map((message) => (message.id === messageId ? { ...message, deleted_by_patient: true, deleted_at: deletedAt } : message)));
+  };
+
+  const startMessageLongPress = (messageId: string, enabled: boolean) => {
+    if (!enabled) return;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => setDeleteMenuMessageId(messageId), 550);
+  };
+
+  const cancelMessageLongPress = () => {
+    if (!longPressTimerRef.current) return;
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+  };
+
+  const saveQuickReply = () => {
+    const next = replyDraft.trim();
+    if (!next) return;
+    setQuickReplies((current) => {
+      if (editingReplyIndex === null) return [...current, next];
+      return current.map((reply, index) => index === editingReplyIndex ? next : reply);
+    });
+    setReplyDraft("");
+    setEditingReplyIndex(null);
   };
 
   const openPicker = (accept: string) => {
@@ -209,11 +293,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     const timestamp = new Date().toISOString();
     const storageTimestamp = Date.now();
-    const path = `patients/${id}/${storageTimestamp}-${file.name}`;
-    const { error } = await supabase.storage.from("chat-media").upload(path, file);
-    if (error) return null;
+    const safeFileName = file.name || `${overrideType || "upload"}-${storageTimestamp}.${overrideType === "video" ? "mp4" : "bin"}`;
+    const path = `patients/${id}/${storageTimestamp}-${safeFileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+    const { error } = await supabase.storage.from("chat-files").upload(path, file, {
+      contentType: overrideType === "video" && !file.type ? "video/mp4" : file.type || "application/octet-stream",
+    });
+    if (error) {
+      console.error("chat file upload failed", error);
+      window.alert(`No pude guardar el archivo: ${error.message}`);
+      return null;
+    }
 
-    const { data } = supabase.storage.from("chat-media").getPublicUrl(path);
+    const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
     const url = data.publicUrl;
     const messageType =
       overrideType ||
@@ -224,6 +315,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           : file.type.startsWith("audio/")
             ? "audio"
             : "file");
+    const messageHash = await generateMessageHash(url, timestamp, currentUserId);
     const payload = {
       room_id: id,
       sender_id: currentUserId,
@@ -235,6 +327,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       file_name: file.name,
       file_type: file.type || "application/octet-stream",
       created_at: timestamp,
+      message_hash: messageHash,
     };
 
     let insert = await supabase
@@ -243,13 +336,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       .select("*")
       .single();
     if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
-      const { type: _type, file_type: _fileType, ...compatiblePayload } = payload;
+      const { type: _type, file_type: _fileType, file_url: _fileUrl, message_hash: _messageHash, ...compatiblePayload } = payload;
       insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
     }
-    if (insert.error) return null;
+    if (insert.error) {
+      console.error("chat message insert failed", insert.error);
+      window.alert(`El archivo se subió, pero no pude guardar el mensaje: ${insert.error.message}`);
+      return null;
+    }
 
     const message = insert.data;
     if (message) {
+      await logMessageAudit(timestamp);
       setMessages((current) => {
         if (current.some((item) => item.id === message.id)) return current;
         return [...current, message as Message];
@@ -266,28 +364,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     event.target.value = "";
   };
 
-  const handleVideoCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
-    setVideoPreviewFile(file);
-    setVideoPreviewUrl(URL.createObjectURL(file));
+    if (!file) {
+      event.target.value = "";
+      return;
+    }
     setMenuOpen(false);
+    await uploadFile(file, "video");
     event.target.value = "";
-  };
-
-  const sendVideoPreview = async () => {
-    if (!videoPreviewFile) return;
-    await uploadFile(videoPreviewFile, "video");
-    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
-    setVideoPreviewFile(null);
-    setVideoPreviewUrl("");
-  };
-
-  const cancelVideoPreview = () => {
-    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
-    setVideoPreviewFile(null);
-    setVideoPreviewUrl("");
   };
 
   const startRecording = async () => {
@@ -404,11 +489,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       quickReplies: "Quick Replies",
       photos: "Photos",
       video: "Video",
-      documents: "Documents",
+      documents: "Prescriptions",
+      noPrescriptions: "No prescriptions yet.",
       createReply: "Create quick reply",
       saveReply: "Save Reply",
       saveChanges: "Save Changes",
       edit: "Edit",
+      delete: "Delete",
+      deletedByUser: "This message was Deleted by user",
       darkMode: "Dark mode",
       textSize: "Text size",
       normal: "Normal",
@@ -422,11 +510,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       quickReplies: "Respuestas rápidas",
       photos: "Fotos",
       video: "Video",
-      documents: "Documentos",
+      documents: "Recetas",
+      noPrescriptions: "Todavía no hay recetas.",
       createReply: "Crear respuesta rápida",
       saveReply: "Guardar respuesta",
       saveChanges: "Guardar cambios",
       edit: "Editar",
+      delete: "Eliminar",
+      deletedByUser: "This message was Deleted by user",
       darkMode: "Modo oscuro",
       textSize: "Tamaño de texto",
       normal: "Normal",
@@ -434,17 +525,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     },
   };
   const labels = translations[uiLang] || translations.en;
-
-  const saveQuickReply = () => {
-    const next = replyDraft.trim();
-    if (!next) return;
-    setQuickReplies((current) => {
-      if (editingReplyIndex === null) return [...current, next];
-      return current.map((reply, index) => index === editingReplyIndex ? next : reply);
-    });
-    setReplyDraft("");
-    setEditingReplyIndex(null);
-  };
+  const prescriptionMessages = messages.filter((message) => `${message.file_name || ""}`.startsWith("[MED]"));
 
   if (!accessReady) {
     return (
@@ -458,8 +539,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   if (accessDenied) {
     return (
       <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#fff", color: "#111", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-        <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 16px" }}>
-          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "min(430px, 92vw)", height: 78, objectFit: "contain", objectPosition: "center" }} />
+        <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
+          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
         </header>
         <section style={{ flex: 1, display: "grid", placeItems: "center", padding: 24 }}>
           <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 18, boxShadow: "0 10px 36px rgba(0,0,0,0.14)", padding: 24, textAlign: "center" }}>
@@ -486,17 +567,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
         @keyframes messageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-        @keyframes micPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(30,136,229,0.28); } 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(30,136,229,0); } }
+        @keyframes micPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(153,27,27,0.42); } 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(153,27,27,0); } }
       `}</style>
-      <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 16px" }}>
-        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "min(430px, 92vw)", height: 78, objectFit: "contain", objectPosition: "center" }} />
+      <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
+        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
       </header>
 
-      <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => setMenuOpen(false)}>
+      <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
         {messages.map((message) => {
           const fileName = `${message.file_name || ""}`;
-          if (fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
+          if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
           const mine = message.sender_type !== "staff";
+          const deletedByPatient = !!message.deleted_by_patient;
+          if (viewerType === "patient" && deletedByPatient) return null;
+          const canDeletePatientMessage = viewerType === "patient" && mine && !deletedByPatient && !message.deleted_by_staff;
           const softBlue = "#d9ecf7";
           const bubbleBg =
             viewerType === "staff"
@@ -504,8 +588,16 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               : message.sender_type === "staff" ? softBlue : "#fff";
           return (
             <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
-              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease" }}>
+              <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
                 {renderMessage(message)}
+                {deletedByPatient && viewerType === "staff" && (
+                  <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
+                )}
+                {canDeletePatientMessage && deleteMenuMessageId === message.id && (
+                  <button onClick={(event) => { event.stopPropagation(); deletePatientMessage(message.id); }} style={{ display: "block", marginTop: 7, marginLeft: "auto", border: "none", background: "transparent", color: "#b91c1c", fontSize: 12, fontWeight: 800, padding: 0 }}>
+                    {labels.delete}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -518,8 +610,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
             <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
             <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
-            <button onClick={() => openPicker("*")} style={menuButtonStyle}>{labels.documents}</button>
-            <button onClick={() => { setQuickRepliesOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
+            <button onClick={() => { setPrescriptionsOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.documents}</button>
+            <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
             <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
           </div>
         )}
@@ -528,27 +620,21 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           {menuOpen ? "×" : "+"}
         </button>
 
-        <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
+        <input value={text} onChange={(event) => { const next = event.target.value; setText(next); setQuickRepliesOpen(next.startsWith("/")); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
 
-        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#2d9cff" : "#dbeafe", color: recording ? "#fff" : "#0b4ea2", fontWeight: 900, fontSize: 30, animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>🎙</button>
+        <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 22 }}>➤</button>
 
-        <button onClick={sendText} aria-label="Send" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 26, display: "grid", placeItems: "center", flexShrink: 0, boxShadow: "0 3px 10px rgba(7,94,84,0.22)" }}>➤</button>
+        <button onClick={() => { window.location.href = "tel:+523332314480"; }} aria-label="Call" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
+          <Image src="/Phone_icon.png" alt="" width={34} height={34} style={{ width: 34, height: 34, objectFit: "contain" }} />
+        </button>
+
+        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
+          <Image src="/Microphone_icon.png" alt="" width={42} height={42} style={{ width: 42, height: 42, objectFit: "contain" }} />
+        </button>
 
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
         <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
       </footer>
-
-      {videoPreviewUrl && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", display: "grid", placeItems: "center", padding: 18, zIndex: 25 }}>
-          <div style={{ width: "100%", maxWidth: 460, background: panelBg, color: textPrimary, borderRadius: 18, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35)" }}>
-            <video src={videoPreviewUrl} controls playsInline style={{ width: "100%", maxHeight: "58dvh", borderRadius: 14, background: "#000", display: "block", marginBottom: 14 }} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={cancelVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
-              <button onClick={sendVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {audioPreviewUrl && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", display: "grid", placeItems: "center", padding: 18, zIndex: 25 }}>
@@ -563,22 +649,59 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       )}
 
       {quickRepliesOpen && (
+        <div style={{ position: "fixed", left: 10, right: 10, bottom: 92, zIndex: 20, pointerEvents: "none" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+              {quickReplies.map((reply, index) => (
+                <button key={`${reply}-${index}`} onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: panelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {quickRepliesManageOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
           <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <strong style={{ fontSize: 18 }}>{labels.quickReplies}</strong>
-              <button onClick={() => setQuickRepliesOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
+              <button onClick={() => setQuickRepliesManageOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
             </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
               {quickReplies.map((reply, index) => (
                 <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <button onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
+                  <button onClick={() => { setText(reply); setQuickRepliesManageOpen(false); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
                   <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.edit}</button>
+                  <button onClick={() => { setQuickReplies((current) => current.filter((_, replyIndex) => replyIndex !== index)); if (editingReplyIndex === index) { setReplyDraft(""); setEditingReplyIndex(null); } }} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.delete}</button>
                 </div>
               ))}
             </div>
             <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder={labels.createReply} style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
             <button onClick={saveQuickReply} style={{ width: "100%", height: 48, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 700 }}>{editingReplyIndex === null ? labels.saveReply : labels.saveChanges}</button>
+          </div>
+        </div>
+      )}
+
+      {prescriptionsOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <strong style={{ fontSize: 18 }}>{labels.documents}</strong>
+              <button onClick={() => setPrescriptionsOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {prescriptionMessages.length === 0 && (
+                <div style={{ border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.noPrescriptions}</div>
+              )}
+              {prescriptionMessages.map((message) => {
+                const url = message.file_url || message.content;
+                const fileName = `${message.file_name || labels.documents}`.replace(/^\[MED\]\s*/i, "");
+                return (
+                  <a key={message.id} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textDecoration: "none", fontSize: 16, fontWeight: 700 }}>
+                    <span style={{ fontSize: 22 }}>📄</span>
+                    <span style={{ wordBreak: "break-word" }}>{fileName}</span>
+                  </a>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
