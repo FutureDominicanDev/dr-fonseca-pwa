@@ -295,7 +295,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const timestamp = new Date().toISOString();
     const storageTimestamp = Date.now();
     const path = `patients/${id}/${storageTimestamp}-${file.name}`;
-    const { error } = await supabase.storage.from("chat-media").upload(path, file);
+    const { error } = await supabase.storage.from("chat-media").upload(path, file, {
+      contentType: overrideType === "video" && !file.type ? "video/mp4" : file.type || "application/octet-stream",
+    });
     if (error) return null;
 
     const { data } = supabase.storage.from("chat-media").getPublicUrl(path);
@@ -356,7 +358,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   const handleVideoCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      event.target.value = "";
+      return;
+    }
     if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
     setVideoPreviewFile(file);
     setVideoPreviewUrl(URL.createObjectURL(file));
@@ -366,16 +371,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   const sendVideoPreview = async () => {
     if (!videoPreviewFile) return;
-    await uploadFile(videoPreviewFile, "video");
+    const uploadedUrl = await uploadFile(videoPreviewFile, "video");
+    if (!uploadedUrl) return;
     if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
     setVideoPreviewFile(null);
     setVideoPreviewUrl("");
+    if (videoCaptureRef.current) videoCaptureRef.current.value = "";
   };
 
   const cancelVideoPreview = () => {
     if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
     setVideoPreviewFile(null);
     setVideoPreviewUrl("");
+    if (videoCaptureRef.current) videoCaptureRef.current.value = "";
   };
 
   const startRecording = async () => {
