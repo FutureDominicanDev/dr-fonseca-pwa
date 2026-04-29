@@ -1867,9 +1867,9 @@ export default function InboxPage() {
     );
 
     const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
-    const bubbleBg = isOut ? "#DCF8C6" : darkMode ? "#1F2C34" : "#FFFFFF";
-    const bubbleRadius=isOut?"10px 10px 2px 10px":"10px 10px 10px 2px";
-    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"76%",padding:"9px 12px",boxShadow:"0 1px 1px rgba(0,0,0,0.12)",position:"relative",border:isOut?"none":`1px solid ${borderColor}`};
+    const bubbleBg = isOut ? "#FFFFFF" : darkMode ? "#1F2C34" : "#D8EDF8";
+    const bubbleRadius=isOut?"18px 18px 4px 18px":"18px 18px 18px 4px";
+    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"76%",padding:"13px 16px",boxShadow:"0 8px 22px rgba(15,23,42,0.12)",position:"relative",border:isOut?`1px solid ${borderColor}`:"none"};
     const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
 
     return (
@@ -1932,7 +1932,7 @@ export default function InboxPage() {
             <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
           </div>
         ):(
-          <div style={{...bubbleStyle,lineHeight:1.58,wordBreak:"break-word",fontSize,fontWeight:500,letterSpacing:"0.01em"}}>
+          <div style={{...bubbleStyle,lineHeight:1.58,wordBreak:"break-word",fontSize:Math.max(fontSize,18),fontWeight:800,letterSpacing:"0.01em"}}>
             {contentToRender}
             {patientDeletedNotice}
             <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
@@ -2259,13 +2259,19 @@ export default function InboxPage() {
         .chat-av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
         .chat-head-name { font-size: 17px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chat-head-sub { font-size: 13px; color: rgba(255,255,255,0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .input-area { flex-shrink: 0; background: ${inputBg}; padding: 10px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); display: flex; align-items: flex-end; gap: 8px; border-top: 1px solid ${borderColor}; }
-        .msg-input { flex: 1; padding: 11px 16px; background: ${darkMode?"#2A3942":"white"}; border: none; border-radius: 10px; font-size: ${fontSize}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 120px; resize: none; line-height: 1.45; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+        .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#172033" : "#E6E8EC"}; padding: 14px max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 12px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
+        .msg-input { flex: 1; padding: 17px 22px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${fontSize}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 96px; resize: none; line-height: 1.35; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
-        .icon-btn { width: 42px; height: 42px; border-radius: 50%; background: ${darkMode?"#2A3942":"#E9EDEF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 20px; transition: background 0.15s; }
-        .icon-btn:hover { background: ${darkMode?"#334956":"#DDE5EA"}; }
-        .send-btn { width: 42px; height: 42px; border-radius: 50%; background: #00A884; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,168,132,0.35); }
+        .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
+        .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
+        .plus-btn { width: 68px; height: 68px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 44px; line-height: 1; box-shadow: 0 4px 14px rgba(15,23,42,0.10); }
+        .staff-menu-popup { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: calc(86px + env(safe-area-inset-bottom)); width: min(330px, calc(100vw - 32px)); background: white; border: 1px solid rgba(15,23,42,0.10); border-radius: 18px; overflow: hidden; box-shadow: 0 18px 45px rgba(15,23,42,0.22); z-index: 40; }
+        .staff-menu-item { width: 100%; border: none; border-bottom: 1px solid rgba(15,23,42,0.08); background: white; color: #111827; padding: 22px 28px; text-align: left; cursor: pointer; font-family: inherit; font-size: 22px; font-weight: 900; }
+        .staff-menu-item:last-child { border-bottom: none; }
+        .send-btn { width: 64px; height: 64px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .phone-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#F4F8FF"}; color: #075EA8; border: 4px solid #075EA8; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; text-decoration: none; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
+        .mic-btn { width: 64px; height: 64px; border-radius: 50%; background: #4D91D8; color: white; border: 10px solid rgba(77,145,216,0.18); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 30px; box-shadow: 0 4px 14px rgba(15,23,42,0.10); }
         .slash-popup { background: ${darkMode?"#2C2C2E":"white"}; border-top: 1px solid ${borderColor}; max-height: 260px; overflow-y: auto; }
         .slash-header { padding: 10px 16px 6px; font-size: 12px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
         .slash-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid ${borderColor}; display: flex; align-items: center; gap: 12px; transition: background 0.1s; }
@@ -2290,6 +2296,10 @@ export default function InboxPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 700px) {
           .chat-head { padding-top: max(14px, env(safe-area-inset-top)); min-height: calc(66px + env(safe-area-inset-top)); }
+          .input-area { gap: 10px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+          .plus-btn { width: 62px; height: 62px; font-size: 40px; }
+          .icon-btn, .send-btn, .phone-btn, .mic-btn { width: 58px; height: 58px; font-size: 25px; }
+          .msg-input { padding: 15px 18px; }
         }
       `}</style>
 
@@ -2812,23 +2822,20 @@ export default function InboxPage() {
                 ):(
                   <div className="input-area" onClick={e=>e.stopPropagation()}>
                     {showMediaMenu&&(
-                      <div style={{position:"absolute",left:12,bottom:`calc(66px + env(safe-area-inset-bottom))`,width:220,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:18,padding:8,boxShadow:"0 14px 34px rgba(15,23,42,0.16)",zIndex:30}}>
-                        <button onClick={()=>{
-                          setShowMediaMenu(false);
-                          if (prefersNativeCapture) audioInputRef.current?.click();
-                          else startRec();
-                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎤</span>{t.recordAudio}</button>
-                        <button onClick={()=>{
-                          setShowMediaMenu(false);
-                          if (prefersNativeCapture) videoInputRef.current?.click();
-                          else openCapture("video");
-                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎥</span>{t.recordVideoOption}</button>
-                        <button onClick={()=>{
+                      <div className="staff-menu-popup">
+                        <button className="staff-menu-item" onClick={()=>{
                           setShowMediaMenu(false);
                           if (prefersNativeCapture) cameraInputRef.current?.click();
                           else openCapture("photo");
-                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📷</span>{t.takePhoto}</button>
-                        <button onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📁</span>{t.chooseFile}</button>
+                        }}>{lang==="es" ? "Fotos" : "Photos"}</button>
+                        <button className="staff-menu-item" onClick={()=>{
+                          setShowMediaMenu(false);
+                          if (prefersNativeCapture) videoInputRef.current?.click();
+                          else openCapture("video");
+                        }}>{lang==="es" ? "Video" : "Video"}</button>
+                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}}>{lang==="es" ? "Recetas" : "Prescriptions"}</button>
+                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowQREditor(true);}}>{t.quickReplies}</button>
+                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowSettings(true);}}>{t.settings}</button>
                       </div>
                     )}
                     {showEmojiMenu && (
@@ -2842,11 +2849,10 @@ export default function InboxPage() {
                         </div>
                       </div>
                     )}
-                    <button className="icon-btn" onClick={()=>setShowMediaMenu(v=>!v)}>📎</button>
-                    <button className="icon-btn" onClick={()=>setShowEmojiMenu(v=>!v)} title={lang==="es"?"Emojis":"Emojis"}>😊</button>
+                    <button className="plus-btn" onClick={()=>{setShowEmojiMenu(false);setShowMediaMenu(v=>!v);}} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>{showMediaMenu ? "×" : "+"}</button>
                     <textarea
                       className="msg-input"
-                      placeholder={t.typeMessage}
+                      placeholder={lang==="es" ? "Mensaje" : "Message"}
                       value={newMessage}
                       rows={1}
                       onChange={e=>{
@@ -2871,13 +2877,13 @@ export default function InboxPage() {
                         if(e.key==="Escape")setShowSlashMenu(false);
                       }}
                     />
-                    {newMessage.trim()?(
-                      <button className="send-btn" onClick={()=>sendMessage()} disabled={sending}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                      </button>
-                    ):(
-                      <button className="icon-btn" onPointerDown={e=>{e.preventDefault();startRec();}}>🎤</button>
+                    <button className="send-btn" onClick={()=>sendMessage()} disabled={sending || !newMessage.trim()} aria-label={t.send}>
+                      <svg width="29" height="29" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    </button>
+                    {selectedRoom.procedures?.patients?.phone && (
+                      <a className="phone-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} aria-label={t.callPatient}>☎</a>
                     )}
+                    <button className="mic-btn" onPointerDown={e=>{e.preventDefault();startRec();}} aria-label={t.recordAudio}>🎙</button>
                   </div>
                 )}
               </>
