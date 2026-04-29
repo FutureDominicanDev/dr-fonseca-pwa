@@ -25,6 +25,7 @@ type ChatShellProps = {
   onSend: () => void;
   onMic: () => void;
   onCamera: () => void;
+  onVideo?: () => void;
   onPlusClick: () => void;
   mode: "patient" | "staff";
   menuOpen?: boolean;
@@ -33,7 +34,6 @@ type ChatShellProps = {
   quickReplies?: string[];
   labels?: ChatShellLabels;
   onPhotos?: () => void;
-  onVideo?: () => void;
   onDocuments?: () => void;
   onQuickRepliesOpen?: () => void;
   onSettings?: () => void;
@@ -46,6 +46,7 @@ export default function ChatShell({
   onSend,
   onMic,
   onCamera,
+  onVideo,
   onPlusClick,
   mode,
   menuOpen = false,
@@ -137,7 +138,7 @@ export default function ChatShell({
         {menuOpen && (
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
             <button onClick={onCamera} style={menuButtonStyle}>{labels.photos || "Photos"}</button>
-            <button onClick={onCamera} style={menuButtonStyle}>{labels.video || "Video"}</button>
+            <button onClick={onVideo} style={menuButtonStyle}>{labels.video || "Video"}</button>
             <button onClick={onPlusClick} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.quickReplies || "Quick Replies"}</button>
           </div>
         )}
