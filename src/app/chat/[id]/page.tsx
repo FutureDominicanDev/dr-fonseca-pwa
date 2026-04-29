@@ -552,12 +552,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
         <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 22 }}>➤</button>
 
-        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
-          <Image src="/Microphone_icon.png" alt="" width={42} height={42} style={{ width: 42, height: 42, objectFit: "contain" }} />
-        </button>
-
         <button onClick={() => { window.location.href = "tel:+523332314480"; }} aria-label="Call" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
           <Image src="/Phone_icon.png" alt="" width={34} height={34} style={{ width: 34, height: 34, objectFit: "contain" }} />
+        </button>
+
+        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
+          <Image src="/Microphone_icon.png" alt="" width={42} height={42} style={{ width: 42, height: 42, objectFit: "contain" }} />
         </button>
 
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
