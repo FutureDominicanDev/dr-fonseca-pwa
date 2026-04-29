@@ -576,6 +576,21 @@ export default function InboxPage() {
     clearTimeout(messagePressTimerRef.current);
     messagePressTimerRef.current = null;
   };
+  useEffect(() => {
+    const updateAppHeight = () => {
+      const height = window.visualViewport?.height || window.innerHeight;
+      document.documentElement.style.setProperty("--app-height", `${height}px`);
+    };
+    updateAppHeight();
+    window.visualViewport?.addEventListener("resize", updateAppHeight);
+    window.visualViewport?.addEventListener("scroll", updateAppHeight);
+    window.addEventListener("resize", updateAppHeight);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateAppHeight);
+      window.visualViewport?.removeEventListener("scroll", updateAppHeight);
+      window.removeEventListener("resize", updateAppHeight);
+    };
+  }, []);
   const toggleCareTeamMember = (id: string) => {
     setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   };
@@ -2300,7 +2315,7 @@ export default function InboxPage() {
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
-        .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
+        .shell { display: flex; flex-direction: column; height: var(--app-height, 100dvh); position: fixed; inset: 0; background: ${bg}; }
         .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(90px, 1fr) minmax(260px, 680px) minmax(90px, 1fr); align-items: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(92px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.16); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
         .topbar-logo { grid-column: 2; justify-self: center; align-self: start; margin-top: -4px; height: 88px; width: min(660px, 100%); object-fit: contain; object-position: center; display: block; }
@@ -2354,7 +2369,7 @@ export default function InboxPage() {
         .phone-btn img { width: 30px; height: 30px; object-fit: contain; display: block; }
         .mic-btn { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .mic-btn img { width: 36px; height: 36px; object-fit: contain; display: block; }
-        .slash-popup { position: fixed; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(74px + env(safe-area-inset-bottom)); z-index: 45; pointer-events: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: 230px; overflow-y: auto; padding: 0 0 6px; }
+        .slash-popup { position: fixed; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 45; pointer-events: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: min(42dvh, 260px); overflow-y: auto; padding: 0 0 8px; }
         .slash-item { width: fit-content; max-width: calc(100vw - 20px); border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(0,0,0,0.10)"}; background: ${darkMode?"#253244":"white"}; color: ${textColor}; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 16px; font-weight: 600; box-shadow: 0 8px 24px rgba(15,23,42,0.16); pointer-events: auto; cursor: pointer; font-family: inherit; }
         .slash-item:hover { background: ${darkMode?"#30415A":"#F8FAFC"}; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); }
@@ -2924,7 +2939,7 @@ export default function InboxPage() {
                     <button onClick={()=>stopRec(false)} style={{padding:"8px 16px",background:"#FF3B30",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⏹ {t.stopAndReview}</button>
                   </div>
                 ):(
-                  <div className="input-area" onClick={e=>e.stopPropagation()}>
+                  <div className="input-area" onClick={e=>{e.stopPropagation();setPressedMsgId(null);}}>
                     {showMediaMenu&&(
                       <div className="staff-menu-popup">
                         <button className="staff-menu-item" onClick={()=>{
@@ -2960,6 +2975,7 @@ export default function InboxPage() {
                       placeholder={lang==="es" ? "Mensaje" : "Message"}
                       value={newMessage}
                       rows={1}
+                      onFocus={()=>setPressedMsgId(null)}
                       onChange={e=>{
                         const v=e.target.value;
                         setNewMessage(v);
