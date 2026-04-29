@@ -1809,6 +1809,10 @@ export default function InboxPage() {
     if (prefersNativeCapture) cameraInputRef.current?.click();
     else openCapture("photo");
   };
+  const handleVideo = () => {
+    if (prefersNativeCapture) videoInputRef.current?.click();
+    else openCapture("video");
+  };
   const handlePlus = () => {
     setMenuOpen(prev => !prev);
   };
@@ -2572,6 +2576,7 @@ export default function InboxPage() {
                 onSend={handleSend}
                 onMic={handleMic}
                 onCamera={handleCamera}
+                onVideo={handleVideo}
                 onPlusClick={handlePlus}
                 menuOpen={menuOpen}
               />
