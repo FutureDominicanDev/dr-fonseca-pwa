@@ -1851,6 +1851,12 @@ export default function InboxPage() {
     });
     setShowSlashMenu(false);
   };
+  const selectQuickReply = (reply: QuickReply) => {
+    setNewMessage(reply.message);
+    updateTypingState(reply.message);
+    setShowSlashMenu(false);
+    setSlashFilter("");
+  };
   const filtPts = patients
     .filter(p=>{
       const q=searchQuery.toLowerCase();
@@ -2327,12 +2333,9 @@ export default function InboxPage() {
         .phone-btn img { width: 30px; height: 30px; object-fit: contain; display: block; }
         .mic-btn { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .mic-btn img { width: 36px; height: 36px; object-fit: contain; display: block; }
-        .slash-popup { background: ${darkMode?"#2C2C2E":"white"}; border-top: 1px solid ${borderColor}; max-height: 260px; overflow-y: auto; }
-        .slash-header { padding: 10px 16px 6px; font-size: 12px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
-        .slash-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid ${borderColor}; display: flex; align-items: center; gap: 12px; transition: background 0.1s; }
-        .slash-item:hover { background: ${darkMode?"#3A3A3C":"#F8F8F8"}; }
-        .slash-shortcut { background: #007AFF; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; flex-shrink: 0; }
-        .slash-msg { font-size: 15px; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .slash-popup { position: fixed; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(74px + env(safe-area-inset-bottom)); z-index: 45; pointer-events: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: 230px; overflow-y: auto; padding: 0 0 6px; }
+        .slash-item { width: fit-content; max-width: calc(100vw - 20px); border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(0,0,0,0.10)"}; background: ${darkMode?"#253244":"white"}; color: ${textColor}; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 16px; font-weight: 800; box-shadow: 0 8px 24px rgba(15,23,42,0.16); pointer-events: auto; cursor: pointer; font-family: inherit; }
+        .slash-item:hover { background: ${darkMode?"#30415A":"#F8FAFC"}; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); }
         .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
         .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
@@ -2883,15 +2886,10 @@ export default function InboxPage() {
 
                 {showSlashMenu&&slashFiltered.length>0&&(
                   <div className="slash-popup" onClick={e=>e.stopPropagation()}>
-                    <div className="slash-header">
-                      <span>⚡ {t.quickReplies}</span>
-                      <button onClick={()=>{setShowSlashMenu(false);setShowQREditor(true);}} style={{background:"none",border:"none",color:"#007AFF",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.edit}</button>
-                    </div>
                     {slashFiltered.map((r,i)=>(
-                      <div key={i} className="slash-item" onClick={()=>{sendMessage(r.message);setShowSlashMenu(false);setSlashFilter("");setNewMessage("");}}>
-                        <span className="slash-shortcut">/{r.shortcut}</span>
-                        <span className="slash-msg">{r.message}</span>
-                      </div>
+                      <button key={`${r.shortcut}-${i}`} className="slash-item" onClick={()=>selectQuickReply(r)}>
+                        {r.message}
+                      </button>
                     ))}
                   </div>
                 )}
@@ -2957,7 +2955,7 @@ export default function InboxPage() {
                         if(e.key==="Enter"&&!e.shiftKey){
                           e.preventDefault();
                           setShowEmojiMenu(false);
-                          if(showSlashMenu&&slashFiltered.length>0){sendMessage(slashFiltered[0].message);setShowSlashMenu(false);setSlashFilter("");setNewMessage("");}
+                          if(showSlashMenu&&slashFiltered.length>0){selectQuickReply(slashFiltered[0]);}
                           else sendMessage();
                         }
                         if(e.key==="Escape")setShowSlashMenu(false);
