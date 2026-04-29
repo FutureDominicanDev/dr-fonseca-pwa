@@ -468,6 +468,10 @@ export default function AdminPage() {
     updateSuccess(isSpanish ? "Acceso restablecido." : "Access restored.");
   };
 
+  const handleExport = (patientId: string) => {
+    void patientId;
+  };
+
   if (!sessionChecked || loading) {
     return (
       <>
@@ -844,6 +848,9 @@ export default function AdminPage() {
                         <div className="mini-actions">
                           <button className="main-btn" onClick={() => (window.location.href = `/admin/paciente/${card.patient.id}`)}>
                             {isSpanish ? "📂 Ver expediente" : "📂 Open record"}
+                          </button>
+                          <button className="ghost-btn" onClick={() => handleExport(card.patient.id)}>
+                            Export Patient Data
                           </button>
                         </div>
                       </div>
