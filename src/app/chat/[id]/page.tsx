@@ -58,11 +58,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
   const [fileAccept, setFileAccept] = useState("*");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [deleteMenuMessageId, setDeleteMenuMessageId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const lang = typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "en";
@@ -252,7 +254,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       .eq("sender_type", "patient");
 
     if (error) return;
+    setDeleteMenuMessageId(null);
     setMessages((current) => current.map((message) => (message.id === messageId ? { ...message, deleted_by_patient: true, deleted_at: deletedAt } : message)));
+  };
+
+  const startMessageLongPress = (messageId: string, enabled: boolean) => {
+    if (!enabled) return;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => setDeleteMenuMessageId(messageId), 550);
+  };
+
+  const cancelMessageLongPress = () => {
+    if (!longPressTimerRef.current) return;
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
   };
 
   const saveQuickReply = () => {
@@ -572,7 +587,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               : message.sender_type === "staff" ? softBlue : "#fff";
           return (
             <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
-              <div style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease" }}>
+              <div onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
                 {deletedByPatient && viewerType === "patient" ? (
                   <span style={{ fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</span>
                 ) : (
@@ -581,7 +596,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 {deletedByPatient && viewerType === "staff" && (
                   <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
                 )}
-                {canDeletePatientMessage && (
+                {canDeletePatientMessage && deleteMenuMessageId === message.id && (
                   <button onClick={() => deletePatientMessage(message.id)} style={{ display: "block", marginTop: 7, marginLeft: "auto", border: "none", background: "transparent", color: "#b91c1c", fontSize: 12, fontWeight: 800, padding: 0 }}>
                     {labels.delete}
                   </button>
