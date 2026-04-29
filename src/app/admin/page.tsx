@@ -471,7 +471,7 @@ export default function AdminPage() {
   const handleExport = async (patientId: string) => {
     const { data, error } = await supabase
       .from("messages")
-      .select("id, sender_id, sender_type, content, file_url, file_name, file_type, message_type, type, created_at")
+      .select("id, sender_id, sender_type, content, file_url, file_name, file_type, message_type, type, message_hash, created_at")
       .eq("room_id", patientId)
       .order("created_at", { ascending: true });
 
@@ -508,6 +508,7 @@ export default function AdminPage() {
         statement: "This document represents a system-generated export of patient communications.",
         total: "Total number of messages",
         timestamp: "Export timestamp",
+        integrityHash: "Integrity Hash",
       },
       es: {
         title: "Exportación de Registro del Paciente",
@@ -521,6 +522,7 @@ export default function AdminPage() {
         statement: "Este documento representa una exportación generada por el sistema de las comunicaciones del paciente.",
         total: "Total de mensajes",
         timestamp: "Marca de tiempo de exportación",
+        integrityHash: "Hash de Integridad",
       },
     };
     const localTime = (value?: string | null) => value ? new Date(value).toLocaleString() : "";
@@ -529,9 +531,15 @@ export default function AdminPage() {
       const normalized = value || "text";
       return normalized.charAt(0).toUpperCase() + normalized.slice(1);
     };
+    const sha256 = async (value: string) => {
+      const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+      return Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    };
+    const masterHash = await sha256((data || []).map((message) => message.message_hash || "").join(""));
     const exportData = {
       patient_id: patientId,
       export_date: new Date().toISOString(),
+      integrity_hash: masterHash,
       messages: (data || []).map((message) => ({
         sender_id: message.sender_id || null,
         sender: message.sender_type === "patient" ? "Patient" : "Doctor",
@@ -539,6 +547,7 @@ export default function AdminPage() {
         content: message.file_url || message.content,
         file_name: message.file_name || null,
         file_type: message.file_type || null,
+        message_hash: message.message_hash || null,
         created_at: message.created_at || null,
       })),
     };
@@ -641,6 +650,7 @@ export default function AdminPage() {
   <div class="integrity">
     <p><strong>${escapeHtml(labels.en.total)} / ${escapeHtml(labels.es.total)}:</strong> ${exportData.messages.length}</p>
     <p><strong>${escapeHtml(labels.en.timestamp)} / ${escapeHtml(labels.es.timestamp)}:</strong> ${escapeHtml(localTime(exportData.export_date))}</p>
+    <p><strong>${escapeHtml(labels.en.integrityHash)} / ${escapeHtml(labels.es.integrityHash)}:</strong> ${escapeHtml(masterHash)}</p>
     <p>${escapeHtml(labels.en.statement)}</p>
     <p>${escapeHtml(labels.es.statement)}</p>
   </div>
@@ -687,6 +697,7 @@ export default function AdminPage() {
       ]),
       `${labels.en.total} / ${labels.es.total}: ${exportData.messages.length}`,
       `${labels.en.timestamp} / ${labels.es.timestamp}: ${localTime(exportData.export_date)}`,
+      `${labels.en.integrityHash} / ${labels.es.integrityHash}: ${masterHash}`,
       labels.en.statement,
       labels.es.statement,
     ];
