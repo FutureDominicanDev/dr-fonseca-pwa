@@ -1,4 +1,8 @@
 "use client";
+
+// ALL chat UI MUST be handled inside ChatShell.tsx.
+// DO NOT duplicate UI here.
+
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
@@ -1830,160 +1834,6 @@ export default function InboxPage() {
       return (a.full_name || "").localeCompare(b.full_name || "", lang==="es" ? "es" : "en");
     });
 
-  const groupedMessages = () => {
-    const groups: {date:string;msgs:any[]}[]=[];
-    let currentDate="";
-    messages.forEach(m=>{
-      if (m.deleted_by_staff || m.is_internal) return;
-      const d=new Date(m.created_at).toDateString();
-      if (d!==currentDate){currentDate=d;groups.push({date:m.created_at,msgs:[]});}
-      groups[groups.length-1].msgs.push(m);
-    });
-    return groups;
-  };
-  const staffPhoneForMessage = (msg: any) => {
-    const member = staffDirectory.find((entry) => entry.id === msg.sender_id);
-    return member?.phone || member?.phone_number || member?.mobile_phone || null;
-  };
-
-  const renderMsg = (msg: any) => {
-    const isOut=msg.sender_type==="staff"||!msg.sender_type;
-    const isSystem=msg.sender_name==="Sistema";
-    const canDeleteOwnStaffMessage =
-      isOut &&
-      !isSystem &&
-      !msg.deleted_by_patient &&
-      !msg.deleted_by_staff &&
-      !!currentUserId &&
-      !!msg.sender_id &&
-      msg.sender_id === currentUserId;
-    const sc=senderColor(msg.sender_type||"staff",msg.sender_role||"staff");
-    const sn = isOut && !!currentUserId && msg.sender_id === currentUserId
-      ? (lang === "es" ? "Tú" : "You")
-      : (msg.sender_name || (isOut ? "Staff" : "Paciente"));
-    const videoCallRoomName = parseVideoCallMessage(msg.content);
-    const callRequestToken = parseCallRequestMessage(msg.content);
-    const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id && !videoCallRoomName && !callRequestToken
-      ? translatedIncoming[translationKey(msg.id, lang)] || ""
-      : "";
-    const contentToRender = translated || msg.content;
-    const effectiveType=msg.message_type==="text"&&isImageUrl(msg.content)?"image":msg.message_type;
-    const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
-    const staffPhone = isOut && !isOwn ? staffPhoneForMessage(msg) : null;
-
-    if (isSystem) return (
-      <div key={msg.id} style={{display:"flex",justifyContent:"center",margin:"8px 0"}}>
-        <div style={{background:"rgba(0,0,0,0.08)",borderRadius:99,padding:"4px 14px",fontSize:12,color:"#555",fontWeight:600}}>{msg.content}</div>
-      </div>
-    );
-
-    const bubbleBg = isOut ? "#FFFFFF" : "#D9ECF7";
-    const bubbleRadius=isOut?"12px 4px 12px 12px":"4px 12px 12px 12px";
-    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:"#0F172A",borderRadius:bubbleRadius,maxWidth:"70%",padding:"11px 13px",boxShadow:"0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)",position:"relative",border:"none",fontWeight:600,lineHeight:1.45,transition:"box-shadow 170ms ease, transform 170ms ease"};
-    const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
-
-    return (
-      <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:8,position:"relative"}}>
-        {staffPhone ? (
-          <a href={`tel:${staffPhone}`} style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0,textDecoration:"none"}}>{sn}</a>
-        ) : (
-          <div style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
-        )}
-        {effectiveType==="image"?(
-          <div style={{...bubbleStyle,padding:4}}>
-            <img src={msg.content} alt="" style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
-            {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
-          </div>
-        ):effectiveType==="video"?(
-          <div style={{...bubbleStyle,padding:4}}>
-            <video src={msg.content} controls style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}}/>
-            {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
-          </div>
-        ):effectiveType==="audio"?(
-          <div style={{...bubbleStyle,minWidth:220}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:20}}>🎤</span><span style={{fontSize:14,fontWeight:600}}>Audio</span></div>
-            <audio src={msg.content} controls style={{width:"100%"}}/>
-            {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
-          </div>
-        ):effectiveType==="file"?(
-          <div style={{...bubbleStyle,cursor:"pointer"}}>
-            <a href={msg.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,color:"inherit",textDecoration:"none"}}>
-              <span style={{fontSize:28}}>📄</span>
-              <div><div style={{fontSize:14,fontWeight:700}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
-            </a>
-            {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
-          </div>
-        ):callRequestToken ? (
-          <div style={{ ...bubbleStyle, padding: 12, minWidth: 250 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 20 }}>📲</span>
-              <span style={{ fontSize: 14, fontWeight: 800 }}>{isOut ? t.callRequestSent : t.incomingCallRequest}</span>
-            </div>
-            <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>
-              {isOut ? t.callRequestSent : t.callRequestBody}
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
-              {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
-            </div>
-            {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
-          </div>
-        ):videoCallRoomName ? (
-          <div style={{ ...bubbleStyle, padding: 12, minWidth: 240 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 20 }}>🎥</span>
-              <span style={{ fontSize: 14, fontWeight: 800 }}>{t.videoCallInvite}</span>
-            </div>
-            <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>{t.videoCallInviteBody}</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
-              {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
-            </div>
-            {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
-          </div>
-        ):(
-          <div style={{...bubbleStyle,lineHeight:1.58,wordBreak:"break-word",fontSize,fontWeight:500,letterSpacing:"0.01em"}}>
-            {contentToRender}
-            {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
-              {fmtTime(msg.created_at)}
-              {isOut&&<span style={{color:"#007AFF"}}>✓✓</span>}
-            </div>
-          </div>
-        )}
-        {canDeleteOwnStaffMessage && (
-          <button
-            onClick={() => {
-              if (!confirm(t.deleteMsg)) return;
-              supabase
-                .from("messages")
-                .update({ deleted_by_staff: true, deleted_at: new Date().toISOString() })
-                .eq("id", msg.id)
-                .then(() => {
-                  setMessages((prev) => prev.map((entry) => (entry.id === msg.id ? { ...entry, deleted_by_staff: true } : entry)));
-                });
-            }}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: "#DC2626",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: "pointer",
-              padding: "2px 4px",
-            }}
-          >
-            🗑️ {lang==="es"?"Eliminar":"Delete"}
-          </button>
-        )}
-      </div>
-    );
-  };
-
   const SettingsPanel = () => (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowSettings(false)}>
       <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:540,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`,WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}} onClick={e=>e.stopPropagation()}>
@@ -2267,25 +2117,6 @@ export default function InboxPage() {
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 14px 0; }
         .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.85)":"rgba(255,255,255,0.92)"}; border-radius: 8px; padding: 4px 10px; font-size: 12px; color: ${darkMode?"#D1D5DB":"#54656F"}; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
-        .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 66px; border-left: 1px solid rgba(255,255,255,0.08); }
-        .back-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 22px; font-weight: 700; transition: background 0.15s; }
-        .back-btn:hover { background: rgba(255,255,255,0.25); }
-        .chat-av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
-        .chat-head-name { font-size: 17px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .chat-head-sub { font-size: 13px; color: rgba(255,255,255,0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .input-area { position: relative; flex-shrink: 0; background: ${inputBg}; padding: 12px max(14px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 12px; border-top: 1px solid ${borderColor}; }
-        .msg-input { flex: 1; height: 58px; padding: 17px 20px; background: ${darkMode?"#2A3942":"white"}; border: none; border-radius: 29px; font-size: ${fontSize}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 120px; resize: none; line-height: 1.45; box-shadow: none; }
-        .msg-input::placeholder { color: #AEAEB2; }
-        .icon-btn { width: 58px; height: 58px; border-radius: 50%; background: ${darkMode?"#2A3942":"#E9EDEF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 24px; transition: background 0.15s; overflow: hidden; }
-        .icon-btn:hover { background: ${darkMode?"#334956":"#DDE5EA"}; }
-        .send-btn { width: 58px; height: 58px; border-radius: 50%; background: #EEF6FF; color: #0B4EA2; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 10px rgba(11,60,93,0.10); font-size: 22px; }
-        .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .slash-popup { background: ${darkMode?"#2C2C2E":"white"}; border-top: 1px solid ${borderColor}; max-height: 260px; overflow-y: auto; }
-        .slash-header { padding: 10px 16px 6px; font-size: 12px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
-        .slash-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid ${borderColor}; display: flex; align-items: center; gap: 12px; transition: background 0.1s; }
-        .slash-item:hover { background: ${darkMode?"#3A3A3C":"#F8F8F8"}; }
-        .slash-shortcut { background: #007AFF; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; flex-shrink: 0; }
-        .slash-msg { font-size: 15px; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); }
         .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
         .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
@@ -2303,7 +2134,6 @@ export default function InboxPage() {
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 700px) {
-          .chat-head { padding-top: max(14px, env(safe-area-inset-top)); min-height: calc(66px + env(safe-area-inset-top)); }
         }
       `}</style>
 

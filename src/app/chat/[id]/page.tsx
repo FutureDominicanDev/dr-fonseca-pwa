@@ -1,5 +1,8 @@
 "use client";
 
+// ALL chat UI MUST be handled inside ChatShell.tsx.
+// DO NOT duplicate UI here.
+
 import { use, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -447,40 +450,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setAudioPreviewUrl("");
   };
 
-  const renderMessage = (message: Message) => {
-    const url = message.file_url || message.content;
-
-    if (message.message_type === "image") {
-      return <img src={url} alt={message.file_name || "Image"} style={{ display: "block", maxWidth: "100%", maxHeight: 280, borderRadius: 10, objectFit: "contain" }} />;
-    }
-
-    if (message.message_type === "video") {
-      return <video src={url} controls style={{ display: "block", width: "100%", maxHeight: 280, borderRadius: 10 }} />;
-    }
-
-    if (message.message_type === "audio") {
-      return <audio src={url} controls style={{ width: "240px", maxWidth: "100%" }} />;
-    }
-
-    if (message.message_type === "file") {
-      return (
-        <a href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, color: "#075e54", textDecoration: "none", fontWeight: 700 }}>
-          <span style={{ fontSize: 24 }}>📄</span>
-          <span style={{ wordBreak: "break-word" }}>{message.file_name || "Download file"}</span>
-        </a>
-      );
-    }
-
-    return <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{message.content}</span>;
-  };
-
   const emergencyPhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara || officePhones.Tijuana;
-  const appBg = darkMode ? "#0f172a" : "#f7f7f7";
-  const textPrimary = darkMode ? "#f8fafc" : "#111";
-  const panelBg = darkMode ? "#172033" : "#fff";
-  const footerBg = darkMode ? "#111827" : "#ededed";
-  const inputPanelBg = darkMode ? "#1f2937" : "#fff";
-  const messageFontSize = textSize === "large" ? 18 : 16;
   const translations = {
     en: {
       messagePlaceholder: "Message",
@@ -526,7 +496,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     },
   };
   const labels = translations[uiLang] || translations.en;
-  const prescriptionMessages = messages.filter((message) => `${message.file_name || ""}`.startsWith("[MED]"));
 
   if (!accessReady) {
     return (
@@ -608,198 +577,4 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
     </>
   );
-
-  return (
-    <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-      <style>{`
-        button { transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
-        button:active { transform: scale(0.96); opacity: 0.86; }
-        input { transition: box-shadow 170ms ease, background-color 170ms ease; }
-        input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
-        @keyframes messageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-        @keyframes micPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(153,27,27,0.42); } 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(153,27,27,0); } }
-      `}</style>
-      <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
-        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
-      </header>
-
-      <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
-        {messages.map((message) => {
-          const fileName = `${message.file_name || ""}`;
-          if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
-          const mine = message.sender_type !== "staff";
-          const deletedByPatient = !!message.deleted_by_patient;
-          if (viewerType === "patient" && deletedByPatient) return null;
-          const canDeletePatientMessage = viewerType === "patient" && mine && !deletedByPatient && !message.deleted_by_staff;
-          const softBlue = "#d9ecf7";
-          const bubbleBg =
-            viewerType === "staff"
-              ? message.sender_type === "patient" ? softBlue : "#fff"
-              : message.sender_type === "staff" ? softBlue : "#fff";
-          return (
-            <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
-              <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
-                {renderMessage(message)}
-                {deletedByPatient && viewerType === "staff" && (
-                  <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
-                )}
-                {canDeletePatientMessage && deleteMenuMessageId === message.id && (
-                  <button onClick={(event) => { event.stopPropagation(); deletePatientMessage(message.id); }} style={{ display: "block", marginTop: 7, marginLeft: "auto", border: "none", background: "transparent", color: "#b91c1c", fontSize: 12, fontWeight: 800, padding: 0 }}>
-                    {labels.delete}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </section>
-
-      <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px calc(12px + env(safe-area-inset-bottom))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
-        {menuOpen && (
-          <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
-            <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
-            <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
-            <button onClick={() => { setPrescriptionsOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.documents}</button>
-            <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
-            <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
-          </div>
-        )}
-
-        <button onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 34, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
-          {menuOpen ? "×" : "+"}
-        </button>
-
-        <input value={text} onChange={(event) => { const next = event.target.value; setText(next); setQuickRepliesOpen(next.startsWith("/")); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
-
-        <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 22 }}>➤</button>
-
-        <button onClick={() => { window.location.href = "tel:+523332314480"; }} aria-label="Call" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
-          <Image src="/Phone_icon.png" alt="" width={34} height={34} style={{ width: 34, height: 34, objectFit: "contain" }} />
-        </button>
-
-        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
-          <Image src="/Microphone_icon.png" alt="" width={42} height={42} style={{ width: 42, height: 42, objectFit: "contain" }} />
-        </button>
-
-        <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
-        <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
-      </footer>
-
-      {audioPreviewUrl && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", display: "grid", placeItems: "center", padding: 18, zIndex: 25 }}>
-          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.35)" }}>
-            <audio src={audioPreviewUrl} controls style={{ width: "100%", marginBottom: 14 }} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={cancelAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
-              <button onClick={sendAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {quickRepliesOpen && (
-        <div style={{ position: "fixed", left: 10, right: 10, bottom: 92, zIndex: 20, pointerEvents: "none" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
-              {quickReplies.map((reply, index) => (
-                <button key={`${reply}-${index}`} onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: panelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
-              ))}
-          </div>
-        </div>
-      )}
-
-      {quickRepliesManageOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
-          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <strong style={{ fontSize: 18 }}>{labels.quickReplies}</strong>
-              <button onClick={() => setQuickRepliesManageOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-              {quickReplies.map((reply, index) => (
-                <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <button onClick={() => { setText(reply); setQuickRepliesManageOpen(false); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
-                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.edit}</button>
-                  <button onClick={() => { setQuickReplies((current) => current.filter((_, replyIndex) => replyIndex !== index)); if (editingReplyIndex === index) { setReplyDraft(""); setEditingReplyIndex(null); } }} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.delete}</button>
-                </div>
-              ))}
-            </div>
-            <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder={labels.createReply} style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
-            <button onClick={saveQuickReply} style={{ width: "100%", height: 48, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 700 }}>{editingReplyIndex === null ? labels.saveReply : labels.saveChanges}</button>
-          </div>
-        </div>
-      )}
-
-      {prescriptionsOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
-          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <strong style={{ fontSize: 18 }}>{labels.documents}</strong>
-              <button onClick={() => setPrescriptionsOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ display: "grid", gap: 8 }}>
-              {prescriptionMessages.length === 0 && (
-                <div style={{ border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.noPrescriptions}</div>
-              )}
-              {prescriptionMessages.map((message) => {
-                const url = message.file_url || message.content;
-                const fileName = `${message.file_name || labels.documents}`.replace(/^\[MED\]\s*/i, "");
-                return (
-                  <a key={message.id} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textDecoration: "none", fontSize: 16, fontWeight: 700 }}>
-                    <span style={{ fontSize: 22 }}>📄</span>
-                    <span style={{ wordBreak: "break-word" }}>{fileName}</span>
-                  </a>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {settingsOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
-          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <strong style={{ fontSize: 18 }}>{labels.settings}</strong>
-              <button onClick={() => setSettingsOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
-            </div>
-            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, fontSize: 16, marginBottom: 18 }}>
-              {labels.darkMode}
-              <input type="checkbox" checked={darkMode} onChange={(event) => setDarkMode(event.target.checked)} style={{ width: 24, height: 24 }} />
-            </label>
-            <div style={{ fontSize: 16, marginBottom: 10 }}>{labels.textSize}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={() => setTextSize("normal")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.normal}</button>
-              <button onClick={() => setTextSize("large")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.large}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </main>
-  );
 }
-
-const roundButtonStyle: React.CSSProperties = {
-  width: 58,
-  height: 58,
-  borderRadius: "50%",
-  border: "none",
-  background: "transparent",
-  fontSize: 28,
-  display: "grid",
-  placeItems: "center",
-  flexShrink: 0,
-};
-
-const menuButtonStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "18px 20px",
-  border: "none",
-  borderBottom: "1px solid rgba(0,0,0,0.08)",
-  background: "#fff",
-  color: "#111",
-  textAlign: "left",
-  fontSize: 17,
-  fontWeight: 700,
-};
