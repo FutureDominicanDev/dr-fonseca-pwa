@@ -550,13 +550,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
         <input value={text} onChange={(event) => { const next = event.target.value; setText(next); setQuickRepliesOpen(next.startsWith("/")); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
 
-        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#2d9cff" : "#dbeafe", color: recording ? "#fff" : "#0b4ea2", fontWeight: 900, fontSize: 30, animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>🎙</button>
+        <button onClick={sendText} aria-label="Send" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: "#0B3C5D", color: "#fff", fontSize: 22, display: "grid", placeItems: "center", flexShrink: 0, boxShadow: "0 3px 10px rgba(11,60,93,0.22)" }}>➤</button>
+
+        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
+          <Image src="/Microphone_icon.webp" alt="" width={34} height={34} style={{ width: 34, height: 34, objectFit: "contain" }} />
+        </button>
 
         <button onClick={() => { window.location.href = "tel:+523332314480"; }} aria-label="Call" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
           <Image src="/Phone_icon.png" alt="" width={34} height={34} style={{ width: 34, height: 34, objectFit: "contain" }} />
         </button>
-
-        <button onClick={sendText} aria-label="Send" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: "#0B3C5D", color: "#fff", fontSize: 22, display: "grid", placeItems: "center", flexShrink: 0, boxShadow: "0 3px 10px rgba(11,60,93,0.22)" }}>➤</button>
 
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
         <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
