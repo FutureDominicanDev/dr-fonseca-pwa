@@ -53,6 +53,45 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
+  const isSpanish = typeof navigator !== "undefined" ? navigator.language.toLowerCase().startsWith("es") : true;
+  const labels = {
+    message: isSpanish ? "Mensaje" : "Message",
+    photos: isSpanish ? "Fotos" : "Photos",
+    video: isSpanish ? "Video" : "Video",
+    documents: isSpanish ? "Documentos" : "Documents",
+    quickReplies: isSpanish ? "Respuestas rapidas" : "Quick Replies",
+    settings: isSpanish ? "Ajustes" : "Settings",
+    cancel: isSpanish ? "Cancelar" : "Cancel",
+    send: isSpanish ? "ENVIAR" : "SEND",
+    edit: isSpanish ? "Editar" : "Edit",
+    createQuickReply: isSpanish ? "Crear respuesta rapida" : "Create quick reply",
+    saveReply: isSpanish ? "Guardar respuesta" : "Save Reply",
+    saveChanges: isSpanish ? "Guardar cambios" : "Save Changes",
+    darkMode: isSpanish ? "Modo oscuro" : "Dark mode",
+    textSize: isSpanish ? "Tamano de texto" : "Text size",
+    normal: isSpanish ? "Normal" : "Normal",
+    large: isSpanish ? "Grande" : "Large",
+    openMenu: isSpanish ? "Abrir menu" : "Open menu",
+    camera: isSpanish ? "Camara" : "Camera",
+    micStart: isSpanish ? "Iniciar grabacion de audio" : "Start audio recording",
+    micStop: isSpanish ? "Detener grabacion de audio" : "Stop audio recording",
+  };
+
+  const isSetupMediaMessage = (message: Message) => {
+    const marker = `${message.file_name || ""} ${message.content || ""} ${message.file_url || ""}`.toLowerCase();
+    return (
+      message.message_type === "image" &&
+      message.sender_type === "staff" &&
+      (marker.includes("[profile]") ||
+        marker.includes("[before]") ||
+        marker.includes("profile") ||
+        marker.includes("avatar") ||
+        marker.includes("setup") ||
+        marker.includes("before"))
+    );
+  };
+
+  const visibleMessages = messages.filter((message) => !isSetupMediaMessage(message));
 
   useEffect(() => {
     let mounted = true;
@@ -121,7 +160,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         .eq("room_id", id)
         .order("created_at", { ascending: true });
 
-      if (mounted) setMessages((data || []) as Message[]);
+      if (mounted) setMessages(((data || []) as Message[]).filter((message) => !isSetupMediaMessage(message)));
     };
 
     loadOfficePhones();
@@ -142,6 +181,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         ({ new: message }: { new: Message }) => {
           setMessages((current) => {
             if (current.some((item) => item.id === message.id)) return current;
+            if (isSetupMediaMessage(message)) return current;
             return [...current, message];
           });
         },
@@ -274,7 +314,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       };
 
       recorder.onstop = async () => {
+        if (!chunksRef.current.length) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        if (!blob.size) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         const file = new File([blob], `audio-${Date.now()}.webm`, { type: "audio/webm" });
         if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
         setAudioPreviewFile(file);
@@ -293,6 +341,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const stopRecording = () => {
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     setRecording(false);
+  };
+
+  const toggleRecording = () => {
+    if (recording) stopRecording();
+    else startRecording();
   };
 
   const sendAudioPreview = async () => {
@@ -367,8 +420,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   if (accessDenied) {
     return (
       <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#fff", color: "#111", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-        <header style={{ height: 56, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#120024", borderBottom: "1px solid rgba(17,24,39,0.10)", padding: "2px 16px" }}>
-          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={320} height={52} priority style={{ width: "min(320px, 84vw)", height: 52, objectFit: "contain", objectPosition: "center" }} />
+        <header style={{ height: 64, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#120024", borderBottom: "1px solid rgba(17,24,39,0.10)", padding: "4px 16px" }}>
+          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={360} height={60} priority style={{ width: "min(360px, 86vw)", height: 60, objectFit: "contain", objectPosition: "center" }} />
         </header>
         <section style={{ flex: 1, display: "grid", placeItems: "center", padding: 24 }}>
           <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 18, boxShadow: "0 10px 36px rgba(0,0,0,0.14)", padding: 24, textAlign: "center" }}>
@@ -388,14 +441,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   return (
     <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-      <header style={{ height: 56, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#120024", borderBottom: "1px solid rgba(17,24,39,0.10)", padding: "2px 16px" }}>
-        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={320} height={52} priority style={{ width: "min(320px, 84vw)", height: 52, objectFit: "contain", objectPosition: "center" }} />
+      <header style={{ height: 64, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#120024", borderBottom: "1px solid rgba(17,24,39,0.10)", padding: "4px 16px" }}>
+        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={360} height={60} priority style={{ width: "min(360px, 86vw)", height: 60, objectFit: "contain", objectPosition: "center" }} />
       </header>
 
       <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => setMenuOpen(false)}>
-        {messages.map((message) => {
+        {visibleMessages.map((message) => {
           const mine = message.sender_type !== "staff";
-          const softBlue = "#e8f4ff";
+          const softBlue = "#d4eaff";
           const bubbleBg =
             viewerType === "staff"
               ? message.sender_type === "patient" ? softBlue : "#fff"
@@ -411,28 +464,33 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <div ref={bottomRef} />
       </section>
 
-      <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px calc(12px + env(safe-area-inset-bottom))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+      <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 14, padding: "14px 16px calc(14px + env(safe-area-inset-bottom))", background: darkMode ? "#0b1220" : "#d7dee8", borderTop: "1px solid rgba(0,0,0,0.14)", boxShadow: "0 -6px 18px rgba(15,23,42,0.10)" }}>
         {menuOpen && (
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5 }}>
-            <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>Photos</button>
-            <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>Video</button>
-            <button onClick={() => openPicker("*")} style={menuButtonStyle}>Documents</button>
-            <button onClick={() => { setQuickRepliesOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>Quick Replies</button>
-            <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>Settings</button>
+            <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
+            <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
+            <button onClick={() => openPicker("*")} style={menuButtonStyle}>{labels.documents}</button>
+            <button onClick={() => { setQuickRepliesOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
+            <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
           </div>
         )}
 
-        <button onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 34, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <button onClick={() => setMenuOpen((open) => !open)} aria-label={labels.openMenu} style={{ width: 62, height: 62, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#eef2f7", color: menuOpen ? "#fff" : "#111", fontSize: 34, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {menuOpen ? "×" : "+"}
         </button>
 
-        <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder="Message" style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
+        <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.message} style={{ minWidth: 0, flex: 1, height: 62, border: "none", outline: "none", borderRadius: 31, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize, boxShadow: "inset 0 0 0 1px rgba(15,23,42,0.08)" }} />
 
-        <button onClick={() => openPicker("image/*")} aria-label="Camera" style={roundButtonStyle}>📷</button>
+        <button onClick={() => openPicker("image/*")} aria-label={labels.camera} style={roundButtonStyle}>📷</button>
 
-        <button onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={stopRecording} onTouchStart={(event) => { event.preventDefault(); startRecording(); }} onTouchEnd={(event) => { event.preventDefault(); stopRecording(); }} aria-label="Hold to record audio" style={{ ...roundButtonStyle, background: recording ? "#1e88e5" : "#dbeafe", color: "#1e88e5", fontWeight: 900 }}>🎙</button>
+        <button onClick={toggleRecording} aria-label={recording ? labels.micStop : labels.micStart} style={{ ...roundButtonStyle, background: recording ? "#bfdbfe" : "#eaf2ff", color: "#143b70", fontWeight: 900, boxShadow: recording ? "0 0 0 4px rgba(20,59,112,0.18)" : "none" }}>
+          <svg width="29" height="29" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 14.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 0 0-7 0v5a3.5 3.5 0 0 0 3.5 3.5Z" fill="currentColor" />
+            <path d="M5.5 10.5a1 1 0 0 1 2 0A4.5 4.5 0 0 0 12 15a4.5 4.5 0 0 0 4.5-4.5 1 1 0 1 1 2 0A6.51 6.51 0 0 1 13 16.92V20h2.25a1 1 0 1 1 0 2h-6.5a1 1 0 1 1 0-2H11v-3.08a6.51 6.51 0 0 1-5.5-6.42Z" fill="currentColor" />
+          </svg>
+        </button>
 
-        <button onClick={sendText} aria-label="Send" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>➤</button>
+        <button onClick={sendText} aria-label={labels.send} style={{ width: 62, height: 62, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>➤</button>
 
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
         <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
@@ -443,8 +501,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           <div style={{ width: "100%", maxWidth: 460, background: panelBg, color: textPrimary, borderRadius: 18, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35)" }}>
             <video src={videoPreviewUrl} controls playsInline style={{ width: "100%", maxHeight: "58dvh", borderRadius: 14, background: "#000", display: "block", marginBottom: 14 }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={cancelVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>Cancel</button>
-              <button onClick={sendVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>SEND</button>
+              <button onClick={cancelVideoPreview} style={{ height: 52, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
+              <button onClick={sendVideoPreview} style={{ height: 52, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
             </div>
           </div>
         </div>
@@ -455,8 +513,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.35)" }}>
             <audio src={audioPreviewUrl} controls style={{ width: "100%", marginBottom: 14 }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={cancelAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>Cancel</button>
-              <button onClick={sendAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>SEND</button>
+              <button onClick={cancelAudioPreview} style={{ height: 52, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
+              <button onClick={sendAudioPreview} style={{ height: 52, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
             </div>
           </div>
         </div>
@@ -466,19 +524,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
           <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <strong style={{ fontSize: 18 }}>Quick Replies</strong>
+              <strong style={{ fontSize: 18 }}>{labels.quickReplies}</strong>
               <button onClick={() => setQuickRepliesOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
             </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
               {quickReplies.map((reply, index) => (
                 <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <button onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
-                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>Edit</button>
+                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#d4eaff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.edit}</button>
                 </div>
               ))}
             </div>
-            <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder="Create quick reply" style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
-            <button onClick={saveQuickReply} style={{ width: "100%", height: 48, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 700 }}>{editingReplyIndex === null ? "Save Reply" : "Save Changes"}</button>
+            <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder={labels.createQuickReply} style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
+            <button onClick={saveQuickReply} style={{ width: "100%", height: 48, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 700 }}>{editingReplyIndex === null ? labels.saveReply : labels.saveChanges}</button>
           </div>
         </div>
       )}
@@ -487,17 +545,17 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
           <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <strong style={{ fontSize: 18 }}>Settings</strong>
+              <strong style={{ fontSize: 18 }}>{labels.settings}</strong>
               <button onClick={() => setSettingsOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
             </div>
             <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, fontSize: 16, marginBottom: 18 }}>
-              Dark mode
+              {labels.darkMode}
               <input type="checkbox" checked={darkMode} onChange={(event) => setDarkMode(event.target.checked)} style={{ width: 24, height: 24 }} />
             </label>
-            <div style={{ fontSize: 16, marginBottom: 10 }}>Text size</div>
+            <div style={{ fontSize: 16, marginBottom: 10 }}>{labels.textSize}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={() => setTextSize("normal")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: 16 }}>Normal</button>
-              <button onClick={() => setTextSize("large")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: 16 }}>Large</button>
+              <button onClick={() => setTextSize("normal")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.normal}</button>
+              <button onClick={() => setTextSize("large")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.large}</button>
             </div>
           </div>
         </div>
