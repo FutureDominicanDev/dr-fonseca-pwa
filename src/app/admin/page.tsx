@@ -471,7 +471,7 @@ export default function AdminPage() {
   const handleExport = async (patientId: string) => {
     const { data, error } = await supabase
       .from("messages")
-      .select("id, content, file_url, file_name, file_type, message_type, type, created_at")
+      .select("id, sender_id, sender_type, content, file_url, file_name, file_type, message_type, type, created_at")
       .eq("room_id", patientId)
       .order("created_at", { ascending: true });
 
@@ -495,13 +495,50 @@ export default function AdminPage() {
       const fromUrl = url.split("?")[0].split(".").pop();
       return fromUrl && fromUrl.length <= 5 ? fromUrl.toLowerCase() : fallback;
     };
+    const labels = {
+      en: {
+        title: "Patient Record Export",
+        exportDate: "Export Date",
+        timeline: "Message Timeline",
+        sender: "Sender",
+        type: "Type",
+        file: "File",
+        patient: "Patient",
+        doctor: "Doctor",
+        statement: "This document represents a system-generated export of patient communications.",
+        total: "Total number of messages",
+        timestamp: "Export timestamp",
+      },
+      es: {
+        title: "Exportación de Registro del Paciente",
+        exportDate: "Fecha de Exportación",
+        timeline: "Cronología de Mensajes",
+        sender: "Remitente",
+        type: "Tipo",
+        file: "Archivo",
+        patient: "Paciente",
+        doctor: "Doctor",
+        statement: "Este documento representa una exportación generada por el sistema de las comunicaciones del paciente.",
+        total: "Total de mensajes",
+        timestamp: "Marca de tiempo de exportación",
+      },
+    };
+    const localTime = (value?: string | null) => value ? new Date(value).toLocaleString() : "";
+    const senderLabel = (senderType?: string | null) => senderType === "patient" ? labels.en.patient : labels.en.doctor;
+    const typeLabel = (value?: string | null) => {
+      const normalized = value || "text";
+      return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    };
     const exportData = {
       patient_id: patientId,
       export_date: new Date().toISOString(),
       messages: (data || []).map((message) => ({
+        sender_id: message.sender_id || null,
+        sender: message.sender_type === "patient" ? "Patient" : "Doctor",
         type: message.message_type || message.type || "text",
         content: message.file_url || message.content,
         file_name: message.file_name || null,
+        file_type: message.file_type || null,
         created_at: message.created_at || null,
       })),
     };
@@ -574,40 +611,94 @@ export default function AdminPage() {
       const content = mediaPath
         ? `<a href="${escapeHtml(mediaPath)}">${escapeHtml(message.file_name || mediaPath)}</a>`
         : `<div class="text">${escapeHtml(message.content)}</div>`;
-      return `<tr><td>${escapeHtml(message.created_at)}</td><td>${escapeHtml(message.type)}</td><td>${content}</td></tr>`;
+      return `<tr><td>${escapeHtml(localTime(message.created_at))}</td><td>${escapeHtml(message.sender)}</td><td>${escapeHtml(typeLabel(message.type))}</td><td>${content}</td></tr>`;
     }).join("");
     const reportHtml = `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Patient Export ${escapeHtml(patientId)}</title>
+  <title>${escapeHtml(labels.en.title)} ${escapeHtml(patientId)}</title>
   <style>
-    body { font-family: Arial, sans-serif; color: #111827; margin: 32px; line-height: 1.5; }
-    h1 { margin-bottom: 4px; }
-    .meta { color: #4B5563; margin-bottom: 24px; }
+    body { font-family: Arial, sans-serif; color: #111; margin: 32px; line-height: 1.5; background: #fff; }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    h2 { margin-top: 26px; font-size: 18px; border-bottom: 1px solid #111; padding-bottom: 6px; }
+    .meta, .integrity { color: #222; margin: 18px 0 24px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid #E5E7EB; padding: 10px; vertical-align: top; text-align: left; }
-    th { background: #F3F4F6; }
+    th { background: #F3F4F6; color: #111; }
     .text { white-space: pre-wrap; overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
-  <h1>Patient Export</h1>
-  <div class="meta">Patient ID: ${escapeHtml(patientId)}<br />Export date: ${escapeHtml(exportData.export_date)}</div>
+  <h1>${escapeHtml(labels.en.title)}</h1>
+  <h1>${escapeHtml(labels.es.title)}</h1>
+  <div class="meta">Patient ID: ${escapeHtml(patientId)}<br />${escapeHtml(labels.en.exportDate)} / ${escapeHtml(labels.es.exportDate)}: ${escapeHtml(localTime(exportData.export_date))}</div>
+  <h2>${escapeHtml(labels.en.timeline)} / ${escapeHtml(labels.es.timeline)}</h2>
   <table>
-    <thead><tr><th>Timestamp</th><th>Type</th><th>Content</th></tr></thead>
+    <thead><tr><th>Timestamp</th><th>${escapeHtml(labels.en.sender)} / ${escapeHtml(labels.es.sender)}</th><th>${escapeHtml(labels.en.type)} / ${escapeHtml(labels.es.type)}</th><th>${escapeHtml(labels.en.file)} / ${escapeHtml(labels.es.file)}</th></tr></thead>
     <tbody>${reportRows}</tbody>
   </table>
+  <div class="integrity">
+    <p><strong>${escapeHtml(labels.en.total)} / ${escapeHtml(labels.es.total)}:</strong> ${exportData.messages.length}</p>
+    <p><strong>${escapeHtml(labels.en.timestamp)} / ${escapeHtml(labels.es.timestamp)}:</strong> ${escapeHtml(localTime(exportData.export_date))}</p>
+    <p>${escapeHtml(labels.en.statement)}</p>
+    <p>${escapeHtml(labels.es.statement)}</p>
+  </div>
 </body>
 </html>`;
 
+    const createPdf = (lines: string[]) => {
+      const pdfEscape = (value: string) => value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+      const objects: string[] = [];
+      const pageObjects: number[] = [];
+      const pages = Array.from({ length: Math.max(1, Math.ceil(lines.length / 42)) }, (_, pageIndex) => lines.slice(pageIndex * 42, pageIndex * 42 + 42));
+      objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+      objects.push("");
+      objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+      for (const pageLines of pages) {
+        const pageNumber = objects.length + 1;
+        const contentNumber = pageNumber + 1;
+        pageObjects.push(pageNumber);
+        objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentNumber} 0 R >>`);
+        const text = `BT /F1 10 Tf 50 742 Td ${pageLines.map((line, index) => `${index === 0 ? "" : "0 -16 Td "}[${pdfEscape(line).slice(0, 110)}] TJ`).join(" ")} ET`;
+        objects.push(`<< /Length ${text.length} >>\nstream\n${text}\nendstream`);
+      }
+      objects[1] = `<< /Type /Pages /Kids [${pageObjects.map((page) => `${page} 0 R`).join(" ")}] /Count ${pageObjects.length} >>`;
+      let pdf = "%PDF-1.4\n";
+      const offsets = [0];
+      objects.forEach((object, index) => {
+        offsets.push(pdf.length);
+        pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+      });
+      const xrefOffset = pdf.length;
+      pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\n`;
+      pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+      return textEncoder.encode(pdf);
+    };
+    const pdfLines = [
+      labels.en.title,
+      labels.es.title,
+      `Patient ID: ${patientId}`,
+      `${labels.en.exportDate} / ${labels.es.exportDate}: ${localTime(exportData.export_date)}`,
+      `${labels.en.timeline} / ${labels.es.timeline}`,
+      ...exportData.messages.flatMap((message) => [
+        `${localTime(message.created_at)} | ${message.sender} | ${typeLabel(message.type)}`,
+        `${message.file_name || message.content || ""}`,
+      ]),
+      `${labels.en.total} / ${labels.es.total}: ${exportData.messages.length}`,
+      `${labels.en.timestamp} / ${labels.es.timestamp}: ${localTime(exportData.export_date)}`,
+      labels.en.statement,
+      labels.es.statement,
+    ];
+
     zipEntries.push({ path: `patient-${patientId}/report.html`, data: textEncoder.encode(reportHtml) });
+    zipEntries.push({ path: `patient-${patientId}/report.pdf`, data: createPdf(pdfLines) });
     zipEntries.push({ path: `patient-${patientId}/data.json`, data: textEncoder.encode(JSON.stringify(exportData, null, 2)) });
     const zipBlob = createZip(zipEntries);
     const downloadUrl = URL.createObjectURL(zipBlob);
     const link = document.createElement("a");
     link.href = downloadUrl;
-    link.download = `patient-${patientId}-export.zip`;
+    link.download = `patient-${patientId}-court-export.zip`;
     document.body.appendChild(link);
     link.click();
     link.remove();
