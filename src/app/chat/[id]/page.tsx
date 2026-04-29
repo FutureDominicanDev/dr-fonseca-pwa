@@ -15,7 +15,6 @@ type Message = {
   file_url?: string | null;
   file_name?: string | null;
   file_type?: string | null;
-  message_hash?: string | null;
   created_at?: string;
 };
 
@@ -173,52 +172,23 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const generateMessageHash = async (content: string, createdAt: string, senderId: string | null) => {
-    const input = `${content}${createdAt}${senderId || ""}`;
-    const bytes = new TextEncoder().encode(input);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  };
-
-  const logMessageAudit = async (timestamp: string) => {
-    const { error } = await supabase.from("audit_logs").insert({
-      user_id: currentUserId,
-      action: "message_sent",
-      timestamp,
-      room_id: id,
-    });
-    if (error) console.warn("audit log failed", error.message);
-  };
-
   const sendText = async () => {
     const content = text.trim();
     if (!content || accessDenied || !accessReady) return;
 
     setText("");
-    const createdAt = new Date().toISOString();
-    const messageHash = await generateMessageHash(content, createdAt, currentUserId);
-    const payload = {
-      room_id: id,
-      content,
-      sender_id: currentUserId,
-      sender_type: "patient",
-      message_type: "text",
-      created_at: createdAt,
-      message_hash: messageHash,
-    };
-    let insert = await supabase
+    const { data } = await supabase
       .from("messages")
-      .insert(payload)
+      .insert({
+        room_id: id,
+        content,
+        sender_type: "patient",
+        message_type: "text",
+      })
       .select("*")
       .single();
-    if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
-      const { message_hash: _messageHash, ...compatiblePayload } = payload;
-      insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
-    }
 
-    const data = insert.data;
     if (data) {
-      await logMessageAudit(createdAt);
       setMessages((current) => {
         if (current.some((item) => item.id === data.id)) return current;
         return [...current, data as Message];
@@ -254,7 +224,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           : file.type.startsWith("audio/")
             ? "audio"
             : "file");
-    const messageHash = await generateMessageHash(url, timestamp, currentUserId);
     const payload = {
       room_id: id,
       sender_id: currentUserId,
@@ -266,7 +235,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       file_name: file.name,
       file_type: file.type || "application/octet-stream",
       created_at: timestamp,
-      message_hash: messageHash,
     };
 
     let insert = await supabase
@@ -275,14 +243,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       .select("*")
       .single();
     if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
-      const { type: _type, file_type: _fileType, message_hash: _messageHash, ...compatiblePayload } = payload;
+      const { type: _type, file_type: _fileType, ...compatiblePayload } = payload;
       insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
     }
     if (insert.error) return null;
 
     const message = insert.data;
     if (message) {
-      await logMessageAudit(timestamp);
       setMessages((current) => {
         if (current.some((item) => item.id === message.id)) return current;
         return [...current, message as Message];
