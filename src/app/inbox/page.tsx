@@ -57,8 +57,14 @@ const T = {
     takePhoto: "Tomar foto",
     recordVideoOption: "Grabar video",
     chooseFile: "Elegir archivo",
-    stopAndSendVideo: "Detener y enviar video",
+    stopAndSendVideo: "Detener y revisar video",
     takePhotoNow: "Tomar foto ahora",
+    reviewCapture: "Revisar antes de enviar",
+    reviewAudio: "Revisar audio",
+    reviewPhoto: "Revisar foto",
+    reviewVideo: "Revisar video",
+    sendRecording: "Enviar grabación",
+    stopAndReview: "Detener y revisar",
     cancelCapture: "Cancelar",
     preparingCamera: "Abriendo cámara...",
     noMessages: "Sin mensajes aún", noMessagesHint: "Envía el primero para comenzar",
@@ -165,8 +171,14 @@ const T = {
     takePhoto: "Take photo",
     recordVideoOption: "Record video",
     chooseFile: "Choose file",
-    stopAndSendVideo: "Stop and send video",
+    stopAndSendVideo: "Stop and review video",
     takePhotoNow: "Take photo now",
+    reviewCapture: "Review before sending",
+    reviewAudio: "Review audio",
+    reviewPhoto: "Review photo",
+    reviewVideo: "Review video",
+    sendRecording: "Send recording",
+    stopAndReview: "Stop and review",
     cancelCapture: "Cancel",
     preparingCamera: "Opening camera...",
     noMessages: "No messages yet", noMessagesHint: "Send the first one to get started",
@@ -437,6 +449,9 @@ export default function InboxPage() {
   const [captureMode, setCaptureMode] = useState<"photo" | "video" | null>(null);
   const [preparingCapture, setPreparingCapture] = useState(false);
   const [recordingVideo, setRecordingVideo] = useState(false);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewType, setPreviewType] = useState<"image" | "video" | "audio" | "file">("file");
   const [userProfile, setUserProfile] = useState<any>(null);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([
     { shortcut: "hola", message: "¡Hola! ¿Cómo se siente hoy?" },
@@ -1452,6 +1467,32 @@ export default function InboxPage() {
     setShowUploadMenu(false);
     await uploadFile(file, cat);
   };
+  const stagePreview = (file: File) => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setPreviewType(
+      file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("video/")
+          ? "video"
+          : file.type.startsWith("audio/")
+            ? "audio"
+            : "file",
+    );
+  };
+  const clearPreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewFile(null);
+    setPreviewUrl("");
+    setPreviewType("file");
+  };
+  const sendPreview = async () => {
+    if (!previewFile) return;
+    const file = previewFile;
+    clearPreview();
+    await uploadFile(file);
+  };
 
   const uploadFile = async (file: File, cat: FileCategory="general") => {
     if (!selectedRoom) return; setSending(true);
@@ -1711,7 +1752,7 @@ export default function InboxPage() {
         discardAudioRef.current=false;
         if (shouldDiscard || b.size===0) return;
         const ext = extensionForMimeType(finalMimeType, "webm");
-        await uploadFile(new File([b],`voice-${Date.now()}.${ext}`,{type:finalMimeType}));
+        stagePreview(new File([b],`voice-${Date.now()}.${ext}`,{type:finalMimeType}));
       };
       mr.start(); setRecording(true); setRecordingSeconds(0); discardAudioRef.current=false;
       recordingTimerRef.current=setInterval(()=>setRecordingSeconds(s=>s+1),1000);
@@ -1747,9 +1788,9 @@ export default function InboxPage() {
           stopCaptureStream();
           setCaptureMode(null);
           setRecordingVideo(false);
-          if (!shouldDiscard) {
+          if (!shouldDiscard && blob.size > 0) {
             const ext = extensionForMimeType(finalMimeType, "webm");
-            await uploadFile(new File([blob], `video-${Date.now()}.${ext}`, { type: blob.type || finalMimeType }));
+            stagePreview(new File([blob], `video-${Date.now()}.${ext}`, { type: blob.type || finalMimeType }));
           }
         };
         recorder.start();
@@ -1785,7 +1826,7 @@ export default function InboxPage() {
     stopCaptureStream();
     setCaptureMode(null);
     if (blob) {
-      await uploadFile(new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }));
+      stagePreview(new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }));
     }
   };
   const sendCapturedVideo = () => {
@@ -2276,16 +2317,16 @@ export default function InboxPage() {
         .msg-input::placeholder { color: #AEAEB2; }
         .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
-        .plus-btn { width: 44px; height: 44px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 30px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
+        .plus-btn { width: 40px; height: 40px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
         .staff-menu-popup { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: calc(64px + env(safe-area-inset-bottom)); width: min(310px, calc(100vw - 32px)); background: white; border: 1px solid rgba(15,23,42,0.10); border-radius: 18px; overflow: hidden; box-shadow: 0 18px 45px rgba(15,23,42,0.22); z-index: 40; }
         .staff-menu-item { width: 100%; border: none; border-bottom: 1px solid rgba(15,23,42,0.08); background: white; color: #111827; padding: 18px 24px; text-align: left; cursor: pointer; font-family: inherit; font-size: 20px; font-weight: 900; }
         .staff-menu-item:last-child { border-bottom: none; }
-        .send-btn { width: 44px; height: 44px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
+        .send-btn { width: 40px; height: 40px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .phone-btn { width: 46px; height: 46px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
-        .phone-btn img { width: 46px; height: 46px; object-fit: contain; display: block; }
-        .mic-btn { width: 46px; height: 46px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
-        .mic-btn img { width: 46px; height: 46px; object-fit: contain; display: block; }
+        .phone-btn { width: 42px; height: 42px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
+        .phone-btn img { width: 34px; height: 34px; object-fit: contain; display: block; }
+        .mic-btn { width: 42px; height: 42px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .mic-btn img { width: 42px; height: 42px; object-fit: contain; display: block; }
         .slash-popup { background: ${darkMode?"#2C2C2E":"white"}; border-top: 1px solid ${borderColor}; max-height: 260px; overflow-y: auto; }
         .slash-header { padding: 10px 16px 6px; font-size: 12px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
         .slash-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid ${borderColor}; display: flex; align-items: center; gap: 12px; transition: background 0.1s; }
@@ -2314,18 +2355,19 @@ export default function InboxPage() {
           .topbar-actions { right: max(30px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 53px); }
           .chat-head { padding-top: 9px; min-height: 58px; }
           .input-area { gap: 10px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
-          .plus-btn { width: 54px; height: 54px; font-size: 36px; }
-          .icon-btn, .send-btn { width: 52px; height: 52px; font-size: 24px; }
-          .phone-btn, .mic-btn { width: 52px; height: 52px; }
-          .phone-btn img, .mic-btn img { width: 52px; height: 52px; }
+          .plus-btn { width: 48px; height: 48px; font-size: 32px; }
+          .icon-btn, .send-btn { width: 46px; height: 46px; font-size: 22px; }
+          .phone-btn, .mic-btn { width: 46px; height: 46px; }
+          .phone-btn img { width: 34px; height: 34px; }
+          .mic-btn img { width: 42px; height: 42px; }
           .msg-input { padding: 15px 18px; }
         }
       `}</style>
 
       <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadSelectedFile(f,"medication");e.target.value="";}}/>
-      <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadSelectedFile(f);e.target.value="";}}/>
-      <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadSelectedFile(f);e.target.value="";}}/>
-      <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadSelectedFile(f);e.target.value="";}}/>
+      <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
+      <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
+      <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
 
@@ -2349,6 +2391,38 @@ export default function InboxPage() {
               ) : (
                 <button onClick={sendCapturedVideo} className="pbtn" style={{marginTop:0,flex:1,background:"#DC2626"}}>{t.stopAndSendVideo}</button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewFile && previewUrl && (
+        <div className="modal-overlay" onClick={clearPreview}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxHeight:"88vh",paddingTop:16}}>
+            <p style={{fontSize:18,fontWeight:700,marginBottom:6,color:textColor}}>
+              {previewType==="audio" ? t.reviewAudio : previewType==="image" ? t.reviewPhoto : previewType==="video" ? t.reviewVideo : t.reviewCapture}
+            </p>
+            <p style={{fontSize:13,color:subTextColor,marginBottom:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {previewFile.name}
+            </p>
+            <div style={{background:darkMode?"#0B1120":"#F8FAFC",border:`1px solid ${borderColor}`,borderRadius:18,overflow:"hidden",display:"grid",placeItems:"center",minHeight:previewType==="audio"?92:220,marginBottom:14}}>
+              {previewType==="image" ? (
+                <img src={previewUrl} alt="" style={{width:"100%",maxHeight:"58vh",objectFit:"contain",display:"block"}} />
+              ) : previewType==="video" ? (
+                <video src={previewUrl} controls playsInline style={{width:"100%",maxHeight:"58vh",display:"block",background:"#000"}} />
+              ) : previewType==="audio" ? (
+                <audio src={previewUrl} controls style={{width:"calc(100% - 28px)"}} />
+              ) : (
+                <div style={{padding:18,fontSize:14,fontWeight:700,color:textColor,textAlign:"center",wordBreak:"break-word"}}>
+                  {previewFile.name}
+                </div>
+              )}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <button onClick={clearPreview} className="sbtn" style={{marginTop:0}}>{t.cancelCapture}</button>
+              <button onClick={sendPreview} className="pbtn" style={{marginTop:0}} disabled={sending}>
+                {previewType==="audio" ? t.sendRecording : t.send}
+              </button>
             </div>
           </div>
         </div>
@@ -2828,7 +2902,7 @@ export default function InboxPage() {
                     <span style={{fontSize:17,fontWeight:700,color:"#FF3B30",fontFamily:"monospace",flex:1}}>{fmtRec(recordingSeconds)}</span>
                     <span style={{fontSize:14,color:subTextColor}}>{t.recording}</span>
                     <button onClick={()=>stopRec(true)} style={{padding:"8px 16px",background:"#6B7280",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.cancelCapture}</button>
-                    <button onClick={()=>stopRec(false)} style={{padding:"8px 16px",background:"#FF3B30",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⏹ {lang==="es"?"Detener y enviar":"Stop & send"}</button>
+                    <button onClick={()=>stopRec(false)} style={{padding:"8px 16px",background:"#FF3B30",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⏹ {t.stopAndReview}</button>
                   </div>
                 ):(
                   <div className="input-area" onClick={e=>e.stopPropagation()}>
