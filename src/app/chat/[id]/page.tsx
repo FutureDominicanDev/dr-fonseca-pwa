@@ -197,13 +197,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const uploadFile = async (file: File, overrideType?: Message["message_type"]) => {
-    if (accessDenied || !accessReady) return;
+    if (accessDenied || !accessReady) return null;
 
-    const path = `chat/${id}/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("chat-files").upload(path, file);
-    if (error) return;
+    const path = `${id}/${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from("chat-media").upload(path, file);
+    if (error) return null;
 
-    const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
+    const { data } = supabase.storage.from("chat-media").getPublicUrl(path);
     const url = data.publicUrl;
     const messageType =
       overrideType ||
@@ -234,6 +234,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         return [...current, message as Message];
       });
     }
+
+    return url;
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -255,37 +257,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   const sendVideoPreview = async () => {
     if (!videoPreviewFile) return;
-    const localId = `local-video-${Date.now()}`;
-    const localMessage: Message = {
-      id: localId,
-      content: videoPreviewUrl,
-      sender_type: "patient",
-      message_type: "video",
-      file_url: videoPreviewUrl,
-      file_name: videoPreviewFile.name,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((current) => [...current, localMessage]);
-
-    const path = `chat/${id}/${Date.now()}-${videoPreviewFile.name}`;
-    const { error } = await supabase.storage.from("chat-files").upload(path, videoPreviewFile);
-    if (!error) {
-      const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
-      const url = data.publicUrl;
-      const { data: message } = await supabase
-        .from("messages")
-        .insert({
-          room_id: id,
-          content: url,
-          sender_type: "patient",
-          message_type: "video",
-          file_url: url,
-          file_name: videoPreviewFile.name,
-        })
-        .select("*")
-        .single();
-      if (message) setMessages((current) => current.map((item) => item.id === localId ? message as Message : item));
-    }
+    await uploadFile(videoPreviewFile, "video");
     if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
     setVideoPreviewFile(null);
     setVideoPreviewUrl("");
