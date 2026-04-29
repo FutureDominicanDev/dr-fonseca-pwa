@@ -87,6 +87,11 @@ export default function ChatShell({
     fontSize: 17,
     fontWeight: 800,
   };
+  const handlePhotos = onPhotos || onCamera;
+  const handleVideo = onVideo || onCamera;
+  const handleDocuments = onDocuments || onPlusClick;
+  const handleQuickRepliesOpen = onQuickRepliesOpen || onPlusClick;
+  const handleSettings = onSettings || onPlusClick;
 
   const renderMessage = (entry: ChatShellMessage) => {
     const url = entry.file_url || entry.content;
@@ -143,11 +148,11 @@ export default function ChatShell({
       <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px calc(12px + env(safe-area-inset-bottom))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
         {menuOpen && (
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
-            <button onClick={onPhotos} style={menuButtonStyle}>{labels.photos || "Photos"}</button>
-            <button onClick={onVideo} style={menuButtonStyle}>{labels.video || "Video"}</button>
-            <button onClick={onDocuments} style={menuButtonStyle}>{labels.documents || "Prescriptions"}</button>
-            <button onClick={onQuickRepliesOpen} style={menuButtonStyle}>{labels.quickReplies || "Quick Replies"}</button>
-            <button onClick={onSettings} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings || "Settings"}</button>
+            <button onClick={handlePhotos} style={menuButtonStyle}>{labels.photos || "Photos"}</button>
+            <button onClick={handleVideo} style={menuButtonStyle}>{labels.video || "Video"}</button>
+            <button onClick={handleDocuments} style={menuButtonStyle}>{labels.documents || "Prescriptions"}</button>
+            <button onClick={handleQuickRepliesOpen} style={menuButtonStyle}>{labels.quickReplies || "Quick Replies"}</button>
+            <button onClick={handleSettings} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings || "Settings"}</button>
           </div>
         )}
 
