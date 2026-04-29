@@ -1,15 +1,10 @@
 "use client";
-
-// ALL chat UI MUST be handled inside ChatShell.tsx.
-// DO NOT duplicate UI here.
-
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { isOwnerEmail } from "@/lib/securityConfig";
-import ChatShell from "@/components/chat/ChatShell";
 
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
@@ -302,9 +297,6 @@ interface CareTeamMember {
   role?: string | null;
   office_location?: string | null;
   avatar_url?: string | null;
-  phone?: string | null;
-  phone_number?: string | null;
-  mobile_phone?: string | null;
 }
 
 const CARE_TEAM_ROLE_ORDER = ["doctor", "enfermeria", "coordinacion", "post_quirofano", "staff"] as const;
@@ -325,7 +317,55 @@ function QREditor({ show, onClose, quickReplies, onSave, savingQR, savedQR, dark
 
   if (!show) return null;
 
-  return null;
+  return (
+    <>
+      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.35)",zIndex:59}} onClick={onClose}/>
+      <div style={{position:"absolute",top:0,right:0,width:"min(400px,100%)",height:"100%",background:sidebarBg,zIndex:60,boxShadow:"-4px 0 20px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column"}}>
+        <div style={{background:headerBg,padding:"14px 16px",paddingTop:"max(14px, env(safe-area-inset-top))",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",padding:"8px 14px",borderRadius:20,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>← {t.back}</button>
+          <span style={{color:"white",fontSize:17,fontWeight:700,flex:1}}>⚡ {t.quickReplies}</span>
+          {savingQR&&<span style={{color:"rgba(255,255,255,0.6)",fontSize:13}}>{t.saving}</span>}
+          {savedQR&&<span style={{color:"#25D366",fontSize:13,fontWeight:700}}>{t.saved}</span>}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:16}}>
+          <p style={{fontSize:13,color:subTextColor,marginBottom:14}}>{t.typeSlash}</p>
+          {quickReplies.length===0&&<p style={{color:subTextColor,fontSize:14,textAlign:"center",padding:"30px 0"}}>{t.noReplies}</p>}
+          {quickReplies.map((qr,i)=>(
+            <div key={i}>
+              {editingIndex===i?(
+                <div style={{background:darkMode?"#2C2C2E":"#EBF5FF",borderRadius:14,padding:14,marginBottom:10,border:"2px solid #007AFF"}}>
+                  <p style={{fontSize:12,fontWeight:700,color:"#007AFF",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>✏️ {t.editReply}</p>
+                  <input value={editingShortcut} onChange={e=>setEditingShortcut(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder={t.shortcut} style={{width:"100%",padding:"9px 12px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:9,fontSize:14,fontFamily:"inherit",color:textColor,outline:"none",marginBottom:8}}/>
+                  <textarea value={editingMessage} onChange={e=>setEditingMessage(e.target.value)} placeholder={t.message} rows={3} style={{width:"100%",padding:"9px 12px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:9,fontSize:14,fontFamily:"inherit",color:textColor,outline:"none",resize:"none",marginBottom:10}}/>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>{if(!editingShortcut.trim()||!editingMessage.trim())return;const updated=[...quickReplies];updated[i]={shortcut:editingShortcut.trim(),message:editingMessage.trim()};onSave(updated);setEditingIndex(null);}} style={{flex:1,padding:"10px 0",background:"#007AFF",border:"none",borderRadius:10,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✅ {t.save}</button>
+                    <button onClick={()=>setEditingIndex(null)} style={{flex:1,padding:"10px 0",background:cardBg,border:`1px solid ${borderColor}`,borderRadius:10,color:textColor,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✕ {t.cancel}</button>
+                  </div>
+                </div>
+              ):(
+                <div style={{background:cardBg,borderRadius:14,padding:14,marginBottom:10,border:`1px solid ${borderColor}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <span style={{background:"#007AFF",color:"white",fontSize:12,fontWeight:700,padding:"2px 10px",borderRadius:99}}>/{qr.shortcut}</span>
+                    <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+                      <button onClick={()=>{setEditingIndex(i);setEditingShortcut(qr.shortcut);setEditingMessage(qr.message);}} style={{background:"#EBF5FF",border:"none",color:"#007AFF",padding:"5px 11px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✏️ {t.edit}</button>
+                      <button onClick={()=>{if(confirm(t.deleteConfirm)){onSave(quickReplies.filter((_,j)=>j!==i));}}} style={{background:"#FFF0EE",border:"none",color:"#FF3B30",padding:"5px 11px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🗑️</button>
+                    </div>
+                  </div>
+                  <p style={{fontSize:14,color:textColor,lineHeight:1.5}}>{qr.message}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{padding:16,borderTop:`1px solid ${borderColor}`,background:darkMode?"#2C2C2E":"#F6F6F6",flexShrink:0}}>
+          <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>➕ {t.addReply}</p>
+          <input value={newShortcut} onChange={e=>setNewShortcut(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder={t.shortcut} style={{width:"100%",padding:"10px 14px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none",marginBottom:8}}/>
+          <textarea value={newMessage} onChange={e=>setNewMessage(e.target.value)} placeholder={t.message} rows={3} style={{width:"100%",padding:"10px 14px",background:darkMode?"#3A3A3C":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none",resize:"none",marginBottom:8}}/>
+          <button onClick={()=>{if(!newShortcut.trim()||!newMessage.trim())return;onSave([...quickReplies,{shortcut:newShortcut.trim(),message:newMessage.trim()}]);setNewShortcut("");setNewMessage("");}} style={{width:"100%",padding:12,background:"#007AFF",border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ {t.addReply}</button>
+        </div>
+      </div>
+    </>
+  );
 }
 
 export default function InboxPage() {
@@ -348,9 +388,7 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
-  const [message, setMessage] = useState("");
-  const newMessage = message;
-  const setNewMessage = setMessage;
+  const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sending, setSending] = useState(false);
   const [mobileView, setMobileView] = useState<"list"|"chat">("list");
@@ -395,7 +433,7 @@ export default function InboxPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [pendingFile, setPendingFile] = useState<File|null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [captureMode, setCaptureMode] = useState<"photo" | "video" | null>(null);
   const [preparingCapture, setPreparingCapture] = useState(false);
   const [recordingVideo, setRecordingVideo] = useState(false);
@@ -922,7 +960,7 @@ export default function InboxPage() {
   const fetchAssignableStaff = async () => {
     const { data } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id, full_name, role, office_location, avatar_url")
       .order("full_name", { ascending: true });
 
     const list = (data || []) as CareTeamMember[];
@@ -932,7 +970,6 @@ export default function InboxPage() {
       role: userProfile.role || "staff",
       office_location: userProfile.office_location || null,
       avatar_url: userProfile.avatar_url || null,
-      phone: userProfile.phone || userProfile.phone_number || userProfile.mobile_phone || null,
     }] : [];
     const merged = [...list];
     fallback.forEach((entry) => {
@@ -955,7 +992,7 @@ export default function InboxPage() {
     const memberIds = Array.from(new Set(members.map((entry: any) => entry.user_id).filter(Boolean)));
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id, full_name, role, office_location, avatar_url")
       .in("id", memberIds);
 
     setSelectedRoomTeam((profiles || []) as CareTeamMember[]);
@@ -980,8 +1017,8 @@ export default function InboxPage() {
 
   const uploadProfilePhoto = async (file: File) => {
     if (!userProfile?.id) return;
-    const fn = `profile-photos/${userProfile.id}/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("chat-files").upload(fn, file);
+    const fn = `profile-photos/${userProfile.id}/avatar.${file.name.split(".").pop()||"jpg"}`;
+    const { error } = await supabase.storage.from("chat-files").upload(fn, file, { upsert: true });
     if (!error) { const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn); await supabase.from("profiles").update({ avatar_url: ud.publicUrl }).eq("id",userProfile.id); setUserProfile((p: any)=>({...p,avatar_url:ud.publicUrl})); }
   };
 
@@ -1414,8 +1451,9 @@ export default function InboxPage() {
   const uploadFile = async (file: File, cat: FileCategory="general") => {
     if (!selectedRoom) return; setSending(true);
     try {
-      const fn=`patients/${selectedRoom.id}/${Date.now()}-${file.name}`;
-      const { error: ue } = await supabase.storage.from("chat-files").upload(fn,file);
+      const ext=file.name.split(".").pop()||"bin";
+      const fn=`${selectedRoom.id}/${Date.now()}.${ext}`;
+      const { error: ue } = await supabase.storage.from("chat-files").upload(fn,file,{upsert:true});
       if (ue){setSending(false);return;}
       const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn);
       let mt="file";
@@ -1573,7 +1611,7 @@ export default function InboxPage() {
 
       const { data: pt, error: pe } = patientInsert;
       if (pe) throw pe;
-      if (profilePicFile){const fn=`patients/${pt.id}/${Date.now()}-${profilePicFile.name}`;const{error:ue}=await supabase.storage.from("chat-files").upload(fn,profilePicFile);if(!ue){const{data:ud}=supabase.storage.from("chat-files").getPublicUrl(fn);await supabase.from("patients").update({profile_picture_url:ud.publicUrl}).eq("id",pt.id);}}
+      if (profilePicFile){const fn=`patient-profiles/${pt.id}/profile.${profilePicFile.name.split(".").pop()||"jpg"}`;const{error:ue}=await supabase.storage.from("chat-files").upload(fn,profilePicFile,{upsert:true});if(!ue){const{data:ud}=supabase.storage.from("chat-files").getPublicUrl(fn);await supabase.from("patients").update({profile_picture_url:ud.publicUrl}).eq("id",pt.id);}}
       const { data: pr, error: pre } = await supabase.from("procedures").insert({patient_id:pt.id,procedure_name:newProcedureName.trim(),surgery_date:surgeryDateIso||null,office_location:newLocation,status:"scheduled"}).select().single();
       if (pre) throw pre;
       const patientAccessToken = createPatientAccessToken();
@@ -1623,8 +1661,8 @@ export default function InboxPage() {
       });
       for (let i = 0; i < beforePhotosFiles.length; i++) {
         const f = beforePhotosFiles[i];
-        const fn2 = `patients/${rm.id}/${Date.now()}-${i}-${f.name}`;
-        const { error: ue2 } = await supabase.storage.from("chat-files").upload(fn2, f);
+        const fn2 = `patient-photos/${pt.id}/before/${Date.now()}-${i}.${f.name.split(".").pop() || "jpg"}`;
+        const { error: ue2 } = await supabase.storage.from("chat-files").upload(fn2, f, { upsert: true });
         if (!ue2) {
           const { data: ud2 } = supabase.storage.from("chat-files").getPublicUrl(fn2);
           await supabase.from("messages").insert({
@@ -1683,7 +1721,7 @@ export default function InboxPage() {
   const openCapture = async (mode: "photo" | "video") => {
     try {
       setPreparingCapture(true);
-      setMenuOpen(false);
+      setShowMediaMenu(false);
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: mode === "video" });
       captureStreamRef.current = stream;
       setCaptureMode(mode);
@@ -1752,25 +1790,6 @@ export default function InboxPage() {
       captureRecorderRef.current.stop();
     }
   };
-  const handleSend = () => sendMessage();
-  const handleMic = () => {
-    if (recording) stopRec();
-    else startRec();
-  };
-  const handleCamera = () => {
-    if (prefersNativeCapture) cameraInputRef.current?.click();
-    else openCapture("photo");
-  };
-  const handleVideo = () => {
-    if (prefersNativeCapture) videoInputRef.current?.click();
-    else openCapture("video");
-  };
-  const handleCall = () => {
-    window.location.href = "tel:+YOUR_NUMBER";
-  };
-  const handlePlus = () => {
-    setMenuOpen(prev => !prev);
-  };
 
   const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
   const roomMediaEntries = messages
@@ -1806,6 +1825,145 @@ export default function InboxPage() {
       if (unreadA !== unreadB) return unreadB - unreadA;
       return (a.full_name || "").localeCompare(b.full_name || "", lang==="es" ? "es" : "en");
     });
+
+  const groupedMessages = () => {
+    const groups: {date:string;msgs:any[]}[]=[];
+    let currentDate="";
+    messages.forEach(m=>{
+      if (m.deleted_by_staff || m.is_internal) return;
+      const d=new Date(m.created_at).toDateString();
+      if (d!==currentDate){currentDate=d;groups.push({date:m.created_at,msgs:[]});}
+      groups[groups.length-1].msgs.push(m);
+    });
+    return groups;
+  };
+
+  const renderMsg = (msg: any) => {
+    const isOut=msg.sender_type==="staff"||!msg.sender_type;
+    const isSystem=msg.sender_name==="Sistema";
+    const canDeleteOwnStaffMessage =
+      isOut &&
+      !isSystem &&
+      !msg.deleted_by_patient &&
+      !msg.deleted_by_staff &&
+      !!currentUserId &&
+      !!msg.sender_id &&
+      msg.sender_id === currentUserId;
+    const sc=senderColor(msg.sender_type||"staff",msg.sender_role||"staff");
+    const sn = isOut && !!currentUserId && msg.sender_id === currentUserId
+      ? (lang === "es" ? "Tú" : "You")
+      : (msg.sender_name || (isOut ? "Staff" : "Paciente"));
+    const videoCallRoomName = parseVideoCallMessage(msg.content);
+    const callRequestToken = parseCallRequestMessage(msg.content);
+    const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id && !videoCallRoomName && !callRequestToken
+      ? translatedIncoming[translationKey(msg.id, lang)] || ""
+      : "";
+    const contentToRender = translated || msg.content;
+    const effectiveType=msg.message_type==="text"&&isImageUrl(msg.content)?"image":msg.message_type;
+
+    if (isSystem) return (
+      <div key={msg.id} style={{display:"flex",justifyContent:"center",margin:"8px 0"}}>
+        <div style={{background:"rgba(0,0,0,0.08)",borderRadius:99,padding:"4px 14px",fontSize:12,color:"#555",fontWeight:600}}>{msg.content}</div>
+      </div>
+    );
+
+    const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
+    const bubbleBg = isOut ? "#DCF8C6" : darkMode ? "#1F2C34" : "#FFFFFF";
+    const bubbleRadius=isOut?"10px 10px 2px 10px":"10px 10px 10px 2px";
+    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"76%",padding:"9px 12px",boxShadow:"0 1px 1px rgba(0,0,0,0.12)",position:"relative",border:isOut?"none":`1px solid ${borderColor}`};
+
+    return (
+      <div key={msg.id} style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}>
+        <div style={{fontSize:13,fontWeight:700,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
+        {msg.deleted_by_patient?(
+          <div style={{...bubbleStyle,fontStyle:"italic",opacity:0.72,fontSize}}>{t.msgDeleted}<div style={{fontSize:12,opacity:0.75,marginTop:3,textAlign:"right"}}>{fmtTime(msg.created_at)}</div></div>
+        ):effectiveType==="image"?(
+          <div style={{...bubbleStyle,padding:4}}>
+            <img src={msg.content} alt="" style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
+            <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+          </div>
+        ):effectiveType==="video"?(
+          <div style={{...bubbleStyle,padding:4}}>
+            <video src={msg.content} controls style={{width:"100%",maxWidth:280,borderRadius:14,display:"block"}}/>
+            <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+          </div>
+        ):effectiveType==="audio"?(
+          <div style={{...bubbleStyle,minWidth:220}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:20}}>🎤</span><span style={{fontSize:14,fontWeight:600}}>Audio</span></div>
+            <audio src={msg.content} controls style={{width:"100%"}}/>
+            <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+          </div>
+        ):effectiveType==="file"?(
+          <div style={{...bubbleStyle,cursor:"pointer"}}>
+            <a href={msg.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,color:"inherit",textDecoration:"none"}}>
+              <span style={{fontSize:28}}>📄</span>
+              <div><div style={{fontSize:14,fontWeight:700}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
+            </a>
+            <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+          </div>
+        ):callRequestToken ? (
+          <div style={{ ...bubbleStyle, padding: 12, minWidth: 250 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 20 }}>📲</span>
+              <span style={{ fontSize: 14, fontWeight: 800 }}>{isOut ? t.callRequestSent : t.incomingCallRequest}</span>
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>
+              {isOut ? t.callRequestSent : t.callRequestBody}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
+              {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
+            </div>
+            <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+          </div>
+        ):videoCallRoomName ? (
+          <div style={{ ...bubbleStyle, padding: 12, minWidth: 240 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 20 }}>🎥</span>
+              <span style={{ fontSize: 14, fontWeight: 800 }}>{t.videoCallInvite}</span>
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 10 }}>{t.videoCallInviteBody}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", borderRadius: 10, padding: "8px 10px" }}>
+              {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
+            </div>
+            <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+          </div>
+        ):(
+          <div style={{...bubbleStyle,lineHeight:1.58,wordBreak:"break-word",fontSize,fontWeight:500,letterSpacing:"0.01em"}}>
+            {contentToRender}
+            <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
+              {fmtTime(msg.created_at)}
+              {isOut&&<span style={{color:"#007AFF"}}>✓✓</span>}
+            </div>
+          </div>
+        )}
+        {canDeleteOwnStaffMessage && (
+          <button
+            onClick={() => {
+              if (!confirm(t.deleteMsg)) return;
+              supabase
+                .from("messages")
+                .update({ deleted_by_staff: true, deleted_at: new Date().toISOString() })
+                .eq("id", msg.id)
+                .then(() => {
+                  setMessages((prev) => prev.map((entry) => (entry.id === msg.id ? { ...entry, deleted_by_staff: true } : entry)));
+                });
+            }}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "#DC2626",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              padding: "2px 4px",
+            }}
+          >
+            🗑️ {lang==="es"?"Eliminar":"Delete"}
+          </button>
+        )}
+      </div>
+    );
+  };
 
   const SettingsPanel = () => (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowSettings(false)}>
@@ -1901,16 +2059,16 @@ export default function InboxPage() {
     })).filter((group) => group.members.length > 0);
 
     return (
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:210,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))",overflow:"hidden",touchAction:"none",overscrollBehavior:"none"}} onClick={()=>setShowPatientInfo(false)}>
-        <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:580,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflow:"hidden",padding:0,touchAction:"auto"}} onClick={e=>e.stopPropagation()}>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:210,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowPatientInfo(false)}>
+        <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:580,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`}} onClick={e=>e.stopPropagation()}>
           <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) max(20px, env(safe-area-inset-right)) 16px max(20px, env(safe-area-inset-left))",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
               <p style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patientInfo}</p>
               <p style={{fontSize:13,color:subTextColor,marginTop:4}}>{t.patientInfoHint}</p>
             </div>
-            <button onClick={()=>setShowPatientInfo(false)} style={{width:44,height:44,background:"#0B3C5D",border:"none",borderRadius:"50%",fontSize:24,fontWeight:900,cursor:"pointer",color:"#fff",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 18px rgba(11,60,93,0.28)"}}>×</button>
+            <button onClick={()=>setShowPatientInfo(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
           </div>
-          <div style={{padding:"0 20px calc(40px + env(safe-area-inset-bottom))",display:"grid",gap:14,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)) - 84px)",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",touchAction:"pan-y"}}>
+          <div style={{padding:"0 20px",display:"grid",gap:14}}>
             <div style={{background:cardBg,borderRadius:18,padding:16,display:"grid",gridTemplateColumns:"88px 1fr",gap:14,alignItems:"center"}}>
               <div style={{width:88,height:88,borderRadius:20,overflow:"hidden",background:"linear-gradient(135deg,#0F172A,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:28,fontWeight:800}}>
                 {patient?.profile_picture_url ? <img src={patient.profile_picture_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(patient?.full_name || "P")}
@@ -2012,9 +2170,9 @@ export default function InboxPage() {
               {beforeEntries.length===0 ? (
                 <p style={{fontSize:14,color:subTextColor}}>{lang==="es" ? "No hay material preoperatorio cargado todavía." : "No pre-op material has been uploaded yet."}</p>
               ) : (
-                <div style={{display:"flex",gap:10,overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch",overscrollBehaviorX:"contain",touchAction:"pan-x",paddingBottom:4}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(84px, 1fr))",gap:10}}>
                   {beforeEntries.map((entry) => (
-                    <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",textDecoration:"none",flex:"0 0 92px"}}>
+                    <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",textDecoration:"none"}}>
                       <div style={{aspectRatio:"1 / 1",borderRadius:14,overflow:"hidden",background:"#E5E7EB"}}>
                         <img src={entry.content} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                       </div>
@@ -2062,52 +2220,384 @@ export default function InboxPage() {
   return (
     <>
       <style>{`
-        * { box-sizing: border-box; }
-        .page { height: 100dvh; width: 100vw; background: ${bg}; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-        .topbar { height: 64px; background: ${headerBg}; color: white; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; padding-top: env(safe-area-inset-top); box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
-        .body { height: calc(100dvh - 64px); display: flex; overflow: hidden; }
-        .sidebar { width: 370px; max-width: 42vw; background: ${sidebarBg}; border-right: 1px solid ${borderColor}; display: flex; flex-direction: column; min-width: 300px; }
-        .sidebar-head { padding: 18px; border-bottom: 1px solid ${borderColor}; }
-        .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-        .search-bar { height: 42px; background: ${inputBg}; border-radius: 14px; display: flex; align-items: center; gap: 10px; padding: 0 13px; }
-        .search-input { flex: 1; border: none; outline: none; background: transparent; color: ${textColor}; font-size: 15px; font-family: inherit; }
-        .patient-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-        .patient-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid ${borderColor}; cursor: pointer; transition: background 0.12s ease; }
-        .patient-row:hover, .patient-row.active { background: ${darkMode ? "#1F2937" : "#EFF6FF"}; }
-        .av { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg,#007AFF,#34C759); color: white; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 900; position: relative; overflow: hidden; flex-shrink: 0; }
-        .av-badge { position: absolute; right: 0; bottom: 0; width: 13px; height: 13px; border-radius: 50%; background: #25D366; border: 2px solid ${sidebarBg}; }
-        .patient-info { min-width: 0; flex: 1; }
-        .patient-name { color: ${textColor}; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .patient-meta { color: ${subTextColor}; font-size: 12px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .main-area { flex: 1; min-width: 0; height: 100%; background: ${bg}; display: flex; flex-direction: column; }
-        .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 28px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+        .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
+        .topbar { flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(62px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+        .body { display: flex; flex: 1; overflow: hidden; position: relative; }
+        .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
+        .sidebar-head { padding: 12px 14px; background: ${darkMode?"#1F2C33":"#F6F7F9"}; border-bottom: 1px solid ${borderColor}; }
+        .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .search-bar { display: flex; align-items: center; gap: 8px; background: ${darkMode?"#2A3942":"#F0F2F5"}; border-radius: 8px; padding: 8px 10px; }
+        .search-input { flex: 1; border: none; background: transparent; font-size: 16px; outline: none; color: ${textColor}; font-family: inherit; }
+        .patient-list { flex: 1; overflow-y: auto; }
+        .patient-list::-webkit-scrollbar { display: none; }
+        .patient-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; border-bottom: 1px solid ${borderColor}; transition: background 0.1s; }
+        .patient-row:hover { background: ${darkMode?"#22303a":"#F7F8FA"}; }
+        .patient-row.active { background: ${darkMode?"#243640":"#EBF5FF"}; }
+        .av { width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; position: relative; }
+        .av-badge { position: absolute; top: 1px; right: 1px; width: 15px; height: 15px; background: #25D366; border-radius: 50%; border: 2px solid ${sidebarBg}; }
+        .patient-info { flex: 1; min-width: 0; }
+        .patient-name { font-size: 17px; font-weight: 600; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .patient-meta { font-size: 14px; color: ${subTextColor}; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .unread-dot { width: 13px; height: 13px; background: #25D366; border-radius: 50%; flex-shrink: 0; }
+        .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${bg}; transition: transform 0.25s ease; z-index: 20; }
+        .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
+        .main-area.hidden { transform: translateX(100%); pointer-events: none; }
+        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${bg}; background-image: radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px); background-size: 18px 18px; }
+        .chat-bg::-webkit-scrollbar { display: none; }
+        .date-sep { display: flex; justify-content: center; margin: 14px 0; }
+        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.85)":"rgba(255,255,255,0.92)"}; border-radius: 8px; padding: 4px 10px; font-size: 12px; color: ${darkMode?"#D1D5DB":"#54656F"}; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+        .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 66px; border-left: 1px solid rgba(255,255,255,0.08); }
+        .back-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 22px; font-weight: 700; transition: background 0.15s; }
+        .back-btn:hover { background: rgba(255,255,255,0.25); }
+        .chat-av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
+        .chat-head-name { font-size: 17px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-head-sub { font-size: 13px; color: rgba(255,255,255,0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .input-area { flex-shrink: 0; background: ${inputBg}; padding: 10px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); display: flex; align-items: flex-end; gap: 8px; border-top: 1px solid ${borderColor}; }
+        .msg-input { flex: 1; padding: 11px 16px; background: ${darkMode?"#2A3942":"white"}; border: none; border-radius: 10px; font-size: ${fontSize}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 120px; resize: none; line-height: 1.45; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+        .msg-input::placeholder { color: #AEAEB2; }
+        .icon-btn { width: 42px; height: 42px; border-radius: 50%; background: ${darkMode?"#2A3942":"#E9EDEF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 20px; transition: background 0.15s; }
+        .icon-btn:hover { background: ${darkMode?"#334956":"#DDE5EA"}; }
+        .send-btn { width: 42px; height: 42px; border-radius: 50%; background: #00A884; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,168,132,0.35); }
+        .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .slash-popup { background: ${darkMode?"#2C2C2E":"white"}; border-top: 1px solid ${borderColor}; max-height: 260px; overflow-y: auto; }
+        .slash-header { padding: 10px 16px 6px; font-size: 12px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
+        .slash-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid ${borderColor}; display: flex; align-items: center; gap: 12px; transition: background 0.1s; }
+        .slash-item:hover { background: ${darkMode?"#3A3A3C":"#F8F8F8"}; }
+        .slash-shortcut { background: #007AFF; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; flex-shrink: 0; }
+        .slash-msg { font-size: 15px; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); }
+        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
+        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
+        .modal-title { font-size: 20px; font-weight: 700; color: ${textColor}; margin-bottom: 20px; }
+        .flabel { font-size: 13px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
+        .finput { width: 100%; padding: 13px 16px; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; border-radius: 14px; font-size: 16px; font-family: inherit; color: ${textColor}; outline: none; margin-bottom: 14px; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
+        .finput::placeholder { color: #AEAEB2; }
+        .loc-group { display: flex; gap: 10px; margin-bottom: 14px; }
+        .loc-opt { flex: 1; padding: 13px; border-radius: 14px; cursor: pointer; font-size: 15px; font-weight: 600; color: ${subTextColor}; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; text-align: center; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
+        .loc-opt.sel { background: #EBF5FF; color: #007AFF; border-color: #007AFF; }
+        .file-box { width: 100%; padding: 16px; border: 2px dashed ${darkMode?"#555":"#C7D8EA"}; border-radius: 14px; cursor: pointer; text-align: center; font-size: 14px; font-weight: 600; color: ${subTextColor}; margin-bottom: 14px; background: ${darkMode?"transparent":"#F8FBFF"}; }
+        .pbtn { width: 100%; padding: 15px; background: #007AFF; border: none; border-radius: 14px; color: white; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 8px; }
+        .pbtn:disabled { opacity: 0.45; }
+        .sbtn { width: 100%; padding: 13px; background: ${darkMode?cardBg:"#F5F8FC"}; border: 1px solid ${darkMode?"transparent":"#D9E4F2"}; border-radius: 14px; color: ${textColor}; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 8px; }
+        .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 820px) {
-          .body { display: block; }
-          .sidebar { width: 100%; max-width: none; height: 100%; min-width: 0; border-right: none; }
-          .main-area { height: 100%; }
-          .hidden { display: none !important; }
+        @media (max-width: 700px) {
+          .chat-head { padding-top: max(14px, env(safe-area-inset-top)); min-height: calc(66px + env(safe-area-inset-top)); }
         }
       `}</style>
 
-      <div className="page">
-        <div className="topbar">
-          <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
-            {mobileView==="chat"&&(
-              <button onClick={()=>setMobileView("list")} style={{width:38,height:38,borderRadius:"50%",border:"none",background:"rgba(255,255,255,0.12)",color:"white",fontSize:22,cursor:"pointer"}} aria-label="Back">‹</button>
-            )}
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:18,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                {selectedRoom?.patients?.full_name || "Dr. Fonseca Portal"}
-              </div>
-              <div style={{fontSize:12,opacity:0.76,fontWeight:700}}>
-                {selectedRoom ? t.online : "Staff"}
-              </div>
+      <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
+      <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
+      <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
+      <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingFile(f);setShowUploadMenu(true);}e.target.value="";}}/>
+      <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
+      <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
+
+      {(captureMode || preparingCapture) && (
+        <div className="modal-overlay" onClick={cancelCapture}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxHeight:"88vh",paddingTop:16}}>
+            <p style={{fontSize:18,fontWeight:700,marginBottom:12,color:textColor}}>
+              {preparingCapture ? t.preparingCamera : captureMode==="photo" ? t.takePhoto : t.recordVideoOption}
+            </p>
+            <div style={{background:"#000",borderRadius:18,overflow:"hidden",aspectRatio:"3 / 4",display:"grid",placeItems:"center",marginBottom:14}}>
+              {preparingCapture ? (
+                <span style={{color:"white",fontWeight:700}}>{t.preparingCamera}</span>
+              ) : (
+                <video ref={mediaCaptureVideoRef} muted playsInline autoPlay style={{width:"100%",height:"100%",objectFit:"cover"}} />
+              )}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={cancelCapture} className="sbtn" style={{marginTop:0,flex:1}}>{t.cancelCapture}</button>
+              {captureMode==="photo" ? (
+                <button onClick={takePhotoNow} className="pbtn" style={{marginTop:0,flex:1}}>{t.takePhotoNow}</button>
+              ) : (
+                <button onClick={sendCapturedVideo} className="pbtn" style={{marginTop:0,flex:1,background:"#DC2626"}}>{t.stopAndSendVideo}</button>
+              )}
             </div>
           </div>
+        </div>
+      )}
+
+      {showUploadMenu&&pendingFile&&(
+        <div className="modal-overlay" onClick={()=>{setShowUploadMenu(false);setPendingFile(null);}}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxHeight:"50vh"}}>
+            <p style={{fontSize:18,fontWeight:700,marginBottom:6,color:textColor}}>{t.fileCategory}</p>
+            <p style={{fontSize:13,color:subTextColor,marginBottom:16}}>{pendingFile.name}</p>
+            {([{c:"general" as FileCategory,icon:"💬",label:t.general,sub:t.generalSub},{c:"medication" as FileCategory,icon:"💊",label:t.medication,sub:t.medicationSub},{c:"before_photo" as FileCategory,icon:"📸",label:t.beforePhoto,sub:t.beforeSub}]).map(opt=>(
+              <button key={opt.c} onClick={()=>confirmUpload(opt.c)} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"13px 14px",background:cardBg,border:`1px solid ${borderColor}`,borderRadius:14,cursor:"pointer",marginBottom:8,fontFamily:"inherit"}}>
+                <span style={{fontSize:28}}>{opt.icon}</span>
+                <div style={{textAlign:"left"}}><p style={{fontSize:15,fontWeight:700,color:textColor,margin:0}}>{opt.label}</p><p style={{fontSize:12,color:subTextColor,margin:0}}>{opt.sub}</p></div>
+              </button>
+            ))}
+            <button onClick={()=>{setShowUploadMenu(false);setPendingFile(null);}} className="sbtn">{t.cancel}</button>
+          </div>
+        </div>
+      )}
+
+      {showNewRoom&&(
+        <div className="modal-overlay" onClick={()=>setShowNewRoom(false)}>
+          <div className="modal-scroll" onClick={e=>e.stopPropagation()}>
+            <p className="modal-title">➕ {t.newRoom}</p>
+            {newRoomError && <div style={{background:"#FFF1F2",color:"#E11D48",borderRadius:14,padding:"12px 14px",fontSize:14,fontWeight:800,marginBottom:14}}>⚠️ {t.fixErrors} {newRoomError}</div>}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label className="flabel">{t.patientFirstName}</label>
+                <input className="finput" placeholder={t.patientFirstNamePH} value={newPatientFirstName} onChange={e=>{setNewPatientFirstName(e.target.value);if(newRoomError)setNewRoomError("");}}/>
+              </div>
+              <div>
+                <label className="flabel">{t.patientLastName}</label>
+                <input className="finput" placeholder={t.patientLastNamePH} value={newPatientLastName} onChange={e=>{setNewPatientLastName(e.target.value);if(newRoomError)setNewRoomError("");}}/>
+              </div>
+            </div>
+            <label className="flabel">{t.phone}</label>
+            <div style={{display:"grid",gridTemplateColumns:"minmax(150px, 220px) 1fr",gap:10}}>
+              <select className="finput" value={newPatientPhoneCountry} onChange={e=>setNewPatientPhoneCountry(e.target.value)}>
+                {PHONE_COUNTRY_OPTIONS.map((option)=>(
+                  <option key={option.code} value={option.code}>{option.label}</option>
+                ))}
+              </select>
+              <input className="finput" inputMode="tel" placeholder={t.phonePH} value={newPatientPhoneLocal} onChange={e=>{setNewPatientPhoneLocal(formatPhoneLocal(e.target.value));if(newRoomError)setNewRoomError("");}}/>
+            </div>
+            <label className="flabel">{t.email}</label>
+            <input className="finput" type="email" placeholder={t.emailPH} value={newPatientEmail} onChange={e=>{setNewPatientEmail(e.target.value);if(newRoomError)setNewRoomError("");}}/>
+            <label className="flabel">{t.birthdate}</label>
+            <input className="finput" inputMode="numeric" placeholder={t.birthdatePH} value={isoToDisplayDate(newBirthdate)} onChange={e=>setNewBirthdate(formatDateTyping(e.target.value))}/>
+            <label className="flabel">{t.procedure}</label>
+            <input className="finput" placeholder={t.procedurePH} value={newProcedureName} onChange={e=>setNewProcedureName(e.target.value)}/>
+            <label className="flabel">{t.surgeryDate}</label>
+            <input className="finput" inputMode="numeric" placeholder={t.surgeryDatePH} value={isoToDisplayDate(newSurgeryDate)} onChange={e=>setNewSurgeryDate(formatDateTyping(e.target.value))}/>
+            <label className="flabel">{t.preferredLanguage}</label>
+            <div className="loc-group">
+              {PATIENT_LANGUAGE_OPTIONS.map((option)=>(
+                <div key={option.value} className={`loc-opt${newPatientLanguage===option.value?" sel":""}`} onClick={()=>setNewPatientLanguage(option.value)}>
+                  {lang==="es" ? option.labelEs : option.labelEn}
+                </div>
+              ))}
+            </div>
+            <label className="flabel">{t.timezone}</label>
+            <select className="finput" value={newPatientTimezone} onChange={e=>setNewPatientTimezone(e.target.value)}>
+              {PATIENT_TIMEZONE_OPTIONS.map((option)=>(
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <p style={{fontSize:12,color:subTextColor,margin:"-6px 0 12px"}}>
+              {lang==="es"
+                ? "Este horario se muestra al equipo médico para evitar confusiones al responder."
+                : "This is shown to the care team to avoid timing confusion when replying."}
+            </p>
+            <label className="flabel">{t.allergies}</label>
+            <textarea className="finput" placeholder={t.allergiesPH} value={newPatientAllergies} onChange={e=>setNewPatientAllergies(e.target.value)} rows={3} style={{resize:"vertical"}}/>
+            <label className="flabel">{t.medications}</label>
+            <textarea className="finput" placeholder={t.medicationsPH} value={newPatientMedications} onChange={e=>setNewPatientMedications(e.target.value)} rows={3} style={{resize:"vertical"}}/>
+            <label className="flabel">{t.location}</label>
+            <div className="loc-group">
+              <div className={`loc-opt${newLocation==="Guadalajara"?" sel":""}`} onClick={()=>setNewLocation("Guadalajara")}>{t.gdl}</div>
+              <div className={`loc-opt${newLocation==="Tijuana"?" sel":""}`} onClick={()=>setNewLocation("Tijuana")}>{t.tjn}</div>
+            </div>
+            <label className="flabel">{t.careTeam}</label>
+            <p style={{fontSize:13,color:subTextColor,margin:"-4px 0 10px"}}>{t.careTeamHint}</p>
+            <div style={{background:darkMode?"#2C2C2E":"#F8FBFF",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,borderRadius:18,padding:14,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+                <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{showAllCareTeamOptions ? t.careTeamShowAll : t.careTeamFocused}</p>
+                <button type="button" onClick={()=>setShowAllCareTeamOptions((prev)=>!prev)} style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#E8F0FE",color:"#2563EB",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
+                  {showAllCareTeamOptions ? t.careTeamShowOffice : t.careTeamShowAll}
+                </button>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ids = [currentUserId, ...careTeamDirectory.map((member)=>member.id)].filter(Boolean) as string[];
+                    setSelectedCareTeamIds(Array.from(new Set(ids)));
+                  }}
+                  style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
+                >
+                  {t.careTeamSelectAll}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCareTeamIds(currentUserId ? [currentUserId] : [])}
+                  style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#EEF2F7",color:"#475569",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
+                >
+                  {t.careTeamClear}
+                </button>
+                <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,fontSize:12,fontWeight:800,color:textColor}}>
+                  {t.careTeamSelected}: {careTeamSelectedMembers.length}
+                </span>
+              </div>
+              <div style={{display:"grid",gap:10}}>
+                {careTeamGroups.map((group)=>(
+                  <div key={group.role} style={{background:darkMode?"#1F2937":"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#E6EEF7"}`,borderRadius:16,padding:12}}>
+                    <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{careTeamRoleLabel(group.role)}</p>
+                    <div style={{display:"grid",gap:8}}>
+                      {group.members.map((member)=>(
+                        <label key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:selectedCareTeamIds.includes(member.id)?"#EBF5FF":(darkMode?"#111827":"#F8FBFF"),border:selectedCareTeamIds.includes(member.id)?"1px solid #93C5FD":`1px solid ${darkMode?"rgba(255,255,255,0.05)":"#E6EEF7"}`,cursor:"pointer"}}>
+                          <input type="checkbox" checked={selectedCareTeamIds.includes(member.id)} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB"}} />
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:14,fontWeight:800,color:textColor}}>{member.full_name || (lang==="es"?"Personal":"Staff")}</div>
+                            <div style={{fontSize:12,color:subTextColor}}>{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p style={{fontSize:12,color:subTextColor,marginBottom:14}}>{t.noTeamSelected}</p>
+            <label className="flabel">📸 {t.profilePic}</label>
+            <div className="file-box" onClick={()=>profilePicRef.current?.click()}>
+              {profilePicFile?<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><img src={URL.createObjectURL(profilePicFile)} alt="" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover"}}/><span>{profilePicFile.name}</span></div>:t.tapProfilePic}
+            </div>
+            <label className="flabel">📷 {t.beforePhotos}</label>
+            {beforePhotosFiles.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{beforePhotosFiles.map((f,i)=><img key={i} src={URL.createObjectURL(f)} style={{width:60,height:60,borderRadius:10,objectFit:"cover"}} alt=""/>)}</div>}
+            <div className="file-box" onClick={()=>beforePhotosRef.current?.click()}>
+              {beforePhotosFiles.length===0?t.tapBeforePhotos:`📷 ${beforePhotosFiles.length} foto(s)`}
+            </div>
+            <button className="pbtn" onClick={createRoom} disabled={creatingRoom}>{creatingRoom?t.creating:t.createRoom}</button>
+            {newRoomError && (
+              <div style={{background:"#FFF1F2",color:"#E11D48",borderRadius:12,padding:"10px 12px",fontSize:13,fontWeight:800,marginTop:8,marginBottom:4}}>
+                ⚠️ {newRoomError}
+              </div>
+            )}
+            <button className="sbtn" onClick={()=>setShowNewRoom(false)}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
+
+      {createdRoomLink&&(
+        <div className="modal-overlay" onClick={()=>setCreatedRoomLink(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <div style={{fontSize:52,marginBottom:10}}>🎉</div>
+              <p style={{fontSize:20,fontWeight:700,color:textColor}}>{t.roomCreated}</p>
+              <p style={{fontSize:15,color:subTextColor,marginTop:4}}>{t.shareLink} <strong style={{color:textColor}}>{createdPatientName}</strong></p>
+            </div>
+            <div style={{background:darkMode?"#3A3A3C":"#F2F2F7",borderRadius:12,padding:"12px 14px",marginBottom:16,wordBreak:"break-all",fontSize:13,color:"#007AFF"}}>{createdRoomLink}</div>
+            <button onClick={copyLink} style={{width:"100%",padding:14,background:linkCopied?"#34C759":"#007AFF",border:"none",borderRadius:14,color:"white",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>{linkCopied?t.copied:t.copyLink}</button>
+            <button onClick={whatsAppLink} style={{width:"100%",padding:14,background:"#25D366",border:"none",borderRadius:14,color:"white",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>{t.whatsapp}</button>
+            <button onClick={()=>setCreatedRoomLink(null)} className="sbtn">{t.done}</button>
+          </div>
+        </div>
+      )}
+
+      {callOverlayOpen && activeCallUrl && (
+        <div style={{position:"fixed",inset:0,zIndex:260,background:"rgba(2,6,23,0.82)",display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
+          <div style={{width:"min(1180px,100%)",height:"min(92dvh,900px)",background:"#020617",borderRadius:18,overflow:"hidden",display:"flex",flexDirection:"column",border:"1px solid rgba(148,163,184,0.35)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"10px 12px",background:"rgba(15,23,42,0.95)",borderBottom:"1px solid rgba(148,163,184,0.2)"}}>
+              <div style={{color:"white",fontSize:14,fontWeight:800}}>🎥 {t.videoCall}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <button onClick={()=>{ if (activeCallRoomName) shareCallInvite(activeCallRoomName); }} style={{border:"none",borderRadius:10,padding:"8px 10px",background:"rgba(37,99,235,0.2)",color:"white",fontSize:12,fontWeight:800,cursor:"pointer"}}>🔗 {t.shareInvite}</button>
+                <button onClick={()=>closeCallOverlay()} style={{border:"none",borderRadius:10,padding:"8px 10px",background:"#DC2626",color:"white",fontSize:12,fontWeight:800,cursor:"pointer"}}>📴 {t.endAndReturn}</button>
+              </div>
+            </div>
+            {callInviteFeedback && (
+              <div style={{padding:"8px 12px",fontSize:12,fontWeight:700,color:"#BFDBFE",background:"rgba(30,58,138,0.45)"}}>
+                {callInviteFeedback}
+              </div>
+            )}
+            <iframe
+              src={activeCallUrl}
+              allow="camera; microphone; fullscreen; display-capture; autoplay"
+              style={{border:"none",width:"100%",height:"100%",background:"#000"}}
+              title="Video Call"
+            />
+          </div>
+        </div>
+      )}
+
+      {showMediaLibrary && (
+        <div className="modal-overlay" onClick={()=>setShowMediaLibrary(false)}>
+          <div className="modal-scroll" onClick={e=>e.stopPropagation()} style={{maxWidth:760}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <p className="modal-title" style={{margin:0}}>🖼️ {lang==="es"?"Media del paciente":"Patient media"}</p>
+              <button onClick={()=>setShowMediaLibrary(false)} style={{background:cardBg,border:"none",borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+              {([
+                { key:"media", label: lang==="es" ? "Media" : "Media" },
+                { key:"audio", label: lang==="es" ? "Audios" : "Audio" },
+                { key:"docs", label: lang==="es" ? "Archivos" : "Files" },
+              ] as { key: MediaTab; label: string }[]).map((tab)=>(
+                <button key={tab.key} onClick={()=>setMediaLibraryTab(tab.key)} style={{padding:"10px 14px",borderRadius:999,border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:800,background:mediaLibraryTab===tab.key?"#DBEAFE":cardBg,color:mediaLibraryTab===tab.key?"#1D4ED8":textColor}}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {mediaLibraryTab==="media" && (
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
+                {roomImageVideoEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{lang==="es"?"Sin imágenes o videos todavía.":"No images or videos yet."}</div>}
+                {roomImageVideoEntries.map((entry:any)=>(
+                  <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",borderRadius:14,overflow:"hidden",textDecoration:"none",background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
+                    {entry.message_type==="image" ? (
+                      <img src={entry.content} alt="" style={{width:"100%",height:120,objectFit:"cover",display:"block"}} />
+                    ) : (
+                      <video src={entry.content} style={{width:"100%",height:120,objectFit:"cover",display:"block"}} />
+                    )}
+                    <div style={{padding:"8px 10px",fontSize:12,color:subTextColor}}>{fmtDateLabel(entry.created_at)}</div>
+                  </a>
+                ))}
+              </div>
+            )}
+            {mediaLibraryTab==="audio" && (
+              <div style={{display:"grid",gap:10}}>
+                {roomAudioEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{lang==="es"?"Sin audios todavía.":"No audio files yet."}</div>}
+                {roomAudioEntries.map((entry:any)=>(
+                  <div key={entry.id} style={{padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`}}>
+                    <audio src={entry.content} controls style={{width:"100%"}} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {mediaLibraryTab==="docs" && (
+              <div style={{display:"grid",gap:10}}>
+                {roomFileEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{lang==="es"?"Sin archivos todavía.":"No files yet."}</div>}
+                {roomFileEntries.map((entry:any)=>(
+                  <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
+                    <span style={{fontSize:22}}>📄</span>
+                    <div style={{fontWeight:700,fontSize:14}}>{entry.file_name || (lang==="es"?"Archivo":"File")}</div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showSettings && SettingsPanel()}
+      {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
+
+      <QREditor
+        show={showQREditor}
+        onClose={()=>setShowQREditor(false)}
+        quickReplies={quickReplies}
+        onSave={saveQuickReplies}
+        savingQR={savingQR}
+        savedQR={savedQR}
+        darkMode={darkMode}
+        lang={lang}
+        t={t}
+        headerBg={headerBg}
+        sidebarBg={sidebarBg}
+        borderColor={borderColor}
+        cardBg={cardBg}
+        textColor={textColor}
+        subTextColor={subTextColor}
+      />
+
+      <div className="shell" onClick={()=>{setPressedMsgId(null);setShowSlashMenu(false);}}>
+        <div className="topbar">
+          <img src="/fonseca_blue.png" style={{height:52,width:"auto",objectFit:"contain"}} alt="Dr. Fonseca"/>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.08)",borderRadius:99}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:"#25D366"}}/>
+              <span style={{fontSize:13,fontWeight:600,color:"rgba(255,255,255,0.8)"}}>{t.online}</span>
+            </div>
             {canOpenAdmin&&<button onClick={()=>window.location.href="/admin"} style={{padding:"0 14px",height:42,borderRadius:99,background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>Admin</button>}
+            <button onClick={()=>setShowSettings(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.1)",border:"none",color:"white",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>⚙️</button>
           </div>
         </div>
 
@@ -2120,8 +2610,14 @@ export default function InboxPage() {
                 <div style={{fontSize:15,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.title}</div>
                 <div style={{fontSize:13,color:subTextColor,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.body}</div>
               </div>
-              <button onClick={(event)=>{event.stopPropagation();setToastAlert(null);}} style={{border:"none",background:"transparent",color:subTextColor,cursor:"pointer",fontSize:18,lineHeight:1}}>x</button>
+              <button onClick={(event)=>{event.stopPropagation();setToastAlert(null);}} style={{border:"none",background:"transparent",color:subTextColor,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
             </div>
+          </div>
+        )}
+
+        {!callOverlayOpen && callInviteFeedback && (
+          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",left:16,zIndex:240,maxWidth:"min(420px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.97)":"rgba(255,255,255,0.99)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:14,boxShadow:"0 10px 28px rgba(15,23,42,0.22)",padding:"10px 12px",fontSize:13,fontWeight:700}}>
+            {callInviteFeedback}
           </div>
         )}
 
@@ -2138,9 +2634,10 @@ export default function InboxPage() {
                     if (!canCreatePatientRooms) {
                       setNotificationFeedback({
                         tone: "error",
-                        text: lang === "es"
-                          ? "No tienes permiso para crear pacientes. Solo el personal habilitado por Admin puede hacerlo."
-                          : "You do not have permission to create patients. Only admin-enabled staff can do this.",
+                        text:
+                          lang === "es"
+                            ? "No tienes permiso para crear pacientes. Solo el personal habilitado por Admin puede hacerlo."
+                            : "You do not have permission to create patients. Only admin-enabled staff can do this.",
                       });
                       return;
                     }
@@ -2167,7 +2664,7 @@ export default function InboxPage() {
                 <div style={{display:"flex",justifyContent:"center",padding:40}}><div style={{width:28,height:28,border:"2px solid #E5E5EA",borderTopColor:"#007AFF",borderRadius:"50%",animation:"spin 0.6s linear infinite"}}/></div>
               ):filtPts.length===0?(
                 <div style={{padding:"60px 20px",textAlign:"center"}}>
-                  <div style={{fontSize:48,marginBottom:12}}>+</div>
+                  <div style={{fontSize:48,marginBottom:12}}>🏥</div>
                   <p style={{fontSize:17,fontWeight:600,color:textColor}}>{t.noPatients}</p>
                   <p style={{fontSize:14,color:subTextColor,marginTop:6}}>{t.noPatientsHint}</p>
                 </div>
@@ -2188,8 +2685,8 @@ export default function InboxPage() {
                       <div className="patient-name">{pt.full_name}</div>
                       <div className="patient-meta">
                         {proc?.procedure_name&&<span>{proc.procedure_name}</span>}
-                        {surgDate&&<span> - {surgDate}</span>}
-                        {proc?.office_location&&<span> - {proc.office_location==="Guadalajara"?"GDL":"TJN"}</span>}
+                        {surgDate&&<span> · {surgDate}</span>}
+                        {proc?.office_location&&<span> · 📍{proc.office_location==="Guadalajara"?"GDL":"TJN"}</span>}
                       </div>
                     </div>
                     {ptUnread&&<div style={{minWidth:24,height:24,padding:"0 8px",background:"#25D366",borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:12,fontWeight:800}}>{ptUnreadCount}</div>}
@@ -2209,19 +2706,176 @@ export default function InboxPage() {
                 <p style={{fontSize:16,color:subTextColor,maxWidth:280,lineHeight:1.6,textAlign:"center"}}>{t.selectPatientHint}</p>
               </div>
             ):(
-              <ChatShell
-                mode="staff"
-                messages={messages}
-                message={message}
-                onChange={setMessage}
-                onSend={handleSend}
-                onMic={handleMic}
-                onCamera={handleCamera}
-                onVideo={handleVideo}
-                onPlusClick={handlePlus}
-                onCall={handleCall}
-                menuOpen={menuOpen}
-              />
+              <>
+                <div className="chat-head">
+                  <button className="back-btn" onClick={()=>{setMobileView("list");setSelectedRoom(null);setShowQREditor(false);}}>←</button>
+                  <div className="chat-av">
+                    {selectedRoom.procedures?.patients?.profile_picture_url
+                      ?<img src={selectedRoom.procedures.patients.profile_picture_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
+                      :ini(selectedRoom.procedures?.patients?.full_name||"P")}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div className="chat-head-name">{selectedRoom.procedures?.patients?.full_name||"Paciente"}</div>
+                    <div className="chat-head-sub">
+                      {selectedRoom.procedures?.procedure_name}
+                      {selectedRoom.procedures?.surgery_date&&` · ${new Date(selectedRoom.procedures.surgery_date).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"})}`}
+                      {selectedRoom.procedures?.office_location&&` · 📍${selectedRoom.procedures.office_location}`}
+                    </div>
+                    {patientTyping && (
+                      <div style={{fontSize:12,color:"#93C5FD",fontWeight:700,marginTop:4}}>
+                        {(selectedRoom.procedures?.patients?.full_name || t.patientLabel)} {t.typingSuffix}
+                      </div>
+                    )}
+                  </div>
+                  {selectedRoom.procedures?.patients?.phone && (
+                    <a href={`tel:${selectedRoom.procedures.patients.phone}`} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",fontSize:18,flexShrink:0}} title={t.callPatient}>📞</a>
+                  )}
+                  <button onClick={()=>{setShowMediaLibrary(true);setMediaLibraryTab("media");}} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={lang==="es"?"Media":"Media"}>🖼️</button>
+                  <button onClick={()=>setShowPatientInfo(true)} style={{width:42,height:42,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title={t.patientInfo}>ⓘ</button>
+                </div>
+
+                <div
+                  className="chat-bg"
+                  ref={chatScrollRef}
+                  onScroll={updateAutoScrollPreference}
+                  onClick={()=>{
+                    setShowSlashMenu(false);
+                    setShowEmojiMenu(false);
+                    setShowMediaMenu(false);
+                  }}
+                >
+                  {messages.filter(m=>!m.deleted_by_staff).length===0?(
+                    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:40,textAlign:"center"}}>
+                      <div style={{fontSize:44}}>💬</div>
+                      <p style={{fontSize:17,fontWeight:600,color:textColor}}>{t.noMessages}</p>
+                      <p style={{fontSize:15,color:subTextColor}}>{t.noMessagesHint}</p>
+                    </div>
+                  ):groupedMessages().map((group,gi)=>(
+                    <div key={gi}>
+                      <div className="date-sep"><div className="date-sep-pill">{fmtDateLabel(group.date)}</div></div>
+                      {group.msgs.map(renderMsg)}
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef}/>
+                </div>
+                {showJumpToLatest && (
+                  <button
+                    onClick={jumpToLatest}
+                    style={{
+                      position:"absolute",
+                      right:16,
+                      bottom:"calc(env(safe-area-inset-bottom) + 86px)",
+                      zIndex:35,
+                      border:"none",
+                      borderRadius:999,
+                      padding:"10px 14px",
+                      background:"#2563EB",
+                      color:"white",
+                      fontSize:13,
+                      fontWeight:800,
+                      cursor:"pointer",
+                      boxShadow:"0 10px 24px rgba(37,99,235,0.35)",
+                    }}
+                  >
+                    {lang==="es" ? "Nuevos mensajes ↓" : "New messages ↓"}
+                  </button>
+                )}
+
+                {showSlashMenu&&slashFiltered.length>0&&(
+                  <div className="slash-popup" onClick={e=>e.stopPropagation()}>
+                    <div className="slash-header">
+                      <span>⚡ {t.quickReplies}</span>
+                      <button onClick={()=>{setShowSlashMenu(false);setShowQREditor(true);}} style={{background:"none",border:"none",color:"#007AFF",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.edit}</button>
+                    </div>
+                    {slashFiltered.map((r,i)=>(
+                      <div key={i} className="slash-item" onClick={()=>{sendMessage(r.message);setShowSlashMenu(false);setSlashFilter("");setNewMessage("");}}>
+                        <span className="slash-shortcut">/{r.shortcut}</span>
+                        <span className="slash-msg">{r.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {recording?(
+                  <div style={{background:inputBg,padding:"10px 12px",display:"flex",alignItems:"center",gap:10,borderTop:`1px solid ${borderColor}`}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:"#FF3B30",flexShrink:0,animation:"pulse 1s infinite"}}/>
+                    <span style={{fontSize:17,fontWeight:700,color:"#FF3B30",fontFamily:"monospace",flex:1}}>{fmtRec(recordingSeconds)}</span>
+                    <span style={{fontSize:14,color:subTextColor}}>{t.recording}</span>
+                    <button onClick={()=>stopRec(true)} style={{padding:"8px 16px",background:"#6B7280",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.cancelCapture}</button>
+                    <button onClick={()=>stopRec(false)} style={{padding:"8px 16px",background:"#FF3B30",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⏹ {lang==="es"?"Detener y enviar":"Stop & send"}</button>
+                  </div>
+                ):(
+                  <div className="input-area" onClick={e=>e.stopPropagation()}>
+                    {showMediaMenu&&(
+                      <div style={{position:"absolute",left:12,bottom:`calc(66px + env(safe-area-inset-bottom))`,width:220,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:18,padding:8,boxShadow:"0 14px 34px rgba(15,23,42,0.16)",zIndex:30}}>
+                        <button onClick={()=>{
+                          setShowMediaMenu(false);
+                          if (prefersNativeCapture) audioInputRef.current?.click();
+                          else startRec();
+                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎤</span>{t.recordAudio}</button>
+                        <button onClick={()=>{
+                          setShowMediaMenu(false);
+                          if (prefersNativeCapture) videoInputRef.current?.click();
+                          else openCapture("video");
+                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>🎥</span>{t.recordVideoOption}</button>
+                        <button onClick={()=>{
+                          setShowMediaMenu(false);
+                          if (prefersNativeCapture) cameraInputRef.current?.click();
+                          else openCapture("photo");
+                        }} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📷</span>{t.takePhoto}</button>
+                        <button onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}} style={{width:"100%",border:"none",background:"transparent",color:textColor,borderRadius:14,padding:"12px 14px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontWeight:700,fontFamily:"inherit"}}><span style={{fontSize:20}}>📁</span>{t.chooseFile}</button>
+                      </div>
+                    )}
+                    {showEmojiMenu && (
+                      <div style={{position:"absolute",left:64,bottom:`calc(66px + env(safe-area-inset-bottom))`,width:250,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:18,padding:10,boxShadow:"0 14px 34px rgba(15,23,42,0.16)",zIndex:31}}>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:6}}>
+                          {QUICK_EMOJIS.map((emoji)=>(
+                            <button key={emoji} onClick={()=>appendEmojiToDraft(emoji)} style={{border:"none",background:cardBg,borderRadius:10,padding:"8px 0",fontSize:20,cursor:"pointer"}}>
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <button className="icon-btn" onClick={()=>setShowMediaMenu(v=>!v)}>📎</button>
+                    <button className="icon-btn" onClick={()=>setShowEmojiMenu(v=>!v)} title={lang==="es"?"Emojis":"Emojis"}>😊</button>
+                    <textarea
+                      className="msg-input"
+                      placeholder={t.typeMessage}
+                      value={newMessage}
+                      rows={1}
+                      onChange={e=>{
+                        const v=e.target.value;
+                        setNewMessage(v);
+                        updateTypingState(v);
+                        setShowMediaMenu(false);
+                        setShowEmojiMenu(false);
+                        if(v.startsWith("/")){setShowSlashMenu(true);setSlashFilter(v.slice(1));}
+                        else{setShowSlashMenu(false);setSlashFilter("");}
+                        e.target.style.height="auto";
+                        e.target.style.height=Math.min(e.target.scrollHeight,120)+"px";
+                      }}
+                      onBlur={()=>updateTypingState("")}
+                      onKeyDown={e=>{
+                        if(e.key==="Enter"&&!e.shiftKey){
+                          e.preventDefault();
+                          setShowEmojiMenu(false);
+                          if(showSlashMenu&&slashFiltered.length>0){sendMessage(slashFiltered[0].message);setShowSlashMenu(false);setSlashFilter("");setNewMessage("");}
+                          else sendMessage();
+                        }
+                        if(e.key==="Escape")setShowSlashMenu(false);
+                      }}
+                    />
+                    {newMessage.trim()?(
+                      <button className="send-btn" onClick={()=>sendMessage()} disabled={sending}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                      </button>
+                    ):(
+                      <button className="icon-btn" onPointerDown={e=>{e.preventDefault();startRec();}}>🎤</button>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

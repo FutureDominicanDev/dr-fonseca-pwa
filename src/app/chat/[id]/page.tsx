@@ -1,28 +1,17 @@
 "use client";
 
-// ALL chat UI MUST be handled inside ChatShell.tsx.
-// DO NOT duplicate UI here.
-
 import { use, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import ChatShell from "@/components/chat/ChatShell";
 
 type Message = {
   id: string;
   content: string;
-  sender_id?: string | null;
   sender_type?: string;
-  type?: "text" | "image" | "video" | "audio" | "file";
   message_type: "text" | "image" | "video" | "audio" | "file";
   file_url?: string | null;
   file_name?: string | null;
-  file_type?: string | null;
-  message_hash?: string | null;
-  deleted_by_patient?: boolean | null;
-  deleted_by_staff?: boolean | null;
-  deleted_at?: string | null;
   created_at?: string;
 };
 
@@ -43,8 +32,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [text, setText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
-  const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
-  const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>(["Gracias", "Tengo una pregunta", "Voy en camino"]);
   const [replyDraft, setReplyDraft] = useState("");
@@ -52,27 +39,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [darkMode, setDarkMode] = useState(false);
   const [textSize, setTextSize] = useState<"normal" | "large">("normal");
   const [recording, setRecording] = useState(false);
-  const [uiLang, setUiLang] = useState<"es" | "en">("en");
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState("");
+  const [videoPreviewFile, setVideoPreviewFile] = useState<File | null>(null);
   const [accessReady, setAccessReady] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [room, setRoom] = useState<RoomAccess | null>(null);
   const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
   const [fileAccept, setFileAccept] = useState("*");
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [deleteMenuMessageId, setDeleteMenuMessageId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const lang = typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "en";
-    setUiLang(lang.startsWith("es") ? "es" : "en");
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -95,10 +75,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         Tijuana: data.find((entry) => entry.key === "office_phone_tijuana")?.value || "",
       });
     };
-
-    supabase.auth.getUser().then(({ data }) => {
-      if (mounted) setCurrentUserId(data.user?.id || null);
-    });
 
     const validateRoom = async () => {
       setAccessReady(false);
@@ -170,18 +146,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           });
         },
       )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "messages",
-          filter: `room_id=eq.${id}`,
-        },
-        ({ new: message }: { new: Message }) => {
-          setMessages((current) => current.map((item) => (item.id === message.id ? message : item)));
-        },
-      )
       .subscribe();
 
     return () => {
@@ -194,94 +158,28 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const generateMessageHash = async (content: string, createdAt: string, senderId: string | null) => {
-    const input = `${content}${createdAt}${senderId || ""}`;
-    const bytes = new TextEncoder().encode(input);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  };
-
-  const logMessageAudit = async (timestamp: string) => {
-    const { error } = await supabase.from("audit_logs").insert({
-      user_id: currentUserId,
-      action: "message_sent",
-      timestamp,
-      room_id: id,
-    });
-    if (error) console.warn("audit log failed", error.message);
-  };
-
   const sendText = async () => {
     const content = text.trim();
     if (!content || accessDenied || !accessReady) return;
 
     setText("");
-    const createdAt = new Date().toISOString();
-    const messageHash = await generateMessageHash(content, createdAt, currentUserId);
-    const payload = {
-      room_id: id,
-      content,
-      sender_id: currentUserId,
-      sender_type: "patient",
-      message_type: "text",
-      created_at: createdAt,
-      message_hash: messageHash,
-    };
-    let insert = await supabase
+    const { data } = await supabase
       .from("messages")
-      .insert(payload)
+      .insert({
+        room_id: id,
+        content,
+        sender_type: "patient",
+        message_type: "text",
+      })
       .select("*")
       .single();
-    if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
-      const { message_hash: _messageHash, ...compatiblePayload } = payload;
-      insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
-    }
 
-    const data = insert.data;
     if (data) {
-      await logMessageAudit(createdAt);
       setMessages((current) => {
         if (current.some((item) => item.id === data.id)) return current;
         return [...current, data as Message];
       });
     }
-  };
-
-  const deletePatientMessage = async (messageId: string) => {
-    const deletedAt = new Date().toISOString();
-    const { error } = await supabase
-      .from("messages")
-      .update({ deleted_by_patient: true, deleted_at: deletedAt })
-      .eq("id", messageId)
-      .eq("room_id", id)
-      .eq("sender_type", "patient");
-
-    if (error) return;
-    setDeleteMenuMessageId(null);
-    setMessages((current) => current.map((message) => (message.id === messageId ? { ...message, deleted_by_patient: true, deleted_at: deletedAt } : message)));
-  };
-
-  const startMessageLongPress = (messageId: string, enabled: boolean) => {
-    if (!enabled) return;
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = setTimeout(() => setDeleteMenuMessageId(messageId), 550);
-  };
-
-  const cancelMessageLongPress = () => {
-    if (!longPressTimerRef.current) return;
-    clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = null;
-  };
-
-  const saveQuickReply = () => {
-    const next = replyDraft.trim();
-    if (!next) return;
-    setQuickReplies((current) => {
-      if (editingReplyIndex === null) return [...current, next];
-      return current.map((reply, index) => index === editingReplyIndex ? next : reply);
-    });
-    setReplyDraft("");
-    setEditingReplyIndex(null);
   };
 
   const openPicker = (accept: string) => {
@@ -293,20 +191,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const uploadFile = async (file: File, overrideType?: Message["message_type"]) => {
-    if (accessDenied || !accessReady) return null;
+    if (accessDenied || !accessReady) return;
 
-    const timestamp = new Date().toISOString();
-    const storageTimestamp = Date.now();
-    const safeFileName = file.name || `${overrideType || "upload"}-${storageTimestamp}.${overrideType === "video" ? "mp4" : "bin"}`;
-    const path = `patients/${id}/${storageTimestamp}-${safeFileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
-    const { error } = await supabase.storage.from("chat-files").upload(path, file, {
-      contentType: overrideType === "video" && !file.type ? "video/mp4" : file.type || "application/octet-stream",
-    });
-    if (error) {
-      console.error("chat file upload failed", error);
-      window.alert(`No pude guardar el archivo: ${error.message}`);
-      return null;
-    }
+    const path = `chat/${id}/${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from("chat-files").upload(path, file);
+    if (error) return;
 
     const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
     const url = data.publicUrl;
@@ -319,46 +208,26 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           : file.type.startsWith("audio/")
             ? "audio"
             : "file");
-    const messageHash = await generateMessageHash(url, timestamp, currentUserId);
-    const payload = {
-      room_id: id,
-      sender_id: currentUserId,
-      sender_type: "patient",
-      type: messageType,
-      message_type: messageType,
-      content: url,
-      file_url: url,
-      file_name: file.name,
-      file_type: file.type || "application/octet-stream",
-      created_at: timestamp,
-      message_hash: messageHash,
-    };
 
-    let insert = await supabase
+    const { data: message } = await supabase
       .from("messages")
-      .insert(payload)
+      .insert({
+        room_id: id,
+        content: url,
+        sender_type: "patient",
+        message_type: messageType,
+        file_url: url,
+        file_name: file.name,
+      })
       .select("*")
       .single();
-    if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
-      const { type: _type, file_type: _fileType, file_url: _fileUrl, message_hash: _messageHash, ...compatiblePayload } = payload;
-      insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
-    }
-    if (insert.error) {
-      console.error("chat message insert failed", insert.error);
-      window.alert(`El archivo se subió, pero no pude guardar el mensaje: ${insert.error.message}`);
-      return null;
-    }
 
-    const message = insert.data;
     if (message) {
-      await logMessageAudit(timestamp);
       setMessages((current) => {
         if (current.some((item) => item.id === message.id)) return current;
         return [...current, message as Message];
       });
     }
-
-    return url;
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -368,27 +237,36 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     event.target.value = "";
   };
 
-  const handleVideoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) {
-      event.target.value = "";
-      return;
-    }
+    if (!file) return;
+    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+    setVideoPreviewFile(file);
+    setVideoPreviewUrl(URL.createObjectURL(file));
     setMenuOpen(false);
-    await uploadFile(file, "video");
     event.target.value = "";
+  };
+
+  const sendVideoPreview = async () => {
+    if (!videoPreviewFile) return;
+    await uploadFile(videoPreviewFile, "video");
+    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+    setVideoPreviewFile(null);
+    setVideoPreviewUrl("");
+  };
+
+  const cancelVideoPreview = () => {
+    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+    setVideoPreviewFile(null);
+    setVideoPreviewUrl("");
   };
 
   const startRecording = async () => {
     if (recording) return;
 
     try {
-      if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
-      setAudioPreviewUrl("");
-      setAudioPreviewFile(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const preferredMimeType = ["audio/mp4", "audio/aac"].find((type) => MediaRecorder.isTypeSupported(type));
-      const recorder = preferredMimeType ? new MediaRecorder(stream, { mimeType: preferredMimeType }) : new MediaRecorder(stream);
+      const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
 
       recorder.ondataavailable = (event) => {
@@ -396,20 +274,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       };
 
       recorder.onstop = async () => {
-        const mimeType = recorder.mimeType || preferredMimeType || "audio/mp4";
-        const extension = mimeType.includes("aac") ? "aac" : mimeType.includes("mp4") ? "m4a" : "audio";
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        if (!blob.size) {
-          stream.getTracks().forEach((track) => track.stop());
-          recorderRef.current = null;
-          return;
-        }
-        const file = new File([blob], `audio-${Date.now()}.${extension}`, { type: mimeType });
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const file = new File([blob], `audio-${Date.now()}.webm`, { type: "audio/webm" });
         if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
         setAudioPreviewFile(file);
         setAudioPreviewUrl(URL.createObjectURL(file));
         stream.getTracks().forEach((track) => track.stop());
-        recorderRef.current = null;
       };
 
       recorderRef.current = recorder;
@@ -417,23 +287,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       setRecording(true);
     } catch {
       setRecording(false);
-      recorderRef.current = null;
-      alert("Microphone access required");
     }
   };
 
   const stopRecording = () => {
-    if (!recorderRef.current || recorderRef.current.state !== "recording") return;
-    recorderRef.current.stop();
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     setRecording(false);
-  };
-
-  const toggleRecording = () => {
-    if (recorderRef.current?.state === "recording") {
-      stopRecording();
-      return;
-    }
-    startRecording();
   };
 
   const sendAudioPreview = async () => {
@@ -450,52 +309,51 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setAudioPreviewUrl("");
   };
 
-  const emergencyPhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara || officePhones.Tijuana;
-  const translations = {
-    en: {
-      messagePlaceholder: "Message",
-      send: "SEND",
-      cancel: "Cancel",
-      settings: "Settings",
-      quickReplies: "Quick Replies",
-      photos: "Photos",
-      video: "Video",
-      documents: "Prescriptions",
-      noPrescriptions: "No prescriptions yet.",
-      createReply: "Create quick reply",
-      saveReply: "Save Reply",
-      saveChanges: "Save Changes",
-      edit: "Edit",
-      delete: "Delete",
-      deletedByUser: "This message was Deleted by user",
-      darkMode: "Dark mode",
-      textSize: "Text size",
-      normal: "Normal",
-      large: "Large",
-    },
-    es: {
-      messagePlaceholder: "Mensaje",
-      send: "ENVIAR",
-      cancel: "Cancelar",
-      settings: "Ajustes",
-      quickReplies: "Respuestas rápidas",
-      photos: "Fotos",
-      video: "Video",
-      documents: "Recetas",
-      noPrescriptions: "Todavía no hay recetas.",
-      createReply: "Crear respuesta rápida",
-      saveReply: "Guardar respuesta",
-      saveChanges: "Guardar cambios",
-      edit: "Editar",
-      delete: "Eliminar",
-      deletedByUser: "This message was Deleted by user",
-      darkMode: "Modo oscuro",
-      textSize: "Tamaño de texto",
-      normal: "Normal",
-      large: "Grande",
-    },
+  const renderMessage = (message: Message) => {
+    const url = message.file_url || message.content;
+
+    if (message.message_type === "image") {
+      return <img src={url} alt={message.file_name || "Image"} style={{ display: "block", maxWidth: "100%", maxHeight: 280, borderRadius: 10, objectFit: "contain" }} />;
+    }
+
+    if (message.message_type === "video") {
+      return <video src={url} controls style={{ display: "block", width: "100%", maxHeight: 280, borderRadius: 10 }} />;
+    }
+
+    if (message.message_type === "audio") {
+      return <audio src={url} controls style={{ width: "240px", maxWidth: "100%" }} />;
+    }
+
+    if (message.message_type === "file") {
+      return (
+        <a href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, color: "#075e54", textDecoration: "none", fontWeight: 700 }}>
+          <span style={{ fontSize: 24 }}>📄</span>
+          <span style={{ wordBreak: "break-word" }}>{message.file_name || "Download file"}</span>
+        </a>
+      );
+    }
+
+    return <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{message.content}</span>;
   };
-  const labels = translations[uiLang] || translations.en;
+
+  const emergencyPhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara || officePhones.Tijuana;
+  const appBg = darkMode ? "#0f172a" : "#fff";
+  const textPrimary = darkMode ? "#f8fafc" : "#111";
+  const panelBg = darkMode ? "#172033" : "#fff";
+  const footerBg = darkMode ? "#111827" : "#f0f0f0";
+  const inputPanelBg = darkMode ? "#1f2937" : "#fff";
+  const messageFontSize = textSize === "large" ? 18 : 16;
+
+  const saveQuickReply = () => {
+    const next = replyDraft.trim();
+    if (!next) return;
+    setQuickReplies((current) => {
+      if (editingReplyIndex === null) return [...current, next];
+      return current.map((reply, index) => index === editingReplyIndex ? next : reply);
+    });
+    setReplyDraft("");
+    setEditingReplyIndex(null);
+  };
 
   if (!accessReady) {
     return (
@@ -509,8 +367,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   if (accessDenied) {
     return (
       <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#fff", color: "#111", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
-        <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
-          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
+        <header style={{ height: 56, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#120024", borderBottom: "1px solid rgba(17,24,39,0.10)", padding: "2px 16px" }}>
+          <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={320} height={52} priority style={{ width: "min(320px, 84vw)", height: 52, objectFit: "contain", objectPosition: "center" }} />
         </header>
         <section style={{ flex: 1, display: "grid", placeItems: "center", padding: 24 }}>
           <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 18, boxShadow: "0 10px 36px rgba(0,0,0,0.14)", padding: 24, textAlign: "center" }}>
@@ -529,52 +387,145 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }
 
   return (
-    <>
-      <ChatShell
-        messages={messages.filter((message) => {
-          const fileName = `${message.file_name || ""}`;
-          if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return false;
-          if (message.deleted_by_patient) return false;
-          return true;
+    <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
+      <header style={{ height: 56, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#120024", borderBottom: "1px solid rgba(17,24,39,0.10)", padding: "2px 16px" }}>
+        <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={320} height={52} priority style={{ width: "min(320px, 84vw)", height: 52, objectFit: "contain", objectPosition: "center" }} />
+      </header>
+
+      <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => setMenuOpen(false)}>
+        {messages.map((message) => {
+          const mine = message.sender_type !== "staff";
+          const softBlue = "#e8f4ff";
+          const bubbleBg =
+            viewerType === "staff"
+              ? message.sender_type === "patient" ? softBlue : "#fff"
+              : message.sender_type === "staff" ? softBlue : "#fff";
+          return (
+            <div key={message.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 8 }}>
+              <div style={{ maxWidth: "78%", background: bubbleBg, color: "#111", borderRadius: mine ? "16px 4px 16px 16px" : "4px 16px 16px 16px", padding: "10px 12px", boxShadow: "0 1px 2px rgba(0,0,0,0.12)", fontSize: messageFontSize, lineHeight: 1.45 }}>
+                {renderMessage(message)}
+              </div>
+            </div>
+          );
         })}
-        message={text}
-        onChange={(next) => {
-          setText(next);
-          setQuickRepliesOpen(next.startsWith("/"));
-        }}
-        onSend={sendText}
-        onMic={toggleRecording}
-        onCamera={() => openPicker("image/*")}
-        onPlusClick={() => setMenuOpen((open) => !open)}
-        onQuickReply={(reply) => {
-          setText(reply);
-          setQuickRepliesOpen(false);
-        }}
-        mode="patient"
-        menuOpen={menuOpen}
-        quickRepliesOpen={quickRepliesOpen}
-        quickReplies={quickReplies}
-        labels={labels}
-        onPhotos={() => openPicker("image/*")}
-        onVideo={() => {
-          videoCaptureRef.current?.click();
-          setMenuOpen(false);
-        }}
-        onDocuments={() => {
-          setPrescriptionsOpen(true);
-          setMenuOpen(false);
-        }}
-        onQuickRepliesOpen={() => {
-          setQuickRepliesManageOpen(true);
-          setMenuOpen(false);
-        }}
-        onSettings={() => {
-          setSettingsOpen(true);
-          setMenuOpen(false);
-        }}
-      />
-      <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
-      <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
-    </>
+        <div ref={bottomRef} />
+      </section>
+
+      <footer style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px calc(12px + env(safe-area-inset-bottom))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+        {menuOpen && (
+          <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5 }}>
+            <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>Photos</button>
+            <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>Video</button>
+            <button onClick={() => openPicker("*")} style={menuButtonStyle}>Documents</button>
+            <button onClick={() => { setQuickRepliesOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>Quick Replies</button>
+            <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>Settings</button>
+          </div>
+        )}
+
+        <button onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 34, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
+          {menuOpen ? "×" : "+"}
+        </button>
+
+        <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder="Message" style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
+
+        <button onClick={() => openPicker("image/*")} aria-label="Camera" style={roundButtonStyle}>📷</button>
+
+        <button onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={stopRecording} onTouchStart={(event) => { event.preventDefault(); startRecording(); }} onTouchEnd={(event) => { event.preventDefault(); stopRecording(); }} aria-label="Hold to record audio" style={{ ...roundButtonStyle, background: recording ? "#1e88e5" : "#dbeafe", color: "#1e88e5", fontWeight: 900 }}>🎙</button>
+
+        <button onClick={sendText} aria-label="Send" style={{ width: 58, height: 58, borderRadius: "50%", border: "none", background: "#075e54", color: "#fff", fontSize: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>➤</button>
+
+        <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
+        <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
+      </footer>
+
+      {videoPreviewUrl && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", display: "grid", placeItems: "center", padding: 18, zIndex: 25 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: panelBg, color: textPrimary, borderRadius: 18, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.35)" }}>
+            <video src={videoPreviewUrl} controls playsInline style={{ width: "100%", maxHeight: "58dvh", borderRadius: 14, background: "#000", display: "block", marginBottom: 14 }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button onClick={cancelVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>Cancel</button>
+              <button onClick={sendVideoPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>SEND</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {audioPreviewUrl && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", display: "grid", placeItems: "center", padding: 18, zIndex: 25 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.35)" }}>
+            <audio src={audioPreviewUrl} controls style={{ width: "100%", marginBottom: 14 }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button onClick={cancelAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>Cancel</button>
+              <button onClick={sendAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>SEND</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {quickRepliesOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <strong style={{ fontSize: 18 }}>Quick Replies</strong>
+              <button onClick={() => setQuickRepliesOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+              {quickReplies.map((reply, index) => (
+                <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
+                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>Edit</button>
+                </div>
+              ))}
+            </div>
+            <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder="Create quick reply" style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
+            <button onClick={saveQuickReply} style={{ width: "100%", height: 48, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 700 }}>{editingReplyIndex === null ? "Save Reply" : "Save Changes"}</button>
+          </div>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <strong style={{ fontSize: 18 }}>Settings</strong>
+              <button onClick={() => setSettingsOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
+            </div>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, fontSize: 16, marginBottom: 18 }}>
+              Dark mode
+              <input type="checkbox" checked={darkMode} onChange={(event) => setDarkMode(event.target.checked)} style={{ width: 24, height: 24 }} />
+            </label>
+            <div style={{ fontSize: 16, marginBottom: 10 }}>Text size</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button onClick={() => setTextSize("normal")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: 16 }}>Normal</button>
+              <button onClick={() => setTextSize("large")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: 16 }}>Large</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
   );
 }
+
+const roundButtonStyle: React.CSSProperties = {
+  width: 58,
+  height: 58,
+  borderRadius: "50%",
+  border: "none",
+  background: "transparent",
+  fontSize: 28,
+  display: "grid",
+  placeItems: "center",
+  flexShrink: 0,
+};
+
+const menuButtonStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "18px 20px",
+  border: "none",
+  borderBottom: "1px solid rgba(0,0,0,0.08)",
+  background: "#fff",
+  color: "#111",
+  textAlign: "left",
+  fontSize: 17,
+  fontWeight: 700,
+};

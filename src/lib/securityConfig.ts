@@ -1,5 +1,4 @@
 export const OWNER_EMAILS = [
-  "mrdiazsr@icloud.com",
   "siluetybodyart@gmail.com",
   "miguelafr31@gmail.com",
 ] as const;
