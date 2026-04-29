@@ -4,6 +4,7 @@ import { use, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import ChatShell from "@/components/chat/ChatShell";
 
 type Message = {
   id: string;
@@ -557,6 +558,56 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       </main>
     );
   }
+
+  return (
+    <>
+      <ChatShell
+        messages={messages.filter((message) => {
+          const fileName = `${message.file_name || ""}`;
+          if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return false;
+          if (message.deleted_by_patient) return false;
+          return true;
+        })}
+        message={text}
+        onChange={(next) => {
+          setText(next);
+          setQuickRepliesOpen(next.startsWith("/"));
+        }}
+        onSend={sendText}
+        onMic={toggleRecording}
+        onCamera={() => openPicker("image/*")}
+        onPlusClick={() => setMenuOpen((open) => !open)}
+        onQuickReply={(reply) => {
+          setText(reply);
+          setQuickRepliesOpen(false);
+        }}
+        mode="patient"
+        menuOpen={menuOpen}
+        quickRepliesOpen={quickRepliesOpen}
+        quickReplies={quickReplies}
+        labels={labels}
+        onPhotos={() => openPicker("image/*")}
+        onVideo={() => {
+          videoCaptureRef.current?.click();
+          setMenuOpen(false);
+        }}
+        onDocuments={() => {
+          setPrescriptionsOpen(true);
+          setMenuOpen(false);
+        }}
+        onQuickRepliesOpen={() => {
+          setQuickRepliesManageOpen(true);
+          setMenuOpen(false);
+        }}
+        onSettings={() => {
+          setSettingsOpen(true);
+          setMenuOpen(false);
+        }}
+      />
+      <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
+      <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
+    </>
+  );
 
   return (
     <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
