@@ -548,7 +548,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           {menuOpen ? "×" : "+"}
         </button>
 
-        <input value={text} onChange={(event) => { const next = event.target.value; setText(next); if (next.startsWith("/")) setQuickRepliesOpen(true); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
+        <input value={text} onChange={(event) => { const next = event.target.value; setText(next); setQuickRepliesOpen(next.startsWith("/")); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
 
         <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#2d9cff" : "#dbeafe", color: recording ? "#fff" : "#0b4ea2", fontWeight: 900, fontSize: 30, animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>🎙</button>
 
@@ -587,10 +587,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       )}
 
       {quickRepliesOpen && (
-        <div style={{ position: "fixed", left: 10, right: 10, bottom: 92, zIndex: 20 }}>
-          <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ position: "fixed", left: 10, right: 10, bottom: 92, zIndex: 20, pointerEvents: "none" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
               {quickReplies.map((reply, index) => (
-                <button key={`${reply}-${index}`} onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ border: "1px solid rgba(0,0,0,0.10)", background: panelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)" }}>{reply}</button>
+                <button key={`${reply}-${index}`} onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: panelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
               ))}
           </div>
         </div>
