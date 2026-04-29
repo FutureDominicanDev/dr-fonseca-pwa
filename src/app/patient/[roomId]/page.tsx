@@ -46,7 +46,6 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
   const chunksRef = useRef<Blob[]>([]);
   const isSending = useRef(false);
 
-  // ── colors ──────────────────────────────────────────────
   const bg = darkMode ? "#111" : "#ECE5DD";
   const headerBg = darkMode ? "#1C1C1E" : "#ffffff";
   const headerBorder = darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
@@ -58,29 +57,43 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
   const menuBorder = darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)";
   const panelBg = darkMode ? "#1C1C1E" : "#ffffff";
 
-  // ── fetch room ───────────────────────────────────────────
+  // ── fetch room + messages ─────────────────────────────────
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("rooms")
-        .select("*, procedures(procedure_name, surgery_date, patients(full_name))")
-        .eq("id", roomId)
-        .single();
-      if (!data) { setNotFound(true); setLoading(false); return; }
-      setRoom(data);
+      try {
+        // Step 1: verify room exists
+        const { data: roomData, error: roomErr } = await supabase
+          .from("rooms")
+          .select("id")
+          .eq("id", roomId)
+          .single();
 
-      const { data: msgs } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("room_id", roomId)
-        .eq("deleted_by_patient", false)
-        .order("created_at", { ascending: true });
-      setMessages(msgs || []);
-      setLoading(false);
+        if (roomErr || !roomData) {
+          setNotFound(true);
+          setLoading(false);
+          return;
+        }
+
+        setRoom(roomData);
+
+        // Step 2: fetch messages — no extra filters that might not exist
+        const { data: msgs } = await supabase
+          .from("messages")
+          .select("*")
+          .eq("room_id", roomId)
+          .order("created_at", { ascending: true });
+
+        setMessages(msgs || []);
+        setLoading(false);
+      } catch (e) {
+        console.error(e);
+        setNotFound(true);
+        setLoading(false);
+      }
     })();
   }, [roomId]);
 
-  // ── real-time ────────────────────────────────────────────
+  // ── real-time ─────────────────────────────────────────────
   useEffect(() => {
     const ch = supabase.channel("patient-" + roomId)
       .on("postgres_changes", {
@@ -96,12 +109,10 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
     return () => { supabase.removeChannel(ch); };
   }, [roomId]);
 
-  // ── scroll to bottom ─────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ── load quick replies from localStorage ─────────────────
   useEffect(() => {
     const saved = localStorage.getItem("patient-qr-" + roomId);
     if (saved) setQuickReplies(JSON.parse(saved));
@@ -112,19 +123,17 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
     localStorage.setItem("patient-qr-" + roomId, JSON.stringify(list));
   };
 
-  // ── send text ────────────────────────────────────────────
   const sendText = useCallback(async (content: string) => {
     if (!content.trim() || isSending.current) return;
     isSending.current = true;
     setText("");
     setShowSlash(false);
-    const { error } = await supabase.from("messages").insert({
+    await supabase.from("messages").insert({
       room_id: roomId,
       content,
       sender_type: "patient",
       message_type: "text",
     });
-    if (error) console.error(error);
     isSending.current = false;
   }, [roomId]);
 
@@ -142,7 +151,6 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
     }
   };
 
-  // ── file upload ──────────────────────────────────────────
   const openPicker = (accept: string) => {
     if (!fileRef.current) return;
     fileRef.current.accept = accept;
@@ -166,12 +174,10 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
       message_type: type,
       file_url: url,
       file_name: file.name,
-      file_size: file.size,
     });
     e.target.value = "";
   };
 
-  // ── audio recording ──────────────────────────────────────
   const startRec = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -203,7 +209,6 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
     setRecording(false);
   };
 
-  // ── helpers ──────────────────────────────────────────────
   const formatTime = (ts: string) => {
     const d = new Date(ts);
     return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
@@ -214,7 +219,6 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
     q.message.toLowerCase().includes(slashFilter)
   );
 
-  // ── not found ────────────────────────────────────────────
   if (notFound) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100dvh", background: "#f5f5f5", padding: 32, textAlign: "center" }}>
       <div style={{ fontSize: 48 }}>🔗</div>
@@ -233,20 +237,20 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: bg, fontSize, color: textColor, fontFamily: "'Segoe UI', sans-serif", position: "relative", overflow: "hidden" }}>
 
-      {/* ── TOP BAR ── */}
+      {/* TOP BAR */}
       <div style={{ background: headerBg, borderBottom: `1px solid ${headerBorder}`, display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 16px", flexShrink: 0, zIndex: 10 }}>
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={160} height={44} style={{ objectFit: "contain", maxHeight: 44 }} priority />
       </div>
 
-      {/* ── CHAT AREA ── */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 8px", WebkitOverflowScrolling: "touch" }} onClick={() => { setMenuOpen(false); setShowSlash(false); }}>
+      {/* CHAT AREA */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 8px", WebkitOverflowScrolling: "touch" }}
+        onClick={() => { setMenuOpen(false); setShowSlash(false); }}>
         {messages.map((msg) => {
           const isPatient = msg.sender_type === "patient";
           const bubbleBg = isPatient ? "#DCF8C6" : "#E3F2FF";
-          const bubbleColor = "#111";
           return (
             <div key={msg.id} style={{ display: "flex", justifyContent: isPatient ? "flex-end" : "flex-start", marginBottom: 6, padding: "0 6px" }}>
-              <div style={{ background: bubbleBg, color: bubbleColor, borderRadius: isPatient ? "16px 4px 16px 16px" : "4px 16px 16px 16px", padding: "8px 12px", maxWidth: "75%", boxShadow: "0 1px 2px rgba(0,0,0,0.12)", position: "relative" }}>
+              <div style={{ background: bubbleBg, color: "#111", borderRadius: isPatient ? "16px 4px 16px 16px" : "4px 16px 16px 16px", padding: "8px 12px", maxWidth: "75%", boxShadow: "0 1px 2px rgba(0,0,0,0.12)" }}>
                 {msg.message_type === "text" && <p style={{ margin: 0, lineHeight: 1.5, wordBreak: "break-word" }}>{msg.content}</p>}
                 {msg.message_type === "image" && <img src={msg.file_url || msg.content} alt="img" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 10, display: "block" }} />}
                 {msg.message_type === "video" && <video src={msg.file_url || msg.content} controls style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 10 }} />}
@@ -265,7 +269,7 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
         <div ref={bottomRef} />
       </div>
 
-      {/* ── SLASH QUICK REPLY MENU ── */}
+      {/* SLASH MENU */}
       {showSlash && filteredQR.length > 0 && (
         <div style={{ position: "absolute", bottom: 68, left: 0, right: 0, background: panelBg, borderTop: `1px solid ${menuBorder}`, zIndex: 50, maxHeight: 200, overflowY: "auto" }}>
           {filteredQR.map((qr, i) => (
@@ -278,7 +282,7 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
         </div>
       )}
 
-      {/* ── PLUS MENU ── */}
+      {/* PLUS MENU */}
       {menuOpen && (
         <div style={{ position: "absolute", bottom: 72, left: 8, background: menuBg, borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.18)", border: `1px solid ${menuBorder}`, zIndex: 100, width: 220, overflow: "hidden" }}>
           {[
@@ -297,54 +301,37 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
         </div>
       )}
 
-      {/* ── INPUT BAR ── */}
+      {/* INPUT BAR */}
       <div style={{ background: inputBarBg, padding: "8px 10px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, zIndex: 10 }}>
-
-        {/* Plus */}
         <button onClick={() => setMenuOpen(o => !o)}
           style={{ width: 40, height: 40, borderRadius: "50%", background: menuOpen ? "#075E54" : (darkMode ? "#3a3a3c" : "#ddd"), border: "none", cursor: "pointer", fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", color: menuOpen ? "#fff" : textColor, flexShrink: 0 }}>
           {menuOpen ? "✕" : "+"}
         </button>
-
-        {/* Text input */}
-        <input
-          value={text}
-          onChange={e => handleInput(e.target.value)}
-          onKeyDown={handleKeyDown}
+        <input value={text} onChange={e => handleInput(e.target.value)} onKeyDown={handleKeyDown}
           placeholder="Escribe un mensaje..."
-          style={{ flex: 1, background: inputBg, border: "none", borderRadius: 22, padding: "10px 16px", fontSize, color: textColor, outline: "none" }}
-        />
-
-        {/* Camera quick */}
+          style={{ flex: 1, background: inputBg, border: "none", borderRadius: 22, padding: "10px 16px", fontSize, color: textColor, outline: "none" }} />
         <button onClick={() => openPicker("image/*")}
-          style={{ width: 38, height: 38, borderRadius: "50%", background: "none", border: "none", cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", color: darkMode ? "#aaa" : "#555", flexShrink: 0 }}>
+          style={{ width: 38, height: 38, borderRadius: "50%", background: "none", border: "none", cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           📷
         </button>
-
-        {/* Mic */}
         <button
-          onMouseDown={startRec}
-          onMouseUp={stopRec}
+          onMouseDown={startRec} onMouseUp={stopRec}
           onTouchStart={(e) => { e.preventDefault(); startRec(); }}
           onTouchEnd={(e) => { e.preventDefault(); stopRec(); }}
-          style={{ width: 38, height: 38, borderRadius: "50%", background: recording ? "#FF3B30" : "none", border: "none", cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", color: recording ? "#fff" : (darkMode ? "#aaa" : "#555"), flexShrink: 0 }}>
+          style={{ width: 38, height: 38, borderRadius: "50%", background: recording ? "#FF3B30" : "none", border: "none", cursor: "pointer", fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", color: recording ? "#fff" : "inherit", flexShrink: 0 }}>
           🎤
         </button>
-
-        {/* Send */}
         {text.trim() && (
           <button onClick={() => sendText(text)}
             style={{ width: 40, height: 40, borderRadius: "50%", background: "#075E54", border: "none", cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
             ➤
           </button>
         )}
-
       </div>
 
-      {/* hidden file input */}
       <input type="file" ref={fileRef} style={{ display: "none" }} onChange={handleFile} />
 
-      {/* ── SETTINGS PANEL ── */}
+      {/* SETTINGS PANEL */}
       {showSettings && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "flex-end" }}>
           <div style={{ background: panelBg, width: "100%", borderRadius: "20px 20px 0 0", padding: "24px 20px 40px", maxHeight: "80dvh", overflowY: "auto" }}>
@@ -352,8 +339,6 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
               <span style={{ fontSize: 18, fontWeight: 700, color: textColor }}>⚙️ Configuración</span>
               <button onClick={() => setShowSettings(false)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: textColor }}>✕</button>
             </div>
-
-            {/* Dark mode */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <span style={{ color: textColor }}>🌙 Modo oscuro</span>
               <div onClick={() => setDarkMode(d => !d)}
@@ -361,8 +346,6 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
                 <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: darkMode ? 25 : 3, transition: "left 0.2s" }} />
               </div>
             </div>
-
-            {/* Font size */}
             <div style={{ marginBottom: 20 }}>
               <div style={{ color: textColor, marginBottom: 10 }}>🔤 Tamaño de texto: {fontSize}px</div>
               <input type="range" min={13} max={20} value={fontSize} onChange={e => setFontSize(Number(e.target.value))}
@@ -375,7 +358,7 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
         </div>
       )}
 
-      {/* ── QUICK REPLIES PANEL ── */}
+      {/* QUICK REPLIES PANEL */}
       {showQR && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "flex-end" }}>
           <div style={{ background: panelBg, width: "100%", borderRadius: "20px 20px 0 0", padding: "24px 20px 40px", maxHeight: "85dvh", overflowY: "auto" }}>
@@ -383,8 +366,6 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
               <span style={{ fontSize: 18, fontWeight: 700, color: textColor }}>⚡ Respuestas rápidas</span>
               <button onClick={() => setShowQR(false)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: textColor }}>✕</button>
             </div>
-
-            {/* Add / Edit form */}
             <div style={{ background: darkMode ? "#2C2C2E" : "#f5f5f5", borderRadius: 12, padding: 16, marginBottom: 20 }}>
               <input value={qrShortcut} onChange={e => setQrShortcut(e.target.value)} placeholder="Atajo (ej: gracias)"
                 style={{ width: "100%", background: inputBg, border: `1px solid ${menuBorder}`, borderRadius: 8, padding: "8px 12px", fontSize: 14, color: textColor, marginBottom: 8, boxSizing: "border-box" as const }} />
@@ -393,20 +374,13 @@ export default function PatientPage({ params }: { params: { roomId: string } }) 
               <button onClick={() => {
                 if (!qrShortcut.trim() || !qrMessage.trim()) return;
                 const updated = [...quickReplies];
-                if (editingIdx !== null) {
-                  updated[editingIdx] = { shortcut: qrShortcut, message: qrMessage };
-                  setEditingIdx(null);
-                } else {
-                  updated.push({ shortcut: qrShortcut, message: qrMessage });
-                }
-                saveQR(updated);
-                setQrShortcut(""); setQrMessage("");
+                if (editingIdx !== null) { updated[editingIdx] = { shortcut: qrShortcut, message: qrMessage }; setEditingIdx(null); }
+                else { updated.push({ shortcut: qrShortcut, message: qrMessage }); }
+                saveQR(updated); setQrShortcut(""); setQrMessage("");
               }} style={{ marginTop: 10, width: "100%", background: "#075E54", color: "#fff", border: "none", borderRadius: 8, padding: "10px", fontSize: 14, cursor: "pointer", fontWeight: 600 }}>
                 {editingIdx !== null ? "Guardar cambios" : "+ Agregar respuesta"}
               </button>
             </div>
-
-            {/* List */}
             {quickReplies.map((qr, i) => (
               <div key={i} style={{ background: darkMode ? "#2C2C2E" : "#f9f9f9", borderRadius: 10, padding: "12px 14px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div style={{ flex: 1 }}>
