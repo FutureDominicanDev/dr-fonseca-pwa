@@ -39,8 +39,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [text, setText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
+  const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [quickReplies] = useState<string[]>(["Gracias", "Tengo una pregunta", "Voy en camino"]);
+  const [quickReplies, setQuickReplies] = useState<string[]>(["Gracias", "Tengo una pregunta", "Voy en camino"]);
+  const [replyDraft, setReplyDraft] = useState("");
+  const [editingReplyIndex, setEditingReplyIndex] = useState<number | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [textSize, setTextSize] = useState<"normal" | "large">("normal");
   const [recording, setRecording] = useState(false);
@@ -250,6 +253,17 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     if (error) return;
     setMessages((current) => current.map((message) => (message.id === messageId ? { ...message, deleted_by_patient: true, deleted_at: deletedAt } : message)));
+  };
+
+  const saveQuickReply = () => {
+    const next = replyDraft.trim();
+    if (!next) return;
+    setQuickReplies((current) => {
+      if (editingReplyIndex === null) return [...current, next];
+      return current.map((reply, index) => index === editingReplyIndex ? next : reply);
+    });
+    setReplyDraft("");
+    setEditingReplyIndex(null);
   };
 
   const openPicker = (accept: string) => {
@@ -585,7 +599,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
             <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
             <button onClick={() => openPicker("*")} style={menuButtonStyle}>{labels.documents}</button>
-            <button onClick={() => { setQuickRepliesOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
+            <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
             <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
           </div>
         )}
@@ -640,6 +654,28 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {quickReplies.map((reply, index) => (
                 <button key={`${reply}-${index}`} onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: panelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
               ))}
+          </div>
+        </div>
+      )}
+
+      {quickRepliesManageOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <strong style={{ fontSize: 18 }}>{labels.quickReplies}</strong>
+              <button onClick={() => setQuickRepliesManageOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+              {quickReplies.map((reply, index) => (
+                <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button onClick={() => { setText(reply); setQuickRepliesManageOpen(false); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
+                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.edit}</button>
+                  <button onClick={() => { setQuickReplies((current) => current.filter((_, replyIndex) => replyIndex !== index)); if (editingReplyIndex === index) { setReplyDraft(""); setEditingReplyIndex(null); } }} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.delete}</button>
+                </div>
+              ))}
+            </div>
+            <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder={labels.createReply} style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
+            <button onClick={saveQuickReply} style={{ width: "100%", height: 48, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 700 }}>{editingReplyIndex === null ? labels.saveReply : labels.saveChanges}</button>
           </div>
         </div>
       )}
