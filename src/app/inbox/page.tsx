@@ -2557,30 +2557,20 @@ export default function InboxPage() {
             </div>
           </div>
 
-          <div className={`main-area${mobileView==="list"?" hidden":""}`}>
-            {!selectedRoom?(
-              <div className="welcome">
-                <div style={{width:90,height:90,borderRadius:"50%",background:"linear-gradient(135deg,#2C2C2E,#007AFF)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                </div>
-                <p style={{fontSize:24,fontWeight:700,color:textColor}}>{t.selectPatient}</p>
-                <p style={{fontSize:16,color:subTextColor,maxWidth:280,lineHeight:1.6,textAlign:"center"}}>{t.selectPatientHint}</p>
-              </div>
-            ):(
-              <ChatShell
-                mode="staff"
-                messages={messages}
-                message={message}
-                onChange={setMessage}
-                onSend={handleSend}
-                onMic={handleMic}
-                onCamera={handleCamera}
-                onVideo={handleVideo}
-                onPlusClick={handlePlus}
-                onCall={handleCall}
-                menuOpen={menuOpen}
-              />
-            )}
+          <div className="h-screen flex flex-col">
+            <ChatShell
+              mode="staff"
+              messages={messages}
+              message={message}
+              onChange={setMessage}
+              onSend={handleSend}
+              onMic={handleMic}
+              onCamera={handleCamera}
+              onVideo={handleVideo}
+              onPlusClick={handlePlus}
+              onCall={handleCall}
+              menuOpen={menuOpen}
+            />
           </div>
         </div>
       </div>
