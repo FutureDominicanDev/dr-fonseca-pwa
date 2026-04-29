@@ -376,7 +376,7 @@ export default function InboxPage() {
   const fontSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 21 : 18;
 
   const bg = darkMode ? "#0B141A" : "#EFEAE2";
-  const headerBg = "#0B3D5A";
+  const headerBg = "#07334D";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
   const inputBg = darkMode ? "#202C33" : "#F0F2F5";
   const textColor = darkMode ? "white" : "#1C1C1E";
@@ -2233,10 +2233,11 @@ export default function InboxPage() {
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
         .shell { display: flex; flex-direction: column; height: 100dvh; position: fixed; inset: 0; background: ${bg}; }
-        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(90px, 1fr) minmax(240px, 520px) minmax(90px, 1fr); align-items: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(66px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
+        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(90px, 1fr) minmax(240px, 560px) minmax(90px, 1fr); align-items: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(70px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.16); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
-        .topbar-logo { grid-column: 2; justify-self: center; height: 62px; width: min(500px, 100%); object-fit: contain; object-position: center; display: block; }
-        .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 31px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
+        .topbar-logo { grid-column: 2; justify-self: center; height: 68px; width: min(540px, 100%); object-fit: contain; object-position: center; display: block; }
+        .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 35px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
+        .admin-inline-btn { padding: 0 12px; height: 38px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: 13px; font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 12px 14px; background: ${darkMode?"#1F2C33":"#F6F7F9"}; border-bottom: 1px solid ${borderColor}; }
@@ -2625,7 +2626,6 @@ export default function InboxPage() {
           <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
           <div className="topbar-actions">
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
-            {canOpenAdmin&&<button onClick={()=>window.location.href="/admin"} style={{padding:"0 12px",height:36,borderRadius:99,background:"rgba(255,255,255,0.12)",border:"none",color:"white",fontSize:13,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>Admin</button>}
           </div>
         </div>
 
@@ -2657,25 +2657,28 @@ export default function InboxPage() {
                   <span style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patients}</span>
                   {totalUnread>0&&<span style={{background:"#25D366",color:"white",fontSize:12,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{totalUnread}</span>}
                 </div>
-                <button
-                  onClick={() => {
-                    if (!canCreatePatientRooms) {
-                      setNotificationFeedback({
-                        tone: "error",
-                        text:
-                          lang === "es"
-                            ? "No tienes permiso para crear pacientes. Solo el personal habilitado por Admin puede hacerlo."
-                            : "You do not have permission to create patients. Only admin-enabled staff can do this.",
-                      });
-                      return;
-                    }
-                    setShowNewRoom(true);
-                  }}
-                  style={{width:38,height:38,borderRadius:"50%",background:"#007AFF",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,122,255,0.3)"}}
-                  title={canCreatePatientRooms ? (lang === "es" ? "Crear paciente" : "Create patient") : (lang === "es" ? "Permiso requerido" : "Permission required")}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </button>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  {canOpenAdmin&&<button className="admin-inline-btn" onClick={()=>window.location.href="/admin"}>Admin</button>}
+                  <button
+                    onClick={() => {
+                      if (!canCreatePatientRooms) {
+                        setNotificationFeedback({
+                          tone: "error",
+                          text:
+                            lang === "es"
+                              ? "No tienes permiso para crear pacientes. Solo el personal habilitado por Admin puede hacerlo."
+                              : "You do not have permission to create patients. Only admin-enabled staff can do this.",
+                        });
+                        return;
+                      }
+                      setShowNewRoom(true);
+                    }}
+                    style={{width:38,height:38,borderRadius:"50%",background:"#007AFF",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,122,255,0.3)"}}
+                    title={canCreatePatientRooms ? (lang === "es" ? "Crear paciente" : "Create patient") : (lang === "es" ? "Permiso requerido" : "Permission required")}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                </div>
               </div>
               <div className="search-bar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
