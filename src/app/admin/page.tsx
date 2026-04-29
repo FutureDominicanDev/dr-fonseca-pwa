@@ -481,15 +481,14 @@ export default function AdminPage() {
     }
 
     const exportData = {
-      messages: data || [],
-      mediaUrls: (data || [])
-        .filter((message) => message.file_url || ["image", "video", "audio", "file"].includes(message.message_type || message.type || ""))
-        .map((message) => ({
-          url: message.file_url || message.content,
-          timestamp: message.created_at,
-          fileType: message.file_type || message.message_type || message.type,
-          fileName: message.file_name || null,
-        })),
+      patient_id: patientId,
+      export_date: new Date().toISOString(),
+      messages: (data || []).map((message) => ({
+        type: message.message_type || message.type || "text",
+        content: message.file_url || message.content,
+        file_name: message.file_name || null,
+        created_at: message.created_at || null,
+      })),
     };
 
     void exportData;
