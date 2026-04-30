@@ -260,9 +260,15 @@ export default function RegisterPage() {
         }),
       });
 
+      const payload = await bootstrapRes.json().catch(() => ({}));
       if (!bootstrapRes.ok) {
-        const payload = await bootstrapRes.json().catch(() => ({}));
         setError(payload?.error || "No pude guardar el perfil.");
+        setLoading(false);
+        return;
+      }
+      const welcomeEmail = payload?.welcomeEmail;
+      if (hasEmail && welcomeEmail && welcomeEmail.sent === false) {
+        setError("Tu cuenta se creó, pero el correo de bienvenida no salió. Avisa al administrador para revisar SMTP.");
         setLoading(false);
         return;
       }

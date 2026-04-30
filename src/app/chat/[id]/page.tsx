@@ -560,6 +560,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
   const senderLabel = (message: Message) => {
     if (message.sender_type !== "staff") return uiLang === "es" ? "Paciente" : "Patient";
+    if (viewerType === "patient") return roleLabel(message.sender_role);
     return message.sender_name || roleLabel(message.sender_role);
   };
 
