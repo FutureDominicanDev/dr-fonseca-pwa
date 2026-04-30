@@ -558,10 +558,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       : { doctor: "Doctor", enfermeria: "Nursing", coordinacion: "Coordination", post_quirofano: "Post-Op", staff: "Staff" };
     return (labelsByLang as Record<string, string>)[role || "staff"] || (uiLang === "es" ? "Personal" : "Staff");
   };
+  const formatTime = (createdAt?: string) => {
+    if (!createdAt) return "";
+    const date = new Date(createdAt);
+    return date.toLocaleTimeString(uiLang === "es" ? "es-MX" : "en-US", { hour: "2-digit", minute: "2-digit" });
+  };
   const senderLabel = (message: Message) => {
-    if (message.sender_type !== "staff") return uiLang === "es" ? "Paciente" : "Patient";
-    if (viewerType === "patient") return roleLabel(message.sender_role);
-    return message.sender_name || roleLabel(message.sender_role);
+    if (message.sender_name?.trim()) return message.sender_name.trim();
+    if (message.sender_type === "staff") return roleLabel(message.sender_role);
+    return mineLabel(message);
+  };
+  const mineLabel = (message: Message) => {
+    const isMine = message.sender_type !== "staff";
+    return isMine ? (uiLang === "es" ? "Tú" : "You") : (uiLang === "es" ? "Paciente" : "Patient");
   };
 
   if (!accessReady) {
@@ -625,13 +634,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             viewerType === "staff"
               ? message.sender_type === "patient" ? softBlue : "#fff"
               : message.sender_type === "staff" ? softBlue : "#fff";
-          const labelColor = message.sender_type === "staff" ? "#0b4ea2" : "#1A6B3C";
           return (
             <div key={message.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
-              <div style={{ maxWidth: "70%", marginBottom: 3, padding: mine ? "0 4px 0 0" : "0 0 0 4px", color: labelColor, fontSize: 13, fontWeight: 700, lineHeight: 1.2, textAlign: mine ? "right" : "left" }}>
-                {senderLabel(message)}
-              </div>
               <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0b1220", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 500, lineHeight: 1.5, letterSpacing: "0.01em", transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>{senderLabel(message)}</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "#64748b", whiteSpace: "nowrap" }}>{formatTime(message.created_at)}</span>
+                </div>
                 {renderMessage(message)}
                 {deletedByPatient && viewerType === "staff" && (
                   <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
