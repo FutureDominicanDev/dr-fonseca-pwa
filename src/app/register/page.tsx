@@ -7,6 +7,75 @@ import { normalizeStaffPhone, phoneAliasEmail } from "@/lib/authIdentity";
 type Lang = "es" | "en";
 type OfficeLocation = "Guadalajara" | "Tijuana" | "Both" | null;
 
+const COUNTRY_OPTIONS = [
+  { code: "+52", es: "México", en: "Mexico" },
+  { code: "+1", es: "Estados Unidos / Canadá", en: "United States / Canada" },
+  { code: "+34", es: "España", en: "Spain" },
+  { code: "+54", es: "Argentina", en: "Argentina" },
+  { code: "+55", es: "Brasil", en: "Brazil" },
+  { code: "+56", es: "Chile", en: "Chile" },
+  { code: "+57", es: "Colombia", en: "Colombia" },
+  { code: "+51", es: "Perú", en: "Peru" },
+  { code: "+58", es: "Venezuela", en: "Venezuela" },
+  { code: "+593", es: "Ecuador", en: "Ecuador" },
+  { code: "+591", es: "Bolivia", en: "Bolivia" },
+  { code: "+595", es: "Paraguay", en: "Paraguay" },
+  { code: "+598", es: "Uruguay", en: "Uruguay" },
+  { code: "+502", es: "Guatemala", en: "Guatemala" },
+  { code: "+503", es: "El Salvador", en: "El Salvador" },
+  { code: "+504", es: "Honduras", en: "Honduras" },
+  { code: "+505", es: "Nicaragua", en: "Nicaragua" },
+  { code: "+506", es: "Costa Rica", en: "Costa Rica" },
+  { code: "+507", es: "Panamá", en: "Panama" },
+  { code: "+53", es: "Cuba", en: "Cuba" },
+  { code: "+1-809", es: "República Dominicana", en: "Dominican Republic" },
+  { code: "+1-787", es: "Puerto Rico", en: "Puerto Rico" },
+  { code: "+44", es: "Reino Unido", en: "United Kingdom" },
+  { code: "+33", es: "Francia", en: "France" },
+  { code: "+49", es: "Alemania", en: "Germany" },
+  { code: "+39", es: "Italia", en: "Italy" },
+  { code: "+351", es: "Portugal", en: "Portugal" },
+  { code: "+31", es: "Países Bajos", en: "Netherlands" },
+  { code: "+32", es: "Bélgica", en: "Belgium" },
+  { code: "+41", es: "Suiza", en: "Switzerland" },
+  { code: "+43", es: "Austria", en: "Austria" },
+  { code: "+46", es: "Suecia", en: "Sweden" },
+  { code: "+47", es: "Noruega", en: "Norway" },
+  { code: "+45", es: "Dinamarca", en: "Denmark" },
+  { code: "+358", es: "Finlandia", en: "Finland" },
+  { code: "+353", es: "Irlanda", en: "Ireland" },
+  { code: "+30", es: "Grecia", en: "Greece" },
+  { code: "+48", es: "Polonia", en: "Poland" },
+  { code: "+420", es: "República Checa", en: "Czech Republic" },
+  { code: "+40", es: "Rumania", en: "Romania" },
+  { code: "+90", es: "Turquía", en: "Turkey" },
+  { code: "+380", es: "Ucrania", en: "Ukraine" },
+  { code: "+7", es: "Rusia / Kazajistán", en: "Russia / Kazakhstan" },
+  { code: "+86", es: "China", en: "China" },
+  { code: "+81", es: "Japón", en: "Japan" },
+  { code: "+82", es: "Corea del Sur", en: "South Korea" },
+  { code: "+91", es: "India", en: "India" },
+  { code: "+92", es: "Pakistán", en: "Pakistan" },
+  { code: "+880", es: "Bangladesh", en: "Bangladesh" },
+  { code: "+63", es: "Filipinas", en: "Philippines" },
+  { code: "+62", es: "Indonesia", en: "Indonesia" },
+  { code: "+60", es: "Malasia", en: "Malaysia" },
+  { code: "+65", es: "Singapur", en: "Singapore" },
+  { code: "+66", es: "Tailandia", en: "Thailand" },
+  { code: "+84", es: "Vietnam", en: "Vietnam" },
+  { code: "+61", es: "Australia", en: "Australia" },
+  { code: "+64", es: "Nueva Zelanda", en: "New Zealand" },
+  { code: "+971", es: "Emiratos Árabes Unidos", en: "United Arab Emirates" },
+  { code: "+966", es: "Arabia Saudita", en: "Saudi Arabia" },
+  { code: "+972", es: "Israel", en: "Israel" },
+  { code: "+20", es: "Egipto", en: "Egypt" },
+  { code: "+27", es: "Sudáfrica", en: "South Africa" },
+  { code: "+234", es: "Nigeria", en: "Nigeria" },
+  { code: "+254", es: "Kenia", en: "Kenya" },
+  { code: "+212", es: "Marruecos", en: "Morocco" },
+  { code: "+216", es: "Túnez", en: "Tunisia" },
+];
+
 const parsePhones = (value: unknown): string[] => {
   if (typeof value !== "string") return [];
   return value
@@ -19,7 +88,7 @@ const COPY = {
   es: {
     toggle: "English",
     loading: "Verificando acceso...",
-    codeTitle: "Registro de Personal Médico",
+    codeTitle: "Registro del Personal Médico",
     codeSubtitle: "Acceso privado para el equipo autorizado de Siluety Plastic Surgery.",
     inviteHeading: "Código de invitación",
     inviteCopy: "Ingresa el código del consultorio para empezar.",
@@ -36,15 +105,17 @@ const COPY = {
     step2Text: "Solo nombre, celular y contraseña.",
     step3: "Entra al portal",
     step3Text: "Verás las salas de pacientes que te asignen.",
-    detailsTitle: "Crear acceso de personal",
+    detailsTitle: "Crear acceso del personal",
     detailsSubtitle: "Completa estos 3 pasos para entrar al portal.",
     formTitle: "Tu cuenta",
-    formHelp: "Usa el mismo celular que usas para comunicarte con el consultorio.",
-    nameLabel: "1. Nombre completo",
-    namePlaceholder: "Ej: Ana García",
+    formHelp: "Usa el nombre y celular que usas para comunicarte con el consultorio.",
+    nameLabel: "1. Nombre o nombre preferido",
+    namePlaceholder: "Ej: Ray",
+    countryLabel: "País",
     phoneLabel: "2. Celular",
+    numberLabel: "Número",
     phonePlaceholder: "Ej: 664 123 4567",
-    phoneHint: "Si no escribes lada, usaremos +52 México.",
+    phoneHint: "Selecciona el país y escribe tu número.",
     passwordTitle: "3. Contraseña",
     passwordLabel: "Contraseña",
     passwordPlaceholder: "Mínimo 6 caracteres",
@@ -54,9 +125,9 @@ const COPY = {
     hide: "Ocultar",
     submit: "Crear cuenta y entrar",
     submitting: "Creando cuenta...",
-    back: "Volver al código",
+    back: "Usar otro código",
     afterTitle: "Después del registro",
-    afterText: "El doctor o administración asigna los pacientes. Al entrar al portal, el staff ve sus salas asignadas.",
+    afterText: "El doctor o el equipo administrativo asigna los pacientes. Al entrar al portal, verás únicamente tus salas asignadas.",
     privacy: "Privacidad",
     support: "Soporte",
     deletion: "Eliminar cuenta",
@@ -66,7 +137,7 @@ const COPY = {
       verify: "Error verificando el código.",
       wrongCode: "Código de invitación incorrecto.",
       expired: "Este enlace ya no es válido. Pide un enlace nuevo.",
-      name: "Por favor ingresa tu nombre completo.",
+      name: "Por favor ingresa tu nombre o nombre preferido.",
       phone: "Ingresa tu número de celular.",
       phoneShort: "Revisa el celular. Debe tener al menos 10 dígitos.",
       password: "La contraseña debe tener al menos 6 caracteres.",
@@ -99,12 +170,14 @@ const COPY = {
     detailsTitle: "Create staff access",
     detailsSubtitle: "Complete these 3 steps to enter the portal.",
     formTitle: "Your account",
-    formHelp: "Use the same phone number you use with the office.",
-    nameLabel: "1. Full name",
-    namePlaceholder: "Example: Ana Garcia",
+    formHelp: "Use the name and phone number you use with the office.",
+    nameLabel: "1. Name or preferred name",
+    namePlaceholder: "Example: Ray",
+    countryLabel: "Country",
     phoneLabel: "2. Mobile phone",
+    numberLabel: "Number",
     phonePlaceholder: "Example: 664 123 4567",
-    phoneHint: "If no country code is entered, we will use +52 Mexico.",
+    phoneHint: "Select the country and enter your number.",
     passwordTitle: "3. Password",
     passwordLabel: "Password",
     passwordPlaceholder: "At least 6 characters",
@@ -114,9 +187,9 @@ const COPY = {
     hide: "Hide",
     submit: "Create account and enter",
     submitting: "Creating account...",
-    back: "Back to code",
+    back: "Use another code",
     afterTitle: "After registration",
-    afterText: "The doctor or administration assigns patients. When staff enter the portal, they see their assigned rooms.",
+    afterText: "The doctor or admin team assigns patients. When you enter the portal, you will only see your assigned rooms.",
     privacy: "Privacy",
     support: "Support",
     deletion: "Delete account",
@@ -126,7 +199,7 @@ const COPY = {
       verify: "Error verifying the code.",
       wrongCode: "Incorrect invitation code.",
       expired: "This link is no longer valid. Request a new link.",
-      name: "Please enter your full name.",
+      name: "Please enter your name or preferred name.",
       phone: "Enter your mobile phone number.",
       phoneShort: "Check the phone number. It must have at least 10 digits.",
       password: "Password must be at least 6 characters.",
@@ -153,14 +226,16 @@ export default function RegisterPage() {
   const [lang, setLang] = useState<Lang>("es");
   const [step, setStep] = useState<"code" | "details">("code");
   const [inviteCode, setInviteCode] = useState("");
+  const [hasInviteLink, setHasInviteLink] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [phoneCountryCode, setPhoneCountryCode] = useState("+52");
   const [phoneInput, setPhoneInput] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [officeLocation, setOfficeLocation] = useState<OfficeLocation>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [checkedInitialCode, setCheckedInitialCode] = useState(false);
   const detailsPageRef = useRef<HTMLDivElement | null>(null);
@@ -202,6 +277,7 @@ export default function RegisterPage() {
     }
 
     setLoading(false);
+    setHasInviteLink(false);
     setStep("details");
   };
 
@@ -226,6 +302,7 @@ export default function RegisterPage() {
 
       if (!codeFromLink) {
         setInviteCode("");
+        setHasInviteLink(false);
         setStep("code");
         setLoading(false);
         setCheckedInitialCode(true);
@@ -239,15 +316,17 @@ export default function RegisterPage() {
       const currentCode = (data?.value || "").trim().toUpperCase();
 
       if (err || !currentCode) {
-        setError(COPY.es.errors.verify);
+        setError(COPY[browserLang].errors.verify);
+        setHasInviteLink(false);
         setLoading(false);
         setCheckedInitialCode(true);
         return;
       }
 
       if (currentCode !== codeFromLink) {
-        setError(COPY.es.errors.expired);
-        setInviteCode(codeFromLink);
+        setError(COPY[browserLang].errors.expired);
+        setInviteCode("");
+        setHasInviteLink(false);
         setStep("code");
         setLoading(false);
         setCheckedInitialCode(true);
@@ -255,6 +334,7 @@ export default function RegisterPage() {
       }
 
       setInviteCode(codeFromLink);
+      setHasInviteLink(true);
       setStep("details");
       setLoading(false);
       setCheckedInitialCode(true);
@@ -279,7 +359,7 @@ export default function RegisterPage() {
       return;
     }
 
-    const normalizedPhone = normalizeStaffPhone(phoneInput);
+    const normalizedPhone = normalizeStaffPhone(phoneInput, phoneCountryCode);
     if (normalizedPhone.replace(/\D/g, "").length < 10) {
       setError(t.errors.phoneShort);
       return;
@@ -436,6 +516,15 @@ export default function RegisterPage() {
           font-weight: 680;
           transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
         }
+        .select {
+          appearance: none;
+          background-image: linear-gradient(45deg, transparent 50%, #426987 50%), linear-gradient(135deg, #426987 50%, transparent 50%);
+          background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+          background-size: 6px 6px, 6px 6px;
+          background-repeat: no-repeat;
+          padding-right: 34px;
+        }
+        .phone-row { display: grid; grid-template-columns: minmax(136px, 0.72fr) minmax(0, 1fr); gap: 10px; align-items: end; }
         .code-input { text-align: center; color: #123A5E; font-size: 20px; font-weight: 850; }
         .input:focus { background: #fff; border-color: #2B78B7; box-shadow: 0 0 0 4px rgba(43,120,183,0.12); }
         .input::placeholder { color: #9AAFC3; font-weight: 600; }
@@ -537,6 +626,7 @@ export default function RegisterPage() {
           .panel { padding: 22px; }
           .top-actions { min-height: 34px; }
           .brand { margin-top: 0; }
+          .phone-row { grid-template-columns: 1fr; gap: 12px; }
         }
       `}</style>
 
@@ -614,14 +704,35 @@ export default function RegisterPage() {
 
               <div className="field">
                 <label className="field-label">{t.phoneLabel}</label>
-                <input
-                  className="input"
-                  inputMode="tel"
-                  placeholder={t.phonePlaceholder}
-                  value={phoneInput}
-                  onChange={(event) => applyPhoneInput(event.target.value)}
-                  autoComplete="tel"
-                />
+                <div className="phone-row">
+                  <div>
+                    <label className="field-label" htmlFor="phone-country">{t.countryLabel}</label>
+                    <select
+                      id="phone-country"
+                      className="input select"
+                      value={phoneCountryCode}
+                      onChange={(event) => setPhoneCountryCode(event.target.value)}
+                    >
+                      {COUNTRY_OPTIONS.map((country) => (
+                        <option key={`${country.code}-${country.en}`} value={country.code}>
+                          {lang === "es" ? country.es : country.en} {country.code}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="field-label" htmlFor="phone-local">{t.numberLabel}</label>
+                    <input
+                      id="phone-local"
+                      className="input"
+                      inputMode="tel"
+                      placeholder={t.phonePlaceholder}
+                      value={phoneInput}
+                      onChange={(event) => applyPhoneInput(event.target.value)}
+                      autoComplete="tel"
+                    />
+                  </div>
+                </div>
                 <p className="hint">{t.phoneHint}</p>
               </div>
 
@@ -663,9 +774,11 @@ export default function RegisterPage() {
               <button className="primary-btn" onClick={handleRegister} disabled={loading}>
                 {loading ? t.submitting : t.submit}
               </button>
-              <button className="secondary-btn" onClick={() => { setStep("code"); setError(""); }}>
-                {t.back}
-              </button>
+              {!hasInviteLink && (
+                <button className="secondary-btn" onClick={() => { setInviteCode(""); setStep("code"); setError(""); }}>
+                  {t.back}
+                </button>
+              )}
 
               <div className="after-panel">
                 <h2>{t.afterTitle}</h2>
