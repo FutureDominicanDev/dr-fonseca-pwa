@@ -1,20 +1,149 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizeStaffPhone, phoneAliasEmail } from "@/lib/authIdentity";
+import { COUNTRY_OPTIONS } from "@/lib/countryDialing";
 
+type Lang = "es" | "en";
 type View = "login" | "forgot" | "sent";
+
+const COPY = {
+  es: {
+    toggle: "English",
+    title: "Iniciar sesión",
+    subtitle: "Entra al portal médico para ver tus salas asignadas.",
+    panelTitle: "Acceso seguro",
+    panelCopy: "Usa el celular o correo asociado a tu cuenta.",
+    country: "País",
+    identifier: "Correo o celular",
+    identifierPlaceholder: "correo@ejemplo.com o 664 123 4567",
+    password: "Contraseña",
+    passwordPlaceholder: "Tu contraseña",
+    show: "Ver",
+    hide: "Ocultar",
+    forgot: "¿Olvidaste tu contraseña?",
+    submit: "Entrar al portal",
+    submitting: "Ingresando...",
+    firstTime: "¿Primera vez aquí?",
+    register: "Crear acceso",
+    forgotTitle: "Recuperar contraseña",
+    forgotCopy: "Escribe el correo asociado a tu cuenta. Si entras con celular, pide ayuda al administrador.",
+    emailLabel: "Correo electrónico",
+    emailPlaceholder: "correo@ejemplo.com",
+    sendReset: "Enviar enlace de recuperación",
+    sending: "Enviando...",
+    back: "Volver al login",
+    sentTitle: "Revisa tu correo",
+    sentCopy: "Enviamos un enlace para cambiar tu contraseña.",
+    sentHelp: "Si no lo ves, revisa spam o pide ayuda al administrador.",
+    privacy: "Privacidad",
+    support: "Soporte",
+    deletion: "Eliminar cuenta",
+    footer: "© 2025 Dr. Miguel Fonseca · Siluety Plastic Surgery",
+    sideTitle: "Comunicación privada del equipo médico.",
+    sideCopy: "Desde aquí el staff entra a las salas de pacientes asignadas por el doctor o administración.",
+    step1: "Entra con tu cuenta",
+    step1Text: "Celular, correo y contraseña personal.",
+    step2: "Revisa tus salas",
+    step2Text: "Solo verás pacientes asignados a tu equipo.",
+    step3: "Responde con claridad",
+    step3Text: "Mensajes, archivos y seguimiento en un solo lugar.",
+    errors: {
+      loginRequired: "Por favor ingresa tu correo o celular y contraseña.",
+      badLogin: "Correo, celular o contraseña incorrectos.",
+      resetRequired: "Por favor ingresa tu correo electrónico.",
+      resetFailed: "No pude enviar el correo. Verifica el correo ingresado.",
+    },
+  },
+  en: {
+    toggle: "Español",
+    title: "Sign in",
+    subtitle: "Enter the medical portal to see your assigned rooms.",
+    panelTitle: "Secure access",
+    panelCopy: "Use the phone or email connected to your account.",
+    country: "Country",
+    identifier: "Email or mobile phone",
+    identifierPlaceholder: "email@example.com or 664 123 4567",
+    password: "Password",
+    passwordPlaceholder: "Your password",
+    show: "Show",
+    hide: "Hide",
+    forgot: "Forgot your password?",
+    submit: "Enter portal",
+    submitting: "Signing in...",
+    firstTime: "First time here?",
+    register: "Create access",
+    forgotTitle: "Recover password",
+    forgotCopy: "Enter the email connected to your account. If you sign in by phone, ask an administrator for help.",
+    emailLabel: "Email address",
+    emailPlaceholder: "email@example.com",
+    sendReset: "Send recovery link",
+    sending: "Sending...",
+    back: "Back to login",
+    sentTitle: "Check your email",
+    sentCopy: "We sent a link to change your password.",
+    sentHelp: "If you do not see it, check spam or ask an administrator for help.",
+    privacy: "Privacy",
+    support: "Support",
+    deletion: "Delete account",
+    footer: "© 2025 Dr. Miguel Fonseca · Siluety Plastic Surgery",
+    sideTitle: "Private communication for the medical team.",
+    sideCopy: "Staff enter here to access patient rooms assigned by the doctor or administration.",
+    step1: "Sign in",
+    step1Text: "Mobile phone, email, and personal password.",
+    step2: "Review your rooms",
+    step2Text: "You only see patients assigned to your team.",
+    step3: "Respond clearly",
+    step3Text: "Messages, files, and follow-up in one place.",
+    errors: {
+      loginRequired: "Please enter your email or phone and password.",
+      badLogin: "Email, phone, or password is incorrect.",
+      resetRequired: "Please enter your email address.",
+      resetFailed: "I could not send the email. Check the address entered.",
+    },
+  },
+} as const;
+
+const getBrowserLang = (): Lang => {
+  if (typeof window === "undefined") return "es";
+  const params = new URLSearchParams(window.location.search);
+  const requestedLang = params.get("lang");
+  if (requestedLang === "en" || requestedLang === "es") return requestedLang;
+
+  const savedLang = window.localStorage.getItem("portal_auth_lang") || window.localStorage.getItem("portal_register_lang");
+  if (savedLang === "en" || savedLang === "es") return savedLang;
+  return "es";
+};
+
+const withLang = (path: string, lang: Lang) => `${path}${path.includes("?") ? "&" : "?"}lang=${lang}`;
 
 export default function LoginPage() {
   const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://portal.drfonsecacirujanoplastico.com").replace(/\/+$/, "");
+  const [lang, setLang] = useState<Lang>("es");
   const [view, setView] = useState<View>("login");
   const [identifier, setIdentifier] = useState("");
+  const [phoneCountryCode, setPhoneCountryCode] = useState("+52");
   const [resetEmail, setResetEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [registerLink, setRegisterLink] = useState("/register");
+
+  const t = COPY[lang];
+  const registerTarget = withLang(registerLink, lang);
+
+  const setLanguage = (next: Lang) => {
+    setLang(next);
+    setError("");
+    if (typeof window !== "undefined") window.localStorage.setItem("portal_auth_lang", next);
+  };
+
+  useEffect(() => {
+    const browserLang = getBrowserLang();
+    if (browserLang !== "es") window.setTimeout(() => setLang(browserLang), 0);
+  }, []);
 
   useEffect(() => {
     const loadRegisterLink = async () => {
@@ -26,145 +155,370 @@ export default function LoginPage() {
   }, []);
 
   const handleLogin = async () => {
-    if (!identifier.trim() || !password.trim()) { setError("Por favor ingresa tu correo/teléfono y contraseña."); return; }
-    setLoading(true); setError("");
+    if (!identifier.trim() || !password.trim()) {
+      setError(t.errors.loginRequired);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
     const isEmailLogin = identifier.includes("@");
     const payload = isEmailLogin
       ? { email: identifier.trim().toLowerCase(), password }
-      : { email: phoneAliasEmail(normalizeStaffPhone(identifier)), password };
+      : { email: phoneAliasEmail(normalizeStaffPhone(identifier, phoneCountryCode)), password };
     const { error: err } = await supabase.auth.signInWithPassword(payload as any);
-    if (err) { setError("Correo/teléfono o contraseña incorrectos."); setLoading(false); return; }
+    if (err) {
+      setError(t.errors.badLogin);
+      setLoading(false);
+      return;
+    }
     window.location.href = "/inbox";
   };
 
   const handleReset = async () => {
-    if (!resetEmail.trim()) { setError("Por favor ingresa tu correo electrónico."); return; }
-    setLoading(true); setError("");
+    if (!resetEmail.trim()) {
+      setError(t.errors.resetRequired);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
     const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-      redirectTo: `${appBaseUrl}/reset-password`,
+      redirectTo: `${appBaseUrl}/reset-password?lang=${lang}`,
     });
-    if (err) { setError("Error enviando el correo. Verifica el correo ingresado."); setLoading(false); return; }
+    if (err) {
+      setError(t.errors.resetFailed);
+      setLoading(false);
+      return;
+    }
     setLoading(false);
     setView("sent");
+  };
+
+  const switchTo = (nextView: View) => {
+    setView(nextView);
+    setError("");
+    setLoading(false);
   };
 
   return (
     <>
       <style>{`
-        .login-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(160deg, #1C1C1E 0%, #2C2C2E 50%, #1a1a2e 100%); }
-        .login-card { width: 100%; max-width: 420px; background: white; border-radius: 24px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
-        .logo-section { background: white; padding: 36px 28px 24px; display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #E5E5EA; }
-        .form-section { padding: 32px 28px 40px; }
-        .page-title { font-size: 26px; font-weight: 800; color: #000000; margin-bottom: 6px; }
-        .page-sub { font-size: 16px; color: #000000; font-weight: 600; margin-bottom: 28px; opacity: 0.82; line-height: 1.5; }
-        .form-label { font-size: 13px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block; }
-        .form-input { width: 100%; padding: 14px 16px; background: #F2F2F7; border: none; border-radius: 12px; font-size: 16px; font-family: inherit; color: #000000; outline: none; margin-bottom: 16px; font-weight: 600; transition: all 0.15s; }
-        .form-input:focus { background: white; box-shadow: 0 0 0 2px rgba(0,122,255,0.3); }
-        .form-input::placeholder { color: #AEAEB2; font-weight: 400; }
-        .pw-wrap { position: relative; margin-bottom: 8px; }
-        .pw-input { width: 100%; padding: 14px 48px 14px 16px; background: #F2F2F7; border: none; border-radius: 12px; font-size: 16px; font-family: inherit; color: #000000; outline: none; font-weight: 600; transition: all 0.15s; }
-        .pw-input:focus { background: white; box-shadow: 0 0 0 2px rgba(0,122,255,0.3); }
-        .pw-input::placeholder { color: #AEAEB2; font-weight: 400; }
-        .pw-eye { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 18px; padding: 4px; }
-        .forgot-link { font-size: 13px; color: #007AFF; font-weight: 700; cursor: pointer; text-align: right; display: block; margin-bottom: 20px; }
-        .main-btn { width: 100%; padding: 16px; background: #007AFF; border: none; border-radius: 14px; color: white; font-size: 16px; font-weight: 800; cursor: pointer; font-family: inherit; transition: all 0.15s; }
-        .main-btn:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,122,255,0.4); }
-        .main-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        .back-btn { width: 100%; padding: 13px; background: #F2F2F7; border: none; border-radius: 14px; color: #000000; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 10px; }
-        .back-btn:hover { background: #E5E5EA; }
-        .error-box { background: #FFF0EE; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; font-weight: 700; color: #FF3B30; text-align: center; }
-        .footer-text { font-size: 14px; color: #000000; text-align: center; margin-top: 20px; font-weight: 600; opacity: 0.82; }
-        .footer-text span { color: #007AFF; font-weight: 800; cursor: pointer; opacity: 1; }
+        .auth-page {
+          min-height: 100dvh;
+          height: 100dvh;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior-y: contain;
+          background: linear-gradient(180deg, #fbfdff 0%, #eef5fb 100%);
+          color: #10243b;
+          padding: calc(env(safe-area-inset-top) + 20px) 16px calc(env(safe-area-inset-bottom) + 28px);
+        }
+        .auth-shell { width: 100%; max-width: 960px; margin: 0 auto; }
+        .top-actions { display: flex; justify-content: flex-end; min-height: 38px; }
+        .lang-toggle {
+          border: 1px solid #DCE8F3;
+          background: rgba(255,255,255,0.86);
+          color: #165D9C;
+          border-radius: 999px;
+          padding: 8px 13px;
+          font-family: inherit;
+          font-size: 13px;
+          font-weight: 850;
+          cursor: pointer;
+          box-shadow: 0 8px 22px rgba(28, 66, 104, 0.08);
+        }
+        .brand { text-align: center; margin: 2px 0 24px; }
+        .logo { width: min(300px, 74vw); height: auto; object-fit: contain; margin-bottom: 16px; }
+        .title { margin: 0; color: #0E2D4A; font-size: clamp(34px, 7vw, 52px); line-height: 1.06; font-weight: 850; letter-spacing: 0; }
+        .subtitle { margin: 12px auto 0; max-width: 680px; color: #52677d; font-size: 18px; line-height: 1.48; font-weight: 650; }
+        .layout { display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 18px; align-items: stretch; }
+        .panel {
+          background: #FFFFFF;
+          border: 1px solid rgba(92,132,170,0.18);
+          border-radius: 22px;
+          box-shadow: 0 22px 64px rgba(28, 66, 104, 0.14);
+          padding: 26px;
+        }
+        .visual-panel {
+          background:
+            linear-gradient(135deg, rgba(255,255,255,0.96), rgba(232,242,250,0.92)),
+            linear-gradient(120deg, rgba(37,103,162,0.12), rgba(255,255,255,0));
+        }
+        .panel-title { margin: 0 0 8px; color: #10243b; font-size: 25px; line-height: 1.16; font-weight: 850; letter-spacing: 0; }
+        .panel-copy { margin: 0 0 22px; color: #64748B; font-size: 15px; line-height: 1.5; font-weight: 650; }
+        .field { margin-bottom: 16px; }
+        .field-label { display: block; color: #25384d; font-size: 13px; font-weight: 850; margin-bottom: 8px; }
+        .input {
+          width: 100%;
+          min-height: 54px;
+          padding: 0 15px;
+          background: #F7FAFD;
+          border: 1px solid #DCE8F3;
+          border-radius: 14px;
+          font-size: 16px;
+          font-family: inherit;
+          color: #10243b;
+          outline: none;
+          font-weight: 680;
+          transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+        }
+        .select {
+          appearance: none;
+          background-image: linear-gradient(45deg, transparent 50%, #426987 50%), linear-gradient(135deg, #426987 50%, transparent 50%);
+          background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+          background-size: 6px 6px, 6px 6px;
+          background-repeat: no-repeat;
+          padding-right: 34px;
+        }
+        .input:focus { background: #fff; border-color: #2B78B7; box-shadow: 0 0 0 4px rgba(43,120,183,0.12); }
+        .input::placeholder { color: #9AAFC3; font-weight: 600; }
+        .phone-row { display: grid; grid-template-columns: minmax(136px, 0.72fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+        .password-wrap { position: relative; }
+        .password-input { padding-right: 82px; }
+        .show-btn {
+          position: absolute;
+          right: 8px;
+          top: 50%;
+          transform: translateY(-50%);
+          height: 36px;
+          border: none;
+          border-radius: 10px;
+          background: #E8F2FA;
+          color: #165D9C;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 850;
+          padding: 0 12px;
+          font-family: inherit;
+        }
+        .primary-btn {
+          width: 100%;
+          min-height: 54px;
+          background: linear-gradient(90deg, #2B78B7, #165D9C);
+          border: none;
+          border-radius: 14px;
+          color: white;
+          font-size: 16px;
+          font-weight: 850;
+          cursor: pointer;
+          font-family: inherit;
+          box-shadow: 0 10px 24px rgba(31, 103, 164, 0.24);
+        }
+        .primary-btn:disabled { opacity: 0.52; cursor: not-allowed; box-shadow: none; }
+        .secondary-btn {
+          width: 100%;
+          min-height: 44px;
+          margin-top: 8px;
+          border: none;
+          background: transparent;
+          color: #52677d;
+          cursor: pointer;
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 850;
+        }
+        .text-link { border: none; background: transparent; padding: 0; color: #165D9C; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 850; }
+        .forgot-link { display: block; margin: -4px 0 20px auto; text-align: right; }
+        .error {
+          background: #FFF1F2;
+          border: 1px solid #FFCDD2;
+          border-radius: 12px;
+          padding: 12px 14px;
+          margin-bottom: 16px;
+          font-size: 14px;
+          font-weight: 750;
+          color: #B42318;
+        }
+        .signup-note { margin: 17px 0 0; color: #52677d; text-align: center; font-size: 14px; font-weight: 650; }
+        .signup-note button { color: #165D9C; font-weight: 850; }
+        .steps { display: grid; gap: 16px; margin-top: 20px; }
+        .step-row { display: grid; grid-template-columns: 40px 1fr; gap: 13px; align-items: start; }
+        .step-num {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: #D9ECFA;
+          color: #1B6CA8;
+          display: grid;
+          place-items: center;
+          font-weight: 850;
+          font-size: 17px;
+          box-shadow: inset 0 0 0 1px rgba(27,108,168,0.18);
+        }
+        .step-row strong { display: block; color: #18344f; font-size: 16px; line-height: 1.24; margin-bottom: 4px; }
+        .step-row span { color: #60758a; font-size: 14px; line-height: 1.45; font-weight: 630; }
+        .footer-copy { color: #5D7288; margin-top: 22px; text-align: center; font-size: 13px; font-weight: 650; }
         .legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; margin-top: 12px; font-size: 12px; font-weight: 800; }
-        .legal-links a { color: rgba(255,255,255,0.78); text-decoration: none; }
-        .legal-links a:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 4px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .legal-links a { color: #426987; text-decoration: none; }
+        @media (max-width: 820px) {
+          .auth-page { padding: calc(env(safe-area-inset-top) + 14px) 14px calc(env(safe-area-inset-bottom) + 26px); }
+          .layout { grid-template-columns: 1fr; gap: 16px; }
+          .auth-panel { order: 1; }
+          .visual-panel { order: 2; }
+          .panel { padding: 22px; }
+          .phone-row { grid-template-columns: 1fr; gap: 12px; }
+          .title { font-size: clamp(32px, 9vw, 42px); }
+          .subtitle { font-size: 16px; }
+        }
       `}</style>
 
-      <div className="login-page">
-        <div className="login-card">
-          <div className="logo-section">
-            <img src="/fonseca_clear.png" style={{ height: 90, width: "auto", objectFit: "contain", marginBottom: 10 }} alt="Dr. Fonseca" />
-            <p style={{ fontSize: 13, color: "#000000", fontWeight: 900, letterSpacing: 2, textTransform: "uppercase" }}>PORTAL MÉDICO — STAFF</p>
+      <main className="auth-page">
+        <div className="auth-shell">
+          <div className="top-actions">
+            <button className="lang-toggle" type="button" onClick={() => setLanguage(lang === "es" ? "en" : "es")}>
+              {t.toggle}
+            </button>
           </div>
 
-          <div className="form-section">
+          <header className="brand">
+            <img className="logo" src="/fonseca_clear.png" alt="Dr. Miguel Fonseca" />
+            <h1 className="title">{view === "login" ? t.title : view === "forgot" ? t.forgotTitle : t.sentTitle}</h1>
+            <p className="subtitle">{view === "login" ? t.subtitle : view === "forgot" ? t.forgotCopy : t.sentCopy}</p>
+          </header>
 
-            {/* LOGIN VIEW */}
-            {view === "login" && (
-              <>
-                <p className="page-title">Bienvenido 👋</p>
-                <p className="page-sub">Ingresa tus credenciales para continuar</p>
-                {error && <div className="error-box">⚠️ {error}</div>}
-                <label className="form-label">Correo o Teléfono</label>
-                <input className="form-input" type="text" placeholder="correo@drmiguelfonseca.com o +52 664 123 4567" value={identifier} onChange={e => setIdentifier(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleLogin(); }} autoComplete="username" />
-                <label className="form-label">Contraseña</label>
-                <div className="pw-wrap">
-                  <input className="pw-input" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleLogin(); }} autoComplete="current-password" />
-                  <button className="pw-eye" onClick={() => setShowPassword(p => !p)} type="button">{showPassword ? "🙈" : "👁️"}</button>
+          <div className="layout">
+            <section className="panel visual-panel" aria-label={t.sideTitle}>
+              <h2 className="panel-title">{t.sideTitle}</h2>
+              <p className="panel-copy">{t.sideCopy}</p>
+              <div className="steps">
+                <div className="step-row">
+                  <div className="step-num">1</div>
+                  <div><strong>{t.step1}</strong><span>{t.step1Text}</span></div>
                 </div>
-                <span className="forgot-link" onClick={() => { setView("forgot"); setError(""); }}>¿Olvidaste tu contraseña?</span>
-                <button className="main-btn" onClick={handleLogin} disabled={loading}>
-                  {loading ? (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                      <div style={{ width: 18, height: 18, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
-                      Ingresando…
+                <div className="step-row">
+                  <div className="step-num">2</div>
+                  <div><strong>{t.step2}</strong><span>{t.step2Text}</span></div>
+                </div>
+                <div className="step-row">
+                  <div className="step-num">3</div>
+                  <div><strong>{t.step3}</strong><span>{t.step3Text}</span></div>
+                </div>
+              </div>
+            </section>
+
+            <section className="panel auth-panel" aria-label={view === "login" ? t.panelTitle : t.forgotTitle}>
+              {view === "login" && (
+                <>
+                  <h2 className="panel-title">{t.panelTitle}</h2>
+                  <p className="panel-copy">{t.panelCopy}</p>
+                  {error && <div className="error">Error: {error}</div>}
+
+                  <div className="field">
+                    <label className="field-label">{t.identifier}</label>
+                    <div className="phone-row">
+                      <div>
+                        <label className="field-label" htmlFor="login-country">{t.country}</label>
+                        <select
+                          id="login-country"
+                          className="input select"
+                          value={phoneCountryCode}
+                          onChange={(event) => setPhoneCountryCode(event.target.value)}
+                        >
+                          {COUNTRY_OPTIONS.map((country) => (
+                            <option key={`${country.code}-${country.en}`} value={country.code}>
+                              {lang === "es" ? country.es : country.en} {country.code}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="field-label" htmlFor="login-id">{t.identifier}</label>
+                        <input
+                          id="login-id"
+                          className="input"
+                          type="text"
+                          placeholder={t.identifierPlaceholder}
+                          value={identifier}
+                          onChange={(event) => setIdentifier(event.target.value)}
+                          onKeyDown={(event) => { if (event.key === "Enter") handleLogin(); }}
+                          autoComplete="username"
+                        />
+                      </div>
                     </div>
-                  ) : "Ingresar al Portal →"}
-                </button>
-                <p className="footer-text">¿Eres nuevo? <span onClick={() => window.location.href = registerLink}>Regístrate aquí</span></p>
-              </>
-            )}
+                  </div>
 
-            {/* FORGOT PASSWORD VIEW */}
-            {view === "forgot" && (
-              <>
-                <div style={{ textAlign: "center", marginBottom: 24 }}>
-                  <div style={{ fontSize: 52, marginBottom: 10 }}>📧</div>
-                  <p className="page-title">Restablecer Contraseña</p>
-                  <p className="page-sub">Te enviaremos un enlace a tu correo</p>
-                </div>
-                {error && <div className="error-box">⚠️ {error}</div>}
-                <label className="form-label">Tu Correo Electrónico</label>
-                <input className="form-input" type="email" placeholder="correo@drmiguelfonseca.com" value={resetEmail} onChange={e => setResetEmail(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleReset(); }} autoComplete="email" style={{ marginBottom: 20 }} />
-                <button className="main-btn" onClick={handleReset} disabled={loading}>
-                  {loading ? (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                      <div style={{ width: 18, height: 18, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
-                      Enviando…
+                  <div className="field">
+                    <label className="field-label">{t.password}</label>
+                    <div className="password-wrap">
+                      <input
+                        className="input password-input"
+                        type={showPassword ? "text" : "password"}
+                        placeholder={t.passwordPlaceholder}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        onKeyDown={(event) => { if (event.key === "Enter") handleLogin(); }}
+                        autoComplete="current-password"
+                      />
+                      <button className="show-btn" onClick={() => setShowPassword((value) => !value)} type="button">
+                        {showPassword ? t.hide : t.show}
+                      </button>
                     </div>
-                  ) : "📧 Enviar Enlace de Restablecimiento"}
-                </button>
-                <button className="back-btn" onClick={() => { setView("login"); setError(""); }}>← Volver al Login</button>
-              </>
-            )}
+                  </div>
 
-            {/* EMAIL SENT VIEW */}
-            {view === "sent" && (
-              <>
-                <div style={{ textAlign: "center", padding: "10px 0 20px" }}>
-                  <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
-                  <p className="page-title">¡Correo Enviado!</p>
-                  <p style={{ fontSize: 15, color: "#000000", fontWeight: 500, opacity: 0.7, marginBottom: 8, lineHeight: 1.6 }}>Enviamos un enlace de restablecimiento a:</p>
-                  <p style={{ fontSize: 16, fontWeight: 800, color: "#007AFF", marginBottom: 24 }}>{resetEmail}</p>
-                  <p style={{ fontSize: 13, color: "#000000", opacity: 0.5, fontWeight: 500, lineHeight: 1.6, marginBottom: 24 }}>Revisa tu bandeja de entrada y sigue las instrucciones. Si no lo ves revisa tu carpeta de spam.</p>
-                  <button className="main-btn" onClick={() => { setView("login"); setError(""); setResetEmail(""); }}>← Volver al Login</button>
-                </div>
-              </>
-            )}
+                  <button className="text-link forgot-link" onClick={() => switchTo("forgot")} type="button">
+                    {t.forgot}
+                  </button>
+                  <button className="primary-btn" onClick={handleLogin} disabled={loading}>
+                    {loading ? t.submitting : t.submit}
+                  </button>
+                  <p className="signup-note">
+                    {t.firstTime}{" "}
+                    <button className="text-link" onClick={() => { window.location.href = registerTarget; }} type="button">
+                      {t.register}
+                    </button>
+                  </p>
+                </>
+              )}
 
+              {view === "forgot" && (
+                <>
+                  <h2 className="panel-title">{t.forgotTitle}</h2>
+                  <p className="panel-copy">{t.forgotCopy}</p>
+                  {error && <div className="error">Error: {error}</div>}
+                  <div className="field">
+                    <label className="field-label">{t.emailLabel}</label>
+                    <input
+                      className="input"
+                      type="email"
+                      placeholder={t.emailPlaceholder}
+                      value={resetEmail}
+                      onChange={(event) => setResetEmail(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === "Enter") handleReset(); }}
+                      autoComplete="email"
+                    />
+                  </div>
+                  <button className="primary-btn" onClick={handleReset} disabled={loading}>
+                    {loading ? t.sending : t.sendReset}
+                  </button>
+                  <button className="secondary-btn" onClick={() => switchTo("login")} type="button">
+                    {t.back}
+                  </button>
+                </>
+              )}
+
+              {view === "sent" && (
+                <>
+                  <h2 className="panel-title">{t.sentTitle}</h2>
+                  <p className="panel-copy">{t.sentCopy}</p>
+                  <p className="panel-copy" style={{ marginTop: -10 }}>{resetEmail}</p>
+                  <p className="panel-copy">{t.sentHelp}</p>
+                  <button className="primary-btn" onClick={() => { setResetEmail(""); switchTo("login"); }} type="button">
+                    {t.back}
+                  </button>
+                </>
+              )}
+            </section>
+          </div>
+
+          <p className="footer-copy">{t.footer}</p>
+          <div className="legal-links" aria-label="Legal links and support">
+            <a href={withLang("/privacy", lang)}>{t.privacy}</a>
+            <a href={withLang("/support", lang)}>{t.support}</a>
+            <a href={withLang("/account-deletion", lang)}>{t.deletion}</a>
           </div>
         </div>
-
-        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 28, textAlign: "center", fontWeight: 600 }}>
-          © 2025 Dr. Miguel Fonseca · Siluety Plastic Surgery
-        </p>
-        <div className="legal-links" aria-label="Enlaces legales y soporte">
-          <a href="/privacy">Privacidad</a>
-          <a href="/support">Soporte</a>
-          <a href="/account-deletion">Eliminar cuenta</a>
-        </div>
-      </div>
+      </main>
     </>
   );
 }
