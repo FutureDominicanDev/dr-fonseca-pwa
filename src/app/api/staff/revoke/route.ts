@@ -37,6 +37,22 @@ const createInviteCode = () => {
   return `FONSECA-${suffix}`;
 };
 
+const isMissingSchemaError = (error: any) => {
+  const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+  return (
+    message.includes("column") ||
+    message.includes("relation") ||
+    message.includes("does not exist") ||
+    message.includes("schema cache")
+  );
+};
+
+const isUserNotFoundError = (error: any) => {
+  const message = `${error?.message || ""}`.toLowerCase();
+  const code = `${error?.code || ""}`.toLowerCase();
+  return message.includes("user not found") || code === "user_not_found";
+};
+
 export async function POST(request: NextRequest) {
   try {
     if (!SUPABASE_SERVICE_ROLE_KEY) {
@@ -48,6 +64,9 @@ export async function POST(request: NextRequest) {
     if (!userId) return NextResponse.json({ error: "Missing userId." }, { status: 400 });
 
     const authUserRes = await supabase.auth.admin.getUserById(userId);
+    if (authUserRes.error && !isUserNotFoundError(authUserRes.error)) {
+      return NextResponse.json({ error: authUserRes.error.message || "Could not read auth user." }, { status: 500 });
+    }
     const targetEmail = authUserRes.data?.user?.email?.trim().toLowerCase() || "";
     const targetPhoneFromAuth = normalizePhone(authUserRes.data?.user?.phone || "");
     if (isOwnerEmail(targetEmail)) {
@@ -96,9 +115,61 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: settingsError.message || "Failed to update settings." }, { status: 500 });
     }
 
-    await supabase.from("profiles").delete().eq("id", userId);
+    // Detach historical references before removing the profile/auth user.
+    // We preserve sender_name/sender_role text in messages, but remove hard FK sender_id.
+    const cleanupErrors: string[] = [];
+
+    const { error: clearMessageSenderError } = await supabase
+      .from("messages")
+      .update({ sender_id: null })
+      .eq("sender_id", userId);
+    if (clearMessageSenderError && !isMissingSchemaError(clearMessageSenderError)) {
+      cleanupErrors.push(`messages: ${clearMessageSenderError.message || "update failed"}`);
+    }
+
+    const { error: clearRoomMembersError } = await supabase.from("room_members").delete().eq("user_id", userId);
+    if (clearRoomMembersError && !isMissingSchemaError(clearRoomMembersError)) {
+      cleanupErrors.push(`room_members: ${clearRoomMembersError.message || "delete failed"}`);
+    }
+
+    const { error: clearRoomsCreatorError } = await supabase
+      .from("rooms")
+      .update({ created_by: null })
+      .eq("created_by", userId);
+    if (clearRoomsCreatorError && !isMissingSchemaError(clearRoomsCreatorError)) {
+      cleanupErrors.push(`rooms.created_by: ${clearRoomsCreatorError.message || "update failed"}`);
+    }
+
+    const { error: clearPatientStatusActorError } = await supabase
+      .from("patients")
+      .update({ record_status_changed_by: null })
+      .eq("record_status_changed_by", userId);
+    if (clearPatientStatusActorError && !isMissingSchemaError(clearPatientStatusActorError)) {
+      cleanupErrors.push(`patients.record_status_changed_by: ${clearPatientStatusActorError.message || "update failed"}`);
+    }
+
+    const { error: clearAuditActorError } = await supabase
+      .from("admin_audit_events")
+      .update({ actor_id: null })
+      .eq("actor_id", userId);
+    if (clearAuditActorError && !isMissingSchemaError(clearAuditActorError)) {
+      cleanupErrors.push(`admin_audit_events.actor_id: ${clearAuditActorError.message || "update failed"}`);
+    }
+
+    if (cleanupErrors.length) {
+      return NextResponse.json(
+        { error: `Failed to detach linked records: ${cleanupErrors.join(" | ")}` },
+        { status: 500 },
+      );
+    }
+
+    const { error: deleteProfileError } = await supabase.from("profiles").delete().eq("id", userId);
+    if (deleteProfileError) {
+      return NextResponse.json({ error: deleteProfileError.message || "Failed to remove profile row." }, { status: 500 });
+    }
+
     const authDeleteRes = await supabase.auth.admin.deleteUser(userId);
-    if (authDeleteRes.error) {
+    if (authDeleteRes.error && !isUserNotFoundError(authDeleteRes.error)) {
       return NextResponse.json({ error: authDeleteRes.error.message || "Failed to remove auth user." }, { status: 500 });
     }
 
