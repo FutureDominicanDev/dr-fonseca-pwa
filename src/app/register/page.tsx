@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { isOwnerEmail } from "@/lib/securityConfig";
 import { normalizePhone, phoneAliasEmail } from "@/lib/authIdentity";
@@ -47,6 +47,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [checkedInitialCode, setCheckedInitialCode] = useState(false);
+  const detailsPageRef = useRef<HTMLDivElement | null>(null);
 
   const applyPhoneInput = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 14);
@@ -122,6 +123,13 @@ export default function RegisterPage() {
 
     verifyInviteFlow();
   }, []);
+
+  useEffect(() => {
+    if (!error) return;
+    if (step === "details") {
+      detailsPageRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [error, step]);
 
   const handleRegister = async () => {
     if (!fullName.trim()) {
@@ -371,7 +379,7 @@ export default function RegisterPage() {
         .ropt.sel { background: #EBF5FF; color: #007AFF; border-color: #007AFF; }
         .role-opt { min-height: 94px; display: flex; align-items: center; justify-content: center; line-height: 1.2; white-space: normal; word-break: break-word; overflow: hidden; padding: 10px 8px; font-size: 11px; }
       `}</style>
-      <div className="details-page">
+      <div className="details-page" ref={detailsPageRef}>
         <div className="details-inner">
           <div className="reg-card2">
             <div className="logo-sec2">
