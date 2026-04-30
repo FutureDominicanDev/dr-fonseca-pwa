@@ -10,7 +10,7 @@ html {
   height: 100%;
   height: -webkit-fill-available;
   overflow: hidden;
-  position: fixed;
+  position: relative;
   width: 100%;
 }
 
@@ -19,7 +19,7 @@ body {
   height: -webkit-fill-available;
   min-height: -webkit-fill-available;
   overflow: hidden;
-  position: fixed;
+  position: relative;
   width: 100%;
   top: 0;
   left: 0;
@@ -41,7 +41,7 @@ body {
   height: -webkit-fill-available;
   width: 100%;
   overflow: hidden;
-  position: fixed;
+  position: relative;
   top: 0;
   left: 0;
 }
