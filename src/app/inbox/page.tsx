@@ -311,6 +311,13 @@ const parseCallRequestMessage = (content: string | null | undefined) => {
 };
 
 interface QuickReply { shortcut: string; message: string; }
+interface RoomMessageSummary {
+  room_id?: string | null;
+  created_at?: string | null;
+  content?: string | null;
+  message_type?: string | null;
+  file_name?: string | null;
+}
 interface CareTeamMember {
   id: string;
   full_name?: string | null;
@@ -385,7 +392,6 @@ export default function InboxPage() {
   const [fontSizeLevel, setFontSizeLevel] = useState<"small"|"medium"|"large">("medium");
   const fontSize = fontSizeLevel === "small" ? 17 : fontSizeLevel === "large" ? 22 : 19;
 
-  const bg = darkMode ? "#0B141A" : "#FFFFFF";
   const headerBg = "#07334D";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
   const inputBg = darkMode ? "#202C33" : "#F0F2F5";
@@ -408,6 +414,7 @@ export default function InboxPage() {
   const [unreadRooms, setUnreadRooms] = useState<Set<string>>(new Set());
   const [totalUnread, setTotalUnread] = useState(0);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [latestRoomMessages, setLatestRoomMessages] = useState<Record<string, RoomMessageSummary>>({});
   const [showNewRoom, setShowNewRoom] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showQREditor, setShowQREditor] = useState(false);
@@ -673,7 +680,7 @@ export default function InboxPage() {
     }
   }, [ensureAudioContext]);
 
-  const describeIncomingMessage = useCallback((message: any) => {
+  const describeIncomingMessage = useCallback((message: RoomMessageSummary) => {
     if (parseCallRequestMessage(message.content)) return t.incomingCallRequest;
     if (message.message_type === "audio") return lang==="es" ? "Nuevo audio" : "New audio";
     if (message.message_type === "video") return lang==="es" ? "Nuevo video" : "New video";
@@ -682,7 +689,7 @@ export default function InboxPage() {
     if (parseVideoCallMessage(message.content)) return t.videoCallInvite;
     const text = `${message.content || ""}`.trim();
     return text ? text.slice(0, 120) : lang==="es" ? "Nuevo mensaje" : "New message";
-  }, [lang, t.videoCallInvite]);
+  }, [lang, t.incomingCallRequest, t.videoCallInvite]);
 
   const roomPatientName = useCallback((roomId: string) => {
     const patient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === roomId));
@@ -985,7 +992,7 @@ export default function InboxPage() {
       .limit(400);
     if (!msgs) return;
     const nextCounts: Record<string, number> = {};
-    const latestByRoom: Record<string, any> = {};
+    const latestByRoom: Record<string, RoomMessageSummary> = {};
     for (const m of msgs) {
       const roomId = m.room_id;
       const lastSeen = localStorage.getItem(`last_seen_${roomId}`) || "0";
@@ -993,6 +1000,7 @@ export default function InboxPage() {
       if (!latestByRoom[roomId]) latestByRoom[roomId] = m;
     }
     setUnreadCounts(nextCounts);
+    setLatestRoomMessages(latestByRoom);
 
     for (const [roomId, latestMessage] of Object.entries(latestByRoom)) {
       if (selectedRoomRef.current?.id === roomId && typeof document !== "undefined" && document.visibilityState === "visible") continue;
@@ -1001,11 +1009,12 @@ export default function InboxPage() {
       const latestMessageKey = incomingMessageKey(latestMessage);
       const lastAlertedMessage = localStorage.getItem(alertMessageStorageKey(roomId)) || "";
       if (latestMessageKey && latestMessageKey === lastAlertedMessage) continue;
-      if (latestMessage.created_at > lastSeen && latestMessage.created_at > lastAlert) {
+      const latestCreatedAt = latestMessage.created_at || "";
+      if (latestCreatedAt > lastSeen && latestCreatedAt > lastAlert) {
         playIncomingTone();
         showToastAlert(roomId, roomPatientName(roomId), describeIncomingMessage(latestMessage));
         pushNotif(roomPatientName(roomId), describeIncomingMessage(latestMessage));
-        localStorage.setItem(`last_alert_${roomId}`, latestMessage.created_at);
+        localStorage.setItem(`last_alert_${roomId}`, latestCreatedAt);
         if (latestMessageKey) localStorage.setItem(alertMessageStorageKey(roomId), latestMessageKey);
       }
     }
@@ -1930,6 +1939,18 @@ export default function InboxPage() {
       if (unreadA !== unreadB) return unreadB - unreadA;
       return (a.full_name || "").localeCompare(b.full_name || "", lang==="es" ? "es" : "en");
     });
+  const roomPreview = (room: { id?: string } | null | undefined) => {
+    const roomId = room?.id || "";
+    const latest = roomId ? latestRoomMessages[roomId] : undefined;
+    if (latest) return describeIncomingMessage(latest);
+    return lang === "es" ? "Sin mensajes recientes" : "No recent messages";
+  };
+  const roomPreviewTime = (room: { id?: string } | null | undefined) => {
+    const roomId = room?.id || "";
+    const latest = roomId ? latestRoomMessages[roomId] : undefined;
+    if (latest?.created_at) return fmtTime(latest.created_at);
+    return "";
+  };
 
   const groupedMessages = () => {
     const groups: {date:string;msgs:any[]}[]=[];
@@ -2371,46 +2392,50 @@ export default function InboxPage() {
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
-        .shell { display: flex; flex-direction: column; height: 100%; min-height: -webkit-fill-available; position: absolute; inset: 0; background: ${bg}; }
-        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(90px, 1fr) minmax(260px, 680px) minmax(90px, 1fr); align-items: center; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(92px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 2px 10px rgba(15,23,42,0.16); }
-        .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.16); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
-        .topbar-logo { grid-column: 2; justify-self: center; align-self: start; margin-top: -4px; height: 88px; width: min(660px, 100%); object-fit: contain; object-position: center; display: block; }
+        .shell { display: flex; flex-direction: column; height: 100%; min-height: -webkit-fill-available; position: absolute; inset: 0; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
+        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(52px, 1fr) minmax(280px, 760px) minmax(52px, 1fr); align-items: center; padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)); z-index: 100; height: calc(98px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 8px 24px rgba(7,51,77,0.18); }
+        .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.18); box-shadow: 0 1px 0 rgba(0,0,0,0.14); }
+        .topbar-logo { grid-column: 2; justify-self: center; align-self: center; height: 96px; width: min(760px, 96vw); object-fit: contain; object-position: center; display: block; }
         .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
         .admin-inline-btn { padding: 0 12px; height: 38px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: 13px; font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
-        .body { display: flex; flex: 1; overflow: hidden; position: relative; }
-        .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${sidebarBg}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
-        .sidebar-head { padding: 12px 14px; background: ${darkMode?"#1F2C33":"#F6F7F9"}; border-bottom: 1px solid ${borderColor}; }
-        .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-        .search-bar { display: flex; align-items: center; gap: 10px; background: ${darkMode?"#243241":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.16)":"#CBD5E1"}; border-radius: 14px; padding: 11px 14px; box-shadow: ${darkMode?"none":"0 2px 8px rgba(15,23,42,0.06)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+        .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
+        .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
+        .sidebar-head { padding: 16px 16px 12px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
+        .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .search-bar { display: flex; align-items: center; gap: 10px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#D5E4F2"}; border-radius: 16px; padding: 12px 15px; box-shadow: ${darkMode?"none":"0 8px 22px rgba(28,66,104,0.08)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
         .search-bar:focus-within { border-color: #2563EB; box-shadow: ${darkMode?"0 0 0 3px rgba(37,99,235,0.22)":"0 0 0 3px rgba(37,99,235,0.12), 0 4px 14px rgba(15,23,42,0.08)"}; }
         .search-bar svg { stroke: ${darkMode?"#CBD5E1":"#64748B"}; }
         .search-input { flex: 1; border: none; background: transparent; font-size: 17px; outline: none; color: ${textColor}; font-family: inherit; font-weight: 650; min-width: 0; }
         .search-input::placeholder { color: ${darkMode?"#94A3B8":"#7C8797"}; opacity: 1; font-weight: 650; }
-        .patient-list { flex: 1; overflow-y: auto; }
+        .patient-list { flex: 1; overflow-y: auto; padding: 10px 12px calc(18px + env(safe-area-inset-bottom)); }
         .patient-list::-webkit-scrollbar { display: none; }
-        .patient-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; border-bottom: 1px solid ${borderColor}; transition: background 0.1s; }
-        .patient-row:hover { background: ${darkMode?"#22303a":"#F7F8FA"}; }
-        .patient-row.active { background: ${darkMode?"#243640":"#EBF5FF"}; }
-        .av { width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; position: relative; }
-        .av-badge { position: absolute; top: 1px; right: 1px; width: 15px; height: 15px; background: #25D366; border-radius: 50%; border: 2px solid ${sidebarBg}; }
+        .patient-row { display: flex; align-items: center; gap: 12px; min-height: 86px; padding: 13px 13px; cursor: pointer; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(102,132,163,0.16)"}; border-radius: 18px; background: ${darkMode?"#15232B":"rgba(255,255,255,0.96)"}; margin-bottom: 9px; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.07)"}; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease; }
+        .patient-row:hover { background: ${darkMode?"#1B2D36":"#FFFFFF"}; transform: translateY(-1px); }
+        .patient-row.active { background: ${darkMode?"#203744":"#EAF5FF"}; border-color: ${darkMode?"rgba(125,211,252,0.30)":"#B9D8F2"}; }
+        .av { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; position: relative; box-shadow: 0 5px 16px rgba(16,52,83,0.18); }
+        .av-badge { position: absolute; top: 0; right: 0; width: 14px; height: 14px; background: #25D366; border-radius: 50%; border: 2px solid ${darkMode ? "#15232B" : "#FFFFFF"}; }
         .patient-info { flex: 1; min-width: 0; }
-        .patient-name { font-size: 17px; font-weight: 600; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .patient-meta { font-size: 14px; color: ${subTextColor}; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .patient-main-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
+        .patient-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
+        .patient-time { flex-shrink: 0; font-size: 12px; color: ${subTextColor}; font-weight: 750; }
+        .patient-meta { font-size: 13px; color: ${subTextColor}; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
+        .patient-preview { font-size: 13px; color: ${darkMode?"#B6C6D5":"#52677D"}; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
+        .unread-count { min-width: 24px; height: 24px; padding: 0 8px; background: #25D366; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 850; box-shadow: 0 4px 12px rgba(37,211,102,0.28); }
         .unread-dot { width: 13px; height: 13px; background: #25D366; border-radius: 50%; flex-shrink: 0; }
-        .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${bg}; transition: transform 0.25s ease; z-index: 20; }
+        .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; transition: transform 0.25s ease; z-index: 20; }
         .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
         .main-area.hidden { transform: translateX(100%); pointer-events: none; }
-        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${bg}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.045) 1px, transparent 1px)"}; background-size: 18px 18px; }
+        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${darkMode ? "#0B141A" : "#F7FAFD"}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.040) 1px, transparent 1px)"}; background-size: 18px 18px; }
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 16px 0 12px; }
         .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.92)":"rgba(255,255,255,0.96)"}; border-radius: 10px; padding: 5px 13px; font-size: 14px; color: ${darkMode?"#F8FAFC":"#111827"}; font-weight: 850; box-shadow: 0 1px 4px rgba(15,23,42,0.10); border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; }
-        .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 6px max(14px, env(safe-area-inset-right)) 7px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 52px; border-left: 1px solid rgba(255,255,255,0.08); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
-        .back-btn { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 21px; font-weight: 700; transition: background 0.15s; }
-        .back-btn:hover { background: rgba(255,255,255,0.25); }
-        .chat-av { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg,#2C2C2E,#007AFF); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden; }
-        .chat-head-name { font-size: 16px; font-weight: 750; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .chat-head-sub { font-size: 12px; color: rgba(255,255,255,0.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-        .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#172033" : "#E6E8EC"}; padding: 10px max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
+        .chat-head { flex-shrink: 0; background: ${darkMode?"#111B21":"rgba(255,255,255,0.98)"}; padding: 9px max(14px, env(safe-area-inset-right)) 9px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 62px; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.18)"}; box-shadow: ${darkMode?"none":"0 6px 18px rgba(28,66,104,0.08)"}; }
+        .back-btn { width: 38px; height: 38px; border-radius: 50%; background: ${darkMode?"#1F2C34":"#EAF3FF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: ${darkMode?"#DBEAFE":"#075EA8"}; font-size: 21px; font-weight: 850; transition: background 0.15s; }
+        .back-btn:hover { background: ${darkMode?"#263846":"#DCEEFF"}; }
+        .chat-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; box-shadow: 0 4px 14px rgba(16,52,83,0.18); }
+        .chat-head-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-head-sub { font-size: 12px; color: ${subTextColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-weight: 650; }
+        .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
         .msg-input:empty::before { content: attr(data-placeholder); color: #AEAEB2; pointer-events: none; }
@@ -2446,11 +2471,13 @@ export default function InboxPage() {
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 700px) {
-          .topbar { height: calc(106px + env(safe-area-inset-top)); grid-template-columns: 1fr auto; padding-left: max(30px, env(safe-area-inset-left)); padding-right: max(30px, env(safe-area-inset-right)); column-gap: 12px; }
-          .topbar-logo { grid-column: 1; justify-self: center; align-self: start; margin-top: -2px; height: 92px; width: min(520px, 72vw); }
-          .topbar-actions { right: max(30px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 53px); }
-          .chat-head { padding-top: 9px; min-height: 58px; }
-          .input-area { gap: 10px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+          .topbar { height: calc(112px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+          .topbar-logo { grid-column: 1; justify-self: center; align-self: center; height: 104px; width: min(640px, 92vw); }
+          .topbar-actions { right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 56px); }
+          .sidebar-head { padding: 15px 14px 12px; }
+          .patient-list { padding-left: 10px; padding-right: 10px; }
+          .chat-head { min-height: 62px; }
+          .input-area { gap: 8px; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
           .plus-btn { width: 42px; height: 42px; font-size: 28px; }
           .icon-btn, .send-btn { width: 42px; height: 42px; font-size: 20px; }
           .phone-btn, .mic-btn { width: 42px; height: 42px; }
@@ -2876,6 +2903,8 @@ export default function InboxPage() {
                 const proc=firstRoom?.procedures;
                 const surgDate=proc?.surgery_date?new Date(proc.surgery_date).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}):"";
                 const isActive=pt.rooms.some((r:any)=>r.id===selectedRoom?.id);
+                const latestPreview=roomPreview(firstRoom);
+                const latestTime=roomPreviewTime(firstRoom);
                 return (
                   <div key={pt.id} className={`patient-row${isActive?" active":""}`} onClick={()=>{setSelectedRoom(firstRoom);setMobileView("chat");}}>
                     <div className="av">
@@ -2883,14 +2912,18 @@ export default function InboxPage() {
                       {ptUnread&&<div className="av-badge"/>}
                     </div>
                     <div className="patient-info">
-                      <div className="patient-name">{pt.full_name}</div>
+                      <div className="patient-main-line">
+                        <div className="patient-name">{pt.full_name}</div>
+                        {latestTime&&<div className="patient-time">{latestTime}</div>}
+                      </div>
                       <div className="patient-meta">
                         {proc?.procedure_name&&<span>{proc.procedure_name}</span>}
                         {surgDate&&<span> · {surgDate}</span>}
                         {proc?.office_location&&<span> · 📍{proc.office_location==="Guadalajara"?"GDL":"TJN"}</span>}
                       </div>
+                      <div className="patient-preview">{latestPreview}</div>
                     </div>
-                    {ptUnread&&<div style={{minWidth:24,height:24,padding:"0 8px",background:"#25D366",borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:12,fontWeight:800}}>{ptUnreadCount}</div>}
+                    {ptUnread&&<div className="unread-count">{ptUnreadCount}</div>}
                   </div>
                 );
               })}
