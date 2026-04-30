@@ -77,6 +77,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     }
     setQuickRepliesOpen(value.startsWith("/"));
   };
+  const applyComposerInputHints = (node: HTMLDivElement | null) => {
+    if (!node) return;
+    node.setAttribute("autocomplete", "off");
+    node.setAttribute("autocorrect", "off");
+    node.setAttribute("autocapitalize", "sentences");
+    node.setAttribute("enterkeyhint", "send");
+    node.setAttribute("inputmode", "text");
+    node.spellcheck = false;
+  };
+  const setComposerNode = (node: HTMLDivElement | null) => {
+    composerRef.current = node;
+    applyComposerInputHints(node);
+  };
 
   useEffect(() => {
     const lang = typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "en";
@@ -650,14 +663,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         </button>
 
         <div
-          ref={composerRef}
+          ref={setComposerNode}
           className="chat-composer"
           contentEditable
           suppressContentEditableWarning
           role="textbox"
           aria-label={labels.messagePlaceholder}
           data-placeholder={labels.messagePlaceholder}
-          onFocus={() => { setDeleteMenuMessageId(null); scrollToLatest(); setTimeout(() => scrollToLatest("auto"), 250); }}
+          onFocus={() => { setDeleteMenuMessageId(null); scrollToLatest(); }}
           onInput={(event) => {
             const next = event.currentTarget.textContent || "";
             setText(next);

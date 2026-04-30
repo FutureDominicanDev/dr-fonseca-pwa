@@ -587,6 +587,19 @@ export default function InboxPage() {
       setSlashFilter("");
     }
   };
+  const applyComposerInputHints = (node: HTMLDivElement | null) => {
+    if (!node) return;
+    node.setAttribute("autocomplete", "off");
+    node.setAttribute("autocorrect", "off");
+    node.setAttribute("autocapitalize", "sentences");
+    node.setAttribute("enterkeyhint", "send");
+    node.setAttribute("inputmode", "text");
+    node.spellcheck = false;
+  };
+  const setComposerNode = (node: HTMLDivElement | null) => {
+    composerRef.current = node;
+    applyComposerInputHints(node);
+  };
   const toggleCareTeamMember = (id: string) => {
     setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   };
@@ -2943,14 +2956,14 @@ export default function InboxPage() {
                     )}
                     <button className="plus-btn" onClick={()=>{setShowEmojiMenu(false);setShowMediaMenu(v=>!v);}} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>{showMediaMenu ? "×" : "+"}</button>
                     <div
-                      ref={composerRef}
+                      ref={setComposerNode}
                       className="msg-input"
                       contentEditable
                       suppressContentEditableWarning
                       role="textbox"
                       aria-label={lang==="es" ? "Mensaje" : "Message"}
                       data-placeholder={lang==="es" ? "Mensaje" : "Message"}
-                      onFocus={()=>{setPressedMsgId(null);jumpToLatest();setTimeout(()=>jumpToLatest(),250);}}
+                      onFocus={()=>{setPressedMsgId(null);jumpToLatest();}}
                       onInput={e=>{
                         const v=e.currentTarget.textContent || "";
                         setNewMessage(v);
