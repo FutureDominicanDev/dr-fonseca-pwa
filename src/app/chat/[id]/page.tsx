@@ -76,23 +76,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }, []);
 
   useEffect(() => {
-    const updateAppHeight = () => {
-      const height = window.visualViewport?.height || window.innerHeight;
-      document.documentElement.style.setProperty("--app-height", `${height}px`);
-      document.body.style.height = `${height}px`;
-    };
-    updateAppHeight();
-    window.visualViewport?.addEventListener("resize", updateAppHeight);
-    window.visualViewport?.addEventListener("scroll", updateAppHeight);
-    window.addEventListener("resize", updateAppHeight);
-    return () => {
-      window.visualViewport?.removeEventListener("resize", updateAppHeight);
-      window.visualViewport?.removeEventListener("scroll", updateAppHeight);
-      window.removeEventListener("resize", updateAppHeight);
-    };
-  }, []);
-
-  useEffect(() => {
     let mounted = true;
 
     const isSchemaColumnError = (error: unknown) => {
@@ -591,7 +574,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }
 
   return (
-    <main style={{ height: "var(--app-height, 100dvh)", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
+    <main style={{ height: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
       <style>{`
         button { transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
         button:active { transform: scale(0.96); opacity: 0.86; }
