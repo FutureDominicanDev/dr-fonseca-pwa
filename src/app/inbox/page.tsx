@@ -2954,7 +2954,6 @@ export default function InboxPage() {
                       onInput={e=>{
                         const v=e.currentTarget.textContent || "";
                         setNewMessage(v);
-                        jumpToLatest();
                         updateTypingState(v);
                         setShowMediaMenu(false);
                         setShowEmojiMenu(false);

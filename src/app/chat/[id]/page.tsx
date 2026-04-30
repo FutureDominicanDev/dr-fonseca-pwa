@@ -662,7 +662,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             const next = event.currentTarget.textContent || "";
             setText(next);
             setQuickRepliesOpen(next.startsWith("/"));
-            scrollToLatest();
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
