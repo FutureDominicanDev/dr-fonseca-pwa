@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Dr. Fonseca | Portal Médico",
-  description: "Siluety Plastic Surgery - Patient Care Platform",
+  description: "Siluety Plastic Surgery - Plataforma de atención al paciente",
   metadataBase: new URL("https://portal.drfonsecacirujanoplastico.com"),
   icons: {
     icon: "/icon-192.png",
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Dr. Fonseca | Portal Médico",
-    description: "Siluety Plastic Surgery - Patient Care Platform",
+    description: "Siluety Plastic Surgery - Plataforma de atención al paciente",
     url: "https://portal.drfonsecacirujanoplastico.com",
     siteName: "Dr. Fonseca | Portal Médico",
     type: "website",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Dr. Fonseca | Portal Médico",
-    description: "Siluety Plastic Surgery - Patient Care Platform",
+    description: "Siluety Plastic Surgery - Plataforma de atención al paciente",
     images: ["/fonseca_white.png"],
   },
 };
