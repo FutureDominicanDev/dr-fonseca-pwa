@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { Fragment, use, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -500,12 +500,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const emergencyPhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara || officePhones.Tijuana;
+  const chatFontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
   const appBg = darkMode ? "#0f172a" : "#f7f7f7";
   const textPrimary = darkMode ? "#f8fafc" : "#111";
   const panelBg = darkMode ? "#172033" : "#fff";
   const footerBg = darkMode ? "#111827" : "#ededed";
   const inputPanelBg = darkMode ? "#1f2937" : "#fff";
-  const messageFontSize = textSize === "large" ? 18 : 16;
+  const messageFontSize = textSize === "large" ? 21 : 18;
   const translations = {
     en: {
       messagePlaceholder: "Message",
@@ -552,6 +553,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
   const labels = translations[uiLang] || translations.en;
   const prescriptionMessages = messages.filter((message) => `${message.file_name || ""}`.startsWith("[MED]"));
+  const visibleChatMessages = messages.filter((message) => {
+    const fileName = `${message.file_name || ""}`;
+    if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return false;
+    if (viewerType === "patient" && (message.deleted_by_patient || message.deleted_by_staff)) return false;
+    return true;
+  });
   const roleLabel = (role?: string | null) => {
     const labelsByLang = uiLang === "es"
       ? { doctor: "Doctor", enfermeria: "Enfermería", coordinacion: "Coordinación", post_quirofano: "Post-Q", staff: "Personal" }
@@ -562,6 +569,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (!createdAt) return "";
     const date = new Date(createdAt);
     return date.toLocaleTimeString(uiLang === "es" ? "es-MX" : "en-US", { hour: "2-digit", minute: "2-digit" });
+  };
+  const formatDateLabel = (createdAt?: string) => {
+    if (!createdAt) return "";
+    const date = new Date(createdAt);
+    return date.toLocaleDateString(uiLang === "es" ? "es-MX" : "en-US", { weekday: "short", month: "short", day: "numeric" });
   };
   const senderLabel = (message: Message) => {
     if (message.sender_name?.trim()) return message.sender_name.trim();
@@ -584,7 +596,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   if (accessDenied) {
     return (
-      <main style={{ height: "100%", minHeight: "-webkit-fill-available", display: "flex", flexDirection: "column", background: "#fff", color: "#111", fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
+      <main style={{ height: "100%", minHeight: "-webkit-fill-available", display: "flex", flexDirection: "column", background: "#fff", color: "#111", fontFamily: chatFontFamily, overflow: "hidden" }}>
         <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
           <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
         </header>
@@ -605,7 +617,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }
 
   return (
-    <main style={{ height: "100%", minHeight: "-webkit-fill-available", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: "Arial, Helvetica, sans-serif", overflow: "hidden" }}>
+    <main style={{ height: "100%", minHeight: "-webkit-fill-available", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: chatFontFamily, overflow: "hidden" }}>
       <style>{`
         button { transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
         button:active { transform: scale(0.96); opacity: 0.86; }
@@ -620,40 +632,51 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
       </header>
 
-      <section style={{ flex: 1, overflowY: "auto", padding: "14px 10px 18px" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
-        {messages.map((message) => {
-          const fileName = `${message.file_name || ""}`;
-          if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return null;
+      <section style={{ flex: 1, overflowY: "auto", padding: "12px 10px 16px" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
+        {(() => {
+          let previousMessageDate = "";
+          return visibleChatMessages.map((message) => {
           const mine = message.sender_type !== "staff";
           const deletedByPatient = !!message.deleted_by_patient;
-          const deletedByStaff = !!message.deleted_by_staff;
-          if (viewerType === "patient" && (deletedByPatient || deletedByStaff)) return null;
           const canDeletePatientMessage = viewerType === "patient" && mine && !deletedByPatient && !message.deleted_by_staff;
           const softBlue = "#d9ecf7";
           const bubbleBg =
             viewerType === "staff"
               ? message.sender_type === "patient" ? softBlue : "#fff"
               : message.sender_type === "staff" ? softBlue : "#fff";
+          const messageDate = message.created_at ? new Date(message.created_at).toDateString() : "";
+          const showDate = !!messageDate && messageDate !== previousMessageDate;
+          previousMessageDate = messageDate || previousMessageDate;
           return (
-            <div key={message.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
-              <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0b1220", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 500, lineHeight: 1.5, letterSpacing: "0.01em", transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>{senderLabel(message)}</span>
-                  <span style={{ fontSize: 11, fontWeight: 500, color: "#64748b", whiteSpace: "nowrap" }}>{formatTime(message.created_at)}</span>
+            <Fragment key={message.id}>
+              {showDate && (
+                <div style={{ display: "flex", justifyContent: "center", margin: "16px 0 12px" }}>
+                  <div style={{ background: darkMode ? "rgba(17,27,33,0.92)" : "rgba(255,255,255,0.96)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"}`, borderRadius: 10, padding: "5px 13px", color: darkMode ? "#F8FAFC" : "#111827", fontSize: 14, fontWeight: 850, boxShadow: "0 1px 4px rgba(15,23,42,0.10)" }}>
+                    {formatDateLabel(message.created_at)}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", marginBottom: 5, animation: "messageIn 180ms ease-out" }}>
+                <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "min(82%, 680px)", background: bubbleBg, color: "#07111f", borderRadius: mine ? "16px 6px 16px 16px" : "6px 16px 16px 16px", padding: "10px 12px 8px", boxShadow: "0 1px 2px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 560, lineHeight: 1.38, letterSpacing: 0, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
+                <div style={{ marginBottom: 5, lineHeight: 1.15 }}>
+                  <span style={{ fontSize: Math.max(messageFontSize - 3, 15), fontWeight: 850, color: "#334155" }}>{senderLabel(message)}</span>
                 </div>
                 {renderMessage(message)}
                 {deletedByPatient && viewerType === "staff" && (
                   <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
                 )}
+                <div style={{ fontSize: Math.max(messageFontSize - 5, 13), fontWeight: 520, color: "#64748b", whiteSpace: "nowrap", lineHeight: 1.1, marginTop: 4, textAlign: "right" }}>{formatTime(message.created_at)}</div>
                 {canDeletePatientMessage && deleteMenuMessageId === message.id && (
                   <button onClick={(event) => { event.stopPropagation(); deletePatientMessage(message.id); }} style={{ display: "block", marginTop: 7, marginLeft: "auto", border: "none", background: "transparent", color: "#b91c1c", fontSize: 12, fontWeight: 800, padding: 0 }}>
                     {labels.delete}
                   </button>
                 )}
               </div>
-            </div>
+              </div>
+            </Fragment>
           );
-        })}
+          });
+        })()}
         <div ref={bottomRef} />
       </section>
 

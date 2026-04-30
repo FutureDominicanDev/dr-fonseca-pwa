@@ -375,7 +375,7 @@ export default function InboxPage() {
   const t = T[lang];
   const [darkMode, setDarkMode] = useState(false);
   const [fontSizeLevel, setFontSizeLevel] = useState<"small"|"medium"|"large">("medium");
-  const fontSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 21 : 18;
+  const fontSize = fontSizeLevel === "small" ? 17 : fontSizeLevel === "large" ? 22 : 19;
 
   const bg = darkMode ? "#0B141A" : "#FFFFFF";
   const headerBg = "#07334D";
@@ -513,6 +513,7 @@ export default function InboxPage() {
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
+  const fmtChatDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"short",month:"short",day:"numeric"}); };
   const fmtSize = (b: number) => !b?"":b<1048576?(b/1024).toFixed(1)+" KB":(b/1048576).toFixed(1)+" MB";
   const fmtRec = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
   const isImageUrl = (url: string) => { if (!url) return false; const u=url.toLowerCase(); return u.includes("supabase")&&(u.endsWith(".jpg")||u.endsWith(".jpeg")||u.endsWith(".png")||u.endsWith(".gif")||u.endsWith(".webp")||u.includes("before")||u.includes("patient-photo")); };
@@ -1962,10 +1963,21 @@ export default function InboxPage() {
     );
 
     const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
-    const bubbleBg = isOut ? "#FFFFFF" : darkMode ? "#1F2C34" : "#D8EDF8";
-    const bubbleRadius=isOut?"18px 18px 4px 18px":"18px 18px 18px 4px";
-    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#111827",borderRadius:bubbleRadius,maxWidth:"70%",padding:"12px 15px",boxShadow:"0 6px 18px rgba(15,23,42,0.10)",position:"relative",border:isOut?`1px solid ${borderColor}`:"none"};
+    const bubbleBg = isOut ? "#FFFFFF" : darkMode ? "#1F2C34" : "#E1F2FA";
+    const bubbleRadius=isOut?"16px 16px 6px 16px":"16px 16px 16px 6px";
+    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#07111F",borderRadius:bubbleRadius,maxWidth:"min(82%, 680px)",padding:"10px 12px 8px",boxShadow:"0 1px 2px rgba(15,23,42,0.13)",position:"relative",border:isOut?`1px solid ${borderColor}`:"none",fontSize, fontWeight:560,lineHeight:1.38,letterSpacing:0};
     const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
+    const bubbleHeader = (style: React.CSSProperties = {}) => (
+      <div style={{marginBottom:5,lineHeight:1.15,...style}}>
+        <span style={{fontSize:Math.max(fontSize - 4, 15),fontWeight:850,color:sc}}>{sn}</span>
+      </div>
+    );
+    const bubbleTime = (showTicks = false, style: React.CSSProperties = {}) => (
+      <div style={{fontSize:Math.max(fontSize - 6, 13),opacity:0.78,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4,fontWeight:520,lineHeight:1.15,...style}}>
+        {fmtTime(msg.created_at)}
+        {showTicks&&<span style={{color:"#007AFF"}}>✓✓</span>}
+      </div>
+    );
 
     return (
       <div
@@ -1977,39 +1989,43 @@ export default function InboxPage() {
         onTouchStart={()=>startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
         onTouchEnd={cancelStaffMessagePress}
         onContextMenu={(event)=>{ if (canDeleteOwnStaffMessage) { event.preventDefault(); setPressedMsgId(msg.id); } }}
-        style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:4,position:"relative"}}
+        style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:5,position:"relative"}}
       >
-        <div style={{fontSize:13,fontWeight:600,color:sc,marginBottom:3,paddingLeft:isOut?0:4,paddingRight:isOut?4:0}}>{sn}</div>
         {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
+            {bubbleHeader({padding:"6px 8px 2px",marginBottom:2})}
             <img src={msg.content} alt="" style={{width:"100%",maxWidth:160,maxHeight:160,borderRadius:12,display:"block",objectFit:"cover"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
             {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            {bubbleTime(false,{padding:"4px 6px 2px",marginTop:0})}
           </div>
         ):effectiveType==="video"?(
           <div style={{...bubbleStyle,padding:4}}>
+            {bubbleHeader({padding:"6px 8px 2px",marginBottom:2})}
             <video src={msg.content} controls style={{width:"100%",maxWidth:170,maxHeight:170,borderRadius:12,display:"block",objectFit:"cover"}}/>
             {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,padding:"4px 6px 2px",textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            {bubbleTime(false,{padding:"4px 6px 2px",marginTop:0})}
           </div>
         ):effectiveType==="audio"?(
           <div style={{...bubbleStyle,minWidth:180,maxWidth:240}}>
+            {bubbleHeader()}
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:20}}>🎤</span><span style={{fontSize:14,fontWeight:600}}>Audio</span></div>
             <audio src={msg.content} controls style={{width:"100%"}}/>
             {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            {bubbleTime(false,{marginTop:6})}
           </div>
         ):effectiveType==="file"?(
           <div style={{...bubbleStyle,cursor:"pointer"}}>
+            {bubbleHeader()}
             <a href={msg.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,color:"inherit",textDecoration:"none"}}>
               <span style={{fontSize:28}}>📄</span>
               <div><div style={{fontSize:14,fontWeight:600}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
             </a>
             {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:6,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            {bubbleTime(false,{marginTop:6})}
           </div>
         ):callRequestToken ? (
           <div style={{ ...bubbleStyle, padding: 12, minWidth: 250 }}>
+            {bubbleHeader()}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 20 }}>📲</span>
               <span style={{ fontSize: 14, fontWeight: 800 }}>{isOut ? t.callRequestSent : t.incomingCallRequest}</span>
@@ -2021,10 +2037,11 @@ export default function InboxPage() {
               {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
             </div>
             {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            {bubbleTime(false,{marginTop:8})}
           </div>
         ):videoCallRoomName ? (
           <div style={{ ...bubbleStyle, padding: 12, minWidth: 240 }}>
+            {bubbleHeader()}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 20 }}>🎥</span>
               <span style={{ fontSize: 14, fontWeight: 800 }}>{t.videoCallInvite}</span>
@@ -2034,16 +2051,14 @@ export default function InboxPage() {
               {lang === "es" ? "Videollamadas desactivadas temporalmente." : "Video calls are temporarily disabled."}
             </div>
             {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:8,textAlign:"right"}}>{fmtTime(msg.created_at)}</div>
+            {bubbleTime(false,{marginTop:8})}
           </div>
         ):(
-          <div style={{...bubbleStyle,lineHeight:1.48,wordBreak:"break-word",fontSize:Math.max(fontSize,16),fontWeight:500,letterSpacing:0}}>
-            {contentToRender}
+          <div style={{...bubbleStyle,wordBreak:"break-word"}}>
+            {bubbleHeader()}
+            <div style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{contentToRender}</div>
             {patientDeletedNotice}
-            <div style={{fontSize:12,opacity:0.75,marginTop:4,textAlign:"right",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
-              {fmtTime(msg.created_at)}
-              {isOut&&<span style={{color:"#007AFF"}}>✓✓</span>}
-            </div>
+            {bubbleTime(isOut)}
           </div>
         )}
         {canDeleteOwnStaffMessage && pressedMsgId === msg.id && (
@@ -2365,8 +2380,8 @@ export default function InboxPage() {
         .main-area.hidden { transform: translateX(100%); pointer-events: none; }
         .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${bg}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.045) 1px, transparent 1px)"}; background-size: 18px 18px; }
         .chat-bg::-webkit-scrollbar { display: none; }
-        .date-sep { display: flex; justify-content: center; margin: 14px 0; }
-        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.85)":"rgba(255,255,255,0.92)"}; border-radius: 8px; padding: 4px 10px; font-size: 12px; color: ${darkMode?"#D1D5DB":"#54656F"}; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+        .date-sep { display: flex; justify-content: center; margin: 16px 0 12px; }
+        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.92)":"rgba(255,255,255,0.96)"}; border-radius: 10px; padding: 5px 13px; font-size: 14px; color: ${darkMode?"#F8FAFC":"#111827"}; font-weight: 850; box-shadow: 0 1px 4px rgba(15,23,42,0.10); border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; }
         .chat-head { flex-shrink: 0; background: ${headerBg}; padding: 6px max(14px, env(safe-area-inset-right)) 7px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 52px; border-left: 1px solid rgba(255,255,255,0.08); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
         .back-btn { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: white; font-size: 21px; font-weight: 700; transition: background 0.15s; }
         .back-btn:hover { background: rgba(255,255,255,0.25); }
@@ -2911,7 +2926,7 @@ export default function InboxPage() {
                     </div>
                   ):groupedMessages().map((group,gi)=>(
                     <div key={gi}>
-                      <div className="date-sep"><div className="date-sep-pill">{fmtDateLabel(group.date)}</div></div>
+                      <div className="date-sep"><div className="date-sep-pill">{fmtChatDateLabel(group.date)}</div></div>
                       {group.msgs.map(renderMsg)}
                     </div>
                   ))}
