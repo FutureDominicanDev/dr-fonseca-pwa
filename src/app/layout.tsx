@@ -5,6 +5,33 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Dr. Fonseca | Portal Médico",
   description: "Siluety Plastic Surgery - Patient Care Platform",
+  metadataBase: new URL("https://portal.drfonsecacirujanoplastico.com"),
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
+  openGraph: {
+    title: "Dr. Fonseca | Portal Médico",
+    description: "Siluety Plastic Surgery - Patient Care Platform",
+    url: "https://portal.drfonsecacirujanoplastico.com",
+    siteName: "Dr. Fonseca | Portal Médico",
+    type: "website",
+    locale: "es_MX",
+    images: [
+      {
+        url: "/fonseca_white.png",
+        width: 1200,
+        height: 630,
+        alt: "Dr. Miguel Fonseca - Siluety Plastic Surgery",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Dr. Fonseca | Portal Médico",
+    description: "Siluety Plastic Surgery - Patient Care Platform",
+    images: ["/fonseca_white.png"],
+  },
 };
 
 export default function RootLayout({
