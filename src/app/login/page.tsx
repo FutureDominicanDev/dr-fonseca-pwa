@@ -355,7 +355,7 @@ export default function LoginPage() {
           .auth-page { padding: calc(env(safe-area-inset-top) + 14px) 14px calc(env(safe-area-inset-bottom) + 26px); }
           .layout { grid-template-columns: 1fr; gap: 16px; }
           .auth-panel { order: 1; }
-          .visual-panel { order: 2; }
+          .visual-panel { display: none; }
           .panel { padding: 22px; }
           .phone-row { grid-template-columns: 1fr; gap: 12px; }
           .title { font-size: clamp(32px, 9vw, 42px); }
