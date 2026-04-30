@@ -628,10 +628,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           const labelColor = message.sender_type === "staff" ? "#0b4ea2" : "#1A6B3C";
           return (
             <div key={message.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", marginBottom: 8, animation: "messageIn 180ms ease-out" }}>
-              <div style={{ maxWidth: "70%", marginBottom: 3, padding: mine ? "0 4px 0 0" : "0 0 0 4px", color: labelColor, fontSize: 13, fontWeight: 600, lineHeight: 1.2, textAlign: mine ? "right" : "left" }}>
+              <div style={{ maxWidth: "70%", marginBottom: 3, padding: mine ? "0 4px 0 0" : "0 0 0 4px", color: labelColor, fontSize: 13, fontWeight: 700, lineHeight: 1.2, textAlign: mine ? "right" : "left" }}>
                 {senderLabel(message)}
               </div>
-              <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0f172a", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 600, lineHeight: 1.45, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
+              <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "70%", background: bubbleBg, color: "#0b1220", borderRadius: mine ? "12px 4px 12px 12px" : "4px 12px 12px 12px", padding: "11px 13px", boxShadow: "0 5px 16px rgba(15,23,42,0.16), 0 1px 4px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 500, lineHeight: 1.5, letterSpacing: "0.01em", transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
                 {renderMessage(message)}
                 {deletedByPatient && viewerType === "staff" && (
                   <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
@@ -683,7 +683,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               sendText();
             }
           }}
-          style={{ minWidth: 0, flex: 1, minHeight: 58, maxHeight: 96, overflowY: "auto", border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "16px 20px", fontSize: messageFontSize, lineHeight: 1.35, WebkitUserSelect: "text", userSelect: "text" }}
+          style={{ minWidth: 0, flex: 1, minHeight: 58, maxHeight: 96, overflowY: "auto", border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: "#1f2937", padding: "16px 20px", fontSize: messageFontSize, fontWeight: 500, lineHeight: 1.4, WebkitUserSelect: "text", userSelect: "text" }}
         />
 
         <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
