@@ -6,6 +6,7 @@ import { normalizePhone, phoneAliasEmail } from "@/lib/authIdentity";
 type View = "login" | "forgot" | "sent";
 
 export default function LoginPage() {
+  const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://portal.drfonsecacirujanoplastico.com").replace(/\/+$/, "");
   const [view, setView] = useState<View>("login");
   const [identifier, setIdentifier] = useState("");
   const [resetEmail, setResetEmail] = useState("");
@@ -40,7 +41,7 @@ export default function LoginPage() {
     if (!resetEmail.trim()) { setError("Por favor ingresa tu correo electrónico."); return; }
     setLoading(true); setError("");
     const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${appBaseUrl}/reset-password`,
     });
     if (err) { setError("Error enviando el correo. Verifica el correo ingresado."); setLoading(false); return; }
     setLoading(false);
