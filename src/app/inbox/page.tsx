@@ -477,6 +477,7 @@ export default function InboxPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLDivElement | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const lastMessageCountRef = useRef(0);
   const selectedRoomRef = useRef<any>(null);
@@ -572,6 +573,19 @@ export default function InboxPage() {
     if (!messagePressTimerRef.current) return;
     clearTimeout(messagePressTimerRef.current);
     messagePressTimerRef.current = null;
+  };
+  const setComposerText = (value: string) => {
+    setNewMessage(value);
+    if (composerRef.current && composerRef.current.textContent !== value) {
+      composerRef.current.textContent = value;
+    }
+    if (value.startsWith("/")) {
+      setShowSlashMenu(true);
+      setSlashFilter(value.slice(1));
+    } else {
+      setShowSlashMenu(false);
+      setSlashFilter("");
+    }
   };
   const toggleCareTeamMember = (id: string) => {
     setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
@@ -1257,7 +1271,7 @@ export default function InboxPage() {
     if (!msg||!selectedRoom||isSending.current) return;
     updateTypingState("", selectedRoom.id);
     isSending.current=true; setSending(true);
-    if (!content) setNewMessage("");
+    if (!content) setComposerText("");
     setShowSlashMenu(false);
     const sName=userProfile?.full_name||userProfile?.display_name||"Staff";
     const sRole=userProfile?.role||"staff";
@@ -1850,18 +1864,18 @@ export default function InboxPage() {
   const roomAudioEntries = roomMediaEntries.filter((entry) => entry.message_type === "audio");
   const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file");
   const appendEmojiToDraft = (emoji: string) => {
-    setNewMessage((previous) => {
-      const next = `${previous}${emoji}`;
-      updateTypingState(next);
-      return next;
-    });
+    const next = `${newMessage}${emoji}`;
+    setComposerText(next);
+    updateTypingState(next);
     setShowSlashMenu(false);
+    composerRef.current?.focus();
   };
   const selectQuickReply = (reply: QuickReply) => {
-    setNewMessage(reply.message);
+    setComposerText(reply.message);
     updateTypingState(reply.message);
     setShowSlashMenu(false);
     setSlashFilter("");
+    composerRef.current?.focus();
   };
   const filtPts = patients
     .filter(p=>{
@@ -2337,6 +2351,7 @@ export default function InboxPage() {
         .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#172033" : "#E6E8EC"}; padding: 10px max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
+        .msg-input:empty::before { content: attr(data-placeholder); color: #AEAEB2; pointer-events: none; }
         .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
         .plus-btn { width: 38px; height: 38px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
@@ -2927,14 +2942,17 @@ export default function InboxPage() {
                       </div>
                     )}
                     <button className="plus-btn" onClick={()=>{setShowEmojiMenu(false);setShowMediaMenu(v=>!v);}} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>{showMediaMenu ? "×" : "+"}</button>
-                    <textarea
+                    <div
+                      ref={composerRef}
                       className="msg-input"
-                      placeholder={lang==="es" ? "Mensaje" : "Message"}
-                      value={newMessage}
-                      rows={1}
+                      contentEditable
+                      suppressContentEditableWarning
+                      role="textbox"
+                      aria-label={lang==="es" ? "Mensaje" : "Message"}
+                      data-placeholder={lang==="es" ? "Mensaje" : "Message"}
                       onFocus={()=>{setPressedMsgId(null);jumpToLatest();setTimeout(()=>jumpToLatest(),250);}}
-                      onChange={e=>{
-                        const v=e.target.value;
+                      onInput={e=>{
+                        const v=e.currentTarget.textContent || "";
                         setNewMessage(v);
                         jumpToLatest();
                         updateTypingState(v);
@@ -2942,8 +2960,6 @@ export default function InboxPage() {
                         setShowEmojiMenu(false);
                         if(v.startsWith("/")){setShowSlashMenu(true);setSlashFilter(v.slice(1));}
                         else{setShowSlashMenu(false);setSlashFilter("");}
-                        e.target.style.height="auto";
-                        e.target.style.height=Math.min(e.target.scrollHeight,120)+"px";
                       }}
                       onBlur={()=>updateTypingState("")}
                       onKeyDown={e=>{

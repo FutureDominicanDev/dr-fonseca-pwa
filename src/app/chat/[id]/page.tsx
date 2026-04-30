@@ -62,12 +62,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [deleteMenuMessageId, setDeleteMenuMessageId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior, block: "end" }));
+  };
+  const setComposerText = (value: string) => {
+    setText(value);
+    if (composerRef.current && composerRef.current.textContent !== value) {
+      composerRef.current.textContent = value;
+    }
+    setQuickRepliesOpen(value.startsWith("/"));
   };
 
   useEffect(() => {
@@ -216,7 +224,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const content = text.trim();
     if (!content || accessDenied || !accessReady) return;
 
-    setText("");
+    setComposerText("");
     const createdAt = new Date().toISOString();
     const messageHash = await generateMessageHash(content, createdAt, currentUserId);
     const payload = {
@@ -580,6 +588,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         button:active { transform: scale(0.96); opacity: 0.86; }
         input { transition: box-shadow 170ms ease, background-color 170ms ease; }
         input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
+        .chat-composer:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
         @keyframes messageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         @keyframes micPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(153,27,27,0.42); } 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(153,27,27,0); } }
@@ -640,7 +649,29 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           {menuOpen ? "×" : "+"}
         </button>
 
-        <input value={text} onFocus={() => { setDeleteMenuMessageId(null); scrollToLatest(); setTimeout(() => scrollToLatest("auto"), 250); }} onChange={(event) => { const next = event.target.value; setText(next); setQuickRepliesOpen(next.startsWith("/")); scrollToLatest(); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) sendText(); }} placeholder={labels.messagePlaceholder} style={{ minWidth: 0, flex: 1, height: 58, border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "0 20px", fontSize: messageFontSize }} />
+        <div
+          ref={composerRef}
+          className="chat-composer"
+          contentEditable
+          suppressContentEditableWarning
+          role="textbox"
+          aria-label={labels.messagePlaceholder}
+          data-placeholder={labels.messagePlaceholder}
+          onFocus={() => { setDeleteMenuMessageId(null); scrollToLatest(); setTimeout(() => scrollToLatest("auto"), 250); }}
+          onInput={(event) => {
+            const next = event.currentTarget.textContent || "";
+            setText(next);
+            setQuickRepliesOpen(next.startsWith("/"));
+            scrollToLatest();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              sendText();
+            }
+          }}
+          style={{ minWidth: 0, flex: 1, minHeight: 58, maxHeight: 96, overflowY: "auto", border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: textPrimary, padding: "16px 20px", fontSize: messageFontSize, lineHeight: 1.35, WebkitUserSelect: "text", userSelect: "text" }}
+        />
 
         <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
 
@@ -672,7 +703,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <div style={{ position: "fixed", left: 10, right: 10, bottom: "calc(86px + env(safe-area-inset-bottom))", zIndex: 20, pointerEvents: "none" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, maxHeight: "min(42dvh, 260px)", overflowY: "auto", paddingBottom: 6 }}>
               {quickReplies.map((reply, index) => (
-                <button key={`${reply}-${index}`} onClick={() => { setText(reply); setQuickRepliesOpen(false); }} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: panelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
+                <button key={`${reply}-${index}`} onClick={() => { setComposerText(reply); setQuickRepliesOpen(false); composerRef.current?.focus(); }} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: panelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
               ))}
           </div>
         </div>
@@ -688,7 +719,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
               {quickReplies.map((reply, index) => (
                 <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <button onClick={() => { setText(reply); setQuickRepliesManageOpen(false); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
+                  <button onClick={() => { setComposerText(reply); setQuickRepliesManageOpen(false); composerRef.current?.focus(); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
                   <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.edit}</button>
                   <button onClick={() => { setQuickReplies((current) => current.filter((_, replyIndex) => replyIndex !== index)); if (editingReplyIndex === index) { setReplyDraft(""); setEditingReplyIndex(null); } }} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.delete}</button>
                 </div>
