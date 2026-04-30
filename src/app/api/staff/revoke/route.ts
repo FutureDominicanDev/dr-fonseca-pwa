@@ -37,6 +37,14 @@ const createInviteCode = () => {
   return `FONSECA-${suffix}`;
 };
 
+const roleLabelEs = (role?: string | null) => {
+  if (role === "doctor") return "Doctor";
+  if (role === "enfermeria") return "Enfermería";
+  if (role === "coordinacion") return "Coordinación";
+  if (role === "post_quirofano") return "Post-Q";
+  return "Personal";
+};
+
 const isMissingSchemaError = (error: any) => {
   const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
   return (
@@ -74,6 +82,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: profileRow } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    const targetRole = typeof (profileRow as any)?.role === "string" ? (profileRow as any).role : "staff";
+    const neutralRoleLabel = roleLabelEs(targetRole);
     const targetPhoneFromProfile = normalizePhone((profileRow as any)?.phone || "");
     const targetPhone = targetPhoneFromAuth || targetPhoneFromProfile;
 
@@ -121,7 +131,7 @@ export async function POST(request: NextRequest) {
 
     const { error: clearMessageSenderError } = await supabase
       .from("messages")
-      .update({ sender_id: null })
+      .update({ sender_id: null, sender_name: neutralRoleLabel, sender_role: targetRole })
       .eq("sender_id", userId);
     if (clearMessageSenderError && !isMissingSchemaError(clearMessageSenderError)) {
       cleanupErrors.push(`messages: ${clearMessageSenderError.message || "update failed"}`);

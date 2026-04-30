@@ -75,6 +75,9 @@ export default function LoginPage() {
         .error-box { background: #FFF0EE; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; font-weight: 700; color: #FF3B30; text-align: center; }
         .footer-text { font-size: 14px; color: #000000; text-align: center; margin-top: 20px; font-weight: 600; opacity: 0.82; }
         .footer-text span { color: #007AFF; font-weight: 800; cursor: pointer; opacity: 1; }
+        .legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; margin-top: 12px; font-size: 12px; font-weight: 800; }
+        .legal-links a { color: rgba(255,255,255,0.78); text-decoration: none; }
+        .legal-links a:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 4px; }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
@@ -156,6 +159,11 @@ export default function LoginPage() {
         <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 28, textAlign: "center", fontWeight: 600 }}>
           © 2025 Dr. Miguel Fonseca · Siluety Plastic Surgery
         </p>
+        <div className="legal-links" aria-label="Enlaces legales y soporte">
+          <a href="/privacy">Privacidad</a>
+          <a href="/support">Soporte</a>
+          <a href="/account-deletion">Eliminar cuenta</a>
+        </div>
       </div>
     </>
   );

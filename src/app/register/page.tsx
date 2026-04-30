@@ -321,6 +321,8 @@ export default function RegisterPage() {
         .rbtn:disabled { opacity: 0.5; }
         .llink { font-size: 14px; color: #000; text-align: center; margin-top: 20px; font-weight: 600; opacity: 0.82; }
         .llink a { color: #007AFF; font-weight: 800; text-decoration: none; }
+        .legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; margin-top: 12px; font-size: 12px; font-weight: 800; }
+        .legal-links a { color: rgba(255,255,255,0.78); text-decoration: none; }
       `}</style>
       <div className="code-page">
         <div className="reg-card">
@@ -342,6 +344,11 @@ export default function RegisterPage() {
           </div>
         </div>
         <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 28, textAlign: "center", fontWeight: 600 }}>© 2025 Dr. Miguel Fonseca · Siluety Plastic Surgery</p>
+        <div className="legal-links" aria-label="Enlaces legales y soporte">
+          <a href="/privacy">Privacidad</a>
+          <a href="/support">Soporte</a>
+          <a href="/account-deletion">Eliminar cuenta</a>
+        </div>
       </div>
     </>
   );
@@ -384,6 +391,8 @@ export default function RegisterPage() {
         .ropt { flex: 1; min-width: 70px; padding: 10px 6px; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 800; color: #000; background: #F2F2F7; border: 2px solid transparent; text-align: center; }
         .ropt.sel { background: #EBF5FF; color: #007AFF; border-color: #007AFF; }
         .role-opt { min-height: 94px; display: flex; align-items: center; justify-content: center; line-height: 1.2; white-space: normal; word-break: break-word; overflow: hidden; padding: 10px 8px; font-size: 11px; }
+        .legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; margin-top: 12px; font-size: 12px; font-weight: 800; }
+        .legal-links a { color: rgba(255,255,255,0.78); text-decoration: none; }
       `}</style>
       <div className="details-page" ref={detailsPageRef}>
         <div className="details-inner">
@@ -468,6 +477,11 @@ export default function RegisterPage() {
             </div>
           </div>
           <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 28, textAlign: "center", fontWeight: 600 }}>© 2025 Dr. Miguel Fonseca · Siluety Plastic Surgery</p>
+          <div className="legal-links" aria-label="Enlaces legales y soporte">
+            <a href="/privacy">Privacidad</a>
+            <a href="/support">Soporte</a>
+            <a href="/account-deletion">Eliminar cuenta</a>
+          </div>
         </div>
       </div>
     </>

@@ -158,6 +158,10 @@ const T = {
     changePhoto: "Cambiar Foto",
     small: "Pequeño", medium: "Normal", large: "Grande",
     editReply: "Editar Respuesta", deleteConfirm: "¿Eliminar esta respuesta?",
+    privacySupport: "Privacidad y soporte",
+    privacyPolicy: "Politica de privacidad",
+    support: "Soporte",
+    accountDeletion: "Eliminar cuenta",
   },
   en: {
     patients: "Patients", search: "Search patient...", noPatients: "No patients yet",
@@ -272,6 +276,10 @@ const T = {
     changePhoto: "Change Photo",
     small: "Small", medium: "Normal", large: "Large",
     editReply: "Edit Reply", deleteConfirm: "Delete this reply?",
+    privacySupport: "Privacy and support",
+    privacyPolicy: "Privacy policy",
+    support: "Support",
+    accountDeletion: "Delete account",
   }
 };
 
@@ -1276,7 +1284,7 @@ export default function InboxPage() {
   const fetchRooms = async () => {
     const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications))";
     const fallbackSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, profile_picture_url, birthdate))";
-    let query = await supabase.from("rooms").select(extendedSelect).order("created_at",{ascending:false});
+    const query = await supabase.from("rooms").select(extendedSelect).order("created_at",{ascending:false});
     let data = query.data;
     let error = query.error;
 
@@ -2166,6 +2174,20 @@ export default function InboxPage() {
               <button onClick={()=>setAutoTranslateIncoming((prev)=>!prev)} style={{width:52,height:30,borderRadius:99,background:autoTranslateIncoming?"#34C759":"#E5E5EA",border:"none",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
                 <div style={{width:26,height:26,borderRadius:"50%",background:"white",position:"absolute",top:2,left:autoTranslateIncoming?24:2,transition:"left 0.2s",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}}/>
               </button>
+            </div>
+          </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>🛡️ {t.privacySupport}</p>
+            <div style={{display:"grid",gap:8}}>
+              {[
+                { href: "/privacy", label: t.privacyPolicy },
+                { href: "/support", label: t.support },
+                { href: "/account-deletion", label: t.accountDeletion },
+              ].map((link) => (
+                <a key={link.href} href={link.href} style={{minHeight:42,display:"flex",alignItems:"center",border:`1px solid ${borderColor}`,background:darkMode?"#2C2C2E":"white",color:textColor,borderRadius:12,padding:"0 12px",textDecoration:"none",fontSize:15,fontWeight:800}}>
+                  {link.label}
+                </a>
+              ))}
             </div>
           </div>
         </div>

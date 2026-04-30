@@ -528,6 +528,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       textSize: "Text size",
       normal: "Normal",
       large: "Large",
+      privacySupport: "Privacy and support",
+      privacyPolicy: "Privacy policy",
+      support: "Support",
+      accountDeletion: "Delete account",
     },
     es: {
       messagePlaceholder: "Mensaje",
@@ -549,6 +553,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       textSize: "Tamaño de texto",
       normal: "Normal",
       large: "Grande",
+      privacySupport: "Privacidad y soporte",
+      privacyPolicy: "Politica de privacidad",
+      support: "Soporte",
+      accountDeletion: "Eliminar cuenta",
     },
   };
   const labels = translations[uiLang] || translations.en;
@@ -817,6 +825,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <button onClick={() => setTextSize("normal")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.normal}</button>
               <button onClick={() => setTextSize("large")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.large}</button>
+            </div>
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(148,163,184,0.28)" }}>
+              <div style={{ fontSize: 16, marginBottom: 10, fontWeight: 700 }}>{labels.privacySupport}</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {[
+                  { href: "/privacy", label: labels.privacyPolicy },
+                  { href: "/support", label: labels.support },
+                  { href: "/account-deletion", label: labels.accountDeletion },
+                ].map((link) => (
+                  <a key={link.href} href={link.href} style={{ minHeight: 42, display: "flex", alignItems: "center", border: "1px solid rgba(148,163,184,0.30)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "0 12px", textDecoration: "none", fontSize: 15, fontWeight: 800 }}>
+                    {link.label}
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
         </div>

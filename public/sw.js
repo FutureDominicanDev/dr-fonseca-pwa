@@ -1,5 +1,26 @@
+const DEFAULT_APP_URL = '/inbox';
+
+function safeAppUrl(value) {
+  try {
+    const target = new URL(typeof value === 'string' && value.trim() ? value : DEFAULT_APP_URL, self.location.origin);
+    if (target.origin !== self.location.origin) return new URL(DEFAULT_APP_URL, self.location.origin).href;
+    return target.href;
+  } catch {
+    return new URL(DEFAULT_APP_URL, self.location.origin).href;
+  }
+}
+
+function readPushData(event) {
+  if (!event.data) return {};
+  try {
+    return event.data.json();
+  } catch {
+    return { body: event.data.text() };
+  }
+}
+
 self.addEventListener('install', function(event) {
-  self.skipWaiting();
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', function(event) {
@@ -8,7 +29,7 @@ self.addEventListener('activate', function(event) {
 
 // Background push — fires even when PWA is fully closed
 self.addEventListener('push', function(event) {
-  const data = event.data ? event.data.json() : {};
+  const data = readPushData(event);
   const title = data.title || 'Dr. Fonseca Portal';
   const options = {
     body: data.body || 'Tienes un nuevo mensaje',
@@ -17,7 +38,7 @@ self.addEventListener('push', function(event) {
     vibrate: [200, 100, 200],
     tag: data.tag || 'new-message',      // groups notifications by room
     renotify: true,                       // vibrate even if same tag
-    data: { url: data.url || '/inbox' },
+    data: { url: safeAppUrl(data.url) },
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
@@ -25,7 +46,7 @@ self.addEventListener('push', function(event) {
 // When user taps the notification, open the correct chat
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/inbox';
+  const targetUrl = safeAppUrl(event.notification.data?.url);
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
