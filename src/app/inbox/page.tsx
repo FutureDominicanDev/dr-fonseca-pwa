@@ -1223,16 +1223,28 @@ export default function InboxPage() {
     pauseBackgroundRefreshRef.current = showSettings || showPatientInfo || showNewRoom || showQREditor;
   }, [showNewRoom, showPatientInfo, showQREditor, showSettings]);
 
-  useEffect(()=>{
-    shouldAutoScrollRef.current = true;
-    setShowJumpToLatest(false);
-    messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
-  },[messages]);
-
   useEffect(() => {
-    setShowJumpToLatest(false);
+    const previousCount = lastMessageCountRef.current;
+    const hasInitialMessages = previousCount === 0 && messages.length > 0;
+    const hasNewMessages = messages.length > previousCount;
+    const latestMessage = messages[messages.length - 1];
+    const latestIsStaffMessage = latestMessage?.sender_type === "staff";
+    const shouldScroll =
+      hasInitialMessages ||
+      (hasNewMessages && (shouldAutoScrollRef.current || latestIsStaffMessage));
+
+    if (shouldScroll) {
+      shouldAutoScrollRef.current = true;
+      setShowJumpToLatest(false);
+      window.requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: hasInitialMessages ? "auto" : "smooth" });
+      });
+    } else if (hasNewMessages) {
+      setShowJumpToLatest(true);
+    }
+
     lastMessageCountRef.current = messages.length;
-  }, [messages.length]);
+  }, [messages]);
 
   useEffect(() => {
     if (captureMode && mediaCaptureVideoRef.current && captureStreamRef.current) {
