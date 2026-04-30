@@ -20,6 +20,10 @@ export default function LegalPage({ title, subtitle, updated, sections, children
     <main
       style={{
         minHeight: "100dvh",
+        height: "100dvh",
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
+        overscrollBehaviorY: "contain",
         background: "#f6f8fb",
         color: "#111827",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",

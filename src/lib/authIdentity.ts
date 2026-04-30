@@ -5,6 +5,16 @@ export const normalizePhone = (value: string) => {
   return `+${cleaned.replace(/\D/g, "")}`;
 };
 
+export const normalizeStaffPhone = (value: string) => {
+  const cleaned = value.replace(/[^\d+]/g, "").trim();
+  if (!cleaned) return "";
+  if (cleaned.startsWith("+")) return normalizePhone(cleaned);
+
+  const digits = cleaned.replace(/\D/g, "");
+  if (digits.length === 10) return normalizePhone(`+52${digits}`);
+  return normalizePhone(digits);
+};
+
 export const phoneAliasEmail = (phone: string) => {
   const normalized = normalizePhone(phone);
   const digits = normalized.replace(/\D/g, "");
