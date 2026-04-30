@@ -7,7 +7,8 @@ export const metadata: Metadata = {
   description: "Siluety Plastic Surgery - Plataforma de atención al paciente",
   metadataBase: new URL("https://portal.drfonsecacirujanoplastico.com"),
   icons: {
-    icon: "/icon-192.png",
+    icon: "/icon.png",
+    shortcut: "/icon.png",
     apple: "/apple-touch-icon.png",
   },
   openGraph: {
