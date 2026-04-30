@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import NativeKeyboardTuning from "./NativeKeyboardTuning";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({
         `}</style>
       </head>
       <body>
+        <NativeKeyboardTuning />
         {children}
       </body>
     </html>
