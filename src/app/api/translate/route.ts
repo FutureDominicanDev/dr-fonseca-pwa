@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ translatedText: text, skipped: true });
     }
 
-    const languageName = targetLang === "es" ? "Spanish" : "English";
+    const languageName = targetLang === "es" ? "standard Mexican Spanish" : "clear professional English";
     const sourceHint = sourceLang === "auto" ? "auto-detect source language" : `source language is ${sourceLang}`;
 
     // Use only configured provider path for safer handling of medical chat text.
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     const prompt =
       `You translate short medical chat messages. ${sourceHint}. Translate into ${languageName}. ` +
-      "Keep names, numbers, medications, dates, and tone. Return only translated text, no quotes.";
+      "Keep names, numbers, medications, dates, and tone. Use natural, warm, professional phrasing. Return only translated text, no quotes.";
 
     const responsesRequest = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",

@@ -1842,13 +1842,17 @@ export default function InboxPage() {
 
         await supabase.from("room_members").insert(rows);
       }
+      const patientFirstName = patientFullName.trim().split(/\s+/)[0] || patientFullName.trim();
+      const welcomeMessage = newPatientLanguage === "en"
+        ? `Hello ${patientFirstName}, welcome. This will be your direct communication channel with our team throughout your care.\n\nIf you need immediate assistance, press the call button to connect with the clinic. We are here to help you.`
+        : `Hola ${patientFirstName}, bienvenido(a). Este será tu canal de comunicación directo con nuestro equipo durante todo tu proceso de cuidado.\n\nSi necesitas asistencia inmediata, presiona el botón de llamada para comunicarte con la clínica. Estamos aquí para ayudarte.`;
       await supabase.from("messages").insert({
         room_id: rm.id,
-        content: lang === "es" ? "✅ Sala creada y equipo asignado." : "✅ Room created and care team assigned.",
+        content: welcomeMessage,
         message_type: "text",
         sender_type: "staff",
         sender_id: creatorId,
-        sender_name: "Sistema",
+        sender_name: "Equipo Dr. Fonseca",
         sender_role: creatorRole,
         sender_office: newLocation,
       });

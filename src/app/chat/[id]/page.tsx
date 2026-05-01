@@ -29,6 +29,10 @@ type RoomAccess = {
   patient_access_token?: string | null;
   procedures?: {
     office_location?: string | null;
+    patients?: {
+      full_name?: string | null;
+      preferred_language?: string | null;
+    } | null;
   } | null;
 };
 
@@ -51,6 +55,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [textSize, setTextSize] = useState<"normal" | "large">("normal");
   const [recording, setRecording] = useState(false);
   const [uiLang, setUiLang] = useState<"es" | "en">("en");
+  const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
   const [accessReady, setAccessReady] = useState(false);
@@ -90,10 +95,31 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     applyComposerInputHints(node);
   };
 
+  const normalizeLang = (value?: string | null): "es" | "en" | null => {
+    const normalized = `${value || ""}`.toLowerCase();
+    if (normalized.startsWith("es")) return "es";
+    if (normalized.startsWith("en")) return "en";
+    return null;
+  };
+  const roomLanguageStorageKey = `patient_chat_lang_${id}`;
+  const setPatientLanguage = (next: "es" | "en") => {
+    setUiLang(next);
+    if (typeof window !== "undefined") window.localStorage.setItem(roomLanguageStorageKey, next);
+  };
+
   useEffect(() => {
-    const lang = typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "en";
-    setUiLang(lang.startsWith("es") ? "es" : "en");
-  }, []);
+    const savedLang = typeof window !== "undefined" ? normalizeLang(window.localStorage.getItem(roomLanguageStorageKey)) : null;
+    const browserLang = typeof navigator !== "undefined" ? normalizeLang(navigator.language) : null;
+    setUiLang(savedLang || browserLang || "es");
+  }, [roomLanguageStorageKey]);
+
+  useEffect(() => {
+    const savedLang = typeof window !== "undefined" ? normalizeLang(window.localStorage.getItem(roomLanguageStorageKey)) : null;
+    if (savedLang) return;
+    const patient = room?.procedures?.patients;
+    const patientLang = normalizeLang(Array.isArray(patient) ? patient[0]?.preferred_language : patient?.preferred_language);
+    if (patientLang) setUiLang(patientLang);
+  }, [room, roomLanguageStorageKey]);
 
   useEffect(() => {
     let mounted = true;
@@ -114,7 +140,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
       let roomQuery = await supabase
         .from("rooms")
-        .select("id, patient_access_token, procedures(office_location)")
+        .select("id, patient_access_token, procedures(office_location, patients(full_name, preferred_language))")
         .eq("id", id)
         .single();
 
@@ -200,6 +226,58 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => {
     scrollToLatest();
   }, [messages]);
+
+  const isLegacyRoomCreatedMessage = (message: Message) => {
+    const normalized = `${message.content || ""}`.toLowerCase();
+    return (
+      normalized.includes("sala creada y equipo asignado") ||
+      normalized.includes("room created and care team assigned")
+    );
+  };
+
+  const translationKey = (messageId: string, targetLang: "es" | "en") => `${messageId}:${targetLang}`;
+
+  useEffect(() => {
+    if (!accessReady || viewerType !== "patient") return;
+    const candidates = messages.filter((message) => (
+      message.id &&
+      message.message_type === "text" &&
+      message.sender_type === "staff" &&
+      !message.deleted_by_patient &&
+      !message.deleted_by_staff &&
+      !isLegacyRoomCreatedMessage(message) &&
+      `${message.content || ""}`.trim()
+    ));
+    const missing = candidates.filter((message) => !translatedMessages[translationKey(message.id, uiLang)]).slice(-30);
+    if (!missing.length) return;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    missing.forEach((message) => {
+      fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: message.content, targetLang: uiLang, sourceLang: "auto" }),
+        signal: controller.signal,
+      })
+        .then((response) => response.ok ? response.json() : null)
+        .then((data) => {
+          if (cancelled) return;
+          const translatedText = `${data?.translatedText || message.content || ""}`.trim();
+          setTranslatedMessages((current) => {
+            const key = translationKey(message.id, uiLang);
+            if (current[key]) return current;
+            return { ...current, [key]: translatedText || message.content };
+          });
+        })
+        .catch(() => {});
+    });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [accessReady, messages, translatedMessages, uiLang, viewerType]);
 
   const generateMessageHash = async (content: string, createdAt: string, senderId: string | null) => {
     const input = `${content}${createdAt}${senderId || ""}`;
@@ -481,7 +559,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       );
     }
 
-    return <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{message.content}</span>;
+    const translatedContent =
+      viewerType === "patient" && message.sender_type === "staff"
+        ? translatedMessages[translationKey(message.id, uiLang)]
+        : "";
+    return <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{translatedContent || message.content}</span>;
   };
 
   const chatFontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
@@ -512,6 +594,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       textSize: "Text size",
       normal: "Normal",
       large: "Large",
+      language: "Language",
       privacySupport: "Privacy and support",
       privacyPolicy: "Privacy policy",
       support: "Support",
@@ -537,6 +620,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       textSize: "Tamaño de texto",
       normal: "Normal",
       large: "Grande",
+      language: "Idioma",
       privacySupport: "Privacidad y soporte",
       privacyPolicy: "Politica de privacidad",
       support: "Soporte",
@@ -547,7 +631,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const prescriptionMessages = messages.filter((message) => `${message.file_name || ""}`.startsWith("[MED]"));
   const visibleChatMessages = messages.filter((message) => {
     const fileName = `${message.file_name || ""}`;
-    if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || message.content.includes("patient-profiles/") || message.content.includes("patient-photos/")) return false;
+    if (isLegacyRoomCreatedMessage(message)) return false;
+    if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || `${message.content || ""}`.includes("patient-profiles/") || `${message.content || ""}`.includes("patient-photos/")) return false;
     if (viewerType === "patient" && (message.deleted_by_patient || message.deleted_by_staff)) return false;
     return true;
   });
@@ -615,8 +700,17 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         @keyframes micPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(153,27,27,0.42); } 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(153,27,27,0); } }
       `}</style>
-      <header style={{ height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
+      <header style={{ position: "relative", height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
+        {viewerType === "patient" && (
+          <div aria-label={labels.language} style={{ position: "absolute", right: 10, bottom: 8, display: "flex", gap: 4, padding: 4, borderRadius: 999, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)" }}>
+            {(["es", "en"] as const).map((option) => (
+              <button key={option} onClick={() => setPatientLanguage(option)} style={{ minWidth: 42, height: 34, border: "none", borderRadius: 999, background: uiLang === option ? "#FFFFFF" : "transparent", color: uiLang === option ? "#0B3C5D" : "#E0F2FE", fontSize: 13, fontWeight: 900, letterSpacing: 0, fontFamily: chatFontFamily }}>
+                {option.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       <section style={{ flex: 1, overflowY: "auto", padding: "12px 10px 16px" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
@@ -674,7 +768,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
             <button onClick={() => { setPrescriptionsOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.documents}</button>
             <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
-            <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
+            {viewerType === "staff" && (
+              <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
+            )}
           </div>
         )}
 
@@ -789,7 +885,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         </div>
       )}
 
-      {settingsOpen && (
+      {settingsOpen && viewerType === "staff" && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
           <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
