@@ -2268,42 +2268,14 @@ export default function InboxPage() {
 
   const SettingsPanel = () => (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowSettings(false)}>
-      <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:540,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`,WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`,WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}} onClick={e=>e.stopPropagation()}>
         <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) max(20px, env(safe-area-inset-right)) 16px max(20px, env(safe-area-inset-left))",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <p style={{fontSize:22,fontWeight:700,color:textColor}}>⚙️ {t.settings}</p>
+          <p style={{fontSize:22,fontWeight:800,color:textColor}}>⚙️ {t.settings}</p>
           <button onClick={()=>setShowSettings(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit",minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
         <div style={{padding:"0 20px"}}>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:14}}>{t.myProfile}</p>
-            <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:16}}>
-              <div style={{width:68,height:68,borderRadius:"50%",background:"linear-gradient(135deg,#2C2C2E,#007AFF)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:24,fontWeight:700,overflow:"hidden",flexShrink:0}}>
-                {userProfile?.avatar_url?<img src={userProfile.avatar_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:ini(userProfile?.full_name||"S")}
-              </div>
-              <div>
-                <p style={{fontSize:17,fontWeight:700,color:textColor}}>{userProfile?.full_name||userProfile?.display_name||"Staff"}</p>
-                <p style={{fontSize:13,color:subTextColor,marginTop:2}}>{t.role}: {userProfile?.role||"staff"}</p>
-                <input ref={profilePicSettingsRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadProfilePhoto(f);}}/>
-                <button onClick={()=>profilePicSettingsRef.current?.click()} style={{marginTop:8,background:"#007AFF",border:"none",borderRadius:8,color:"white",padding:"7px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📷 {t.changePhoto}</button>
-              </div>
-            </div>
-            <p style={{fontSize:13,fontWeight:700,color:subTextColor,marginBottom:6}}>{t.displayName}</p>
-            <div style={{display:"flex",gap:8}}>
-              <input value={displayNameEdit} onChange={e=>setDisplayNameEdit(e.target.value)} style={{flex:1,padding:"11px 14px",background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:10,fontSize:15,fontFamily:"inherit",color:textColor,outline:"none"}}/>
-              <button onClick={saveDisplayName} disabled={savingName} style={{padding:"11px 16px",background:savedName?"#34C759":"#007AFF",border:"none",borderRadius:10,color:"white",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14}}>{savedName?"✅":savingName?"...":t.save}</button>
-            </div>
-          </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div>
-                <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5}}>⚡ {t.quickReplies} ({quickReplies.length})</p>
-                <p style={{fontSize:13,color:subTextColor,marginTop:6}}>{t.typeSlash}</p>
-              </div>
-              <button onClick={()=>{setShowSettings(false);setShowQREditor(true);}} style={{background:"#007AFF",border:"none",borderRadius:10,color:"white",padding:"8px 16px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✏️ {t.edit}</button>
-            </div>
-          </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:14}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
+            <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:14}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
               <span style={{fontSize:16,color:textColor,fontWeight:500}}>🌙 {t.darkMode}</span>
               <button onClick={()=>setDarkMode(d=>!d)} style={{width:52,height:30,borderRadius:99,background:darkMode?"#34C759":"#E5E5EA",border:"none",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
@@ -2316,43 +2288,6 @@ export default function InboxPage() {
                 <button key={level} onClick={()=>setFontSizeLevel(level)} style={{flex:1,padding:"10px 0",borderRadius:10,border:fontSizeLevel===level?"2px solid #007AFF":`2px solid ${borderColor}`,background:fontSizeLevel===level?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:fontSizeLevel===level?"#007AFF":textColor,fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:level==="small"?13:level==="large"?18:15}}>
                   {t[level]}
                 </button>
-              ))}
-            </div>
-          </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>🌐 {lang==="es"?"Idioma":"Language"}</p>
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>setLang("es")} style={{flex:1,padding:12,borderRadius:10,border:lang==="es"?"2px solid #007AFF":`2px solid ${borderColor}`,background:lang==="es"?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:lang==="es"?"#007AFF":textColor,fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:15}}>🇲🇽 Español</button>
-              <button onClick={()=>setLang("en")} style={{flex:1,padding:12,borderRadius:10,border:lang==="en"?"2px solid #007AFF":`2px solid ${borderColor}`,background:lang==="en"?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:lang==="en"?"#007AFF":textColor,fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:15}}>🇺🇸 English</button>
-            </div>
-          </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>🌍 {lang==="es" ? "Traducción" : "Translation"}</p>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-              <div>
-                <p style={{fontSize:15,fontWeight:700,color:textColor,margin:0}}>
-                  {lang==="es" ? "Traducir mensajes de pacientes automáticamente" : "Auto-translate patient messages"}
-                </p>
-                <p style={{fontSize:13,color:subTextColor,marginTop:6}}>
-                  {lang==="es" ? "Solo cambia cómo se muestran tus mensajes entrantes." : "Only changes how incoming messages are displayed."}
-                </p>
-              </div>
-              <button onClick={()=>setAutoTranslateIncoming((prev)=>!prev)} style={{width:52,height:30,borderRadius:99,background:autoTranslateIncoming?"#34C759":"#E5E5EA",border:"none",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
-                <div style={{width:26,height:26,borderRadius:"50%",background:"white",position:"absolute",top:2,left:autoTranslateIncoming?24:2,transition:"left 0.2s",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}}/>
-              </button>
-            </div>
-          </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:13,fontWeight:700,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>🛡️ {t.privacySupport}</p>
-            <div style={{display:"grid",gap:8}}>
-              {[
-                { href: "/privacy", label: t.privacyPolicy },
-                { href: "/support", label: t.support },
-                { href: "/account-deletion", label: t.accountDeletion },
-              ].map((link) => (
-                <a key={link.href} href={link.href} style={{minHeight:42,display:"flex",alignItems:"center",border:`1px solid ${borderColor}`,background:darkMode?"#2C2C2E":"white",color:textColor,borderRadius:12,padding:"0 12px",textDecoration:"none",fontSize:15,fontWeight:800}}>
-                  {link.label}
-                </a>
               ))}
             </div>
           </div>
