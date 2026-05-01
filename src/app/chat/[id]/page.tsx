@@ -593,6 +593,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const footerBg = darkMode ? "#111827" : "#ededed";
   const inputPanelBg = darkMode ? "#1f2937" : "#fff";
   const messageFontSize = textSize === "large" ? 22 : 19;
+  const patientTextBase = textSize === "large" ? 18 : 17;
+  const patientTextSmall = textSize === "large" ? 16 : 15;
   const translations = {
     en: {
       messagePlaceholder: "Message",
@@ -768,8 +770,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }
 
   return (
-    <main style={{ height: "100%", minHeight: "-webkit-fill-available", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: chatFontFamily, overflow: "hidden" }}>
-      <style>{`
+      <main className="patient-chat-app" data-text-size={textSize} style={{ height: "100%", minHeight: "-webkit-fill-available", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: chatFontFamily, overflow: "hidden", maxWidth: "100vw" }}>
+        <style>{`
+        .patient-chat-app { --patient-ui-font-size: ${patientTextBase}px; --patient-ui-small-size: ${patientTextSmall}px; }
+        .patient-chat-app * { box-sizing: border-box; }
+        .patient-chat-app p, .patient-chat-app label, .patient-chat-app button, .patient-chat-app input, .patient-chat-app textarea, .patient-chat-app a { overflow-wrap: anywhere; }
+        .patient-chat-app button, .patient-chat-app [role="button"], .patient-chat-app input, .patient-chat-app textarea { min-height: 44px; }
         button { transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
         button:active { transform: scale(0.96); opacity: 0.86; }
         input { transition: box-shadow 170ms ease, background-color 170ms ease; }
@@ -783,7 +789,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
       </header>
 
-      <section style={{ flex: 1, overflowY: "auto", padding: "12px 10px 16px" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
+      <section style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
         {(() => {
           let previousMessageDate = "";
           return visibleChatMessages.map((message) => {
@@ -802,7 +808,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             <Fragment key={message.id}>
               {showDate && (
                 <div style={{ display: "flex", justifyContent: "center", margin: "16px 0 12px" }}>
-                  <div style={{ background: darkMode ? "rgba(17,27,33,0.92)" : "rgba(255,255,255,0.96)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"}`, borderRadius: 10, padding: "5px 13px", color: darkMode ? "#F8FAFC" : "#111827", fontSize: 14, fontWeight: 850, boxShadow: "0 1px 4px rgba(15,23,42,0.10)" }}>
+	                  <div style={{ background: darkMode ? "rgba(17,27,33,0.92)" : "rgba(255,255,255,0.96)", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"}`, borderRadius: 10, padding: "6px 13px", color: darkMode ? "#F8FAFC" : "#111827", fontSize: patientTextSmall, fontWeight: 850, boxShadow: "0 1px 4px rgba(15,23,42,0.10)" }}>
                     {formatDateLabel(message.created_at)}
                   </div>
                 </div>
@@ -814,17 +820,17 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 </div>
                 {renderMessage(message)}
                 {deletedByPatient && viewerType === "staff" && (
-                  <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: 12, fontStyle: "italic", opacity: 0.72 }}>{labels.deletedByUser}</div>
+	                  <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(15,23,42,0.14)", fontSize: patientTextSmall, fontStyle: "italic", opacity: 0.72, lineHeight: 1.4 }}>{labels.deletedByUser}</div>
                 )}
                 <div style={{ fontSize: Math.max(messageFontSize - 5, 13), fontWeight: 520, color: "#64748b", whiteSpace: "nowrap", lineHeight: 1.1, marginTop: 4, textAlign: "right" }}>{formatTime(message.created_at)}</div>
                 {canDeletePatientMessage && deleteMenuMessageId === message.id && (
                   <div style={{display:"flex",gap:12,justifyContent:"flex-end",marginTop:8}}>
                     {message.message_type === "text" && (
-                      <button onClick={(event) => { event.stopPropagation(); setEditingMessage(message); setEditingMessageText(message.content || ""); setDeleteMenuMessageId(null); }} style={{ border: "none", background: "transparent", color: "#075e54", fontSize: 13, fontWeight: 900, padding: 0 }}>
+	                      <button onClick={(event) => { event.stopPropagation(); setEditingMessage(message); setEditingMessageText(message.content || ""); setDeleteMenuMessageId(null); }} style={{ border: "none", background: "transparent", color: "#075e54", fontSize: patientTextSmall, fontWeight: 900, padding: "6px 0" }}>
                         {labels.edit}
                       </button>
                     )}
-                    <button onClick={(event) => { event.stopPropagation(); deletePatientMessage(message.id); }} style={{ border: "none", background: "transparent", color: "#b91c1c", fontSize: 13, fontWeight: 900, padding: 0 }}>
+	                    <button onClick={(event) => { event.stopPropagation(); deletePatientMessage(message.id); }} style={{ border: "none", background: "transparent", color: "#b91c1c", fontSize: patientTextSmall, fontWeight: 900, padding: "6px 0" }}>
                       {labels.delete}
                     </button>
                   </div>
@@ -838,7 +844,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <div ref={bottomRef} />
       </section>
 
-      <footer onClick={() => setDeleteMenuMessageId(null)} style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px calc(12px + env(safe-area-inset-bottom))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+      <footer onClick={() => setDeleteMenuMessageId(null)} style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)", maxWidth: "100vw" }}>
         {menuOpen && (
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
             <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
@@ -917,18 +923,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       )}
 
       {quickRepliesManageOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
-          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: "max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))", zIndex: 20, overflow: "hidden" }}>
+          <div style={{ width: "100%", maxWidth: 420, maxHeight: "calc(100dvh - 36px)", overflowY: "auto", overflowX: "hidden", background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <strong style={{ fontSize: 18 }}>{labels.quickReplies}</strong>
+              <strong style={{ fontSize: patientTextBase, lineHeight: 1.35 }}>{labels.quickReplies}</strong>
               <button onClick={() => setQuickRepliesManageOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
             </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
               {quickReplies.map((reply, index) => (
-                <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <button onClick={() => { setComposerText(reply); setQuickRepliesManageOpen(false); composerRef.current?.focus(); }} style={{ flex: 1, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16 }}>{reply}</button>
-                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.edit}</button>
-                  <button onClick={() => { setQuickReplies((current) => current.filter((_, replyIndex) => replyIndex !== index)); if (editingReplyIndex === index) { setReplyDraft(""); setEditingReplyIndex(null); } }} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.delete}</button>
+                <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap" }}>
+                  <button onClick={() => { setComposerText(reply); setQuickRepliesManageOpen(false); composerRef.current?.focus(); }} style={{ flex: "1 1 160px", border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: patientTextBase, lineHeight: 1.45 }}>{reply}</button>
+                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: patientTextBase, fontWeight: 800 }}>{labels.edit}</button>
+                  <button onClick={() => { setQuickReplies((current) => current.filter((_, replyIndex) => replyIndex !== index)); if (editingReplyIndex === index) { setReplyDraft(""); setEditingReplyIndex(null); } }} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 12, padding: "12px 14px", fontSize: patientTextBase, fontWeight: 800 }}>{labels.delete}</button>
                 </div>
               ))}
             </div>
@@ -939,24 +945,24 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       )}
 
       {prescriptionsOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
-          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: "max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))", zIndex: 20, overflow: "hidden" }}>
+          <div style={{ width: "100%", maxWidth: 420, maxHeight: "calc(100dvh - 36px)", overflowY: "auto", overflowX: "hidden", background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <strong style={{ fontSize: 18 }}>{labels.documents}</strong>
+              <strong style={{ fontSize: patientTextBase, lineHeight: 1.35 }}>{labels.documents}</strong>
               <button onClick={() => setPrescriptionsOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
             </div>
             <div style={{ display: "grid", gap: 8 }}>
               {prescriptionMessages.length === 0 && (
-                <div style={{ border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.noPrescriptions}</div>
+                <div style={{ border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.noPrescriptions}</div>
               )}
               {prescriptionMessages.map((message) => {
                 const prescription = parsePrescriptionText(message.file_name);
                 return (
-                  <button key={message.id} type="button" onClick={() => setSelectedPrescription(message)} style={{ display: "flex", alignItems: "flex-start", gap: 10, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textDecoration: "none", fontSize: 16, fontWeight: 700, textAlign:"left", fontFamily:"inherit", width:"100%" }}>
+                  <button key={message.id} type="button" onClick={() => setSelectedPrescription(message)} style={{ display: "flex", alignItems: "flex-start", gap: 10, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "13px 14px", textDecoration: "none", fontSize: patientTextBase, fontWeight: 800, textAlign:"left", fontFamily:"inherit", width:"100%", lineHeight:1.4 }}>
                     <span style={{ fontSize: 22 }}>📄</span>
                     <span style={{ wordBreak: "break-word", display:"grid", gap:4 }}>
                       <span>{prescription.title}</span>
-                      {prescription.instructions && <span style={{fontSize:13,fontWeight:600,color:darkMode?"#CBD5E1":"#64748B",lineHeight:1.35}}>{labels.prescriptionInstructions}: {prescription.instructions}</span>}
+	                      {prescription.instructions && <span style={{fontSize:patientTextSmall,fontWeight:650,color:darkMode?"#CBD5E1":"#64748B",lineHeight:1.45}}>{labels.prescriptionInstructions}: {prescription.instructions}</span>}
                     </span>
                   </button>
                 );
@@ -967,20 +973,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       )}
 
       {selectedPrescription && (
-        <div style={{ position: "fixed", inset: 0, background: darkMode ? "#0f172a" : "#f8fafc", color: textPrimary, zIndex: 30, display: "flex", flexDirection: "column" }}>
-          <div style={{ flexShrink: 0, padding: "calc(14px + env(safe-area-inset-top)) 14px 12px", background: panelBg, borderBottom: "1px solid rgba(148,163,184,0.25)", boxShadow: "0 6px 18px rgba(15,23,42,0.08)" }}>
+        <div style={{ position: "fixed", inset: 0, background: darkMode ? "#0f172a" : "#f8fafc", color: textPrimary, zIndex: 30, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ flexShrink: 0, padding: "calc(14px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 12px max(14px, env(safe-area-inset-left))", background: panelBg, borderBottom: "1px solid rgba(148,163,184,0.25)", boxShadow: "0 6px 18px rgba(15,23,42,0.08)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 17, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{selectedPrescriptionInfo?.title || labels.documents}</div>
-                {selectedPrescriptionInfo?.instructions && <div style={{ fontSize: 13, color: darkMode ? "#CBD5E1" : "#64748B", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{labels.prescriptionInstructions}: {selectedPrescriptionInfo.instructions}</div>}
+                <div style={{ fontSize: patientTextBase, fontWeight: 900, lineHeight:1.35, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{selectedPrescriptionInfo?.title || labels.documents}</div>
+                {selectedPrescriptionInfo?.instructions && <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", marginTop: 3, lineHeight:1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{labels.prescriptionInstructions}: {selectedPrescriptionInfo.instructions}</div>}
               </div>
-              <button onClick={() => setSelectedPrescription(null)} style={{ border: "none", borderRadius: 999, background: inputPanelBg, color: textPrimary, minWidth: 78, height: 42, padding: "0 14px", fontSize: 15, fontWeight: 850, fontFamily: "inherit" }}>{labels.close}</button>
+              <button onClick={() => setSelectedPrescription(null)} style={{ border: "none", borderRadius: 999, background: inputPanelBg, color: textPrimary, minWidth: 86, height: 44, padding: "0 14px", fontSize: patientTextSmall, fontWeight: 850, fontFamily: "inherit" }}>{labels.close}</button>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-              <button onClick={sharePrescription} style={{ border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", minHeight: 42, fontSize: 13, fontWeight: 850, fontFamily: "inherit" }}>{labels.share}</button>
-              <button onClick={messagePrescription} style={{ border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", minHeight: 42, fontSize: 13, fontWeight: 850, fontFamily: "inherit" }}>{labels.messages}</button>
-              <button onClick={emailPrescription} style={{ border: "none", borderRadius: 12, background: "#FDE68A", color: "#854D0E", minHeight: 42, fontSize: 13, fontWeight: 850, fontFamily: "inherit" }}>{labels.email}</button>
-              <button onClick={printPrescription} style={{ border: "none", borderRadius: 12, background: "#E0E7FF", color: "#3730A3", minHeight: 42, fontSize: 13, fontWeight: 850, fontFamily: "inherit" }}>{labels.print}</button>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+              <button onClick={sharePrescription} style={{ border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.share}</button>
+              <button onClick={messagePrescription} style={{ border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.messages}</button>
+              <button onClick={emailPrescription} style={{ border: "none", borderRadius: 12, background: "#FDE68A", color: "#854D0E", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.email}</button>
+              <button onClick={printPrescription} style={{ border: "none", borderRadius: 12, background: "#E0E7FF", color: "#3730A3", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.print}</button>
             </div>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>
@@ -1014,20 +1020,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       )}
 
       {settingsOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
-          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: "max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))", zIndex: 20, overflow: "hidden" }}>
+          <div style={{ width: "100%", maxWidth: 420, maxHeight: "calc(100dvh - 36px)", overflowY: "auto", overflowX: "hidden", background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <strong style={{ fontSize: 18 }}>{labels.settings}</strong>
+              <strong style={{ fontSize: patientTextBase, lineHeight: 1.35 }}>{labels.settings}</strong>
               <button onClick={() => setSettingsOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
             </div>
-            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, fontSize: 16, marginBottom: 18 }}>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, fontSize: patientTextBase, lineHeight: 1.45, marginBottom: 18 }}>
               {labels.darkMode}
               <input type="checkbox" checked={darkMode} onChange={(event) => setDarkMode(event.target.checked)} style={{ width: 24, height: 24 }} />
             </label>
-            <div style={{ fontSize: 16, marginBottom: 10 }}>{labels.textSize}</div>
+            <div style={{ fontSize: patientTextBase, lineHeight: 1.45, marginBottom: 10 }}>{labels.textSize}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={() => setTextSize("normal")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.normal}</button>
-              <button onClick={() => setTextSize("large")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.large}</button>
+              <button onClick={() => setTextSize("normal")} style={{ height: 48, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 800 }}>{labels.normal}</button>
+              <button onClick={() => setTextSize("large")} style={{ height: 48, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 800 }}>{labels.large}</button>
             </div>
           </div>
         </div>

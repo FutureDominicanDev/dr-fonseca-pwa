@@ -17,7 +17,6 @@ import {
   recordStatusLabel,
   type AdminLevel,
   type Office,
-  type MessageRecord,
   type PatientRecord,
   type PatientRecordStatus,
   type ProcedureRecord,
@@ -36,6 +35,31 @@ type PatientCard = {
   matchesSearch: boolean;
 };
 
+type StaffPrivateMessage = {
+  id?: string;
+  sender_id?: string | null;
+  recipient_id?: string | null;
+  receiver_id?: string | null;
+  to_user_id?: string | null;
+  target_user_id?: string | null;
+  sender_name?: string | null;
+  recipient_name?: string | null;
+  receiver_name?: string | null;
+  message?: string | null;
+  content?: string | null;
+  body?: string | null;
+  created_at?: string | null;
+};
+
+type StaffPrivateConversation = {
+  key: string;
+  participantIds: string[];
+  title: string;
+  subtitle: string;
+  messages: StaffPrivateMessage[];
+  latestAt: string;
+};
+
 export default function AdminPage() {
   const { lang, setLang, isSpanish } = useAdminLang();
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -45,7 +69,7 @@ export default function AdminPage() {
   const [viewerId, setViewerId] = useState("");
   const [viewerProfile, setViewerProfile] = useState<StaffProfile | null>(null);
   const [staff, setStaff] = useState<StaffProfile[]>([]);
-  const [staffMessages, setStaffMessages] = useState<MessageRecord[]>([]);
+  const [staffPrivateMessages, setStaffPrivateMessages] = useState<StaffPrivateMessage[]>([]);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [procedures, setProcedures] = useState<ProcedureRecord[]>([]);
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
@@ -164,7 +188,40 @@ export default function AdminPage() {
   const blockedAccessCount = blockedEmails.length + blockedPhones.length;
   const adminAccessCount = staff.filter((member) => normalizeAdminLevel(member.admin_level, member.id === viewerId ? viewerEmail : "") !== "none").length;
   const inviteCodePreview = inviteCode ? `${inviteCode.slice(0, Math.min(7, inviteCode.length))}••••` : "";
-  const staffMessageCount = (memberId: string) => staffMessages.filter((message) => message.sender_id === memberId).length;
+  const staffById = useMemo(() => new Map(staff.map((member) => [member.id, member])), [staff]);
+  const privateMessageText = (message: StaffPrivateMessage) => message.content || message.message || message.body || "";
+  const privateRecipientId = (message: StaffPrivateMessage) => message.recipient_id || message.receiver_id || message.to_user_id || message.target_user_id || "";
+  const staffPrivateConversations = useMemo<StaffPrivateConversation[]>(() => {
+    const conversations = new Map<string, StaffPrivateMessage[]>();
+    staffPrivateMessages.forEach((message) => {
+      const senderId = message.sender_id || "";
+      const recipientId = privateRecipientId(message);
+      if (!senderId || !recipientId) return;
+      const key = [senderId, recipientId].sort().join(":");
+      conversations.set(key, [...(conversations.get(key) || []), message]);
+    });
+
+    return Array.from(conversations.entries())
+      .map(([key, conversationMessages]) => {
+        const participantIds = key.split(":");
+        const participantNames = participantIds.map((participantId) => {
+          const member = staffById.get(participantId);
+          return member?.full_name || member?.display_name || participantId;
+        });
+        const sortedMessages = [...conversationMessages].sort((a, b) => `${b.created_at || ""}`.localeCompare(`${a.created_at || ""}`));
+        const latestMessage = sortedMessages[0];
+        const latestText = privateMessageText(latestMessage).trim();
+        return {
+          key,
+          participantIds,
+          title: participantNames.join(" ↔ "),
+          subtitle: `${conversationMessages.length} ${isSpanish ? "mensaje(s) privados" : "private message(s)"}${latestText ? ` · ${latestText.slice(0, 90)}` : ""}`,
+          messages: sortedMessages,
+          latestAt: latestMessage?.created_at || "",
+        };
+      })
+      .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
+  }, [isSpanish, staffById, staffPrivateMessages]);
 
   const updateSuccess = (message: string) => {
     setPageError("");
@@ -195,12 +252,12 @@ export default function AdminPage() {
   const fetchData = async () => {
     setPageError("");
 
-    const [staffRes, patientsRes, proceduresRes, roomsRes, staffMessagesRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
+    const [staffRes, patientsRes, proceduresRes, roomsRes, staffPrivateMessagesRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("patients").select("*").order("full_name"),
       supabase.from("procedures").select("*"),
       supabase.from("rooms").select("*").order("created_at", { ascending: false }),
-      supabase.from("messages").select("id, room_id, sender_id, sender_name, sender_role, sender_office, sender_type, message_type, content, file_name, created_at, is_internal").eq("is_internal", true).order("created_at", { ascending: false }).limit(500),
+      supabase.from("staff_private_messages").select("*").order("created_at", { ascending: false }).limit(500),
       supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle(),
@@ -213,7 +270,6 @@ export default function AdminPage() {
       patientsRes.error ? "No pude cargar los pacientes." : "",
       proceduresRes.error ? "No pude cargar los procedimientos." : "",
       roomsRes.error ? "No pude cargar las salas." : "",
-      staffMessagesRes.error ? "No pude cargar mensajes internos del equipo." : "",
       inviteRes.error ? "No pude cargar el código de invitación." : "",
       blockedEmailsRes.error ? "No pude cargar correos bloqueados." : "",
       blockedPhonesRes.error ? "No pude cargar teléfonos bloqueados." : "",
@@ -225,7 +281,7 @@ export default function AdminPage() {
     setPatients((patientsRes.data || []) as PatientRecord[]);
     setProcedures((proceduresRes.data || []) as ProcedureRecord[]);
     setRooms((roomsRes.data || []) as RoomRecord[]);
-    setStaffMessages((staffMessagesRes.data || []) as MessageRecord[]);
+    setStaffPrivateMessages(staffPrivateMessagesRes.error ? [] : ((staffPrivateMessagesRes.data || []) as StaffPrivateMessage[]));
     setInviteCode((inviteRes.data?.value as string) || "");
     setBlockedEmails(parseSettingList(blockedEmailsRes.data?.value).map((item) => item.toLowerCase()));
     setBlockedPhones(parseSettingList(blockedPhonesRes.data?.value));
@@ -430,22 +486,23 @@ export default function AdminPage() {
     });
   };
 
-  const openStaffChatExportMenu = (member: StaffProfile) => {
-    const title = member.full_name || member.display_name || (isSpanish ? "Staff" : "Staff");
-    const recentMessages = staffMessages
-      .filter((message) => message.sender_id === member.id)
-      .slice(0, 25)
-      .map((message) => `${message.created_at ? new Date(message.created_at).toLocaleString() : ""} - ${message.content || message.file_name || ""}`)
-      .filter(Boolean);
+  const openStaffChatExportMenu = (conversation: StaffPrivateConversation) => {
+    const recentMessages = conversation.messages
+      .slice(0, 50)
+      .map((message) => {
+        const sender = staffById.get(message.sender_id || "");
+        const recipient = staffById.get(privateRecipientId(message));
+        const senderName = sender?.full_name || sender?.display_name || message.sender_name || (isSpanish ? "Personal" : "Staff");
+        const recipientName = recipient?.full_name || recipient?.display_name || message.recipient_name || message.receiver_name || (isSpanish ? "Personal" : "Staff");
+        return `${message.created_at ? new Date(message.created_at).toLocaleString() : ""} - ${senderName} → ${recipientName}: ${privateMessageText(message) || "—"}`;
+      });
     const body = [
-      `Staff: ${title}`,
-      `Tel: ${member.phone || "Sin teléfono"}`,
-      `Correo: ${member.email || (member.id === viewerId ? viewerEmail : "Sin correo")}`,
-      `Mensajes internos: ${staffMessageCount(member.id)}`,
+      isSpanish ? `Conversación privada: ${conversation.title}` : `Private conversation: ${conversation.title}`,
+      `${isSpanish ? "Mensajes privados" : "Private messages"}: ${conversation.messages.length}`,
       "",
-      ...(recentMessages.length ? recentMessages : [isSpanish ? "Sin mensajes internos registrados." : "No internal messages recorded."]),
+      ...(recentMessages.length ? recentMessages : [isSpanish ? "Sin mensajes privados registrados." : "No private messages recorded."]),
     ].join("\n");
-    setExportMenu({ type: "staff", id: member.id, title, body });
+    setExportMenu({ type: "staff", id: conversation.key, title: conversation.title, body });
   };
 
   const shareExportMenu = async () => {
@@ -808,9 +865,9 @@ export default function AdminPage() {
   return (
     <>
       <style>{`
-        * { box-sizing: border-box; }
-        body { background: #F5F7FB; }
-        .admin-shell { position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: radial-gradient(circle at top, rgba(59,130,246,0.10), transparent 26%), #F5F7FB; }
+        * { box-sizing: border-box; max-width: 100%; }
+        body { background: #F5F7FB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 16px; overflow-x: hidden; }
+        .admin-shell { position: fixed; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: radial-gradient(circle at top, rgba(59,130,246,0.10), transparent 26%), #F5F7FB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.55; }
         .admin-topbar { background: #07334D; backdrop-filter: blur(18px); min-height: calc(86px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; z-index: 100; box-shadow: 0 8px 26px rgba(7,51,77,0.22); }
         .admin-body { width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
         .topbar-title { min-width: 0; display: flex; align-items: center; gap: 14px; flex: 1 1 auto; }
@@ -818,8 +875,8 @@ export default function AdminPage() {
         .admin-title-copy { min-width: 0; padding-left: 14px; border-left: 1px solid rgba(255,255,255,0.18); }
         .topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 0 auto; }
         .topbar-actions { display: flex; gap: 7px; flex-wrap: nowrap; justify-content: flex-end; }
-        .topbar-btn { height: 38px; padding: 0 11px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 850; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; }
-        .topbar-select { appearance: none; -webkit-appearance: none; width: 86px; height: 38px; padding: 0 26px 0 10px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 850; font-size: 14px !important; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 15px) calc(50% - 3px), calc(100% - 10px) calc(50% - 3px); background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+        .topbar-btn { min-height: 44px; padding: 0 12px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 850; font-size: 15px; cursor: pointer; font-family: inherit; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; }
+        .topbar-select { appearance: none; -webkit-appearance: none; width: 96px; min-height: 44px; padding: 0 28px 0 12px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 850; font-size: 16px !important; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 15px) calc(50% - 3px), calc(100% - 10px) calc(50% - 3px); background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
         .menu-btn { display: none; width: 42px; height: 42px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; cursor: pointer; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
         .menu-panel { display: none; }
         .hero { background: linear-gradient(135deg, #0B2438 0%, #0E3F63 58%, #155C95 100%); color: white; border-radius: 30px; padding: 26px; margin-bottom: 18px; box-shadow: 0 18px 50px rgba(7,51,77,0.20); border: 1px solid rgba(255,255,255,0.12); }
@@ -830,14 +887,14 @@ export default function AdminPage() {
         .stat-card { display: block; width: 100%; padding: 18px 16px; min-height: 124px; appearance: none; text-align: left; font-family: inherit; cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
         .stat-card:hover, .stat-card:focus-visible { transform: translateY(-2px); border-color: rgba(37,99,235,0.35); box-shadow: 0 14px 34px rgba(28,66,104,0.10); outline: none; }
         .stat-icon { width: 38px; height: 38px; border-radius: 14px; display: grid; place-items: center; background: #EAF5FF; color: #075EA8; font-size: 18px; margin-bottom: 12px; }
-        .stat-label { color: #64748B; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+        .stat-label { color: #64748B; font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; line-height: 1.35; }
         .stat-value { color: #0E2D4A; font-size: 30px; line-height: 1; font-weight: 950; }
-        .stat-help { color: #64748B; font-size: 12px; font-weight: 700; line-height: 1.4; margin-top: 8px; }
-        .section-title { font-size: 13px; font-weight: 900; color: #6B7280; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+        .stat-help { color: #64748B; font-size: 15px; font-weight: 700; line-height: 1.45; margin-top: 8px; }
+        .section-title { font-size: 15px; font-weight: 900; color: #6B7280; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; line-height: 1.35; }
         .big-title { font-size: 34px; font-weight: 900; margin: 0 0 8px; }
         .subtle { color: rgba(255,255,255,0.84); line-height: 1.6; font-size: 15px; }
         .quick-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
-        .hero-link { padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.12); color: white; font-size: 14px; font-weight: 800; cursor: pointer; font-family: inherit; }
+        .hero-link { min-height: 44px; padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.12); color: white; font-size: 16px; font-weight: 800; cursor: pointer; font-family: inherit; }
         .hero-link:disabled { opacity: 0.5; cursor: not-allowed; }
         .hero-note { padding: 14px 16px; border-radius: 18px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.12); }
         .search-panel { display: grid; gap: 16px; }
@@ -846,25 +903,25 @@ export default function AdminPage() {
         .line-input.search-main { height: 52px; font-size: 16px; font-weight: 700; }
         .filter-stack { display: grid; gap: 10px; }
         .filter-row { display: flex; flex-wrap: wrap; gap: 8px; }
-        .filter-chip { padding: 10px 13px; border-radius: 999px; border: 1px solid #DCE7F5; background: #F8FBFF; color: #334155; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit; }
+        .filter-chip { min-height: 44px; padding: 10px 13px; border-radius: 999px; border: 1px solid #DCE7F5; background: #F8FBFF; color: #334155; font-size: 15px; font-weight: 800; cursor: pointer; font-family: inherit; }
         .filter-chip.active { background: #1D4ED8; color: white; border-color: #1D4ED8; box-shadow: 0 10px 24px rgba(29,78,216,0.18); }
         .search-status { padding: 14px 16px; border-radius: 18px; background: linear-gradient(135deg, #F8FBFF, #EEF4FF); color: #1E3A8A; font-size: 14px; font-weight: 800; line-height: 1.5; border: 1px solid #DBEAFE; }
         .secure-invite { border: 1px solid #DBEAFE; background: linear-gradient(135deg, #F8FBFF, #EEF6FF); border-radius: 18px; padding: 16px; margin-bottom: 14px; }
-        .secure-invite-label { color: #64748B; font-size: 12px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+        .secure-invite-label { color: #64748B; font-size: 15px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; line-height: 1.35; }
         .secure-invite-main { color: #0E2D4A; font-size: 16px; font-weight: 900; margin: 0 0 4px; }
-        .secure-invite-code { color: #1D4ED8; font-size: 13px; font-weight: 850; margin: 0; }
+        .secure-invite-code { color: #1D4ED8; font-size: 15px; font-weight: 850; margin: 0; overflow-wrap: anywhere; }
         .summary-panel { display: grid; gap: 14px; }
         .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .summary-item { padding: 14px; border-radius: 18px; background: #F8FAFC; border: 1px solid #E7EEF7; }
-        .summary-label { font-size: 11px; font-weight: 900; color: #64748B; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+        .summary-label { font-size: 15px; font-weight: 900; color: #64748B; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; line-height: 1.35; }
         .summary-value { font-size: 28px; font-weight: 900; color: #111827; line-height: 1; }
-        .summary-copy { color: #6B7280; font-size: 13px; line-height: 1.5; margin-top: 6px; }
+        .summary-copy { color: #6B7280; font-size: 15px; line-height: 1.55; margin-top: 6px; overflow-wrap: anywhere; }
         .hero-pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
         .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-        .hero-secondary-btn { padding: 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; }
-        .main-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #007AFF; color: white; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
+        .hero-secondary-btn { min-height: 46px; padding: 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; }
+        .main-btn { min-height: 48px; padding: 14px 16px; border-radius: 14px; border: none; background: #007AFF; color: white; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; }
         .main-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-        .ghost-btn { padding: 14px 16px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
+        .ghost-btn { min-height: 48px; padding: 14px 16px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; }
         .line-input { width: 100%; padding: 14px 16px; background: #F3F4F6; border: 1px solid transparent; border-radius: 14px; font-size: 16px; font-family: inherit; color: #111827; outline: none; font-weight: 600; }
         .line-input:focus { border-color: rgba(0,122,255,0.5); background: white; }
         .grid-2 { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start; }
@@ -874,25 +931,25 @@ export default function AdminPage() {
         .staff-row:last-child, .patient-row:last-child { border-bottom: none; }
         .staff-row.compact { gap: 12px; padding: 14px 0; }
         .staff-heading-line { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-        .staff-contact { color: #64748B; font-size: 12px; font-weight: 700; line-height: 1.45; margin-top: 3px; overflow-wrap: anywhere; }
+        .staff-contact { color: #64748B; font-size: 15px; font-weight: 700; line-height: 1.45; margin-top: 3px; overflow-wrap: anywhere; }
         .staff-controls { margin-top: 10px; border: 1px solid #E6EEF7; border-radius: 14px; overflow: hidden; background: #FBFDFF; }
-        .staff-controls summary { list-style: none; padding: 10px 12px; cursor: pointer; color: #075EA8; font-size: 12px; font-weight: 900; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .staff-controls summary { list-style: none; min-height: 44px; padding: 10px 12px; cursor: pointer; color: #075EA8; font-size: 15px; font-weight: 900; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .staff-controls summary::-webkit-details-marker { display: none; }
         .staff-controls-body { padding: 0 12px 12px; }
-        .danger-inline-btn { flex-shrink: 0; padding: 8px 10px; border-radius: 999px; border: none; background: #FFF1F2; color: #E11D48; font-size: 12px; font-weight: 900; cursor: pointer; font-family: inherit; }
+        .danger-inline-btn { flex-shrink: 0; min-height: 44px; padding: 8px 10px; border-radius: 999px; border: none; background: #FFF1F2; color: #E11D48; font-size: 15px; font-weight: 900; cursor: pointer; font-family: inherit; }
         .danger-inline-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg,#111827,#1D4ED8); color: white; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; flex-shrink: 0; overflow: hidden; }
         .small-avatar { width: 42px; height: 42px; font-size: 13px; }
         .list-action-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; border: 1px solid #E7EEF7; background: #F8FAFC; color: #111827; text-align: left; cursor: pointer; font-family: inherit; }
-        .list-action-row strong { display: block; font-size: 15px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .list-action-row span span { display: block; margin-top: 3px; color: #64748B; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+        .list-action-row strong { display: block; font-size: 16px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .list-action-row span span { display: block; margin-top: 3px; color: #64748B; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; line-height: 1.4; }
         .list-action-row:hover, .list-action-row:focus-visible { border-color: #BFDBFE; background: #EFF6FF; outline: none; }
         .export-overlay { position: fixed; inset: 0; z-index: 170; display: grid; place-items: center; padding: 18px; background: rgba(15,23,42,0.42); }
         .export-modal { width: min(440px, 100%); border-radius: 22px; background: white; padding: 20px; box-shadow: 0 24px 80px rgba(15,23,42,0.28); }
         .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
-        .meta-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; margin-right: 6px; margin-top: 8px; }
+        .meta-badge { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 999px; font-size: 15px; line-height: 1.25; font-weight: 800; margin-right: 6px; margin-top: 8px; }
         .mini-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-        .mini-btn { padding: 9px 12px; border-radius: 12px; border: none; cursor: pointer; font-size: 12px; font-weight: 800; font-family: inherit; transition: transform 0.15s ease, background 0.15s ease; }
+        .mini-btn { min-height: 44px; padding: 9px 12px; border-radius: 12px; border: none; cursor: pointer; font-size: 15px; font-weight: 800; font-family: inherit; transition: transform 0.15s ease, background 0.15s ease; }
         .mini-btn:disabled { cursor: not-allowed; }
         .mini-btn:not(:disabled):hover { transform: translateY(-1px); }
         .export-card { background: linear-gradient(135deg, #F8FBFF, #EFF6FF); border: 1px solid #DBEAFE; border-radius: 18px; padding: 16px; }
@@ -902,11 +959,11 @@ export default function AdminPage() {
         .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
         .card-title { font-size: 22px; font-weight: 900; color: #111827; margin: 0 0 6px; }
         .helper-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-        .small-note { font-size: 12px; color: #64748B; line-height: 1.5; }
+        .small-note { font-size: 15px; color: #64748B; line-height: 1.55; }
         .setting-group { margin-top: 12px; }
-        .group-label { font-size: 12px; font-weight: 900; color: #64748B; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 6px; }
+        .group-label { font-size: 15px; font-weight: 900; color: #64748B; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 6px; line-height: 1.35; }
         .toast-stack { position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 160; display: grid; gap: 10px; width: min(360px, calc(100vw - 32px)); }
-        .toast { border-radius: 16px; padding: 14px 16px; box-shadow: 0 14px 36px rgba(15,23,42,0.16); font-size: 14px; font-weight: 800; line-height: 1.5; }
+        .toast { border-radius: 16px; padding: 14px 16px; box-shadow: 0 14px 36px rgba(15,23,42,0.16); font-size: 16px; font-weight: 800; line-height: 1.5; }
         .toast.error { background: #FFF1F2; color: #E11D48; }
         .toast.success { background: #EDFAF1; color: #15803D; }
         .result-count { font-size: 13px; color: #64748B; font-weight: 700; }
@@ -1025,9 +1082,9 @@ export default function AdminPage() {
             </button>
             <button type="button" className="stat-card" onClick={() => scrollToAdminSection("staff-to-staff")}>
               <div className="stat-icon">💬</div>
-              <p className="stat-label">Staff to Staff Chat</p>
-              <p className="stat-value">{staff.length}</p>
-              <p className="stat-help">{isSpanish ? "Conversaciones internas" : "Internal conversations"}</p>
+              <p className="stat-label">{isSpanish ? "Chat staff a staff" : "Staff to Staff Chat"}</p>
+              <p className="stat-value">{staffPrivateConversations.length}</p>
+              <p className="stat-help">{isSpanish ? "Conversaciones privadas del equipo" : "Private staff conversations"}</p>
             </button>
             <button type="button" className="stat-card" onClick={() => scrollToAdminSection("equipo")}>
               <div className="stat-icon">👥</div>
@@ -1048,31 +1105,31 @@ export default function AdminPage() {
               <section className="card" id="staff-to-staff">
                 <div className="header-row">
                   <div>
-                    <p className="card-title">Staff to Staff Chat</p>
-                    <p className="muted">
-                      {isSpanish
-                        ? "Lista administrativa para revisar y exportar conversaciones internas del equipo."
-                        : "Administrative list for reviewing and exporting internal team conversations."}
+	                    <p className="card-title">{isSpanish ? "Chat staff a staff" : "Staff to Staff Chat"}</p>
+	                    <p className="muted">
+	                      {isSpanish
+	                        ? "Lista administrativa para revisar y exportar conversaciones privadas entre miembros del equipo."
+	                        : "Administrative list for reviewing and exporting private staff-to-staff conversations."}
                     </p>
                   </div>
                 </div>
                 <div style={{ display: "grid", gap: 10 }}>
-                  {staff.length === 0 ? (
-                    <p className="muted">{isSpanish ? "No hay personal registrado." : "No staff registered."}</p>
-                  ) : (
-                    staff.map((member) => (
-                      <button
-                        key={`staff-chat-${member.id}`}
-                        type="button"
-                        className="list-action-row"
-                        onClick={() => openStaffChatExportMenu(member)}
-                      >
-                        <span className="avatar small-avatar">{initials(member.full_name || member.display_name)}</span>
-                        <span style={{ minWidth: 0, flex: 1 }}>
-                          <strong>{member.full_name || member.display_name || "Staff"}</strong>
-                          <span>{staffMessageCount(member.id)} {isSpanish ? "mensaje(s) internos" : "internal message(s)"} · {[member.phone, member.email || (member.id === viewerId ? viewerEmail : "")].filter(Boolean).join(" · ") || (isSpanish ? "Sin teléfono o correo" : "No phone or email")}</span>
-                        </span>
-                      </button>
+	                  {staffPrivateConversations.length === 0 ? (
+	                    <p className="muted">{isSpanish ? "Todavía no hay conversaciones privadas staff a staff registradas en la app." : "No app-recorded private staff-to-staff conversations yet."}</p>
+	                  ) : (
+	                    staffPrivateConversations.map((conversation) => (
+	                      <button
+	                        key={`staff-chat-${conversation.key}`}
+	                        type="button"
+	                        className="list-action-row"
+	                        onClick={() => openStaffChatExportMenu(conversation)}
+	                      >
+	                        <span className="avatar small-avatar">{initials(conversation.title)}</span>
+	                        <span style={{ minWidth: 0, flex: 1 }}>
+	                          <strong>{conversation.title}</strong>
+	                          <span>{conversation.subtitle}</span>
+	                        </span>
+	                      </button>
                     ))
                   )}
                 </div>

@@ -56,10 +56,11 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <style>{`
           *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-          html { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; }
-          body { height: 100%; margin: 0; padding: 0; font-family: inherit; }
-          .shell, .patient-shell { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; height: 100%; min-height: -webkit-fill-available; }
+          html { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+          body { height: 100%; margin: 0; padding: 0; font-family: inherit; font-size: 16px; line-height: 1.55; overflow-x: hidden; }
+          .shell, .patient-shell { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; height: 100%; min-height: -webkit-fill-available; max-width: 100vw; }
           input, textarea, select { font-size: 16px !important; user-select: text !important; -webkit-user-select: text !important; touch-action: auto !important; font-family: inherit; }
+          button, input, textarea, select, [role="button"] { min-height: 44px; }
           ::-webkit-scrollbar { display: none; }
           scrollbar-width: none;
         `}</style>

@@ -423,6 +423,9 @@ export default function InboxPage() {
   const [darkMode, setDarkMode] = useState(false);
   const [fontSizeLevel, setFontSizeLevel] = useState<"small"|"medium"|"large">("medium");
   const fontSize = fontSizeLevel === "small" ? 17 : fontSizeLevel === "large" ? 22 : 19;
+  const uiBaseSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 18 : 17;
+  const uiLabelSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 17 : 16;
+  const uiSmallSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 16 : 15;
 
   const headerBg = "#07334D";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
@@ -447,6 +450,8 @@ export default function InboxPage() {
   const [editingMessage, setEditingMessage] = useState<any | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
   const [staffContactMember, setStaffContactMember] = useState<CareTeamMember | null>(null);
+  const [staffPrivateDraft, setStaffPrivateDraft] = useState("");
+  const [savingStaffPrivateMessage, setSavingStaffPrivateMessage] = useState(false);
   const [unreadRooms, setUnreadRooms] = useState<Set<string>>(new Set());
   const [totalUnread, setTotalUnread] = useState(0);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
@@ -631,12 +636,44 @@ export default function InboxPage() {
   };
   const openStaffContact = (member: CareTeamMember | null) => {
     if (!member || member.id === currentUserId) return;
+    if (messagePressTimerRef.current) {
+      clearTimeout(messagePressTimerRef.current);
+      messagePressTimerRef.current = null;
+    }
+    setActiveMessageAction(null);
+    setPressedMsgId(null);
     setStaffContactMember(member);
+  };
+  const closeStaffContact = () => {
+    setStaffContactMember(null);
+    setStaffPrivateDraft("");
+  };
+  const sendStaffPrivateMessage = async () => {
+    const content = staffPrivateDraft.trim();
+    if (!content || !staffContactMember || !currentUserId || savingStaffPrivateMessage) return;
+    setSavingStaffPrivateMessage(true);
+    const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
+    const { error } = await supabase.from("staff_private_messages").insert({
+      sender_id: currentUserId,
+      recipient_id: staffContactMember.id,
+      sender_name: senderName,
+      recipient_name: staffContactMember.full_name || staffContactMember.display_name || null,
+      content,
+      created_at: new Date().toISOString(),
+    } as any);
+    setSavingStaffPrivateMessage(false);
+    if (error) {
+      alert(lang === "es" ? "No pude guardar el mensaje privado. Falta configurar la tabla de mensajes privados staff a staff." : "I could not save the private message. The staff-to-staff private messages table is not configured yet.");
+      return;
+    }
+    setStaffPrivateDraft("");
+    alert(lang === "es" ? "Mensaje privado enviado." : "Private message sent.");
+    closeStaffContact();
   };
   const closeMessageActions = () => {
     setPressedMsgId(null);
     setActiveMessageAction(null);
-    setStaffContactMember(null);
+    closeStaffContact();
   };
   const startStaffMessagePress = (messageId: string, enabled: boolean) => {
     if (!enabled) return;
@@ -2267,14 +2304,18 @@ export default function InboxPage() {
     const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
     const bubbleHeader = (style: React.CSSProperties = {}) => (
       <div style={{marginBottom:5,lineHeight:1.15,...style}}>
-        <button
-          type="button"
-          onClick={(event)=>{
-            event.stopPropagation();
-            openStaffContact(staffContact);
-          }}
-          style={{border:"none",background:"transparent",padding:0,margin:0,fontFamily:"inherit",fontSize:Math.max(fontSize - 4, 15),fontWeight:850,color:sc,cursor:staffContact?"pointer":"default"}}
-        >
+	        <button
+	          type="button"
+	          onClick={(event)=>{
+	            event.stopPropagation();
+	            openStaffContact(staffContact);
+	          }}
+	          onPointerDown={(event)=>{event.stopPropagation();startStaffContactPress(staffContact);}}
+	          onPointerUp={(event)=>{event.stopPropagation();cancelStaffMessagePress();}}
+	          onPointerCancel={cancelStaffMessagePress}
+	          onContextMenu={(event)=>{ if (staffContact) { event.preventDefault(); event.stopPropagation(); openStaffContact(staffContact); } }}
+	          style={{border:"none",background:"transparent",padding:"4px 0",margin:0,fontFamily:"inherit",fontSize:Math.max(fontSize - 4, 15),fontWeight:850,color:sc,cursor:staffContact?"pointer":"default",touchAction:"manipulation",WebkitTouchCallout:"none"}}
+	        >
           {sn}
         </button>
       </div>
@@ -2376,38 +2417,38 @@ export default function InboxPage() {
   };
 
   const SettingsPanel = () => (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowSettings(false)}>
-      <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`,WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}} onClick={e=>e.stopPropagation()}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))",paddingLeft:"max(0px, env(safe-area-inset-left))",paddingRight:"max(0px, env(safe-area-inset-right))",overflow:"hidden"}} onClick={()=>setShowSettings(false)}>
+      <div className="settings-sheet" style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",overflowX:"hidden",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`,WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}} onClick={e=>e.stopPropagation()}>
         <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) max(20px, env(safe-area-inset-right)) 16px max(20px, env(safe-area-inset-left))",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <p style={{fontSize:22,fontWeight:800,color:textColor}}>⚙️ {t.settings}</p>
           <button onClick={()=>setShowSettings(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit",minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
         <div style={{padding:"0 20px"}}>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>{lang==="es"?"Mi nombre":"My name"}</p>
-            <label style={{display:"block",fontSize:14,fontWeight:700,color:textColor,marginBottom:8}}>{t.displayName}</label>
+            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Mi nombre":"My name"}</p>
+            <label style={{display:"block",fontSize:uiBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>{t.displayName}</label>
             <input
               value={displayNameEdit}
               onChange={(event)=>setDisplayNameEdit(event.target.value)}
               placeholder={lang==="es"?"Nombre visible para pacientes y equipo":"Name shown to patients and team"}
               style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 14px",fontSize:16,fontFamily:"inherit",fontWeight:650,marginBottom:10}}
             />
-            <button onClick={saveDisplayName} disabled={savingName || !displayNameEdit.trim()} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingName || !displayNameEdit.trim()?0.55:1}}>
+            <button onClick={saveDisplayName} disabled={savingName || !displayNameEdit.trim()} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingName || !displayNameEdit.trim()?0.55:1}}>
               {savingName ? (lang==="es"?"Guardando...":"Saving...") : savedName ? t.saved : t.save}
             </button>
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:14}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
+            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:14,lineHeight:1.35}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-              <span style={{fontSize:16,color:textColor,fontWeight:500}}>🌙 {t.darkMode}</span>
+              <span style={{fontSize:uiBaseSize,color:textColor,fontWeight:650,lineHeight:1.4}}>🌙 {t.darkMode}</span>
               <button onClick={()=>setDarkMode(d=>!d)} style={{width:52,height:30,borderRadius:99,background:darkMode?"#34C759":"#E5E5EA",border:"none",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
                 <div style={{width:26,height:26,borderRadius:"50%",background:"white",position:"absolute",top:2,left:darkMode?24:2,transition:"left 0.2s",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}}/>
               </button>
             </div>
-            <span style={{fontSize:16,color:textColor,fontWeight:500,display:"block",marginBottom:10}}>🔤 {t.fontSize}</span>
+            <span style={{fontSize:uiBaseSize,color:textColor,fontWeight:650,display:"block",marginBottom:10,lineHeight:1.4}}>🔤 {t.fontSize}</span>
             <div style={{display:"flex",gap:8}}>
               {(["small","medium","large"] as const).map(level=>(
-                <button key={level} onClick={()=>setFontSizeLevel(level)} style={{flex:1,padding:"10px 0",borderRadius:10,border:fontSizeLevel===level?"2px solid #007AFF":`2px solid ${borderColor}`,background:fontSizeLevel===level?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:fontSizeLevel===level?"#007AFF":textColor,fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:level==="small"?13:level==="large"?18:15}}>
+                <button key={level} onClick={()=>setFontSizeLevel(level)} style={{flex:1,padding:"11px 8px",minHeight:48,borderRadius:12,border:fontSizeLevel===level?"2px solid #007AFF":`2px solid ${borderColor}`,background:fontSizeLevel===level?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:fontSizeLevel===level?"#007AFF":textColor,fontWeight:800,cursor:"pointer",fontFamily:"inherit",fontSize:level==="large"?18:16,lineHeight:1.25}}>
                   {t[level]}
                 </button>
               ))}
@@ -2447,12 +2488,12 @@ export default function InboxPage() {
       .filter(Boolean);
 
     return (
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:210,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowPatientInfo(false)}>
-        <div style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:580,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`}} onClick={e=>e.stopPropagation()}>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:210,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))",paddingLeft:"max(0px, env(safe-area-inset-left))",paddingRight:"max(0px, env(safe-area-inset-right))",overflow:"hidden"}} onClick={()=>setShowPatientInfo(false)}>
+        <div className="patient-info-sheet" style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:580,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",overflowX:"hidden",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`,WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}} onClick={e=>e.stopPropagation()}>
           <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) max(20px, env(safe-area-inset-right)) 16px max(20px, env(safe-area-inset-left))",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
               <p style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patientInfo}</p>
-              <p style={{fontSize:13,color:subTextColor,marginTop:4}}>{t.patientInfoHint}</p>
+	              <p style={{fontSize:uiSmallSize,color:subTextColor,marginTop:4,lineHeight:1.45,overflowWrap:"anywhere"}}>{t.patientInfoHint}</p>
             </div>
             <button onClick={()=>setShowPatientInfo(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
           </div>
@@ -2463,42 +2504,42 @@ export default function InboxPage() {
               </div>
               <div style={{minWidth:0}}>
                 <p style={{fontSize:22,fontWeight:800,color:textColor}}>{patient?.full_name || (lang==="es" ? "Paciente sin nombre" : "Unnamed patient")}</p>
-                <p style={{fontSize:14,color:subTextColor,marginTop:4}}>{selectedRoom?.procedures?.procedure_name || (lang==="es" ? "Sin procedimiento" : "No procedure")}</p>
+	                <p style={{fontSize:uiBaseSize,color:subTextColor,marginTop:4,lineHeight:1.45,overflowWrap:"anywhere"}}>{selectedRoom?.procedures?.procedure_name || (lang==="es" ? "Sin procedimiento" : "No procedure")}</p>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
-                  <span style={{padding:"6px 10px",borderRadius:999,background:"#EBF5FF",color:"#2563EB",fontSize:12,fontWeight:700}}>{selectedRoom?.procedures?.office_location || (lang==="es" ? "Sin sede" : "No office")}</span>
+	                  <span style={{padding:"7px 10px",borderRadius:999,background:"#EBF5FF",color:"#2563EB",fontSize:uiSmallSize,fontWeight:800,lineHeight:1.25}}>{selectedRoom?.procedures?.office_location || (lang==="es" ? "Sin sede" : "No office")}</span>
                 </div>
               </div>
             </div>
 
             <div style={{background:cardBg,borderRadius:18,padding:16}}>
-              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:12}}>{lang==="es" ? "Datos principales" : "Core details"}</p>
-              <div style={{display:"grid",gap:10}}>
-                <div><strong style={{color:textColor}}>{t.phone}:</strong> <span style={{color:subTextColor}}>{patient?.phone || "—"}</span></div>
-                <div><strong style={{color:textColor}}>{t.email}:</strong> <span style={{color:subTextColor}}>{patient?.email || "—"}</span></div>
-                <div><strong style={{color:textColor}}>{t.birthdate}:</strong> <span style={{color:subTextColor}}>{patient?.birthdate ? new Date(patient.birthdate).toLocaleDateString(locale) : "—"}</span></div>
-                <div><strong style={{color:textColor}}>{t.timezone}:</strong> <span style={{color:subTextColor}}>{labelTimeZone(patient?.timezone)}</span></div>
-                {localTime && <div><strong style={{color:textColor}}>{t.patientLocalTime}:</strong> <span style={{color:subTextColor}}>{localTime}</span></div>}
-                <div><strong style={{color:textColor}}>{t.allergies}:</strong> <span style={{color:subTextColor}}>{patient?.allergies || "—"}</span></div>
-              </div>
+	              <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12,lineHeight:1.35}}>{lang==="es" ? "Datos principales" : "Core details"}</p>
+	              <div style={{display:"grid",gap:12,fontSize:uiBaseSize,lineHeight:1.5,overflowWrap:"anywhere"}}>
+	                <div><strong style={{color:textColor}}>{t.phone}:</strong> <span style={{color:subTextColor,overflowWrap:"anywhere"}}>{patient?.phone || "—"}</span></div>
+	                <div><strong style={{color:textColor}}>{t.email}:</strong> <span style={{color:subTextColor,overflowWrap:"anywhere"}}>{patient?.email || "—"}</span></div>
+	                <div><strong style={{color:textColor}}>{t.birthdate}:</strong> <span style={{color:subTextColor}}>{patient?.birthdate ? new Date(patient.birthdate).toLocaleDateString(locale) : "—"}</span></div>
+	                <div><strong style={{color:textColor}}>{t.timezone}:</strong> <span style={{color:subTextColor,overflowWrap:"anywhere"}}>{labelTimeZone(patient?.timezone)}</span></div>
+	                {localTime && <div><strong style={{color:textColor}}>{t.patientLocalTime}:</strong> <span style={{color:subTextColor}}>{localTime}</span></div>}
+	                <div><strong style={{color:textColor}}>{t.allergies}:</strong> <span style={{color:subTextColor,overflowWrap:"anywhere"}}>{patient?.allergies || "—"}</span></div>
+	              </div>
             </div>
 
             <div style={{background:cardBg,borderRadius:18,padding:16}}>
-              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:6}}>{t.medications}</p>
-              <p style={{fontSize:13,color:subTextColor,marginBottom:12}}>
+              <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,lineHeight:1.35}}>{t.medications}</p>
+              <p style={{fontSize:uiSmallSize,color:subTextColor,marginBottom:12,lineHeight:1.5,overflowWrap:"anywhere"}}>
                 {lang==="es" ? "El equipo asignado puede ver y agregar medicamentos. Solo super admin puede eliminar." : "Assigned staff can view and add medications. Only super admins can delete."}
               </p>
               {patientMedications.length === 0 ? (
-                <p style={{fontSize:14,color:subTextColor,marginBottom:12}}>{lang==="es" ? "Sin medicamentos registrados." : "No medications listed."}</p>
+                <p style={{fontSize:uiBaseSize,color:subTextColor,marginBottom:12,lineHeight:1.45}}>{lang==="es" ? "Sin medicamentos registrados." : "No medications listed."}</p>
               ) : (
                 <div style={{display:"grid",gap:8,marginBottom:12}}>
                   {patientMedications.map((medication, index)=>(
                     <div key={`${medication}-${index}`} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
-                      <div style={{flex:1,minWidth:0,fontSize:15,fontWeight:750,color:textColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{medication}</div>
+                      <div style={{flex:1,minWidth:0,fontSize:uiBaseSize,fontWeight:750,color:textColor,lineHeight:1.45,overflowWrap:"anywhere"}}>{medication}</div>
                       <button
                         type="button"
                         onClick={()=>removePatientMedication(index)}
                         disabled={savingMedication}
-                        style={{border:"none",borderRadius:12,background:isSuperAdmin?"#FEE2E2":"#F3F4F6",color:isSuperAdmin?"#B91C1C":subTextColor,padding:"8px 10px",fontSize:12,fontWeight:850,fontFamily:"inherit",cursor:savingMedication?"not-allowed":"pointer",opacity:savingMedication?0.55:1}}
+                        style={{border:"none",borderRadius:12,background:isSuperAdmin?"#FEE2E2":"#F3F4F6",color:isSuperAdmin?"#B91C1C":subTextColor,padding:"9px 12px",minHeight:44,fontSize:uiSmallSize,fontWeight:850,fontFamily:"inherit",cursor:savingMedication?"not-allowed":"pointer",opacity:savingMedication?0.55:1}}
                       >
                         {lang==="es" ? "Eliminar" : "Delete"}
                       </button>
@@ -2511,18 +2552,18 @@ export default function InboxPage() {
                   value={medicationDraft}
                   onChange={(event)=>setMedicationDraft(event.target.value)}
                   placeholder={t.medicationsPH}
-                  style={{minWidth:0,height:46,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#0F172A":"white",color:textColor,padding:"0 12px",fontSize:15,fontFamily:"inherit",fontWeight:650}}
+                  style={{minWidth:0,height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#0F172A":"white",color:textColor,padding:"0 12px",fontSize:16,fontFamily:"inherit",fontWeight:650}}
                 />
-                <button onClick={addPatientMedication} disabled={savingMedication || !medicationDraft.trim()} style={{height:46,border:"none",borderRadius:14,background:"#2563EB",color:"white",padding:"0 14px",fontSize:14,fontWeight:850,cursor:"pointer",fontFamily:"inherit",opacity:savingMedication || !medicationDraft.trim()?0.55:1}}>
+                <button onClick={addPatientMedication} disabled={savingMedication || !medicationDraft.trim()} style={{height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",padding:"0 14px",fontSize:uiBaseSize,fontWeight:850,cursor:"pointer",fontFamily:"inherit",opacity:savingMedication || !medicationDraft.trim()?0.55:1}}>
                   {lang==="es" ? "Agregar" : "Add"}
                 </button>
               </div>
             </div>
 
             <div style={{background:cardBg,borderRadius:18,padding:16}}>
-              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:12}}>{lang==="es" ? "Equipo asignado" : "Assigned care team"}</p>
+              <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12,lineHeight:1.35}}>{lang==="es" ? "Equipo asignado" : "Assigned care team"}</p>
               {selectedRoomTeam.length===0 ? (
-                <p style={{fontSize:14,color:subTextColor}}>{t.teamEmpty}</p>
+                <p style={{fontSize:uiBaseSize,color:subTextColor,lineHeight:1.45}}>{t.teamEmpty}</p>
               ) : (
                 <div style={{display:"grid",gap:10}}>
                   {selectedRoomTeam.map((member) => {
@@ -2546,8 +2587,8 @@ export default function InboxPage() {
                         {member.avatar_url ? <img src={member.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(member.full_name || "S")}
                       </div>
                       <div style={{minWidth:0}}>
-                        <div style={{fontSize:15,fontWeight:700,color:textColor}}>{member.full_name || (lang==="es" ? "Sin nombre" : "No name")}</div>
-                        <div style={{fontSize:13,color:subTextColor}}>{roleName(member.role)} · {member.office_location || "—"}</div>
+	                        <div style={{fontSize:uiBaseSize,fontWeight:800,color:textColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{member.full_name || (lang==="es" ? "Sin nombre" : "No name")}</div>
+	                        <div style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{roleName(member.role)} · {member.office_location || "—"}</div>
                       </div>
                     </button>
                   );})}
@@ -2555,23 +2596,23 @@ export default function InboxPage() {
               )}
               {canManageCareTeam && (
                 <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${borderColor}`}}>
-                  <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{t.manageTeam}</p>
+	                  <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10,lineHeight:1.35}}>{t.manageTeam}</p>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
-                    <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${borderColor}`,fontSize:12,fontWeight:800,color:textColor}}>
+	                    <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${borderColor}`,fontSize:uiSmallSize,fontWeight:800,color:textColor,lineHeight:1.25}}>
                       {t.careTeamSelected}: {managedTeamIds.length}
                     </span>
                   </div>
                   <div style={{display:"grid",gap:10,marginBottom:12}}>
                     {panelCareTeamGroups.map((group)=>(
                       <div key={group.role} style={{background:darkMode?"#1F2937":"white",border:`1px solid ${borderColor}`,borderRadius:16,padding:12}}>
-                        <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{careTeamRoleLabel(group.role)}</p>
+	                        <p style={{fontSize:uiSmallSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10,lineHeight:1.35}}>{careTeamRoleLabel(group.role)}</p>
                         <div style={{display:"grid",gap:8}}>
                           {group.members.map((member)=>(
                             <label key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:managedTeamIds.includes(member.id)?"#EBF5FF":(darkMode?"#111827":"#F8FBFF"),border:managedTeamIds.includes(member.id)?"1px solid #93C5FD":`1px solid ${borderColor}`,cursor:"pointer"}}>
                               <input type="checkbox" checked={managedTeamIds.includes(member.id)} onChange={()=>setManagedTeamIds((current)=>current.includes(member.id)?current.filter((entry)=>entry!==member.id):[...current, member.id])} style={{width:16,height:16,accentColor:"#2563EB"}} />
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:14,fontWeight:800,color:textColor}}>{member.full_name || (lang==="es" ? "Personal" : "Staff")}</div>
-                                <div style={{fontSize:12,color:subTextColor}}>{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
+	                                <div style={{fontSize:uiBaseSize,fontWeight:800,color:textColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{member.full_name || (lang==="es" ? "Personal" : "Staff")}</div>
+	                                <div style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
                               </div>
                             </label>
                           ))}
@@ -2579,7 +2620,7 @@ export default function InboxPage() {
                       </div>
                     ))}
                   </div>
-                  <button onClick={saveManagedTeam} disabled={savingTeam} style={{width:"100%",padding:12,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:savingTeam?0.5:1}}>
+	                  <button onClick={saveManagedTeam} disabled={savingTeam} style={{width:"100%",padding:12,minHeight:48,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingTeam?0.5:1}}>
                     {savingTeam ? (lang==="es" ? "Guardando..." : "Saving...") : t.saveTeam}
                   </button>
                 </div>
@@ -2587,9 +2628,9 @@ export default function InboxPage() {
             </div>
 
             <div style={{background:cardBg,borderRadius:18,padding:16}}>
-              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:12}}>{t.beforeMaterials}</p>
+              <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12,lineHeight:1.35}}>{t.beforeMaterials}</p>
               {beforeEntries.length===0 ? (
-                <p style={{fontSize:14,color:subTextColor}}>{lang==="es" ? "No hay material preoperatorio cargado todavía." : "No pre-op material has been uploaded yet."}</p>
+                <p style={{fontSize:uiBaseSize,color:subTextColor,lineHeight:1.45}}>{lang==="es" ? "No hay material preoperatorio cargado todavía." : "No pre-op material has been uploaded yet."}</p>
               ) : (
                 <div style={{display:"flex",gap:12,overflowX:"auto",overflowY:"hidden",overscrollBehaviorX:"contain",touchAction:"pan-x",padding:"2px 2px 8px",maxWidth:"100%"}}>
                   {beforeEntries.map((entry, index) => (
@@ -2604,31 +2645,31 @@ export default function InboxPage() {
             </div>
 
             <div style={{background:cardBg,borderRadius:18,padding:16}}>
-              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:6}}>{t.internalNotes}</p>
-              <p style={{fontSize:13,color:subTextColor,margin:"0 0 12px"}}>{t.internalNotesHint}</p>
+              <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,lineHeight:1.35}}>{t.internalNotes}</p>
+              <p style={{fontSize:uiSmallSize,color:subTextColor,margin:"0 0 12px",lineHeight:1.45}}>{t.internalNotesHint}</p>
               {internalNotes.length===0 ? (
-                <p style={{fontSize:14,color:subTextColor,marginBottom:12}}>{t.noInternalNotes}</p>
+                <p style={{fontSize:uiBaseSize,color:subTextColor,marginBottom:12,lineHeight:1.45}}>{t.noInternalNotes}</p>
               ) : (
                 <div style={{display:"grid",gap:10,marginBottom:12}}>
                   {internalNotes.map((note)=>(
                     <div key={note.id} style={{padding:"12px 14px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
                       <div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:6}}>
-                        <strong style={{color:textColor,fontSize:14}}>{note.sender_name && note.sender_name !== "Sistema" ? note.sender_name : roleName(note.sender_role)}</strong>
-                        <span style={{fontSize:12,color:subTextColor}}>{fmtTime(note.created_at)} · {new Date(note.created_at).toLocaleDateString(locale)}</span>
+	                        <strong style={{color:textColor,fontSize:uiSmallSize,lineHeight:1.35,overflowWrap:"anywhere"}}>{note.sender_name && note.sender_name !== "Sistema" ? note.sender_name : roleName(note.sender_role)}</strong>
+	                        <span style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.35}}>{fmtTime(note.created_at)} · {new Date(note.created_at).toLocaleDateString(locale)}</span>
                       </div>
-                      <div style={{fontSize:14,color:textColor,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{note.content}</div>
+	                      <div style={{fontSize:uiBaseSize,color:textColor,lineHeight:1.55,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{note.content}</div>
                     </div>
                   ))}
                 </div>
               )}
-              <textarea ref={internalNoteInputRef} value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:14,resize:"vertical",marginBottom:10}} />
-              <button onClick={saveInternalNote} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{width:"100%",padding:12,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:savingInternalNote || !internalNoteDraft.trim()?0.5:1}}>
+              <textarea ref={internalNoteInputRef} value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:16,resize:"vertical",marginBottom:10,lineHeight:1.5}} />
+              <button onClick={saveInternalNote} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{width:"100%",padding:12,minHeight:48,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingInternalNote || !internalNoteDraft.trim()?0.5:1}}>
                 {savingInternalNote ? (lang==="es" ? "Guardando..." : "Saving...") : t.addInternalNote}
               </button>
             </div>
 
             {canOpenAdmin && patient?.id && (
-              <button onClick={()=>window.location.href=`/admin/paciente/${patient.id}`} style={{width:"100%",padding:14,borderRadius:14,border:"none",background:"#0F172A",color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+              <button onClick={()=>window.location.href=`/admin/paciente/${patient.id}`} style={{width:"100%",padding:14,minHeight:48,borderRadius:14,border:"none",background:"#0F172A",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
                 {t.openFullRecord}
               </button>
             )}
@@ -2658,14 +2699,16 @@ export default function InboxPage() {
   return (
     <>
       <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
-        .shell { display: flex; flex-direction: column; height: 100%; min-height: -webkit-fill-available; position: absolute; inset: 0; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
+	        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; max-width: 100%; }
+	        html, body { height: 100%; font-size: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: hidden; }
+	        .shell { --app-ui-font-size: ${uiBaseSize}px; --app-ui-label-size: ${uiLabelSize}px; --app-ui-small-size: ${uiSmallSize}px; display: flex; flex-direction: column; height: 100%; min-height: -webkit-fill-available; position: absolute; inset: 0; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; overflow: hidden; max-width: 100vw; }
+	        .shell p, .shell label, .shell button, .shell input, .shell textarea, .shell select, .shell summary { overflow-wrap: anywhere; }
+	        .shell button, .shell [role="button"], .shell input, .shell textarea, .shell select { min-height: 44px; }
         .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(52px, 1fr) minmax(280px, 760px) minmax(52px, 1fr); align-items: center; padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)); z-index: 100; height: calc(98px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 8px 24px rgba(7,51,77,0.18); }
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.18); box-shadow: 0 1px 0 rgba(0,0,0,0.14); }
         .topbar-logo { grid-column: 2; justify-self: center; align-self: center; height: 96px; width: min(760px, 96vw); object-fit: contain; object-position: center; display: block; }
         .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
-        .admin-inline-btn { padding: 0 12px; height: 38px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: 13px; font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
+	        .admin-inline-btn { padding: 0 12px; min-height: 44px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: var(--app-ui-small-size); font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 16px 16px 12px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
@@ -2685,9 +2728,9 @@ export default function InboxPage() {
         .patient-info { flex: 1; min-width: 0; }
         .patient-main-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
         .patient-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
-        .patient-time { flex-shrink: 0; font-size: 12px; color: ${subTextColor}; font-weight: 750; }
-        .patient-meta { font-size: 13px; color: ${subTextColor}; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
-        .patient-preview { font-size: 13px; color: ${darkMode?"#B6C6D5":"#52677D"}; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
+	        .patient-time { flex-shrink: 0; font-size: var(--app-ui-small-size); color: ${subTextColor}; font-weight: 750; }
+	        .patient-meta { font-size: var(--app-ui-small-size); color: ${subTextColor}; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
+	        .patient-preview { font-size: var(--app-ui-small-size); color: ${darkMode?"#B6C6D5":"#52677D"}; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
         .unread-count { min-width: 24px; height: 24px; padding: 0 8px; background: #25D366; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 850; box-shadow: 0 4px 12px rgba(37,211,102,0.28); }
         .unread-dot { width: 13px; height: 13px; background: #25D366; border-radius: 50%; flex-shrink: 0; }
         .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; transition: transform 0.25s ease; z-index: 20; }
@@ -2696,13 +2739,13 @@ export default function InboxPage() {
         .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${darkMode ? "#0B141A" : "#F7FAFD"}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.040) 1px, transparent 1px)"}; background-size: 18px 18px; }
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 16px 0 12px; }
-        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.92)":"rgba(255,255,255,0.96)"}; border-radius: 10px; padding: 5px 13px; font-size: 14px; color: ${darkMode?"#F8FAFC":"#111827"}; font-weight: 850; box-shadow: 0 1px 4px rgba(15,23,42,0.10); border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; }
+	        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.92)":"rgba(255,255,255,0.96)"}; border-radius: 10px; padding: 6px 13px; font-size: var(--app-ui-small-size); color: ${darkMode?"#F8FAFC":"#111827"}; font-weight: 850; box-shadow: 0 1px 4px rgba(15,23,42,0.10); border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; }
         .chat-head { flex-shrink: 0; background: ${darkMode?"#111B21":"rgba(255,255,255,0.98)"}; padding: 9px max(14px, env(safe-area-inset-right)) 9px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 62px; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.18)"}; box-shadow: ${darkMode?"none":"0 6px 18px rgba(28,66,104,0.08)"}; }
         .back-btn { width: 38px; height: 38px; border-radius: 50%; background: ${darkMode?"#1F2C34":"#EAF3FF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: ${darkMode?"#DBEAFE":"#075EA8"}; font-size: 21px; font-weight: 850; transition: background 0.15s; }
         .back-btn:hover { background: ${darkMode?"#263846":"#DCEEFF"}; }
         .chat-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; box-shadow: 0 4px 14px rgba(16,52,83,0.18); }
         .chat-head-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .chat-head-sub { font-size: 12px; color: ${subTextColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-weight: 650; }
+	        .chat-head-sub { font-size: var(--app-ui-small-size); color: ${subTextColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-weight: 650; }
         .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
@@ -2722,15 +2765,15 @@ export default function InboxPage() {
         .slash-popup { position: fixed; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 45; pointer-events: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: min(42dvh, 260px); overflow-y: auto; padding: 0 0 8px; }
         .slash-item { width: fit-content; max-width: calc(100vw - 20px); border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(0,0,0,0.10)"}; background: ${darkMode?"#253244":"white"}; color: ${textColor}; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 16px; font-weight: 600; box-shadow: 0 8px 24px rgba(15,23,42,0.16); pointer-events: auto; cursor: pointer; font-family: inherit; }
         .slash-item:hover { background: ${darkMode?"#30415A":"#F8FAFC"}; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); overflow: hidden; }
-        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
-        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
+	        .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); overflow: hidden; padding-left: max(0px, env(safe-area-inset-left)); padding-right: max(0px, env(safe-area-inset-right)); }
+	        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: min(560px, 100vw); max-height: 92dvh; overflow-y: auto; overflow-x: hidden; padding: 24px max(18px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
+	        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: min(560px, 100vw); position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 24px max(18px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
         .modal-title { font-size: 20px; font-weight: 700; color: ${textColor}; margin-bottom: 20px; }
         .room-create-modal { max-width: 680px; top: 4vh; background: ${darkMode?"#111B21":"#F8FBFF"}; padding-top: 18px; }
         .room-modal-head { background: linear-gradient(135deg,#07334D 0%,#0E4C75 100%); border-radius: 22px; padding: 18px; color: white; margin-bottom: 14px; box-shadow: 0 16px 34px rgba(7,51,77,0.18); }
-        .room-modal-kicker { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.72); margin-bottom: 8px; }
-        .room-modal-title { font-size: 25px; font-weight: 900; line-height: 1.08; margin-bottom: 8px; }
-        .room-modal-copy { color: rgba(255,255,255,0.84); font-size: 14px; line-height: 1.55; font-weight: 650; }
+	        .room-modal-kicker { font-size: var(--app-ui-label-size); font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.72); margin-bottom: 8px; }
+	        .room-modal-title { font-size: clamp(27px, 7vw, 34px); font-weight: 900; line-height: 1.12; margin-bottom: 8px; overflow-wrap: anywhere; }
+	        .room-modal-copy { color: rgba(255,255,255,0.88); font-size: var(--app-ui-font-size); line-height: 1.55; font-weight: 650; overflow-wrap: anywhere; }
         .room-progress { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 16px; }
         .room-progress-step { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px 10px; border-radius: 14px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.12); color: white; font-size: 12px; font-weight: 850; }
         .room-progress-num { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,0.92); color: #07334D; font-size: 12px; font-weight: 950; flex-shrink: 0; }
@@ -2738,7 +2781,7 @@ export default function InboxPage() {
         .room-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
         .room-section-num { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #EAF5FF; color: #075EA8; font-size: 14px; font-weight: 950; flex-shrink: 0; }
         .room-section-title { color: ${textColor}; font-size: 18px; font-weight: 900; line-height: 1.15; }
-        .room-section-copy { color: ${subTextColor}; font-size: 13px; line-height: 1.45; margin-top: 2px; font-weight: 650; }
+	        .room-section-copy { color: ${subTextColor}; font-size: var(--app-ui-small-size); line-height: 1.5; margin-top: 2px; font-weight: 650; overflow-wrap: anywhere; }
         .room-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .room-phone-grid { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 10px; }
         .room-field { min-width: 0; }
@@ -2747,11 +2790,11 @@ export default function InboxPage() {
         .room-toggle > summary { list-style: none; cursor: pointer; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .room-toggle > summary::-webkit-details-marker { display: none; }
         .room-toggle-title { color: ${textColor}; font-size: 16px; font-weight: 900; margin-bottom: 3px; }
-        .room-toggle-copy { color: ${subTextColor}; font-size: 13px; line-height: 1.45; font-weight: 650; }
+	        .room-toggle-copy { color: ${subTextColor}; font-size: var(--app-ui-small-size); line-height: 1.5; font-weight: 650; overflow-wrap: anywhere; }
         .room-toggle-chevron { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; font-size: 18px; font-weight: 900; flex-shrink: 0; transition: transform 0.16s ease; }
         .room-toggle[open] .room-toggle-chevron { transform: rotate(180deg); }
         .room-toggle-body { padding: 0 18px 18px; }
-        .room-note { background: ${darkMode?"rgba(37,99,235,0.16)":"#EAF5FF"}; border: 1px solid ${darkMode?"rgba(125,211,252,0.16)":"#CFE5FA"}; color: ${darkMode?"#DBEAFE":"#174769"}; border-radius: 16px; padding: 12px 14px; font-size: 13px; font-weight: 750; line-height: 1.45; margin-bottom: 12px; }
+	        .room-note { background: ${darkMode?"rgba(37,99,235,0.16)":"#EAF5FF"}; border: 1px solid ${darkMode?"rgba(125,211,252,0.16)":"#CFE5FA"}; color: ${darkMode?"#DBEAFE":"#174769"}; border-radius: 16px; padding: 12px 14px; font-size: var(--app-ui-small-size); font-weight: 750; line-height: 1.5; margin-bottom: 12px; overflow-wrap: anywhere; }
         .room-action-bar { position: static; background: ${darkMode?"rgba(17,27,33,0.96)":"rgba(248,251,255,0.96)"}; backdrop-filter: blur(12px); margin: 16px calc(-1 * max(20px, env(safe-area-inset-right))) 0 calc(-1 * max(20px, env(safe-area-inset-left))); padding: 12px max(20px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); border-top: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"#DDE9F6"}; }
         .care-team-panel { background: ${darkMode?"#2C2C2E":"#F8FBFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; border-radius: 18px; padding: 14px; }
         .care-team-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -2774,19 +2817,19 @@ export default function InboxPage() {
         .care-team-name { color: ${textColor}; font-size: 14px; font-weight: 900; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .care-team-meta { color: ${subTextColor}; font-size: 12px; font-weight: 700; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .care-team-empty { color: ${subTextColor}; font-size: 13px; font-weight: 700; padding: 8px 2px 0; }
-        .flabel { font-size: 13px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
-        .finput { width: 100%; padding: 13px 16px; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; border-radius: 14px; font-size: 16px; font-family: inherit; color: ${textColor}; outline: none; margin-bottom: 14px; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
+	        .flabel { font-size: var(--app-ui-label-size); font-weight: 800; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 7px; display: block; line-height: 1.35; }
+	        .finput { width: 100%; min-height: 48px; padding: 14px 16px; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; border-radius: 14px; font-size: 16px; font-family: inherit; color: ${textColor}; outline: none; margin-bottom: 14px; line-height: 1.45; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
         .finput::placeholder { color: #AEAEB2; }
         .loc-group { display: flex; gap: 10px; margin-bottom: 14px; }
-        .loc-opt { flex: 1; padding: 13px; border-radius: 14px; cursor: pointer; font-size: 15px; font-weight: 600; color: ${subTextColor}; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; text-align: center; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
+	        .loc-opt { flex: 1; min-height: 48px; padding: 13px; border-radius: 14px; cursor: pointer; font-size: var(--app-ui-font-size); font-weight: 750; color: ${subTextColor}; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; text-align: center; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; display: flex; align-items: center; justify-content: center; line-height: 1.3; }
         .loc-opt.sel { background: #EBF5FF; color: #007AFF; border-color: #007AFF; }
-        .file-box { width: 100%; padding: 16px; border: 2px dashed ${darkMode?"#555":"#C7D8EA"}; border-radius: 14px; cursor: pointer; text-align: center; font-size: 14px; font-weight: 600; color: ${subTextColor}; margin-bottom: 14px; background: ${darkMode?"transparent":"#F8FBFF"}; }
-        .pbtn { width: 100%; padding: 15px; background: #007AFF; border: none; border-radius: 14px; color: white; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 8px; }
+	        .file-box { width: 100%; min-height: 54px; padding: 16px; border: 2px dashed ${darkMode?"#555":"#C7D8EA"}; border-radius: 14px; cursor: pointer; text-align: center; font-size: var(--app-ui-font-size); font-weight: 650; color: ${subTextColor}; margin-bottom: 14px; background: ${darkMode?"transparent":"#F8FBFF"}; overflow-wrap: anywhere; line-height: 1.45; }
+	        .pbtn { width: 100%; min-height: 50px; padding: 15px; background: #007AFF; border: none; border-radius: 14px; color: white; font-size: var(--app-ui-font-size); font-weight: 800; cursor: pointer; font-family: inherit; margin-top: 8px; }
         .pbtn:disabled { opacity: 0.45; }
-        .sbtn { width: 100%; padding: 13px; background: ${darkMode?cardBg:"#F5F8FC"}; border: 1px solid ${darkMode?"transparent":"#D9E4F2"}; border-radius: 14px; color: ${textColor}; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 8px; }
+	        .sbtn { width: 100%; min-height: 48px; padding: 13px; background: ${darkMode?cardBg:"#F5F8FC"}; border: 1px solid ${darkMode?"transparent":"#D9E4F2"}; border-radius: 14px; color: ${textColor}; font-size: var(--app-ui-font-size); font-weight: 750; cursor: pointer; font-family: inherit; margin-top: 8px; }
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 700px) {
+	        @media (max-width: 700px) {
           .topbar { height: calc(112px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
           .topbar-logo { grid-column: 1; justify-self: center; align-self: center; height: 104px; width: min(640px, 92vw); }
           .topbar-actions { right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 56px); }
@@ -2800,13 +2843,14 @@ export default function InboxPage() {
           .phone-btn img { width: 30px; height: 30px; }
           .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
-          .room-create-modal { top: 0; max-height: 100dvh; border-radius: 0; }
-          .room-modal-head { border-radius: 0 0 22px 22px; margin-left: calc(-1 * max(20px, env(safe-area-inset-left))); margin-right: calc(-1 * max(20px, env(safe-area-inset-right))); margin-top: -18px; padding-top: calc(18px + env(safe-area-inset-top)); }
-          .room-modal-title { font-size: 22px; }
-          .room-progress { grid-template-columns: 1fr; }
-          .room-grid-2, .room-phone-grid { grid-template-columns: 1fr; }
-          .room-progress-step { padding: 8px 10px; }
-        }
+	          .modal, .modal-scroll, .settings-sheet, .patient-info-sheet { width: 100%; max-width: 100vw; }
+	          .room-create-modal { top: 0; max-height: 100dvh; border-radius: 0; }
+	          .room-modal-head { border-radius: 0 0 22px 22px; margin-left: calc(-1 * max(20px, env(safe-area-inset-left))); margin-right: calc(-1 * max(20px, env(safe-area-inset-right))); margin-top: -18px; padding-top: calc(18px + env(safe-area-inset-top)); }
+	          .room-modal-title { font-size: clamp(28px, 8.2vw, 34px); }
+	          .room-progress { grid-template-columns: 1fr; }
+	          .room-grid-2, .room-phone-grid { grid-template-columns: 1fr; }
+	          .room-progress-step { padding: 8px 10px; }
+	        }
       `}</style>
 
       <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setPrescriptionInstructions("");setShowMediaMenu(false);}e.target.value="";}}/>
@@ -3343,10 +3387,10 @@ export default function InboxPage() {
         </div>
       )}
       {staffContactMember && (
-        <div className="modal-overlay" onClick={()=>setStaffContactMember(null)}>
+        <div className="modal-overlay" onClick={closeStaffContact}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
             <p className="modal-title">{staffContactMember.full_name || staffContactMember.display_name || (lang==="es" ? "Personal" : "Staff")}</p>
-            <div style={{fontSize:14,color:subTextColor,marginBottom:14}}>
+            <div style={{fontSize:uiBaseSize,color:subTextColor,marginBottom:14,lineHeight:1.45,overflowWrap:"anywhere"}}>
               {roleName(staffContactMember.role)}{staffContactMember.office_location ? ` · ${staffContactMember.office_location}` : ""}
             </div>
             <button
@@ -3356,22 +3400,28 @@ export default function InboxPage() {
             >
               {lang==="es" ? "Llamar" : "Call"}
             </button>
+            <label className="flabel" style={{marginTop:12}}>{lang==="es" ? "Mensaje privado" : "Private message"}</label>
+            <textarea
+              className="finput"
+              rows={3}
+              value={staffPrivateDraft}
+              onChange={(event)=>setStaffPrivateDraft(event.target.value)}
+              placeholder={lang==="es" ? "Escribe un mensaje privado para este miembro del equipo" : "Write a private message to this staff member"}
+              style={{resize:"vertical",minHeight:96}}
+            />
             <button
               className="sbtn"
-              disabled={!staffContactMember.phone && !staffContactMember.email}
-              onClick={()=>{
-                if (staffContactMember.phone) window.location.href = `sms:${staffContactMember.phone}`;
-                else if (staffContactMember.email) window.location.href = `mailto:${staffContactMember.email}`;
-              }}
+              disabled={!staffPrivateDraft.trim() || savingStaffPrivateMessage}
+              onClick={sendStaffPrivateMessage}
             >
-              {lang==="es" ? "Mensaje privado" : "Private message"}
+              {savingStaffPrivateMessage ? (lang==="es" ? "Enviando..." : "Sending...") : (lang==="es" ? "Enviar mensaje privado" : "Send private message")}
             </button>
             {!staffContactMember.phone && !staffContactMember.email && (
-              <div style={{fontSize:13,color:subTextColor,marginTop:10}}>
+              <div style={{fontSize:uiSmallSize,color:subTextColor,marginTop:10,lineHeight:1.45}}>
                 {lang==="es" ? "Este miembro no tiene teléfono o correo registrado." : "This staff member has no phone or email listed."}
               </div>
             )}
-            <button className="sbtn" onClick={()=>setStaffContactMember(null)}>{t.cancel}</button>
+            <button className="sbtn" onClick={closeStaffContact}>{t.cancel}</button>
           </div>
         </div>
       )}
@@ -3394,7 +3444,7 @@ export default function InboxPage() {
         subTextColor={subTextColor}
       />
 
-      <div className="shell" onClick={()=>{closeMessageActions();setShowSlashMenu(false);}}>
+	      <div className="shell" data-text-size={fontSizeLevel} onClick={()=>{closeMessageActions();setShowSlashMenu(false);}}>
         <div className="topbar">
           <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
           <div className="topbar-actions">
