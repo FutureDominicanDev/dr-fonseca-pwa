@@ -10,6 +10,7 @@ type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
 type PhoneCountryOption = { code: string; label: string };
 type MediaTab = "media" | "audio" | "docs";
+type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
 
 const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
 
@@ -68,15 +69,15 @@ const T = {
     cancelCapture: "Cancelar",
     preparingCamera: "Abriendo cámara...",
     noMessages: "Sin mensajes aún", noMessagesHint: "Envía el primero para comenzar",
-    selectPatient: "Selecciona un paciente", selectPatientHint: "para abrir su sala de chat",
-    newRoom: "Crear sala de paciente", patientFirstName: "Paciente *", patientLastName: "Apellido",
+    selectPatient: "Selecciona un paciente", selectPatientHint: "para abrir su chat",
+    newRoom: "Crear chat de paciente", patientFirstName: "Paciente *", patientLastName: "Apellido",
     patientFirstNamePH: "Ej: María González", patientLastNamePH: "Ej: González", phone: "Teléfono (WhatsApp)",
     phoneCode: "Clave internacional", phonePH: "123-456-7890", birthdate: "Fecha de Nacimiento",
     birthdatePH: "dd/mm/aaaa",
     email: "Correo Electrónico",
     emailPH: "paciente@correo.com",
     procedure: "Procedimiento *", procedurePH: "Ej: Rinoplastia, Lipo 360...",
-    surgeryDate: "Fecha de Cirugía", location: "Sede *",
+    surgeryDate: "Fecha de Cirugía", location: "Consultorio *",
     surgeryDatePH: "dd/mm/aaaa",
     preferredLanguage: "Idioma Preferido",
     timezone: "Zona horaria del paciente",
@@ -85,13 +86,18 @@ const T = {
     medications: "Medicamentos Actuales",
     medicationsPH: "Ej: Ibuprofeno, metformina, vitaminas...",
     careTeam: "Equipo Asignado",
-    careTeamHint: "Elige quién verá esta sala dentro del portal/app. No se envían SMS ni enlaces al equipo.",
-    careTeamFocused: "Sede elegida",
+    careTeamHint: "Elige qué personas verán este chat. No se manda enlace al equipo; solo aparecerá en su portal.",
+    careTeamFocused: "Consultorio elegido",
     careTeamShowAll: "Todos",
-    careTeamShowOffice: "Sede",
+    careTeamShowOffice: "Consultorio",
     careTeamSelectAll: "Todos",
     careTeamClear: "Solo yo",
     careTeamSelected: "Seleccionados",
+    careTeamFilterGdl: "Guadalajara",
+    careTeamFilterTjn: "Tijuana",
+    careTeamFilterSelected: "Elegidos",
+    careTeamDoctorsGdl: "Doctores GDL",
+    careTeamDoctorsTjn: "Doctores TJN",
     careTeamRoleDoctor: "Doctores",
     careTeamRoleEnfermeria: "Enfermería",
     careTeamRoleCoordinacion: "Coordinación",
@@ -126,7 +132,7 @@ const T = {
     internalNotePH: "Escribe una nota clínica o administrativa para el equipo...",
     noInternalNotes: "Todavía no hay notas internas para este caso.",
     noteSaved: "Nota interna guardada.",
-    noTeamSelected: "Si no eliges a nadie, se asignará solo la persona que crea la sala.",
+    noTeamSelected: "Si no seleccionas a nadie, se asignará solo la persona que crea el chat.",
     noPatientInfo: "Todavía no hay datos extendidos para este paciente.",
     openFullRecord: "Abrir expediente",
     teamEmpty: "No hay personal asignado todavía.",
@@ -135,7 +141,7 @@ const T = {
     profilePic: "Foto de Perfil", beforePhotos: "Fotos Pre-Op",
     tapProfilePic: "Toca para subir foto de perfil",
     tapBeforePhotos: "Toca para subir fotos pre-op",
-    createRoom: "Crear sala del paciente", creating: "Creando sala...",
+    createRoom: "Crear chat del paciente", creating: "Creando chat...",
     cancel: "Cancelar", roomCreated: "¡Sala Creada!", shareLink: "Comparte este enlace con el paciente:",
     copyLink: "📋 Copiar Enlace", copied: "✅ ¡Copiado!", whatsapp: "💬 Enviar por WhatsApp",
     done: "Listo", required: "Nombre del paciente y procedimiento son obligatorios.",
@@ -186,7 +192,7 @@ const T = {
     cancelCapture: "Cancel",
     preparingCamera: "Opening camera...",
     noMessages: "No messages yet", noMessagesHint: "Send the first one to get started",
-    selectPatient: "Select a patient", selectPatientHint: "to open their chat room",
+    selectPatient: "Select a patient", selectPatientHint: "to open their chat",
     newRoom: "Create patient room", patientFirstName: "Patient *", patientLastName: "Last name",
     patientFirstNamePH: "e.g. Maria Gonzalez", patientLastNamePH: "e.g. Gonzalez", phone: "Phone (WhatsApp)",
     phoneCode: "Country Code", phonePH: "123-456-7890", birthdate: "Date of Birth",
@@ -210,6 +216,11 @@ const T = {
     careTeamSelectAll: "All",
     careTeamClear: "Only me",
     careTeamSelected: "Selected",
+    careTeamFilterGdl: "Guadalajara",
+    careTeamFilterTjn: "Tijuana",
+    careTeamFilterSelected: "Selected",
+    careTeamDoctorsGdl: "GDL doctors",
+    careTeamDoctorsTjn: "TJN doctors",
     careTeamRoleDoctor: "Doctors",
     careTeamRoleEnfermeria: "Nursing",
     careTeamRoleCoordinacion: "Coordination",
@@ -321,6 +332,7 @@ interface RoomMessageSummary {
 interface CareTeamMember {
   id: string;
   full_name?: string | null;
+  display_name?: string | null;
   role?: string | null;
   office_location?: string | null;
   avatar_url?: string | null;
@@ -435,7 +447,7 @@ export default function InboxPage() {
   const [beforePhotosFiles, setBeforePhotosFiles] = useState<File[]>([]);
   const [staffDirectory, setStaffDirectory] = useState<CareTeamMember[]>([]);
   const [selectedCareTeamIds, setSelectedCareTeamIds] = useState<string[]>([]);
-  const [showAllCareTeamOptions, setShowAllCareTeamOptions] = useState(false);
+  const [careTeamFilter, setCareTeamFilter] = useState<CareTeamFilter>("all");
   const [showPatientInfo, setShowPatientInfo] = useState(false);
   const [selectedRoomTeam, setSelectedRoomTeam] = useState<CareTeamMember[]>([]);
   const [managedTeamIds, setManagedTeamIds] = useState<string[]>([]);
@@ -619,15 +631,57 @@ export default function InboxPage() {
   const toggleCareTeamMember = (id: string) => {
     setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   };
+  const careTeamRoleRank = (role?: string | null) => {
+    if (role === "doctor") return 0;
+    if (role === "enfermeria") return 1;
+    if (role === "post_quirofano") return 2;
+    if (role === "coordinacion") return 3;
+    return 4;
+  };
+  const sortCareTeamMembers = (members: CareTeamMember[]) =>
+    [...members].sort((a, b) => {
+      const roleDiff = careTeamRoleRank(a.role) - careTeamRoleRank(b.role);
+      if (roleDiff !== 0) return roleDiff;
+      return (a.full_name || "").localeCompare(b.full_name || "", lang === "es" ? "es" : "en");
+    });
+  const addCareTeamMembers = (members: CareTeamMember[]) => {
+    const ids = [currentUserId, ...members.map((member) => member.id)].filter(Boolean) as string[];
+    setSelectedCareTeamIds((current) => Array.from(new Set([...current, ...ids])));
+  };
   const canOpenAdmin = isOwnerEmail(currentUserEmail);
   const canManageCareTeam = (userProfile?.role || "").toLowerCase() === "doctor" || ["owner","super_admin"].includes(userProfile?.admin_level || "");
   const canCreatePatientRooms =
     isOwnerEmail(currentUserEmail) ||
     ["owner", "super_admin", "admin"].includes((userProfile?.admin_level || "").toLowerCase());
-  const careTeamDirectory = showAllCareTeamOptions
-    ? staffDirectory
-    : staffDirectory.filter((member) => !member.office_location || member.office_location === newLocation);
+  const careTeamDirectory = sortCareTeamMembers(
+    careTeamFilter === "guadalajara"
+      ? staffDirectory.filter((member) => member.office_location === "Guadalajara" || !member.office_location)
+      : careTeamFilter === "tijuana"
+        ? staffDirectory.filter((member) => member.office_location === "Tijuana" || !member.office_location)
+        : careTeamFilter === "selected"
+          ? staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id))
+          : staffDirectory
+  );
   const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id));
+  const careTeamOfficeGroups = [
+    {
+      key: "guadalajara",
+      label: "Guadalajara",
+      members: careTeamDirectory.filter((member) => member.office_location === "Guadalajara"),
+    },
+    {
+      key: "tijuana",
+      label: "Tijuana",
+      members: careTeamDirectory.filter((member) => member.office_location === "Tijuana"),
+    },
+    {
+      key: "both",
+      label: lang === "es" ? "Ambos consultorios" : "Both offices",
+      members: careTeamDirectory.filter((member) => !member.office_location),
+    },
+  ].filter((group) => group.members.length > 0);
+  const guadalajaraDoctors = staffDirectory.filter((member) => member.role === "doctor" && member.office_location === "Guadalajara");
+  const tijuanaDoctors = staffDirectory.filter((member) => member.role === "doctor" && member.office_location === "Tijuana");
   const careTeamRoleLabel = (role: string) => {
     if (role === "doctor") return t.careTeamRoleDoctor;
     if (role === "enfermeria") return t.careTeamRoleEnfermeria;
@@ -1022,15 +1076,34 @@ export default function InboxPage() {
   };
 
   const fetchAssignableStaff = async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, role, office_location, avatar_url")
-      .order("full_name", { ascending: true });
+    let list: CareTeamMember[] = [];
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
 
-    const list = (data || []) as CareTeamMember[];
+    if (token) {
+      try {
+        const response = await fetch("/api/staff/directory", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && Array.isArray(payload?.staff)) list = payload.staff as CareTeamMember[];
+      } catch {
+        // Fall back to the client-visible profile rows below.
+      }
+    }
+
+    if (list.length === 0) {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, display_name, role, office_location, avatar_url")
+        .order("full_name", { ascending: true });
+      list = (data || []) as CareTeamMember[];
+    }
+
     const fallback = userProfile?.id ? [{
       id: userProfile.id,
       full_name: userProfile.full_name || userProfile.display_name || "Staff",
+      display_name: userProfile.display_name || null,
       role: userProfile.role || "staff",
       office_location: userProfile.office_location || null,
       avatar_url: userProfile.avatar_url || null,
@@ -1039,7 +1112,7 @@ export default function InboxPage() {
     fallback.forEach((entry) => {
       if (!merged.some((member) => member.id === entry.id)) merged.unshift(entry);
     });
-    setStaffDirectory(merged);
+    setStaffDirectory(sortCareTeamMembers(merged));
   };
 
   const fetchSelectedRoomTeam = async (roomId: string) => {
@@ -2486,8 +2559,14 @@ export default function InboxPage() {
         .care-team-count { font-size: 12px; font-weight: 850; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.6px; }
         .care-team-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .care-team-chip { padding: 8px 12px; border-radius: 999px; border: none; background: #E8F0FE; color: #2563EB; font-size: 12px; font-weight: 850; cursor: pointer; font-family: inherit; }
+        .care-team-chip.active { background: #2563EB; color: #FFFFFF; }
         .care-team-chip.secondary { background: #EEF2F7; color: #475569; }
-        .care-team-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 10px; }
+        .care-team-chip:disabled { opacity: 0.42; cursor: not-allowed; }
+        .care-team-quick-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+        .care-team-groups { display: grid; gap: 10px; }
+        .care-team-group { border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#E6EEF7"}; background: ${darkMode?"#17212B":"#FFFFFF"}; border-radius: 16px; padding: 10px; }
+        .care-team-group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: ${subTextColor}; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+        .care-team-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
         .care-team-option { display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 10px 12px; border-radius: 14px; background: ${darkMode?"#111827":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#E6EEF7"}; cursor: pointer; }
         .care-team-option.selected { background: #EBF5FF; border-color: #93C5FD; }
         .care-team-option.selected .care-team-name { color: #0F172A; }
@@ -2619,8 +2698,8 @@ export default function InboxPage() {
               <p className="room-modal-title">{t.newRoom}</p>
               <p className="room-modal-copy">
                 {lang==="es"
-                  ? "Crea la sala con lo esencial. El equipo puede completar datos clínicos después desde el expediente."
-                  : "Create the room with only the essentials. The team can complete clinical details later from the record."}
+                  ? "Crea el chat con lo esencial. El equipo puede completar datos clínicos después desde el expediente."
+                  : "Create the chat with only the essentials. The team can complete clinical details later from the record."}
               </p>
               <div className="room-progress" aria-hidden="true">
                 <div className="room-progress-step"><span className="room-progress-num">1</span>{lang==="es" ? "Paciente" : "Patient"}</div>
@@ -2636,7 +2715,7 @@ export default function InboxPage() {
                 <div>
                   <p className="room-section-title">{lang==="es" ? "Datos para abrir la sala" : "Room essentials"}</p>
                   <p className="room-section-copy">
-                    {lang==="es" ? "Solo nombre del paciente, procedimiento y sede son necesarios." : "Only patient name, procedure, and office are needed."}
+                    {lang==="es" ? "Solo nombre del paciente, procedimiento y consultorio son necesarios." : "Only patient name, procedure, and office are needed."}
                   </p>
                 </div>
               </div>
@@ -2755,21 +2834,42 @@ export default function InboxPage() {
                 <div className="care-team-panel">
                   <div className="care-team-toolbar">
                     <p className="care-team-count">
-                      {showAllCareTeamOptions ? t.careTeamShowAll : t.careTeamFocused} · {t.careTeamSelected}: {careTeamSelectedMembers.length}
+                      {t.careTeamSelected}: {careTeamSelectedMembers.length} · {staffDirectory.length} {lang==="es" ? "en el equipo" : "on team"}
                     </p>
                     <div className="care-team-actions">
-                      <button type="button" className="care-team-chip" onClick={()=>setShowAllCareTeamOptions((prev)=>!prev)}>
-                        {showAllCareTeamOptions ? t.careTeamShowOffice : t.careTeamShowAll}
+                      {([
+                        { key: "all", label: t.careTeamShowAll },
+                        { key: "guadalajara", label: t.careTeamFilterGdl },
+                        { key: "tijuana", label: t.careTeamFilterTjn },
+                        { key: "selected", label: t.careTeamFilterSelected },
+                      ] as { key: CareTeamFilter; label: string }[]).map((filter) => (
+                        <button
+                          key={filter.key}
+                          type="button"
+                          className={`care-team-chip${careTeamFilter === filter.key ? " active" : ""}`}
+                          onClick={() => setCareTeamFilter(filter.key)}
+                        >
+                          {filter.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="care-team-quick-row">
+                      <button
+                        type="button"
+                        className="care-team-chip"
+                        onClick={() => addCareTeamMembers(guadalajaraDoctors)}
+                        disabled={guadalajaraDoctors.length === 0}
+                      >
+                        {t.careTeamDoctorsGdl}
                       </button>
                       <button
                         type="button"
                         className="care-team-chip"
-                        onClick={() => {
-                          const ids = [currentUserId, ...careTeamDirectory.map((member)=>member.id)].filter(Boolean) as string[];
-                          setSelectedCareTeamIds(Array.from(new Set(ids)));
-                        }}
+                        onClick={() => addCareTeamMembers(tijuanaDoctors)}
+                        disabled={tijuanaDoctors.length === 0}
                       >
-                        {t.careTeamSelectAll}
+                        {t.careTeamDoctorsTjn}
                       </button>
                       <button
                         type="button"
@@ -2778,24 +2878,33 @@ export default function InboxPage() {
                       >
                         {t.careTeamClear}
                       </button>
-                    </div>
                   </div>
-                  <div className="care-team-list">
-                    {careTeamDirectory.map((member)=>(
-                      <label key={member.id} className={`care-team-option${selectedCareTeamIds.includes(member.id) ? " selected" : ""}`}>
-                        <input type="checkbox" checked={selectedCareTeamIds.includes(member.id)} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB",flexShrink:0}} />
-                        <div className="care-team-avatar">
-                          {member.avatar_url ? <img src={member.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(member.full_name || "S")}
+                  <div className="care-team-groups">
+                    {careTeamOfficeGroups.map((group) => (
+                      <div className="care-team-group" key={group.key}>
+                        <div className="care-team-group-head">
+                          <span>{group.label}</span>
+                          <span>{group.members.length}</span>
                         </div>
-                        <div style={{minWidth:0,flex:1}}>
-                          <div className="care-team-name">{member.full_name || (lang==="es"?"Personal":"Staff")}</div>
-                          <div className="care-team-meta">{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
+                        <div className="care-team-list">
+                          {group.members.map((member)=>(
+                            <label key={member.id} className={`care-team-option${selectedCareTeamIds.includes(member.id) ? " selected" : ""}`}>
+                              <input type="checkbox" checked={selectedCareTeamIds.includes(member.id)} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB",flexShrink:0}} />
+                              <div className="care-team-avatar">
+                                {member.avatar_url ? <img src={member.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(member.full_name || member.display_name || "S")}
+                              </div>
+                              <div style={{minWidth:0,flex:1}}>
+                                <div className="care-team-name">{member.full_name || member.display_name || (lang==="es"?"Personal":"Staff")}</div>
+                                <div className="care-team-meta">{roleName(member.role)}</div>
+                              </div>
+                            </label>
+                          ))}
                         </div>
-                      </label>
+                      </div>
                     ))}
                   </div>
-                  {careTeamDirectory.length === 0 && (
-                    <div className="care-team-empty">{lang==="es" ? "No hay personal visible para la sede elegida." : "No visible staff for the selected office."}</div>
+                  {careTeamOfficeGroups.length === 0 && (
+                    <div className="care-team-empty">{lang==="es" ? "No hay personal visible con este filtro." : "No staff visible with this filter."}</div>
                   )}
                 </div>
                 <p style={{fontSize:12,color:subTextColor,marginTop:10,marginBottom:0,lineHeight:1.45,fontWeight:650}}>
