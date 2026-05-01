@@ -32,10 +32,15 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await adminClient
       .from("profiles")
-      .select("id, full_name, display_name, role, office_location, avatar_url, phone, email")
+      .select("id, full_name, display_name, role, office_location, avatar_url, phone")
       .order("full_name", { ascending: true });
 
     if (error) return NextResponse.json({ error: error.message || "Could not load staff." }, { status: 500 });
+
+    const { data: authUsersData } = await adminClient.auth.admin.listUsers();
+    const emailById = new Map(
+      (authUsersData?.users || []).map((user) => [user.id, user.email || null]),
+    );
 
     return NextResponse.json({
       staff: (data || []).map((member) => ({
@@ -45,7 +50,7 @@ export async function GET(request: NextRequest) {
         office_location: member.office_location || null,
         avatar_url: member.avatar_url || null,
         phone: member.phone || null,
-        email: member.email || null,
+        email: emailById.get(member.id) || null,
       })),
     });
   } catch {

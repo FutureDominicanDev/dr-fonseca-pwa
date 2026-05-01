@@ -631,7 +631,16 @@ export default function InboxPage() {
     return (
       staffDirectory.find((member) => member.id === message.sender_id) ||
       selectedRoomTeam.find((member) => member.id === message.sender_id) ||
-      null
+      {
+        id: message.sender_id,
+        full_name: message.sender_name || roleName(message.sender_role),
+        display_name: message.sender_name || roleName(message.sender_role),
+        role: message.sender_role || "staff",
+        office_location: message.sender_office || null,
+        avatar_url: null,
+        phone: null,
+        email: null,
+      }
     );
   };
   const openStaffContact = (member: CareTeamMember | null) => {
@@ -2280,7 +2289,7 @@ export default function InboxPage() {
     const sc=senderColor(msg.sender_type||"staff",msg.sender_role||"staff");
     const sn = displaySenderName(msg, isOut);
     const staffContact =
-      msg.sender_type === "staff" && msg.sender_id !== currentUserId
+      msg.sender_type === "staff" && msg.sender_id && msg.sender_id !== currentUserId
         ? findStaffMemberForMessage(msg)
         : null;
     const videoCallRoomName = parseVideoCallMessage(msg.content);
@@ -2332,15 +2341,26 @@ export default function InboxPage() {
         key={msg.id}
         onClick={(event)=>{
           event.stopPropagation();
+          if (staffContact) {
+            openStaffContact(staffContact);
+            return;
+          }
           if (canDeleteOwnStaffMessage) setActiveMessageAction(msg);
         }}
-        onMouseDown={()=>startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
+        onMouseDown={()=> staffContact ? startStaffContactPress(staffContact) : startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
         onMouseUp={cancelStaffMessagePress}
         onMouseLeave={cancelStaffMessagePress}
-        onTouchStart={()=>startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
+        onTouchStart={()=> staffContact ? startStaffContactPress(staffContact) : startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
         onTouchEnd={cancelStaffMessagePress}
-        onContextMenu={(event)=>{ if (canDeleteOwnStaffMessage) { event.preventDefault(); setPressedMsgId(msg.id); setActiveMessageAction(msg); } }}
-        style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:5,position:"relative"}}
+        onContextMenu={(event)=>{
+          if (staffContact) {
+            event.preventDefault();
+            openStaffContact(staffContact);
+            return;
+          }
+          if (canDeleteOwnStaffMessage) { event.preventDefault(); setPressedMsgId(msg.id); setActiveMessageAction(msg); }
+        }}
+        style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:5,position:"relative",cursor:staffContact?"pointer":"default"}}
       >
         {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
