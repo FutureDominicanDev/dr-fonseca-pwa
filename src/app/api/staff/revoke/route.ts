@@ -67,9 +67,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing SUPABASE_SERVICE_ROLE_KEY." }, { status: 503 });
     }
 
+    const authHeader = request.headers.get("authorization") || "";
+    const accessToken = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
+    if (!accessToken) {
+      return NextResponse.json({ error: "Missing admin session." }, { status: 401 });
+    }
+
+    const requesterRes = await supabase.auth.getUser(accessToken);
+    const requester = requesterRes.data?.user;
+    if (requesterRes.error || !requester) {
+      return NextResponse.json({ error: "Invalid admin session." }, { status: 401 });
+    }
+
+    const requesterEmail = requester.email?.trim().toLowerCase() || "";
+    const { data: requesterProfile } = await supabase.from("profiles").select("admin_level").eq("id", requester.id).maybeSingle();
+    const requesterAdminLevel = `${(requesterProfile as any)?.admin_level || ""}`.toLowerCase();
+    const requesterIsOwner = isOwnerEmail(requesterEmail) || requesterAdminLevel === "owner";
+    const requesterCanRevoke = requesterIsOwner || requesterAdminLevel === "super_admin";
+    if (!requesterCanRevoke) {
+      return NextResponse.json({ error: "Only super admin can delete staff users." }, { status: 403 });
+    }
+
     const body = await request.json().catch(() => ({}));
     const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
     if (!userId) return NextResponse.json({ error: "Missing userId." }, { status: 400 });
+    if (userId === requester.id) {
+      return NextResponse.json({ error: "You cannot delete your own account while signed in." }, { status: 403 });
+    }
 
     const authUserRes = await supabase.auth.admin.getUserById(userId);
     if (authUserRes.error && !isUserNotFoundError(authUserRes.error)) {
@@ -82,6 +106,14 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: profileRow } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    const targetAdminLevel = `${(profileRow as any)?.admin_level || ""}`.toLowerCase();
+    if (targetAdminLevel === "owner") {
+      return NextResponse.json({ error: "Owner account is protected and cannot be revoked." }, { status: 403 });
+    }
+    if (targetAdminLevel === "super_admin" && !requesterIsOwner) {
+      return NextResponse.json({ error: "Only an owner can delete a super admin user." }, { status: 403 });
+    }
+
     const targetRole = typeof (profileRow as any)?.role === "string" ? (profileRow as any).role : "staff";
     const neutralRoleLabel = roleLabelEs(targetRole);
     const targetPhoneFromProfile = normalizePhone((profileRow as any)?.phone || "");
@@ -140,6 +172,14 @@ export async function POST(request: NextRequest) {
     const { error: clearRoomMembersError } = await supabase.from("room_members").delete().eq("user_id", userId);
     if (clearRoomMembersError && !isMissingSchemaError(clearRoomMembersError)) {
       cleanupErrors.push(`room_members: ${clearRoomMembersError.message || "delete failed"}`);
+    }
+
+    const { error: clearPrivateMessagesError } = await supabase
+      .from("staff_private_messages")
+      .delete()
+      .or(`sender_id.eq.${userId},recipient_id.eq.${userId}`);
+    if (clearPrivateMessagesError && !isMissingSchemaError(clearPrivateMessagesError)) {
+      cleanupErrors.push(`staff_private_messages: ${clearPrivateMessagesError.message || "delete failed"}`);
     }
 
     const { error: clearRoomsCreatorError } = await supabase

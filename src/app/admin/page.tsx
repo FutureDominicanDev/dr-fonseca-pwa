@@ -83,6 +83,7 @@ export default function AdminPage() {
   const [savingPhones, setSavingPhones] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [staffNameDrafts, setStaffNameDrafts] = useState<Record<string, string>>({});
+  const [deletingStaffId, setDeletingStaffId] = useState("");
   const [unblockBusyKey, setUnblockBusyKey] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -374,6 +375,61 @@ export default function AdminPage() {
       metadata: payload,
     });
     updateSuccess(success);
+  };
+
+  const deleteStaffMember = async (member: StaffProfile) => {
+    const memberName = member.full_name || member.display_name || member.email || (isSpanish ? "este usuario" : "this user");
+    const confirmed = window.confirm(
+      isSpanish
+        ? `Eliminar a ${memberName} quitará su acceso al portal, lo sacará de los expedientes asignados y bloqueará su correo/teléfono para que no pueda volver a registrarse con la invitación actual. ¿Continuar?`
+        : `Deleting ${memberName} will remove portal access, detach them from assigned records, and block their email/phone from registering again with the current invite. Continue?`,
+    );
+    if (!confirmed) return;
+
+    setDeletingStaffId(member.id);
+    setPageError("");
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token || "";
+    const response = await fetch("/api/staff/revoke", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ userId: member.id }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setDeletingStaffId("");
+
+    if (!response.ok) {
+      setPageError(payload?.error || (isSpanish ? "No pude eliminar este usuario." : "I could not delete this user."));
+      return;
+    }
+
+    setStaff((previous) => previous.filter((item) => item.id !== member.id));
+    if (payload?.removedEmail) {
+      setBlockedEmails((previous) => [...new Set([...previous, `${payload.removedEmail}`.toLowerCase()])].sort());
+    }
+    if (payload?.removedPhone) {
+      setBlockedPhones((previous) => [...new Set([...previous, `${payload.removedPhone}`])].sort());
+    }
+    if (payload?.newInviteCode) {
+      setInviteCode(`${payload.newInviteCode}`);
+      setNewInviteCode("");
+    }
+
+    await logAdminEvent({
+      action: "staff_user_deleted",
+      entityType: "staff_profile",
+      entityId: member.id,
+      entityName: memberName,
+      actorId: viewerId,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: isSpanish ? `Se eliminó el acceso de ${memberName}.` : `Deleted access for ${memberName}.`,
+      metadata: { removedEmail: payload?.removedEmail || member.email || null, removedPhone: payload?.removedPhone || member.phone || null },
+    }).catch(() => undefined);
+    updateSuccess(isSpanish ? `${memberName} eliminado del portal.` : `${memberName} deleted from the portal.`);
   };
 
   const saveInviteCode = async () => {
@@ -1339,10 +1395,13 @@ export default function AdminPage() {
                     const contactLine = [member.phone, memberEmail].filter(Boolean).join(" · ");
                     const level = normalizeAdminLevel(member.admin_level, memberEmail);
                     const canEditThisMember = canManageAdmins && !(level === "owner" && !canManageOwner);
+                    const isSelf = member.id === viewerId;
+                    const canDeleteThisMember = canManageAdmins && !isSelf && level !== "owner";
                     const accessKey = `${member.id}-admin_level`;
                     const nameKey = `${member.id}-full_name-display_name`;
                     const nameDraft = staffNameDrafts[member.id] ?? (member.full_name || member.display_name || "");
                     const cleanNameDraft = nameDraft.trim();
+                    const deleteBusy = deletingStaffId === member.id;
 
                     return (
                       <div key={member.id} className="staff-row compact">
@@ -1412,6 +1471,34 @@ export default function AdminPage() {
                                   {level === "owner" && (
                                     <span className="meta-badge" style={{ color: adminColor("owner"), background: `${adminColor("owner")}18` }}>
                                       {isSpanish ? "Protegido" : "Protected"}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="setting-group">
+                                <p className="group-label">{isSpanish ? "Eliminar usuario" : "Delete user"}</p>
+                                <div className="mini-actions">
+                                  <button
+                                    className="danger-inline-btn"
+                                    disabled={!canDeleteThisMember || deleteBusy}
+                                    onClick={() => deleteStaffMember(member)}
+                                    title={
+                                      isSelf
+                                        ? (isSpanish ? "No puedes eliminar tu propia cuenta desde esta sesión." : "You cannot delete your own account from this session.")
+                                        : level === "owner"
+                                          ? (isSpanish ? "La cuenta propietaria está protegida." : "The owner account is protected.")
+                                          : ""
+                                    }
+                                  >
+                                    {deleteBusy ? (isSpanish ? "Eliminando..." : "Deleting...") : (isSpanish ? "Eliminar usuario" : "Delete user")}
+                                  </button>
+                                  {!canDeleteThisMember && (
+                                    <span className="meta-badge" style={{ color: "#64748B", background: "#F1F5F9" }}>
+                                      {isSelf
+                                        ? (isSpanish ? "Cuenta actual" : "Current account")
+                                        : level === "owner"
+                                          ? (isSpanish ? "Protegido" : "Protected")
+                                          : (isSpanish ? "Solo super admin" : "Super admin only")}
                                     </span>
                                   )}
                                 </div>
