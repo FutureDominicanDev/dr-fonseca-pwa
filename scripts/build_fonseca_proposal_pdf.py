@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from textwrap import shorten
 
 from PIL import Image
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import (
     Image as RLImage,
-    KeepTogether,
     PageBreak,
     Paragraph,
     SimpleDocTemplate,
@@ -24,8 +23,7 @@ from reportlab.platypus import (
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "proposals" / "Dr_Fonseca_Portal_Proposal_and_User_Guide_Ramon_Diaz_DIT.pdf"
 ASSETS = ROOT / "docs" / "training" / "phone-screens"
-LOGO = ROOT / "public" / "fonseca_white.png"
-BLUE_LOGO = ROOT / "public" / "fonseca_blue.png"
+LOGO = ROOT / "public" / "fonseca_blue.png"
 
 PAGE_W, PAGE_H = letter
 NAVY = colors.HexColor("#12344D")
@@ -39,98 +37,12 @@ GOLD = colors.HexColor("#B7791F")
 
 
 styles = getSampleStyleSheet()
-styles.add(
-    ParagraphStyle(
-        name="CoverTitle",
-        parent=styles["Title"],
-        fontName="Helvetica-Bold",
-        fontSize=30,
-        leading=34,
-        textColor=colors.white,
-        alignment=TA_CENTER,
-        spaceAfter=16,
-    )
-)
-styles.add(
-    ParagraphStyle(
-        name="CoverSub",
-        parent=styles["BodyText"],
-        fontName="Helvetica",
-        fontSize=13,
-        leading=19,
-        textColor=colors.HexColor("#D9ECFF"),
-        alignment=TA_CENTER,
-        spaceAfter=12,
-    )
-)
-styles.add(
-    ParagraphStyle(
-        name="H1",
-        parent=styles["Heading1"],
-        fontName="Helvetica-Bold",
-        fontSize=22,
-        leading=26,
-        textColor=NAVY,
-        spaceBefore=8,
-        spaceAfter=10,
-    )
-)
-styles.add(
-    ParagraphStyle(
-        name="H2",
-        parent=styles["Heading2"],
-        fontName="Helvetica-Bold",
-        fontSize=15,
-        leading=19,
-        textColor=INK,
-        spaceBefore=8,
-        spaceAfter=6,
-    )
-)
-styles.add(
-    ParagraphStyle(
-        name="Body",
-        parent=styles["BodyText"],
-        fontName="Helvetica",
-        fontSize=10.5,
-        leading=15.5,
-        textColor=INK,
-        spaceAfter=7,
-    )
-)
-styles.add(
-    ParagraphStyle(
-        name="Small",
-        parent=styles["BodyText"],
-        fontName="Helvetica",
-        fontSize=8.5,
-        leading=12,
-        textColor=MUTED,
-        spaceAfter=4,
-    )
-)
-styles.add(
-    ParagraphStyle(
-        name="Callout",
-        parent=styles["BodyText"],
-        fontName="Helvetica-Bold",
-        fontSize=11,
-        leading=16,
-        textColor=NAVY,
-        spaceAfter=6,
-    )
-)
-styles.add(
-    ParagraphStyle(
-        name="Caption",
-        parent=styles["BodyText"],
-        fontName="Helvetica",
-        fontSize=9,
-        leading=12,
-        textColor=MUTED,
-        alignment=TA_CENTER,
-    )
-)
+styles.add(ParagraphStyle(name="H1", parent=styles["Heading1"], fontName="Helvetica-Bold", fontSize=22, leading=26, textColor=NAVY, spaceBefore=8, spaceAfter=10))
+styles.add(ParagraphStyle(name="H2", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=15, leading=19, textColor=INK, spaceBefore=8, spaceAfter=6))
+styles.add(ParagraphStyle(name="Body", parent=styles["BodyText"], fontName="Helvetica", fontSize=10.5, leading=15.5, textColor=INK, spaceAfter=7))
+styles.add(ParagraphStyle(name="Small", parent=styles["BodyText"], fontName="Helvetica", fontSize=8.5, leading=12, textColor=MUTED, spaceAfter=4))
+styles.add(ParagraphStyle(name="Callout", parent=styles["BodyText"], fontName="Helvetica-Bold", fontSize=11, leading=16, textColor=NAVY, spaceAfter=6))
+styles.add(ParagraphStyle(name="Caption", parent=styles["BodyText"], fontName="Helvetica", fontSize=9, leading=12, textColor=MUTED, alignment=TA_CENTER))
 
 
 def p(text: str, style: str = "Body") -> Paragraph:
@@ -147,41 +59,108 @@ def page_header_footer(canvas, doc):
     canvas.rect(0, PAGE_H - 0.45 * inch, PAGE_W, 0.45 * inch, fill=1, stroke=0)
     canvas.setFillColor(colors.white)
     canvas.setFont("Helvetica-Bold", 8.5)
-    canvas.drawString(0.55 * inch, PAGE_H - 0.29 * inch, "Dr. Fonseca Medical Portal")
+    canvas.drawString(0.55 * inch, PAGE_H - 0.29 * inch, "Portal Médico Dr. Fonseca")
     canvas.setFont("Helvetica", 8)
-    canvas.drawRightString(PAGE_W - 0.55 * inch, PAGE_H - 0.29 * inch, "Proposal & User Guide")
+    canvas.drawRightString(PAGE_W - 0.55 * inch, PAGE_H - 0.29 * inch, "Propuesta y guía de uso")
     canvas.setFillColor(MUTED)
     canvas.setFont("Helvetica", 8)
-    canvas.drawString(0.55 * inch, 0.35 * inch, "Prepared by Ramon Diaz, DIT")
-    canvas.drawRightString(PAGE_W - 0.55 * inch, 0.35 * inch, f"Page {doc.page}")
+    canvas.drawString(0.55 * inch, 0.35 * inch, "Preparado por Ramon Diaz, DIT")
+    canvas.drawRightString(PAGE_W - 0.55 * inch, 0.35 * inch, f"Página {doc.page}")
+    canvas.restoreState()
+
+
+def draw_centered_wrapped(canvas, text: str, y: float, font: str, size: int, color, max_width: float, leading: float):
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if stringWidth(candidate, font, size) <= max_width:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    canvas.setFont(font, size)
+    canvas.setFillColor(color)
+    for i, line in enumerate(lines):
+        canvas.drawCentredString(PAGE_W / 2, y - i * leading, line)
+    return y - len(lines) * leading
+
+
+def draw_phone_mockup(canvas, x: float, y: float, width: float, screenshot: Path):
+    img = Image.open(screenshot)
+    ratio = img.height / img.width
+    screen_w = width * 0.83
+    screen_h = screen_w * ratio
+    phone_w = width
+    phone_h = screen_h + 0.44 * inch
+    radius = 25
+
+    canvas.saveState()
+    # Soft layered shadow.
+    for offset, alpha in [(16, 0.07), (9, 0.10), (4, 0.13)]:
+        canvas.setFillColor(colors.Color(0, 0, 0, alpha=alpha))
+        canvas.roundRect(x + offset * 0.05, y - offset * 0.05, phone_w, phone_h, radius, fill=1, stroke=0)
+
+    canvas.setFillColor(colors.HexColor("#0C1220"))
+    canvas.roundRect(x, y, phone_w, phone_h, radius, fill=1, stroke=0)
+    canvas.setFillColor(colors.HexColor("#1F2937"))
+    canvas.roundRect(x + 0.045 * inch, y + 0.045 * inch, phone_w - 0.09 * inch, phone_h - 0.09 * inch, radius - 3, fill=1, stroke=0)
+
+    screen_x = x + (phone_w - screen_w) / 2
+    screen_y = y + 0.22 * inch
+    canvas.drawImage(str(screenshot), screen_x, screen_y, width=screen_w, height=screen_h, mask="auto")
+
+    # Speaker and camera.
+    canvas.setFillColor(colors.HexColor("#05070D"))
+    canvas.roundRect(x + phone_w * 0.39, y + phone_h - 0.16 * inch, phone_w * 0.22, 0.055 * inch, 4, fill=1, stroke=0)
+    canvas.circle(x + phone_w * 0.66, y + phone_h - 0.13 * inch, 0.027 * inch, fill=1, stroke=0)
     canvas.restoreState()
 
 
 def cover_page(canvas, doc):
     canvas.saveState()
-    canvas.setFillColor(NAVY)
+    canvas.setFillColor(colors.white)
     canvas.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
-    canvas.setFillColor(colors.HexColor("#1E5AA8"))
-    canvas.rect(0, 0, PAGE_W, 1.4 * inch, fill=1, stroke=0)
-    canvas.setFillColor(colors.HexColor("#0A2235"))
-    canvas.rect(0, PAGE_H - 1.15 * inch, PAGE_W, 1.15 * inch, fill=1, stroke=0)
+
+    # Separation lines.
+    canvas.setStrokeColor(colors.HexColor("#E6EDF5"))
+    canvas.setLineWidth(1)
+    for y in [PAGE_H - 1.85 * inch, PAGE_H - 2.05 * inch, 1.3 * inch, 1.48 * inch]:
+        canvas.line(0.7 * inch, y, PAGE_W - 0.7 * inch, y)
+
     if LOGO.exists():
         img = Image.open(LOGO)
         ratio = img.width / img.height
-        width = 2.9 * inch
-        canvas.drawImage(str(LOGO), (PAGE_W - width) / 2, PAGE_H - 1.0 * inch, width=width, height=width / ratio, mask="auto")
-    canvas.setFillColor(colors.white)
-    canvas.setFont("Helvetica-Bold", 30)
-    canvas.drawCentredString(PAGE_W / 2, PAGE_H - 2.25 * inch, "Dr. Fonseca Medical Portal")
-    canvas.setFont("Helvetica", 15)
-    canvas.setFillColor(colors.HexColor("#D9ECFF"))
-    canvas.drawCentredString(PAGE_W / 2, PAGE_H - 2.6 * inch, "Executive Proposal, System Overview, and User Guide")
-    canvas.setFillColor(colors.white)
-    canvas.setFont("Helvetica-Bold", 13)
-    canvas.drawCentredString(PAGE_W / 2, 1.0 * inch, "Created by Ramon Diaz, DIT")
-    canvas.setFont("Helvetica", 9)
-    canvas.setFillColor(colors.HexColor("#D9ECFF"))
-    canvas.drawCentredString(PAGE_W / 2, 0.72 * inch, "Prepared May 1, 2026")
+        width = 3.8 * inch
+        canvas.drawImage(str(LOGO), (PAGE_W - width) / 2, PAGE_H - 1.35 * inch, width=width, height=width / ratio, mask="auto")
+
+    canvas.setFillColor(NAVY)
+    canvas.setFont("Helvetica-Bold", 25)
+    canvas.drawCentredString(PAGE_W / 2, PAGE_H - 2.48 * inch, "Portal Médico Dr. Fonseca")
+    canvas.setFont("Helvetica", 13)
+    canvas.setFillColor(MUTED)
+    canvas.drawCentredString(PAGE_W / 2, PAGE_H - 2.78 * inch, "Propuesta ejecutiva, guía operativa y valor de plataforma")
+
+    draw_phone_mockup(canvas, (PAGE_W - 2.18 * inch) / 2, 2.05 * inch, 2.18 * inch, ASSETS / "login-real.png")
+
+    y = 1.08 * inch
+    y = draw_centered_wrapped(
+        canvas,
+        "Sistema clínico móvil creado de forma individual por Ramon Diaz, DIT, para ordenar la comunicación entre pacientes, equipo médico y administración.",
+        y,
+        "Helvetica-Bold",
+        10,
+        NAVY,
+        5.35 * inch,
+        0.17 * inch,
+    )
+    canvas.setFont("Helvetica", 8.5)
+    canvas.setFillColor(MUTED)
+    canvas.drawCentredString(PAGE_W / 2, 0.52 * inch, "Preparado el 1 de mayo de 2026")
     canvas.restoreState()
 
 
@@ -193,24 +172,15 @@ def phone_image(path: Path, width: float = 1.6 * inch) -> RLImage:
 
 def screenshot_card(title: str, filename: str, caption: str) -> Table:
     img_path = ASSETS / filename
-    story = [
-        p(title, "H2"),
-        phone_image(img_path, 1.52 * inch),
-        p(caption, "Caption"),
-    ]
+    story = [p(title, "H2"), phone_image(img_path, 1.52 * inch), p(caption, "Caption")]
     table = Table([[story]], colWidths=[2.05 * inch])
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), colors.white),
-                ("BOX", (0, 0), (-1, -1), 0.7, LINE),
-                ("ROUNDEDCORNERS", (0, 0), (-1, -1), 10),
-                ("PADDING", (0, 0), (-1, -1), 8),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ]
-        )
-    )
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+        ("BOX", (0, 0), (-1, -1), 0.7, LINE),
+        ("PADDING", (0, 0), (-1, -1), 8),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
     return table
 
 
@@ -229,299 +199,234 @@ def section_title(title: str, subtitle: str | None = None) -> list:
 
 def value_table() -> Table:
     data = [
-        [p("Layer", "Callout"), p("What was built", "Callout")],
-        [p("Mobile PWA", "Body"), p("A responsive app-like experience designed for iPhone, Android, Safari, Chrome, PWA wrappers, and future app-store packaging.", "Body")],
-        [p("Clinical chat", "Body"), p("Patient and staff chat, message actions, media, audio, call controls, date labels, prescriptions, and patient-safe restrictions.", "Body")],
-        [p("Admin operations", "Body"), p("Patient records, staff permissions, active patients, staff-to-staff private messages, export tools, blocks, audit views, and support workflows.", "Body")],
-        [p("Database layer", "Body"), p("Supabase Postgres tables, authentication, storage, role-based policies, patient links, staff directory, private messaging, push subscriptions, and audit tables.", "Body")],
-        [p("Release engineering", "Body"), p("Vercel deployment, production environment variables, rollback tags, build checks, mobile typography hardening, and iterative QA.", "Body")],
+        [p("Capa", "Callout"), p("Lo que se construyó", "Callout")],
+        [p("PWA móvil", "Body"), p("Experiencia tipo app para iPhone, Android, Safari, Chrome, WebView, PWA y futura preparación para tiendas móviles.", "Body")],
+        [p("Chat clínico", "Body"), p("Chat paciente/staff, acciones de mensaje, multimedia, audio, llamadas, recetas, fechas legibles y restricciones específicas del paciente.", "Body")],
+        [p("Operación administrativa", "Body"), p("Expedientes, permisos de equipo, pacientes activos, chat staff a staff, exportaciones, bloqueos, auditoría y soporte.", "Body")],
+        [p("Base de datos", "Body"), p("Supabase/Postgres con autenticación, almacenamiento, perfiles, salas, mensajes, enlaces de paciente, mensajes privados, auditoría y notificaciones.", "Body")],
+        [p("Producción", "Body"), p("Despliegue en Vercel, variables de entorno, puntos de reversión, compilación, revisiones móviles y endurecimiento progresivo.", "Body")],
     ]
     table = Table(data, colWidths=[1.45 * inch, 5.0 * inch])
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#F8FBFF")),
-                ("GRID", (0, 0), (-1, -1), 0.4, LINE),
-                ("PADDING", (0, 0), (-1, -1), 8),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ]
-        )
-    )
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#F8FBFF")),
+        ("GRID", (0, 0), (-1, -1), 0.4, LINE),
+        ("PADDING", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
     return table
 
 
 def effort_table() -> Table:
     rows = [
-        ["Workstream", "Representative scope", "Conservative equivalent effort"],
-        ["Product strategy & UX", "Patient/staff workflows, Spanish/English language behavior, mobile-first clinical interface", "40-70 hours"],
-        ["Frontend engineering", "Next.js/React PWA, responsive layouts, modals, chat UI, media handling, app-like safe areas", "90-140 hours"],
-        ["Database & security", "Supabase auth, Postgres schema, storage, permissions, private messaging, rollback planning", "60-110 hours"],
-        ["Admin operations", "Control center, staff permissions, patient records, exports, audit/support/legal pages", "55-95 hours"],
-        ["Testing & release", "Build verification, live deployment, mobile QA, policy/readiness review, rollback tags", "35-70 hours"],
-        ["Total equivalent build", "A realistic small-team/vendor equivalent for the current system", "280-485+ engineering hours"],
+        ["Área de trabajo", "Alcance representativo", "Esfuerzo equivalente"],
+        ["Estrategia de producto y UX", "Flujos paciente/staff, comportamiento en español/inglés, interfaz clínica móvil", "50-90 horas"],
+        ["Ingeniería frontend", "Next.js/React PWA, layouts móviles, modales, chat, multimedia, safe areas y experiencia tipo app", "110-180 horas"],
+        ["Base de datos y seguridad", "Supabase, Postgres, autenticación, storage, permisos, mensajes privados y auditoría", "80-150 horas"],
+        ["Operación administrativa", "Centro de control, permisos, expedientes, exportaciones, bloqueos y páginas legales/soporte", "70-130 horas"],
+        ["Pruebas y producción", "Builds, despliegues, QA móvil, revisiones de políticas, rollback tags y verificación en vivo", "45-90 horas"],
+        ["Total realista", "Equivalente de construcción para una plataforma clínica personalizada", "355-640+ horas"],
     ]
     data = [[p(cell, "Callout" if idx == 0 else "Body") for cell in row] for idx, row in enumerate(rows)]
     table = Table(data, colWidths=[1.45 * inch, 3.45 * inch, 1.55 * inch])
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("BACKGROUND", (0, 1), (-1, -2), colors.white),
-                ("BACKGROUND", (0, -1), (-1, -1), SKY),
-                ("GRID", (0, 0), (-1, -1), 0.4, LINE),
-                ("PADDING", (0, 0), (-1, -1), 7),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ]
-        )
-    )
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 1), (-1, -2), colors.white),
+        ("BACKGROUND", (0, -1), (-1, -1), SKY),
+        ("GRID", (0, 0), (-1, -1), 0.4, LINE),
+        ("PADDING", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    return table
+
+
+def price_table() -> Table:
+    rows = [
+        ["Concepto", "Rango comercial conservador"],
+        ["Diseño, arquitectura, desarrollo y despliegue inicial", "USD $65,000 - $140,000+"],
+        ["Endurecimiento de seguridad, RLS, QA móvil y preparación app-store", "USD $18,000 - $45,000+"],
+        ["Mantenimiento, soporte, mejoras y monitoreo anual", "USD $24,000 - $60,000+ / año"],
+    ]
+    data = [[p(cell, "Callout" if i == 0 else "Body") for cell in row] for i, row in enumerate(rows)]
+    table = Table(data, colWidths=[4.3 * inch, 2.15 * inch])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#FFFDF7")),
+        ("GRID", (0, 0), (-1, -1), 0.5, LINE),
+        ("PADDING", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
     return table
 
 
 def feature_matrix() -> Table:
     rows = [
-        ["Area", "Doctor/Admin", "Staff", "Patient"],
-        ["Access", "Control center, permissions, blocks, audit review", "Assigned patient rooms and staff settings", "Secure patient link and simplified chat"],
-        ["Communication", "Staff-to-staff oversight and export", "Patient chat, private staff messages, internal notes", "Direct clinic channel, media, calls, prescriptions"],
-        ["Clinical record", "Patient profile, procedure, media, export, recovery tools", "Internal notes, prescriptions, current medications", "Receives care instructions and prescription files"],
-        ["Security", "Admin/super admin controls, rollback and audit trail", "Assigned team permissions", "No admin/privacy/support/delete-account clutter in patient chat"],
+        ["Área", "Doctor/Admin", "Staff", "Paciente"],
+        ["Acceso", "Centro de control, permisos, bloqueos y auditoría", "Salas asignadas y ajustes personales", "Enlace seguro y chat simplificado"],
+        ["Comunicación", "Supervisión y exportación de conversaciones internas", "Chat con pacientes, mensajes privados e internas", "Canal directo con clínica, archivos y recetas"],
+        ["Expediente", "Perfil, procedimiento, media, exportación y herramientas", "Notas internas, recetas y medicamentos actuales", "Recibe instrucciones y archivos clínicos"],
+        ["Seguridad", "Permisos admin/super admin y rollback", "Acceso según equipo asignado", "Sin opciones administrativas innecesarias"],
     ]
     data = [[p(cell, "Callout" if i == 0 else "Body") for cell in row] for i, row in enumerate(rows)]
     table = Table(data, colWidths=[1.0 * inch, 1.85 * inch, 1.8 * inch, 1.8 * inch])
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("GRID", (0, 0), (-1, -1), 0.4, LINE),
-                ("PADDING", (0, 0), (-1, -1), 7),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ]
-        )
-    )
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.4, LINE),
+        ("PADDING", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
     return table
 
 
 def build_story() -> list:
-    story: list = []
+    story: list = [Spacer(1, 6.75 * inch), PageBreak()]
 
-    story.extend(
-        [
-            Spacer(1, 6.4 * inch),
-            p("A custom medical communication platform for Siluety Plastic Surgery, designed to make patient follow-up clearer, faster, safer, and easier for the care team.", "CoverSub"),
-            PageBreak(),
-        ]
-    )
+    story.extend(section_title("Resumen Ejecutivo", "Qué es el portal y por qué tiene valor."))
+    story.extend([
+        p("El Portal Médico Dr. Fonseca es una plataforma clínica personalizada que conecta pacientes, personal asignado y administración en un flujo de atención organizado. No es una página web básica ni una plantilla. Es un sistema operativo móvil con chat clínico, expedientes, recetas, multimedia, notas internas, permisos, auditoría, enlaces de paciente y despliegue en producción."),
+        p("La experiencia está diseñada para que el paciente la entienda como un canal familiar, claro y legible, mientras que la clínica obtiene estructura: salas por paciente, equipo asignado, trazabilidad, expedientes organizados y control administrativo."),
+        value_table(),
+        Spacer(1, 10),
+        p("Preparado para Dr. Miguel Fonseca y su equipo. Creado individualmente por Ramon Diaz, DIT.", "Small"),
+        PageBreak(),
+    ])
 
-    story.extend(section_title("Executive Summary", "What the portal is and why it matters."))
-    story.extend(
-        [
-            p("The Dr. Fonseca Medical Portal is a custom-built Progressive Web App that connects patients, assigned staff, and administrative leadership in one coordinated care workflow. It is not a template site. It combines mobile chat, staff operations, patient records, prescriptions, media management, internal notes, admin permissions, and deployment-grade infrastructure into one clinical communication system."),
-            p("The experience is designed to feel familiar to patients, close to WhatsApp/iOS readability, while giving the clinic stronger structure than ordinary messaging apps: patient-specific rooms, care-team assignment, auditability, record organization, and administrative control."),
-            value_table(),
-            Spacer(1, 10),
-            p("Prepared for Dr. Miguel Fonseca and team. Created by Ramon Diaz, DIT.", "Small"),
-            PageBreak(),
-        ]
-    )
+    story.extend(section_title("Perfil del Creador", "La persona responsable de construir el sistema."))
+    story.extend([
+        p("<b>Ramon Diaz, DIT</b> diseñó, desarrolló, integró y desplegó esta plataforma de manera individual, sin un equipo externo de desarrollo, sin agencia y sin dividir el trabajo entre varios departamentos."),
+        p("Trayectoria profesional presentada para esta propuesta: Junior Developer en Apple Inc.; experiencia en ingeniería VoIP para PayPal; Bachelor of Science in Software Engineering por New England Institute of Technology; maestría por Southern New Hampshire University; y Doctor of Information Technology por Arizona State University."),
+        p("La construcción exigió criterio de producto, diseño de experiencia móvil, ingeniería frontend, integración con autenticación, modelado de base de datos Postgres/Supabase, flujos clínicos, manejo de multimedia, permisos, despliegue, QA y revisiones de seguridad. En una empresa de software, estas responsabilidades normalmente se reparten entre producto, UX, frontend, backend, base de datos, QA, DevOps y project management."),
+        p("Aquí todo ese trabajo fue llevado por una sola persona, de principio a fin, hasta tener una plataforma funcional en producción.", "Callout"),
+        PageBreak(),
+    ])
 
-    story.extend(section_title("Creator Profile", "The person behind the system."))
-    story.extend(
-        [
-            p("<b>Ramon Diaz, DIT</b> created this system using advanced language-model assisted software engineering, modern full-stack development, production database architecture, and deployment workflows."),
-            p("Professional background presented for this proposal: 10 years at Apple Inc. as a junior developer; VoIP engineering work for PayPal; Bachelor of Science in Software Engineering from New England Institute of Technology; Master's degree from Southern New Hampshire University; and Doctor of Information Technology from Arizona State University."),
-            p("This project required combining product design judgment, mobile UI engineering, authentication, Postgres/Supabase database modeling, clinical workflow mapping, media handling, security hardening, deployment, and iterative QA. In a commercial software company, this would typically be divided across product, UX, frontend, backend, database, QA, DevOps, and project management roles."),
-            p("The result is a custom operational system built around the clinic's actual workflow, language needs, mobile device habits, and patient communication requirements.", "Callout"),
-            PageBreak(),
-        ]
-    )
+    story.extend(section_title("Magnitud del Proyecto", "Lo que implica crear una plataforma así desde cero."))
+    story.extend([
+        p("Construir este portal no equivale a crear un sitio informativo. Es levantar una aplicación clínica móvil con datos reales, roles, permisos, multimedia, mensajes en tiempo real, expedientes, operación administrativa y lógica de seguridad. Cada función tiene implicaciones técnicas y clínicas: qué ve el paciente, qué puede modificar el staff, qué puede controlar el doctor, cómo se separa una receta de media general, cómo se protege un expediente y cómo se mantiene estable en producción."),
+        effort_table(),
+        Spacer(1, 8),
+        p("El esfuerzo anterior es una estimación conservadora de horas equivalentes. No incluye el costo adicional que normalmente cobra una agencia por descubrimiento, administración de cuenta, diseño visual, juntas, control de cambios, QA formal, documentación, soporte ni mantenimiento.", "Small"),
+        price_table(),
+        Spacer(1, 8),
+        p("Valor estimado de mercado: una clínica que contratara una empresa para construir una plataforma equivalente debería presupuestar razonablemente entre <b>USD $83,000 y $185,000+</b> para construcción y preparación inicial, más soporte anual. La cifra puede subir si se agregan app nativa, cumplimiento regulatorio formal, integraciones de facturación, llamadas avanzadas o soporte 24/7.", "Callout"),
+        PageBreak(),
+    ])
 
-    story.extend(section_title("Project Effort and Value", "A conservative engineering-equivalent view."))
-    story.extend(
-        [
-            p("A project like this is not a simple website. It is a secure, mobile-first clinical operations platform with real database state, role-based behavior, media workflows, patient/staff interfaces, and production deployment requirements."),
-            effort_table(),
-            Spacer(1, 8),
-            p("These hours are conservative engineering-equivalent estimates for the current system scope. They do not include the full cost of a traditional agency structure: discovery meetings, account management, UI design rounds, QA cycles, compliance review, deployment support, maintenance retainers, or change orders.", "Small"),
-            p("The practical takeaway: this is the type of work a professional software company would price and staff as a serious custom platform build, not as a quick page or simple chat widget.", "Callout"),
-            PageBreak(),
-        ]
-    )
-
-    story.extend(section_title("System Map", "How the moving pieces fit together."))
+    story.extend(section_title("Mapa del Sistema", "Cómo se conectan las partes principales."))
     story.append(feature_matrix())
-    story.extend(
-        bullets(
-            [
-                "Patients use a simplified mobile chat experience with calls, media, prescriptions, and readable device-language behavior.",
-                "Staff manage assigned rooms, communicate with patients, add internal notes, send prescriptions, handle media, and contact other staff.",
-                "Admin/Doctor users control team access, view patient lists, review staff-to-staff messages, export records, manage blocks, and support operational oversight.",
-                "Supabase stores authentication, patient records, procedures, rooms, messages, staff profiles, audit events, private staff messages, and push notification subscriptions.",
-                "Vercel provides production deployment and environment management for a live app-like web experience.",
-            ]
-        )
-    )
+    story.extend(bullets([
+        "El paciente usa una experiencia móvil simplificada con chat, llamadas, recetas, multimedia y textos legibles.",
+        "El staff administra salas asignadas, responde mensajes, agrega notas internas, envía recetas, maneja archivos y contacta a otros miembros del equipo.",
+        "El Doctor/Admin controla accesos, permisos, pacientes activos, conversaciones internas, exportaciones, bloqueos y herramientas de expediente.",
+        "Supabase almacena autenticación, pacientes, procedimientos, salas, mensajes, perfiles, auditoría, mensajes privados y suscripciones de notificaciones.",
+        "Vercel mantiene el despliegue productivo y la configuración de entorno para la aplicación en vivo.",
+    ]))
     story.append(PageBreak())
 
-    story.extend(section_title("Access and Sign-Up", "How staff enter the portal and begin using the system."))
-    story.append(
-        three_cards(
-            [
-                screenshot_card("1. Login", "login-real.png", "Staff sign in using email or phone, depending on how their account was created."),
-                screenshot_card("2. Staff Registration", "register-real.png", "New team members use an invite code and complete staff onboarding."),
-                screenshot_card("3. Office Context", "office-switch.png", "The portal supports clinic context such as Guadalajara and Tijuana workflows."),
-            ]
-        )
-    )
-    story.extend(
-        bullets(
-            [
-                "Staff accounts are protected by Supabase authentication.",
-                "Invite-code onboarding limits access to approved team members.",
-                "The system supports staff who prefer phone-based access as well as staff who use email.",
-            ]
-        )
-    )
+    story.extend(section_title("Acceso y Registro", "Cómo entra el equipo al sistema."))
+    story.append(three_cards([
+        screenshot_card("1. Inicio de sesión", "login-real.png", "El staff puede iniciar sesión con correo o teléfono, según cómo se haya creado su cuenta."),
+        screenshot_card("2. Registro staff", "register-real.png", "Los nuevos miembros usan código de invitación y completan su registro."),
+        screenshot_card("3. Contexto de sede", "office-switch.png", "El portal contempla operaciones como Guadalajara y Tijuana."),
+    ]))
+    story.extend(bullets([
+        "El acceso del staff está protegido por autenticación de Supabase.",
+        "El código de invitación limita el registro a miembros aprobados.",
+        "El sistema contempla a quienes prefieren usar teléfono y a quienes usan correo.",
+    ]))
     story.append(PageBreak())
 
-    story.extend(section_title("Staff Workflow", "Day-to-day patient communication."))
-    story.append(
-        three_cards(
-            [
-                screenshot_card("Inbox", "inbox-list.png", "Assigned patient rooms appear in a mobile-first conversation list."),
-                screenshot_card("Search", "search.png", "Staff can search by patient, procedure, phone, email, or office context."),
-                screenshot_card("Patient Chat", "staff-chat.png", "Staff respond in a structured chat environment with patient context visible."),
-            ]
-        )
-    )
-    story.extend(
-        bullets(
-            [
-                "Each patient room keeps patient messages, staff replies, media, prescriptions, and internal clinical notes tied to the patient record.",
-                "Staff actions are designed for quick mobile use: tap, type, send media, call, open profile, or add notes.",
-                "Messages include timestamps, sender context, and update/delete behavior where permissions allow.",
-            ]
-        )
-    )
+    story.extend(section_title("Flujo del Staff", "Uso diario para comunicación con pacientes."))
+    story.append(three_cards([
+        screenshot_card("Inbox", "inbox-list.png", "Las salas asignadas aparecen en una lista móvil fácil de revisar."),
+        screenshot_card("Búsqueda", "search.png", "El equipo puede buscar por paciente, procedimiento, teléfono, correo o sede."),
+        screenshot_card("Chat de paciente", "staff-chat.png", "El staff responde dentro de un chat con contexto del paciente."),
+    ]))
+    story.extend(bullets([
+        "Cada sala mantiene mensajes, respuestas del staff, multimedia, recetas y notas internas ligadas al expediente.",
+        "Las acciones están pensadas para uso rápido en celular: tocar, escribir, adjuntar, llamar, abrir perfil o agregar notas.",
+        "Los mensajes incluyen hora, remitente y acciones de edición/eliminación según permisos.",
+    ]))
     story.append(PageBreak())
 
-    story.extend(section_title("Patient Side", "A simple mobile care channel for patients."))
-    story.append(
-        three_cards(
-            [
-                screenshot_card("Patient Chat", "patient-chat.png", "Patients see a focused conversation with readable message text and simple controls."),
-                screenshot_card("Emergency / Call", "emergency.png", "Patients can quickly call the clinic when immediate assistance is needed."),
-                screenshot_card("Voice Notes", "voice-note.png", "Audio messages allow easier communication when typing is inconvenient."),
-            ]
-        )
-    )
-    story.extend(
-        bullets(
-            [
-                "The patient view intentionally avoids admin clutter.",
-                "Patient settings are limited to appearance and readability controls.",
-                "Language behavior can align with device/onboarding language so Spanish-only or English-only patients are not blocked by the interface.",
-            ]
-        )
-    )
+    story.extend(section_title("Vista del Paciente", "Un canal de cuidado simple y claro."))
+    story.append(three_cards([
+        screenshot_card("Chat del paciente", "patient-chat.png", "El paciente ve una conversación enfocada, legible y sin opciones administrativas."),
+        screenshot_card("Llamada clínica", "emergency.png", "El paciente puede llamar a la clínica cuando necesita asistencia inmediata."),
+        screenshot_card("Notas de voz", "voice-note.png", "Los audios facilitan comunicación cuando escribir no es práctico."),
+    ]))
+    story.extend(bullets([
+        "La vista del paciente evita enlaces de administración, privacidad, soporte o eliminación dentro del chat.",
+        "Los ajustes del paciente se limitan a apariencia y tamaño de texto.",
+        "El idioma puede alinearse con el dispositivo o el idioma de onboarding para evitar barreras entre español e inglés.",
+    ]))
     story.append(PageBreak())
 
-    story.extend(section_title("Media, Prescriptions, and Files", "Clinical material stays organized around the patient."))
-    story.append(
-        three_cards(
-            [
-                screenshot_card("Send Media", "media-send.png", "Staff can send patient-related photos, videos, audio, and files from the chat tools."),
-                screenshot_card("Files / Prescriptions", "files.png", "Prescription-style files are visible as a distinct clinical resource for the patient."),
-                screenshot_card("Profile Media", "profile.png", "Patient details and related media remain connected to the expediente."),
-            ]
-        )
-    )
-    story.extend(
-        bullets(
-            [
-                "Recetas/prescriptions are handled as patient-specific clinical material rather than loose general media.",
-                "Patient records can include profile photo, procedure details, office, medications, allergies, and related uploads.",
-                "The prescription viewer includes patient-facing actions such as share, messages, email, and print where supported by the device.",
-            ]
-        )
-    )
+    story.extend(section_title("Media, Recetas y Archivos", "Material clínico organizado por paciente."))
+    story.append(three_cards([
+        screenshot_card("Enviar media", "media-send.png", "El staff puede enviar fotos, videos, audios y archivos desde el chat."),
+        screenshot_card("Recetas y archivos", "files.png", "Las recetas aparecen como recurso clínico separado para el paciente."),
+        screenshot_card("Perfil", "profile.png", "Los datos del paciente y su media permanecen ligados al expediente."),
+    ]))
+    story.extend(bullets([
+        "Las recetas se manejan como material clínico del paciente, no como archivos generales mezclados.",
+        "El expediente puede incluir foto, procedimiento, sede, medicamentos, alergias y media relacionada.",
+        "El visor de receta permite acciones como compartir, enviar por mensaje, correo o imprimir cuando el dispositivo lo soporte.",
+    ]))
     story.append(PageBreak())
 
-    story.extend(section_title("Team Operations", "How the clinic coordinates internally."))
-    story.append(
-        three_cards(
-            [
-                screenshot_card("Internal Notes", "internal.png", "Assigned staff can add internal notes for care coordination."),
-                screenshot_card("Team", "team.png", "Assigned team and permission controls support clinical responsibility boundaries."),
-                screenshot_card("Quick Replies", "quick-replies.png", "Staff can use quick replies for repeated patient communication."),
-            ]
-        )
-    )
-    story.extend(
-        bullets(
-            [
-                "Internal notes help the assigned team coordinate without exposing those notes to patients.",
-                "Medication and team assignment behavior follows privilege rules: staff can contribute where appropriate, while sensitive deletion/team management is reserved for super admin/doctor roles.",
-                "Staff-to-staff private messaging supports internal communication separate from patient rooms.",
-            ]
-        )
-    )
+    story.extend(section_title("Operación del Equipo", "Coordinación interna de la clínica."))
+    story.append(three_cards([
+        screenshot_card("Notas internas", "internal.png", "El equipo asignado puede agregar notas internas para seguimiento clínico."),
+        screenshot_card("Equipo", "team.png", "Los permisos delimitan quién puede ver o modificar funciones sensibles."),
+        screenshot_card("Respuestas rápidas", "quick-replies.png", "El staff puede usar respuestas frecuentes para agilizar comunicación."),
+    ]))
+    story.extend(bullets([
+        "Las notas internas ayudan a coordinar al equipo sin exponerlas al paciente.",
+        "Medicamentos y equipo asignado respetan privilegios: el staff puede contribuir, pero los cambios sensibles quedan para super admin/doctor.",
+        "El chat staff a staff mantiene comunicación interna separada de los chats con pacientes.",
+    ]))
     story.append(PageBreak())
 
-    story.extend(section_title("Admin / Doctor Control Center", "Operational oversight for leadership."))
-    story.append(
-        three_cards(
-            [
-                screenshot_card("Admin Dashboard", "admin.png", "The control center gives leadership visibility into patients, staff, blocks, and internal conversations."),
-                screenshot_card("Privacy", "privacy-real.png", "The public privacy page supports app-store and patient trust requirements."),
-                screenshot_card("Account Deletion", "delete-account-real.png", "Account/data deletion instructions are available for policy compliance."),
-            ]
-        )
-    )
-    story.extend(
-        bullets(
-            [
-                "Admin can review active patients, staff-to-staff conversations, team access, blocked signups, and expediente tools.",
-                "Export workflows support sharing or printing conversation and record data through device options.",
-                "Legal/support pages support app review expectations and give patients and staff clear contact paths.",
-            ]
-        )
-    )
+    story.extend(section_title("Centro de Control Admin / Doctor", "Supervisión operativa."))
+    story.append(three_cards([
+        screenshot_card("Dashboard admin", "admin.png", "El centro de control muestra pacientes, equipo, bloqueos y conversaciones internas."),
+        screenshot_card("Privacidad", "privacy-real.png", "La página pública de privacidad apoya confianza y revisión de tiendas."),
+        screenshot_card("Eliminar cuenta", "delete-account-real.png", "La solicitud de eliminación cumple una expectativa clave de políticas móviles."),
+    ]))
+    story.extend(bullets([
+        "Admin puede revisar pacientes activos, chats internos, equipo, bloqueos y herramientas de expediente.",
+        "Las exportaciones permiten compartir o imprimir datos mediante opciones del dispositivo.",
+        "Las páginas legales y de soporte dan claridad a pacientes, staff y revisores externos.",
+    ]))
     story.append(PageBreak())
 
-    story.extend(section_title("Security and Release Discipline", "How the platform is being kept safe."))
-    story.extend(
-        bullets(
-            [
-                "Rollback tags are created before risky changes so the project can return to a known safe point.",
-                "Build checks are run before production pushes.",
-                "Production environment variables are managed through Vercel rather than hardcoded in the codebase.",
-                "Push notification endpoints were hardened to require authenticated staff authorization.",
-                "The app uses a mobile-safe global typography and viewport approach for PWA, WebView, and future app-store packaging.",
-                "Remaining release-readiness priority: continue Supabase RLS hardening for patient-room guest access so database policies are as strict as the clinical workflow requires.",
-            ]
-        )
-    )
-    story.append(
-        Table(
-            [[p("Professional note: No software product can guarantee Apple App Store or Google Play approval in advance, because reviewer decisions include account metadata, privacy declarations, screenshots, support URLs, and policy interpretation. This build now has the core ingredients required for a serious submission path: privacy/support/deletion pages, mobile app-like behavior, production hosting, authentication, and a clear clinical purpose.", "Body")]],
-            colWidths=[6.45 * inch],
-            style=TableStyle([("BACKGROUND", (0, 0), (-1, -1), SKY), ("BOX", (0, 0), (-1, -1), 0.8, BLUE), ("PADDING", (0, 0), (-1, -1), 10)]),
-        )
-    )
+    story.extend(section_title("Seguridad y Disciplina de Producción", "Cómo se mantiene controlado el sistema."))
+    story.extend(bullets([
+        "Se crean rollback tags antes de cambios riesgosos para poder regresar a un punto seguro.",
+        "Se ejecutan builds antes de empujar cambios a producción.",
+        "Las variables de entorno productivas se manejan en Vercel en lugar de depender de valores hardcodeados.",
+        "El endpoint de notificaciones push se endureció para requerir autorización de staff autenticado.",
+        "La app usa tipografía, safe areas y viewport compatibles con PWA, WebView y empaquetado futuro para tiendas.",
+        "Siguiente prioridad técnica: continuar el endurecimiento RLS de Supabase para que el acceso de paciente por enlace quede tan estricto como requiere una operación clínica.",
+    ]))
+    story.append(Table(
+        [[p("Nota profesional: ninguna aplicación puede garantizar aprobación anticipada de Apple App Store o Google Play, porque los revisores también evalúan metadatos, declaraciones de privacidad, capturas, URLs de soporte y criterios de política. Esta plataforma ya cuenta con elementos esenciales para una ruta seria de envío: privacidad, soporte, eliminación de cuenta, comportamiento móvil, hosting productivo, autenticación y propósito clínico claro.", "Body")]],
+        colWidths=[6.45 * inch],
+        style=TableStyle([("BACKGROUND", (0, 0), (-1, -1), SKY), ("BOX", (0, 0), (-1, -1), 0.8, BLUE), ("PADDING", (0, 0), (-1, -1), 10)]),
+    ))
     story.append(PageBreak())
 
-    story.extend(section_title("Closing Position", "Why this work has strategic value."))
-    story.extend(
-        [
-            p("This portal gives the clinic a custom digital care channel that ordinary WhatsApp groups, spreadsheets, and scattered files cannot provide. It centralizes patient communication, creates operational visibility, supports staff accountability, and prepares the clinic for a more polished mobile-app future."),
-            p("Ramon Diaz, DIT delivered a working production platform by combining advanced AI-assisted engineering, custom UI implementation, database design, deployment operations, and iterative clinical workflow refinement. The value is not only the code. It is the translation of the clinic's real operational needs into a system that patients and staff can actually use.", "Callout"),
-            p("Recommended next phase: complete Supabase RLS hardening, finalize app-store metadata/screenshots, run staff training, and define a maintenance plan for backups, security reviews, feature requests, and ongoing platform updates."),
-        ]
-    )
-
+    story.extend(section_title("Cierre", "Por qué esta plataforma tiene valor estratégico."))
+    story.extend([
+        p("Este portal le da a la clínica un canal digital propio que WhatsApp, hojas de cálculo y archivos dispersos no pueden ofrecer. Centraliza comunicación, organiza expedientes, mejora visibilidad operativa, crea responsabilidad del equipo y prepara el camino para una experiencia móvil más formal."),
+        p("Ramon Diaz, DIT entregó individualmente una plataforma funcional en producción combinando implementación UI, arquitectura de datos, flujos clínicos, despliegue, seguridad progresiva y refinamiento operativo. El valor no está solamente en el código: está en convertir necesidades reales de la clínica en un sistema que pacientes y staff pueden usar.", "Callout"),
+        p("Siguiente fase recomendada: endurecimiento RLS completo, preparación final de metadatos/capturas para tiendas, capacitación del equipo y plan de mantenimiento para respaldos, revisiones de seguridad, mejoras y soporte continuo."),
+    ])
     return story
 
 
@@ -534,11 +439,10 @@ def build_pdf() -> None:
         leftMargin=0.55 * inch,
         topMargin=0.65 * inch,
         bottomMargin=0.55 * inch,
-        title="Dr. Fonseca Medical Portal Proposal and User Guide",
+        title="Portal Médico Dr. Fonseca - Propuesta y Guía de Uso",
         author="Ramon Diaz, DIT",
     )
-    story = build_story()
-    doc.build(story, onFirstPage=cover_page, onLaterPages=page_header_footer)
+    doc.build(build_story(), onFirstPage=cover_page, onLaterPages=page_header_footer)
 
 
 if __name__ == "__main__":
