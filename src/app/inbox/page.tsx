@@ -528,7 +528,7 @@ export default function InboxPage() {
   const [activeCallUrl, setActiveCallUrl] = useState<string | null>(null);
   const [activeCallRoomName, setActiveCallRoomName] = useState<string | null>(null);
   const [callInviteFeedback, setCallInviteFeedback] = useState("");
-  const [preOpViewerUrl, setPreOpViewerUrl] = useState("");
+  const [preOpViewerIndex, setPreOpViewerIndex] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -2364,6 +2364,7 @@ export default function InboxPage() {
   const PatientInfoPanel = () => {
     const patient = selectedRoom?.procedures?.patients;
     const beforeEntries = messages.filter((entry) => (entry.file_name || "").startsWith("[BEFORE]"));
+    const activePreOpEntry = preOpViewerIndex !== null ? beforeEntries[preOpViewerIndex] : null;
     const isOldBrokenNote = (entry: any) => {
       const content = `${entry?.content || ""}`.trim();
       return (
@@ -2479,8 +2480,8 @@ export default function InboxPage() {
                 <p style={{fontSize:14,color:subTextColor}}>{lang==="es" ? "No hay material preoperatorio cargado todavía." : "No pre-op material has been uploaded yet."}</p>
               ) : (
                 <div style={{display:"flex",gap:12,overflowX:"auto",overflowY:"hidden",overscrollBehaviorX:"contain",touchAction:"pan-x",padding:"2px 2px 8px",maxWidth:"100%"}}>
-                  {beforeEntries.map((entry) => (
-                    <button key={entry.id} type="button" onClick={()=>setPreOpViewerUrl(entry.content)} style={{display:"block",border:"none",padding:0,background:"transparent",cursor:"pointer",flex:"0 0 118px"}}>
+                  {beforeEntries.map((entry, index) => (
+                    <button key={entry.id} type="button" onClick={()=>setPreOpViewerIndex(index)} style={{display:"block",border:"none",padding:0,background:"transparent",cursor:"pointer",flex:"0 0 118px"}}>
                       <div style={{aspectRatio:"1 / 1",borderRadius:14,overflow:"hidden",background:"#E5E7EB"}}>
                         <img src={entry.content} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                       </div>
@@ -2520,6 +2521,23 @@ export default function InboxPage() {
               </button>
             )}
           </div>
+          {activePreOpEntry && (
+            <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(15,23,42,0.72)",display:"flex",alignItems:"center",justifyContent:"center",padding:"max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))"}} onClick={()=>setPreOpViewerIndex(null)}>
+              <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:760,display:"grid",gap:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                  <button disabled={preOpViewerIndex === 0} onClick={()=>setPreOpViewerIndex((current)=>current === null ? current : Math.max(0,current - 1))} style={{width:46,height:46,border:"none",borderRadius:999,background:"rgba(255,255,255,0.96)",color:"#111827",fontSize:22,fontWeight:900,cursor:"pointer",opacity:preOpViewerIndex === 0 ? 0.4 : 1}}>‹</button>
+                  <div style={{padding:"9px 13px",borderRadius:999,background:"rgba(255,255,255,0.96)",color:"#111827",fontSize:13,fontWeight:900}}>
+                    {(preOpViewerIndex || 0) + 1} / {beforeEntries.length}
+                  </div>
+                  <button disabled={preOpViewerIndex === beforeEntries.length - 1} onClick={()=>setPreOpViewerIndex((current)=>current === null ? current : Math.min(beforeEntries.length - 1,current + 1))} style={{width:46,height:46,border:"none",borderRadius:999,background:"rgba(255,255,255,0.96)",color:"#111827",fontSize:22,fontWeight:900,cursor:"pointer",opacity:preOpViewerIndex === beforeEntries.length - 1 ? 0.4 : 1}}>›</button>
+                  <button onClick={()=>setPreOpViewerIndex(null)} style={{width:46,height:46,border:"none",borderRadius:999,background:"rgba(255,255,255,0.96)",color:"#111827",fontSize:20,fontWeight:900,cursor:"pointer"}}>×</button>
+                </div>
+                <div style={{borderRadius:18,overflow:"hidden",background:"#0F172A",boxShadow:"0 18px 50px rgba(0,0,0,0.28)"}}>
+                  <img src={activePreOpEntry.content} alt="" style={{display:"block",width:"100%",maxHeight:"78dvh",objectFit:"contain"}}/>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -3241,16 +3259,6 @@ export default function InboxPage() {
               </div>
             )}
             <button className="sbtn" onClick={()=>setStaffContactMember(null)}>{t.cancel}</button>
-          </div>
-        </div>
-      )}
-      {preOpViewerUrl && (
-        <div className="modal-overlay" onClick={()=>setPreOpViewerUrl("")}>
-          <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:760,maxHeight:"92dvh",padding:14,display:"grid",gap:10}}>
-            <button onClick={()=>setPreOpViewerUrl("")} style={{justifySelf:"end",width:44,height:44,border:"none",borderRadius:999,background:"rgba(255,255,255,0.96)",color:"#111827",fontSize:20,fontWeight:900,cursor:"pointer"}}>×</button>
-            <div style={{borderRadius:18,overflow:"hidden",background:"#0F172A",boxShadow:"0 18px 50px rgba(0,0,0,0.28)"}}>
-              <img src={preOpViewerUrl} alt="" style={{display:"block",width:"100%",maxHeight:"78dvh",objectFit:"contain"}}/>
-            </div>
           </div>
         </div>
       )}
