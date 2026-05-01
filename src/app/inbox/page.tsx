@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
@@ -357,6 +357,24 @@ interface CareTeamMember {
   phone?: string | null;
   email?: string | null;
 }
+type StaffPrivateMessage = {
+  id?: string;
+  sender_id?: string | null;
+  recipient_id?: string | null;
+  sender_name?: string | null;
+  recipient_name?: string | null;
+  content?: string | null;
+  created_at?: string | null;
+  read_at?: string | null;
+};
+type StaffPrivateConversation = {
+  peerId: string;
+  peer: CareTeamMember;
+  messages: StaffPrivateMessage[];
+  latestAt: string;
+  latestText: string;
+  unreadCount: number;
+};
 
 const CARE_TEAM_ROLE_ORDER = ["doctor", "enfermeria", "coordinacion", "post_quirofano", "staff"] as const;
 
@@ -452,6 +470,11 @@ export default function InboxPage() {
   const [staffContactMember, setStaffContactMember] = useState<CareTeamMember | null>(null);
   const [staffPrivateDraft, setStaffPrivateDraft] = useState("");
   const [savingStaffPrivateMessage, setSavingStaffPrivateMessage] = useState(false);
+  const [staffPrivateMessages, setStaffPrivateMessages] = useState<StaffPrivateMessage[]>([]);
+  const [showStaffChats, setShowStaffChats] = useState(false);
+  const [activeStaffChatPeerId, setActiveStaffChatPeerId] = useState<string | null>(null);
+  const [staffPrivateReply, setStaffPrivateReply] = useState("");
+  const [privateToast, setPrivateToast] = useState<StaffPrivateMessage | null>(null);
   const [unreadRooms, setUnreadRooms] = useState<Set<string>>(new Set());
   const [totalUnread, setTotalUnread] = useState(0);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
@@ -517,8 +540,11 @@ export default function InboxPage() {
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [mediaLibraryTab, setMediaLibraryTab] = useState<MediaTab>("media");
   const [displayNameEdit, setDisplayNameEdit] = useState("");
+  const [phoneEdit, setPhoneEdit] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [savedName, setSavedName] = useState(false);
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [savedPhone, setSavedPhone] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [patientTyping, setPatientTyping] = useState(false);
@@ -573,6 +599,9 @@ export default function InboxPage() {
   const translationCacheRef = useRef<Record<string, string>>({});
   const pauseBackgroundRefreshRef = useRef(false);
   const messagePressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showStaffChatsRef = useRef(false);
+  const activeStaffChatPeerIdRef = useRef<string | null>(null);
+  const privateToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
@@ -657,24 +686,55 @@ export default function InboxPage() {
     setStaffContactMember(null);
     setStaffPrivateDraft("");
   };
-  const sendStaffPrivateMessage = async () => {
-    const content = staffPrivateDraft.trim();
-    if (!content || !staffContactMember || !currentUserId || savingStaffPrivateMessage) return;
+
+  const upsertStaffPrivateMessage = useCallback((message: StaffPrivateMessage) => {
+    if (!message?.id) return;
+    setStaffPrivateMessages((previous) => {
+      const exists = previous.some((entry) => entry.id === message.id);
+      const next = exists
+        ? previous.map((entry) => (entry.id === message.id ? { ...entry, ...message } : entry))
+        : [message, ...previous];
+      return next.sort((a, b) => `${b.created_at || ""}`.localeCompare(`${a.created_at || ""}`));
+    });
+  }, []);
+
+  const fetchStaffPrivateMessages = useCallback(async () => {
+    if (!currentUserId) return;
+    const { data, error } = await supabase
+      .from("staff_private_messages")
+      .select("*")
+      .or(`sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (!error) setStaffPrivateMessages((data || []) as StaffPrivateMessage[]);
+  }, [currentUserId]);
+
+  const sendStaffPrivateToMember = async (member: CareTeamMember, content: string) => {
+    const cleanContent = content.trim();
+    if (!cleanContent || !member?.id || !currentUserId || savingStaffPrivateMessage) return false;
     setSavingStaffPrivateMessage(true);
     const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
-    const { error } = await supabase.from("staff_private_messages").insert({
+    const { data, error } = await supabase.from("staff_private_messages").insert({
       sender_id: currentUserId,
-      recipient_id: staffContactMember.id,
+      recipient_id: member.id,
       sender_name: senderName,
-      recipient_name: staffContactMember.full_name || staffContactMember.display_name || null,
-      content,
+      recipient_name: member.full_name || member.display_name || null,
+      content: cleanContent,
       created_at: new Date().toISOString(),
-    } as any);
+    } as any).select("*").single();
     setSavingStaffPrivateMessage(false);
     if (error) {
       alert(lang === "es" ? "No pude guardar el mensaje privado. Falta configurar la tabla de mensajes privados staff a staff." : "I could not save the private message. The staff-to-staff private messages table is not configured yet.");
-      return;
+      return false;
     }
+    if (data) upsertStaffPrivateMessage(data as StaffPrivateMessage);
+    return true;
+  };
+
+  const sendStaffPrivateMessage = async () => {
+    if (!staffContactMember) return;
+    const sent = await sendStaffPrivateToMember(staffContactMember, staffPrivateDraft);
+    if (!sent) return;
     setStaffPrivateDraft("");
     alert(lang === "es" ? "Mensaje privado enviado." : "Private message sent.");
     closeStaffContact();
@@ -768,6 +828,97 @@ export default function InboxPage() {
           : staffDirectory
   );
   const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id));
+  const staffPrivateConversations = useMemo<StaffPrivateConversation[]>(() => {
+    if (!currentUserId) return [];
+    const memberById = new Map<string, CareTeamMember>();
+    staffDirectory.forEach((member) => memberById.set(member.id, member));
+    selectedRoomTeam.forEach((member) => {
+      if (!memberById.has(member.id)) memberById.set(member.id, member);
+    });
+    if (userProfile?.id) {
+      memberById.set(userProfile.id, {
+        id: userProfile.id,
+        full_name: userProfile.full_name || userProfile.display_name || "Staff",
+        display_name: userProfile.display_name || null,
+        role: userProfile.role || "staff",
+        office_location: userProfile.office_location || null,
+        avatar_url: userProfile.avatar_url || null,
+        phone: userProfile.phone || null,
+        email: userProfile.email || null,
+      });
+    }
+
+    const grouped = new Map<string, StaffPrivateMessage[]>();
+    staffPrivateMessages.forEach((message) => {
+      const senderId = message.sender_id || "";
+      const recipientId = message.recipient_id || "";
+      if (!senderId || !recipientId) return;
+      const peerId = senderId === currentUserId ? recipientId : senderId;
+      if (!peerId || peerId === currentUserId) return;
+      grouped.set(peerId, [...(grouped.get(peerId) || []), message]);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([peerId, conversationMessages]) => {
+        const sorted = [...conversationMessages].sort((a, b) => `${a.created_at || ""}`.localeCompare(`${b.created_at || ""}`));
+        const latest = sorted[sorted.length - 1] || {};
+        const fallbackName =
+          latest.sender_id === peerId
+            ? latest.sender_name
+            : latest.recipient_name;
+        const peer = memberById.get(peerId) || {
+          id: peerId,
+          full_name: fallbackName || (lang === "es" ? "Personal" : "Staff"),
+          display_name: fallbackName || null,
+          role: "staff",
+          office_location: null,
+          avatar_url: null,
+          phone: null,
+          email: null,
+        };
+        return {
+          peerId,
+          peer,
+          messages: sorted,
+          latestAt: latest.created_at || "",
+          latestText: `${latest.content || ""}`.trim(),
+          unreadCount: sorted.filter((message) => message.recipient_id === currentUserId && !message.read_at).length,
+        };
+      })
+      .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
+  }, [currentUserId, lang, selectedRoomTeam, staffDirectory, staffPrivateMessages, userProfile]);
+  const staffPrivateUnread = staffPrivateConversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0);
+  const activeStaffPrivateConversation = staffPrivateConversations.find((conversation) => conversation.peerId === activeStaffChatPeerId) || null;
+
+  const markStaffPrivateConversationRead = useCallback(async (peerId: string) => {
+    if (!currentUserId || !peerId) return;
+    const readAt = new Date().toISOString();
+    setStaffPrivateMessages((previous) => previous.map((message) => (
+      message.sender_id === peerId && message.recipient_id === currentUserId && !message.read_at
+        ? { ...message, read_at: readAt }
+        : message
+    )));
+    await supabase
+      .from("staff_private_messages")
+      .update({ read_at: readAt })
+      .eq("sender_id", peerId)
+      .eq("recipient_id", currentUserId)
+      .is("read_at", null);
+  }, [currentUserId]);
+
+  const openStaffPrivateConversation = useCallback((peerId: string) => {
+    if (!peerId) return;
+    setShowStaffChats(true);
+    setActiveStaffChatPeerId(peerId);
+    setPrivateToast(null);
+    markStaffPrivateConversationRead(peerId);
+  }, [markStaffPrivateConversationRead]);
+
+  const sendStaffPrivateReply = async () => {
+    if (!activeStaffPrivateConversation || !staffPrivateReply.trim()) return;
+    const sent = await sendStaffPrivateToMember(activeStaffPrivateConversation.peer, staffPrivateReply);
+    if (sent) setStaffPrivateReply("");
+  };
   const careTeamOfficeGroups = [
     {
       key: "guadalajara",
@@ -1196,7 +1347,7 @@ export default function InboxPage() {
 
   const fetchProfile = async (id: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id",id).single();
-    if (data) { setUserProfile(data); setDisplayNameEdit(data.full_name||data.display_name||""); if (data.quick_replies?.length) setQuickReplies(data.quick_replies); }
+    if (data) { setUserProfile(data); setDisplayNameEdit(data.full_name||data.display_name||""); setPhoneEdit(data.phone || ""); if (data.quick_replies?.length) setQuickReplies(data.quick_replies); }
   };
 
   const fetchAssignableStaff = async () => {
@@ -1219,7 +1370,7 @@ export default function InboxPage() {
     if (list.length === 0) {
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name, display_name, role, office_location, avatar_url, phone, email")
+        .select("id, full_name, display_name, role, office_location, avatar_url, phone")
         .order("full_name", { ascending: true });
       list = (data || []) as CareTeamMember[];
     }
@@ -1255,7 +1406,7 @@ export default function InboxPage() {
     const memberIds = Array.from(new Set(members.map((entry: any) => entry.user_id).filter(Boolean)));
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, full_name, display_name, role, office_location, avatar_url, phone, email")
+      .select("id, full_name, display_name, role, office_location, avatar_url, phone")
       .in("id", memberIds);
 
     setSelectedRoomTeam((profiles || []) as CareTeamMember[]);
@@ -1278,6 +1429,22 @@ export default function InboxPage() {
     setSavingName(false); setSavedName(true); setTimeout(()=>setSavedName(false),2000);
   };
 
+  const saveProfilePhone = async () => {
+    if (!userProfile?.id) return;
+    const cleanPhone = phoneEdit.trim();
+    setSavingPhone(true);
+    const { error } = await supabase.from("profiles").update({ phone: cleanPhone || null }).eq("id", userProfile.id);
+    setSavingPhone(false);
+    if (error) {
+      alert(lang === "es" ? "No pude guardar el teléfono." : "I could not save the phone number.");
+      return;
+    }
+    setUserProfile((p: any)=>({...p,phone:cleanPhone || null}));
+    setStaffDirectory((previous) => previous.map((member) => member.id === userProfile.id ? { ...member, phone: cleanPhone || null } : member));
+    setSavedPhone(true);
+    setTimeout(()=>setSavedPhone(false),2000);
+  };
+
   const uploadProfilePhoto = async (file: File) => {
     if (!userProfile?.id) return;
     const fn = `profile-photos/${userProfile.id}/${Date.now()}-${file.name}`;
@@ -1286,6 +1453,16 @@ export default function InboxPage() {
   };
 
   useEffect(()=>{ selectedRoomRef.current=selectedRoom; },[selectedRoom]);
+  useEffect(()=>{ showStaffChatsRef.current=showStaffChats; },[showStaffChats]);
+  useEffect(()=>{ activeStaffChatPeerIdRef.current=activeStaffChatPeerId; },[activeStaffChatPeerId]);
+  useEffect(() => {
+    if (!privateToast) return;
+    if (privateToastTimeoutRef.current) clearTimeout(privateToastTimeoutRef.current);
+    privateToastTimeoutRef.current = setTimeout(() => setPrivateToast(null), 9000);
+    return () => {
+      if (privateToastTimeoutRef.current) clearTimeout(privateToastTimeoutRef.current);
+    };
+  }, [privateToast]);
 
   useEffect(() => {
     if (!selectedRoom?.id) {
@@ -1343,6 +1520,46 @@ export default function InboxPage() {
   }, [currentUserId, userProfile]);
 
   useEffect(() => {
+    if (!currentUserId) return;
+    fetchStaffPrivateMessages();
+
+    const handlePrivateMessage = (message: StaffPrivateMessage) => {
+      if (!message?.id) return;
+      upsertStaffPrivateMessage(message);
+      const peerId = message.sender_id === currentUserId ? message.recipient_id || "" : message.sender_id || "";
+      const incoming = message.recipient_id === currentUserId && message.sender_id !== currentUserId;
+
+      if (incoming) {
+        const isOpenConversation = showStaffChatsRef.current && activeStaffChatPeerIdRef.current === peerId;
+        if (isOpenConversation) {
+          markStaffPrivateConversationRead(peerId);
+        } else {
+          playIncomingTone();
+          setPrivateToast(message);
+          pushNotif(
+            lang === "es" ? "Mensaje privado del equipo" : "Private staff message",
+            `${message.sender_name || (lang === "es" ? "Personal" : "Staff")}: ${`${message.content || ""}`.slice(0, 120)}`
+          );
+        }
+      }
+    };
+
+    const channel = supabase
+      .channel(`staff-private-messages:${currentUserId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "staff_private_messages", filter: `recipient_id=eq.${currentUserId}` }, ({ new: message }) => handlePrivateMessage(message as StaffPrivateMessage))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "staff_private_messages", filter: `sender_id=eq.${currentUserId}` }, ({ new: message }) => handlePrivateMessage(message as StaffPrivateMessage))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "staff_private_messages", filter: `recipient_id=eq.${currentUserId}` }, ({ new: message }) => upsertStaffPrivateMessage(message as StaffPrivateMessage))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "staff_private_messages", filter: `sender_id=eq.${currentUserId}` }, ({ new: message }) => upsertStaffPrivateMessage(message as StaffPrivateMessage))
+      .subscribe();
+    const interval = window.setInterval(fetchStaffPrivateMessages, 30000);
+
+    return () => {
+      window.clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, fetchStaffPrivateMessages, lang, markStaffPrivateConversationRead, playIncomingTone, pushNotif, upsertStaffPrivateMessage]);
+
+  useEffect(() => {
     if (showNewRoom && currentUserId) {
       setSelectedCareTeamIds((current) => current.includes(currentUserId) ? current : [currentUserId, ...current]);
     }
@@ -1390,7 +1607,10 @@ export default function InboxPage() {
     setTotalUnread(filteredEntries.reduce((sum, [, count]) => sum + count, 0));
   }, [unreadCounts]);
 
-  useEffect(()=>{ document.title=totalUnread>0?`(${totalUnread}) Dr. Fonseca Portal`:"Dr. Fonseca Portal"; },[totalUnread]);
+  useEffect(()=>{
+    const totalAlerts = totalUnread + staffPrivateUnread;
+    document.title=totalAlerts>0?`(${totalAlerts}) Dr. Fonseca Portal`:"Dr. Fonseca Portal";
+  },[staffPrivateUnread, totalUnread]);
 
   // Poll for unread badges every 20s and on tab focus
   useEffect(()=>{
@@ -1433,8 +1653,8 @@ export default function InboxPage() {
   }, []);
 
   useEffect(() => {
-    pauseBackgroundRefreshRef.current = showSettings || showPatientInfo || showNewRoom || showQREditor;
-  }, [showNewRoom, showPatientInfo, showQREditor, showSettings]);
+    pauseBackgroundRefreshRef.current = showSettings || showStaffChats || showPatientInfo || showNewRoom || showQREditor;
+  }, [showNewRoom, showPatientInfo, showQREditor, showSettings, showStaffChats]);
 
   useEffect(() => {
     const previousCount = lastMessageCountRef.current;
@@ -2458,6 +2678,23 @@ export default function InboxPage() {
             </button>
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Teléfono / WhatsApp":"Phone / WhatsApp"}</p>
+            <label style={{display:"block",fontSize:uiBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>
+              {lang==="es"?"Número para llamadas internas del equipo":"Number for internal team calls"}
+            </label>
+            <input
+              value={phoneEdit}
+              onChange={(event)=>setPhoneEdit(event.target.value)}
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="+52 664 123 4567"
+              style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 14px",fontSize:16,fontFamily:"inherit",fontWeight:650,marginBottom:10}}
+            />
+            <button onClick={saveProfilePhone} disabled={savingPhone} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingPhone?0.55:1}}>
+              {savingPhone ? (lang==="es"?"Guardando...":"Saving...") : savedPhone ? t.saved : t.save}
+            </button>
+          </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
             <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:14,lineHeight:1.35}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
               <span style={{fontSize:uiBaseSize,color:textColor,fontWeight:650,lineHeight:1.4}}>🌙 {t.darkMode}</span>
@@ -2478,6 +2715,94 @@ export default function InboxPage() {
       </div>
     </div>
   );
+
+  const StaffChatsPanel = () => {
+    const activePeer = activeStaffPrivateConversation?.peer || null;
+    return (
+      <div className="modal-overlay" onClick={()=>{setShowStaffChats(false);setActiveStaffChatPeerId(null);setStaffPrivateReply("");}}>
+        <div className="modal-scroll" onClick={e=>e.stopPropagation()} style={{maxWidth:720}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14}}>
+            <div style={{minWidth:0}}>
+              <p className="modal-title" style={{margin:0}}>{lang==="es"?"Chat staff a staff":"Staff to Staff Chat"}</p>
+              <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45,marginTop:4}}>
+                {activePeer
+                  ? (activePeer.full_name || activePeer.display_name || (lang==="es"?"Personal":"Staff"))
+                  : (lang==="es"?"Mensajes privados entre miembros del equipo.":"Private messages between team members.")}
+              </p>
+            </div>
+            <button onClick={()=>{setShowStaffChats(false);setActiveStaffChatPeerId(null);setStaffPrivateReply("");}} style={{background:cardBg,border:"none",borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:800,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
+          </div>
+
+          {!activeStaffPrivateConversation ? (
+            <div style={{display:"grid",gap:10}}>
+              {staffPrivateConversations.length === 0 ? (
+                <div style={{padding:22,borderRadius:18,background:cardBg,border:`1px solid ${borderColor}`,color:subTextColor,fontSize:uiBaseSize,fontWeight:700,lineHeight:1.5}}>
+                  {lang==="es"?"Todavía no hay mensajes privados staff a staff.":"No private staff-to-staff messages yet."}
+                </div>
+              ) : staffPrivateConversations.map((conversation) => (
+                <button
+                  key={conversation.peerId}
+                  onClick={()=>openStaffPrivateConversation(conversation.peerId)}
+                  style={{display:"flex",alignItems:"center",gap:12,width:"100%",border:`1px solid ${conversation.unreadCount ? "#93C5FD" : borderColor}`,background:conversation.unreadCount ? (darkMode?"rgba(37,99,235,0.18)":"#EFF6FF") : cardBg,borderRadius:18,padding:14,textAlign:"left",fontFamily:"inherit",cursor:"pointer"}}
+                >
+                  <div style={{width:46,height:46,borderRadius:"50%",background:"linear-gradient(135deg,#111827,#2563EB)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,flexShrink:0}}>
+                    {conversation.peer.avatar_url ? <img src={conversation.peer.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}} /> : ini(conversation.peer.full_name || conversation.peer.display_name || "S")}
+                  </div>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"space-between"}}>
+                      <p style={{fontSize:uiBaseSize,fontWeight:900,color:textColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{conversation.peer.full_name || conversation.peer.display_name || (lang==="es"?"Personal":"Staff")}</p>
+                      <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:750,whiteSpace:"nowrap"}}>{fmtTime(conversation.latestAt)}</span>
+                    </div>
+                    <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{conversation.latestText || (lang==="es"?"Mensaje privado":"Private message")}</p>
+                  </div>
+                  {conversation.unreadCount > 0 && <span style={{minWidth:24,height:24,borderRadius:99,background:"#2563EB",color:"white",fontSize:13,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}}>{conversation.unreadCount}</span>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{display:"grid",gap:12}}>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                <button className="sbtn" onClick={()=>{setActiveStaffChatPeerId(null);setStaffPrivateReply("");}} style={{width:"auto",padding:"0 14px"}}>{lang==="es"?"Volver":"Back"}</button>
+                <button
+                  className="pbtn"
+                  disabled={!activePeer?.phone}
+                  onClick={()=>{ if (activePeer?.phone) window.location.href = `tel:${activePeer.phone}`; }}
+                  style={{width:"auto",padding:"0 14px",opacity:activePeer?.phone?1:0.5}}
+                >
+                  {lang==="es"?"Llamar":"Call"}
+                </button>
+                {!activePeer?.phone && <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{lang==="es"?"Sin teléfono registrado. Puede agregarlo en Ajustes.":"No phone listed. They can add it in Settings."}</span>}
+              </div>
+              <div style={{display:"grid",gap:8,maxHeight:"45dvh",overflowY:"auto",padding:"12px",borderRadius:18,background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
+                {activeStaffPrivateConversation.messages.map((message) => {
+                  const mine = message.sender_id === currentUserId;
+                  return (
+                    <div key={message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
+                      <div style={{maxWidth:"82%",borderRadius:mine?"16px 16px 4px 16px":"16px 16px 16px 4px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"10px 12px",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}>
+                        <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{message.content}</p>
+                        <p style={{fontSize:Math.max(uiSmallSize - 1, 12),opacity:0.78,textAlign:"right",marginTop:5,fontWeight:700}}>{fmtTime(message.created_at || "")}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <textarea
+                className="finput"
+                rows={3}
+                value={staffPrivateReply}
+                onChange={(event)=>setStaffPrivateReply(event.target.value)}
+                placeholder={lang==="es"?"Responder mensaje privado":"Reply privately"}
+                style={{resize:"vertical",minHeight:96}}
+              />
+              <button className="pbtn" disabled={!staffPrivateReply.trim() || savingStaffPrivateMessage} onClick={sendStaffPrivateReply}>
+                {savingStaffPrivateMessage ? (lang==="es"?"Enviando...":"Sending...") : (lang==="es"?"Enviar respuesta":"Send reply")}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const PatientInfoPanel = () => {
     const patient = selectedRoom?.procedures?.patients;
@@ -3360,6 +3685,7 @@ export default function InboxPage() {
       )}
 
       {showSettings && SettingsPanel()}
+      {showStaffChats && StaffChatsPanel()}
       {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
       {activeMessageAction && (
         <div className="modal-overlay" onClick={closeMessageActions}>
@@ -3502,6 +3828,22 @@ export default function InboxPage() {
             {callInviteFeedback}
           </div>
         )}
+        {privateToast && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={()=>openStaffPrivateConversation(privateToast.sender_id || "")}
+            onKeyDown={(event)=>{ if (event.key === "Enter" || event.key === " ") openStaffPrivateConversation(privateToast.sender_id || ""); }}
+            style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:245,width:"min(360px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.98)":"rgba(255,255,255,0.99)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 45px rgba(15,23,42,0.24)",padding:14,cursor:"pointer"}}
+          >
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
+              <p style={{fontSize:uiSmallSize,fontWeight:900,color:"#2563EB",textTransform:"uppercase",letterSpacing:0.4}}>{lang==="es"?"Mensaje privado":"Private message"}</p>
+              <button onClick={(event)=>{event.stopPropagation();setPrivateToast(null);}} style={{border:"none",background:cardBg,borderRadius:999,width:34,height:34,minHeight:34,color:textColor,fontWeight:900,cursor:"pointer"}}>×</button>
+            </div>
+            <p style={{fontSize:uiBaseSize,fontWeight:900,marginBottom:4,overflowWrap:"anywhere"}}>{privateToast.sender_name || (lang==="es"?"Personal":"Staff")}</p>
+            <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45,overflowWrap:"anywhere"}}>{`${privateToast.content || ""}`.slice(0, 160)}</p>
+          </div>
+        )}
 
         <div className="body">
           <div className={`sidebar${mobileView==="chat"?" hidden":""}`}>
@@ -3512,6 +3854,19 @@ export default function InboxPage() {
                   {totalUnread>0&&<span style={{background:"#25D366",color:"white",fontSize:12,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{totalUnread}</span>}
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <button
+                    className="admin-inline-btn"
+                    onClick={()=>{setShowStaffChats(true);setActiveStaffChatPeerId(null);fetchStaffPrivateMessages();}}
+                    title={lang==="es" ? "Chat staff a staff" : "Staff to Staff Chat"}
+                    style={{position:"relative"}}
+                  >
+                    {lang==="es" ? "Staff" : "Staff"}
+                    {staffPrivateUnread > 0 && (
+                      <span style={{position:"absolute",top:-6,right:-6,minWidth:20,height:20,padding:"0 5px",borderRadius:99,background:"#EF4444",color:"white",fontSize:12,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(239,68,68,0.35)"}}>
+                        {staffPrivateUnread}
+                      </span>
+                    )}
+                  </button>
                   {canOpenAdmin&&<button className="admin-inline-btn" onClick={()=>window.location.href="/admin"}>Admin</button>}
                   <button
                     onClick={() => {
