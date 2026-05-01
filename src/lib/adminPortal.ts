@@ -9,6 +9,8 @@ export type StaffProfile = {
   id: string;
   full_name?: string | null;
   display_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
   role?: string | null;
   avatar_url?: string | null;
   office_location?: string | null;

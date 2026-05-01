@@ -185,6 +185,11 @@ export default function AdminPage() {
     window.location.href = path;
   };
 
+  const scrollToAdminSection = (id: string) => {
+    setMobileMenuOpen(false);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const scrollAdminToTop = () => {
     const shell = document.querySelector(".admin-shell");
     if (shell instanceof HTMLElement) {
@@ -379,13 +384,14 @@ export default function AdminPage() {
   const shareInviteLink = async () => {
     if (!inviteLink) return;
     const nav = navigator as Navigator & { share?: (data?: ShareData) => Promise<void> };
+    const inviteText = isSpanish
+      ? `Invitación al portal médico privado del Dr. Fonseca: ${inviteLink}`
+      : `Invitation to Dr. Fonseca's private medical portal: ${inviteLink}`;
     if (typeof nav.share === "function") {
       try {
         await nav.share({
           title: isSpanish ? "Invitación al portal" : "Portal invitation",
-          text: isSpanish
-            ? "Usa este enlace para registrarte en el portal del equipo."
-            : "Use this link to register for the team portal.",
+          text: inviteText,
           url: inviteLink,
         });
         updateSuccess(isSpanish ? "Se abrió el menú para compartir el enlace." : "The share menu opened for the invitation link.");
@@ -395,6 +401,15 @@ export default function AdminPage() {
       }
     }
     await copyInviteLink();
+  };
+
+  const sendInviteText = () => {
+    if (!inviteLink) return;
+    const inviteText = isSpanish
+      ? `Invitación al portal médico privado del Dr. Fonseca: ${inviteLink}`
+      : `Invitation to Dr. Fonseca's private medical portal: ${inviteLink}`;
+    window.location.href = `sms:?&body=${encodeURIComponent(inviteText)}`;
+    updateSuccess(isSpanish ? "Abrí Mensajes con la invitación lista." : "Messages opened with the invitation ready.");
   };
 
   const deleteStaff = async (member: StaffProfile) => {
@@ -788,15 +803,15 @@ export default function AdminPage() {
         * { box-sizing: border-box; }
         body { background: #F5F7FB; }
         .admin-shell { position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: radial-gradient(circle at top, rgba(59,130,246,0.10), transparent 26%), #F5F7FB; }
-        .admin-topbar { background: #07334D; backdrop-filter: blur(18px); min-height: calc(102px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 14px; position: sticky; top: 0; z-index: 100; box-shadow: 0 8px 26px rgba(7,51,77,0.22); }
+        .admin-topbar { background: #07334D; backdrop-filter: blur(18px); min-height: calc(86px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; z-index: 100; box-shadow: 0 8px 26px rgba(7,51,77,0.22); }
         .admin-body { width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-        .topbar-title { min-width: 0; display: flex; align-items: center; gap: 16px; }
-        .admin-brand-logo { width: min(330px, 38vw); height: 74px; object-fit: contain; object-position: left center; display: block; }
+        .topbar-title { min-width: 0; display: flex; align-items: center; gap: 14px; flex: 1 1 auto; }
+        .admin-brand-logo { width: min(270px, 31vw); height: 64px; object-fit: contain; object-position: left center; display: block; }
         .admin-title-copy { min-width: 0; padding-left: 14px; border-left: 1px solid rgba(255,255,255,0.18); }
-        .topbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
-        .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-        .topbar-btn { height: 42px; padding: 0 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; }
-        .topbar-select { appearance: none; -webkit-appearance: none; width: 152px; height: 42px; padding: 0 36px 0 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px); background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+        .topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 0 auto; }
+        .topbar-actions { display: flex; gap: 7px; flex-wrap: nowrap; justify-content: flex-end; }
+        .topbar-btn { height: 38px; padding: 0 11px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 850; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; }
+        .topbar-select { appearance: none; -webkit-appearance: none; width: 86px; height: 38px; padding: 0 26px 0 10px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 850; font-size: 14px !important; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 15px) calc(50% - 3px), calc(100% - 10px) calc(50% - 3px); background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
         .menu-btn { display: none; width: 42px; height: 42px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; cursor: pointer; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
         .menu-panel { display: none; }
         .hero { background: linear-gradient(135deg, #0B2438 0%, #0E3F63 58%, #155C95 100%); color: white; border-radius: 30px; padding: 26px; margin-bottom: 18px; box-shadow: 0 18px 50px rgba(7,51,77,0.20); border: 1px solid rgba(255,255,255,0.12); }
@@ -804,7 +819,8 @@ export default function AdminPage() {
         .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr); gap: 16px; align-items: start; }
         .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 18px 0; }
         .stat-card, .card { background: rgba(255,255,255,0.98); border: 1px solid rgba(102,132,163,0.14); border-radius: 20px; padding: 20px; box-shadow: 0 8px 28px rgba(28,66,104,0.06); }
-        .stat-card { padding: 18px 16px; min-height: 124px; }
+        .stat-card { display: block; width: 100%; padding: 18px 16px; min-height: 124px; appearance: none; text-align: left; font-family: inherit; cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+        .stat-card:hover, .stat-card:focus-visible { transform: translateY(-2px); border-color: rgba(37,99,235,0.35); box-shadow: 0 14px 34px rgba(28,66,104,0.10); outline: none; }
         .stat-icon { width: 38px; height: 38px; border-radius: 14px; display: grid; place-items: center; background: #EAF5FF; color: #075EA8; font-size: 18px; margin-bottom: 12px; }
         .stat-label { color: #64748B; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
         .stat-value { color: #0E2D4A; font-size: 30px; line-height: 1; font-weight: 950; }
@@ -848,6 +864,15 @@ export default function AdminPage() {
         .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
         .staff-row, .patient-row { display: flex; gap: 14px; align-items: flex-start; padding: 16px 0; border-bottom: 1px solid #EEF2F7; }
         .staff-row:last-child, .patient-row:last-child { border-bottom: none; }
+        .staff-row.compact { gap: 12px; padding: 14px 0; }
+        .staff-heading-line { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .staff-contact { color: #64748B; font-size: 12px; font-weight: 700; line-height: 1.45; margin-top: 3px; overflow-wrap: anywhere; }
+        .staff-controls { margin-top: 10px; border: 1px solid #E6EEF7; border-radius: 14px; overflow: hidden; background: #FBFDFF; }
+        .staff-controls summary { list-style: none; padding: 10px 12px; cursor: pointer; color: #075EA8; font-size: 12px; font-weight: 900; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .staff-controls summary::-webkit-details-marker { display: none; }
+        .staff-controls-body { padding: 0 12px 12px; }
+        .danger-inline-btn { flex-shrink: 0; padding: 8px 10px; border-radius: 999px; border: none; background: #FFF1F2; color: #E11D48; font-size: 12px; font-weight: 900; cursor: pointer; font-family: inherit; }
+        .danger-inline-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg,#111827,#1D4ED8); color: white; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; flex-shrink: 0; overflow: hidden; }
         .meta-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; margin-right: 6px; margin-top: 8px; }
         .mini-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -876,6 +901,8 @@ export default function AdminPage() {
         @media (max-width: 980px) {
           .hero-grid, .workspace-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
           .stats-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+          .admin-brand-logo { width: min(245px, 34vw); }
+          .admin-title-copy { display: none; }
         }
         @media (max-width: 560px) {
           .stats-grid { grid-template-columns: 1fr 1fr; }
@@ -918,13 +945,13 @@ export default function AdminPage() {
           </div>
           <div className="topbar-right">
             <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
-              <option value="es">🇲🇽 Español</option>
-              <option value="en">🇺🇸 English</option>
+              <option value="es">🇲🇽 ES</option>
+              <option value="en">🇺🇸 EN</option>
             </select>
             <div className="topbar-actions">
               <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
-              <button className="topbar-btn" onClick={() => goTo("/inbox")}>{isSpanish ? "Volver al portal" : "Back to portal"}</button>
-              <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Sign out"}</button>
+              <button className="topbar-btn" onClick={() => goTo("/inbox")}>Portal</button>
+              <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Exit"}</button>
             </div>
           </div>
           <button
@@ -942,12 +969,12 @@ export default function AdminPage() {
         {mobileMenuOpen && (
           <div className="menu-panel">
             <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
-              <option value="es">🇲🇽 Español</option>
-              <option value="en">🇺🇸 English</option>
+              <option value="es">🇲🇽 ES</option>
+              <option value="en">🇺🇸 EN</option>
             </select>
             <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
-            <button className="topbar-btn" onClick={() => goTo("/inbox")}>{isSpanish ? "Volver al portal" : "Back to portal"}</button>
-            <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Sign out"}</button>
+            <button className="topbar-btn" onClick={() => goTo("/inbox")}>Portal</button>
+            <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Exit"}</button>
           </div>
         )}
 
@@ -974,30 +1001,30 @@ export default function AdminPage() {
           </section>
 
           <section className="stats-grid" aria-label={isSpanish ? "Resumen administrativo" : "Administrative summary"}>
-            <div className="stat-card">
+            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("expedientes")}>
               <div className="stat-icon">🏥</div>
               <p className="stat-label">{isSpanish ? "Pacientes activos" : "Active patients"}</p>
               <p className="stat-value">{activePatientCount}</p>
               <p className="stat-help">{isSpanish ? "Expedientes en seguimiento" : "Records in follow-up"}</p>
-            </div>
-            <div className="stat-card">
+            </button>
+            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("expedientes")}>
               <div className="stat-icon">💬</div>
               <p className="stat-label">{isSpanish ? "Salas" : "Rooms"}</p>
               <p className="stat-value">{rooms.length}</p>
               <p className="stat-help">{isSpanish ? "Chats creados" : "Created chats"}</p>
-            </div>
-            <div className="stat-card">
+            </button>
+            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("equipo")}>
               <div className="stat-icon">👥</div>
               <p className="stat-label">{isSpanish ? "Equipo" : "Team"}</p>
               <p className="stat-value">{staff.length}</p>
               <p className="stat-help">{isSpanish ? `${adminAccessCount} con acceso admin` : `${adminAccessCount} with admin access`}</p>
-            </div>
-            <div className="stat-card">
+            </button>
+            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("bloqueos")}>
               <div className="stat-icon">🔒</div>
               <p className="stat-label">{isSpanish ? "Bloqueos" : "Blocks"}</p>
               <p className="stat-value">{blockedAccessCount}</p>
               <p className="stat-help">{isSpanish ? "Correos y teléfonos restringidos" : "Restricted emails and phones"}</p>
-            </div>
+            </button>
           </section>
 
           <div className="workspace-grid">
@@ -1153,6 +1180,139 @@ export default function AdminPage() {
             </div>
 
             <div className="stack">
+              <section className="card team-card" id="equipo">
+                <div className="header-row">
+                  <div>
+                    <p className="card-title">{isSpanish ? "Equipo y permisos" : "Team and permissions"}</p>
+                    <p className="muted">
+                      {isSpanish
+                        ? "Contactos, sede y acceso administrativo en una vista compacta."
+                        : "Contacts, office, and admin access in a compact view."}
+                    </p>
+                  </div>
+                </div>
+
+                {staff.length === 0 ? (
+                  <div className="empty-state">
+                    <div style={{ fontSize: 34, marginBottom: 8 }}>👥</div>
+                    <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "Todavía no hay equipo" : "No team members yet"}</p>
+                    <p className="muted">{isSpanish ? "Cuando se registren aparecerán aquí." : "They will appear here once they register."}</p>
+                  </div>
+                ) : (
+                  staff.map((member) => {
+                    const memberEmail = member.id === viewerId ? viewerEmail : member.email || "";
+                    const contactLine = [member.phone, memberEmail].filter(Boolean).join(" · ");
+                    const level = normalizeAdminLevel(member.admin_level, memberEmail);
+                    const memberOffice = normalizeOffice(member.office_location);
+                    const memberWorksBoth = member.office_location === null;
+                    const memberOfficeText = memberWorksBoth ? (isSpanish ? "🌐 Ambas sedes" : "🌐 Both offices") : officeLabel(memberOffice);
+                    const canEditThisMember = canManageAdmins && !(level === "owner" && !canManageOwner);
+                    const accessKey = `${member.id}-admin_level`;
+                    const officeKey = `${member.id}-office_location`;
+
+                    return (
+                      <div key={member.id} className="staff-row compact">
+                        <div className="avatar">
+                          {member.avatar_url ? (
+                            <img src={member.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            initials(member.full_name || member.display_name)
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="staff-heading-line">
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ fontSize: 16, fontWeight: 900, color: "#111827", marginBottom: 2 }}>{member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name")}</p>
+                              <p className="staff-contact">{contactLine || (isSpanish ? "Sin teléfono o correo registrado" : "No phone or email listed")}</p>
+                            </div>
+                            <button
+                              className="danger-inline-btn"
+                              disabled={deletingId === member.id || !canManageAdmins || (level === "owner" && !canManageOwner)}
+                              onClick={() => deleteStaff(member)}
+                            >
+                              {deletingId === member.id ? (isSpanish ? "..." : "...") : (isSpanish ? "Eliminar" : "Delete")}
+                            </button>
+                          </div>
+
+                          <div>
+                            <span className="meta-badge" style={{ color: roleColor(member.role), background: `${roleColor(member.role)}18` }}>{roleText(member.role)}</span>
+                            <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>{adminText(level)}</span>
+                            <span className="meta-badge" style={{ color: memberWorksBoth || memberOffice ? "#1D4ED8" : "#6B7280", background: memberWorksBoth || memberOffice ? "#EFF6FF" : "#F3F4F6" }}>
+                              {memberOfficeText}
+                            </span>
+                          </div>
+
+                          <details className="staff-controls">
+                            <summary>
+                              {isSpanish ? "Ajustar permisos" : "Adjust permissions"}
+                              <span>⌄</span>
+                            </summary>
+                            <div className="staff-controls-body">
+                              <div className="setting-group">
+                                <p className="group-label">{isSpanish ? "Sede" : "Office"}</p>
+                                <div className="mini-actions">
+                                  {[
+                                    { value: "Guadalajara" as Office, label: "Guadalajara", active: memberOffice === "Guadalajara" && !memberWorksBoth },
+                                    { value: "Tijuana" as Office, label: "Tijuana", active: memberOffice === "Tijuana" && !memberWorksBoth },
+                                    { value: null as string | null, label: isSpanish ? "Ambas" : "Both", active: memberWorksBoth },
+                                  ].map((officeOption) => (
+                                    <button
+                                      key={`${member.id}-${officeOption.label}`}
+                                      className="mini-btn"
+                                      style={{
+                                        background: officeOption.active ? "#DBEAFE" : "#EFF3F8",
+                                        color: officeOption.active ? "#1D4ED8" : "#374151",
+                                        opacity: savingKey === officeKey ? 0.6 : 1,
+                                      }}
+                                      disabled={savingKey === officeKey}
+                                      onClick={() => updateStaffField(
+                                        member,
+                                        { office_location: officeOption.value },
+                                        isSpanish
+                                          ? `Sede de ${member.full_name || "staff"} actualizada a ${officeOption.value || "Ambas sedes"}.`
+                                          : `Office for ${member.full_name || "staff"} updated to ${officeOption.value || "Both offices"}.`,
+                                      )}
+                                    >
+                                      {officeOption.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="setting-group">
+                                <p className="group-label">{isSpanish ? "Admin" : "Admin"}</p>
+                                <div className="mini-actions">
+                                  {(["none", "admin", "super_admin"] as AdminLevel[]).map((option) => (
+                                    <button
+                                      key={`${member.id}-${option}`}
+                                      className="mini-btn"
+                                      style={{
+                                        background: level === option ? `${adminColor(option)}18` : "#EFF3F8",
+                                        color: level === option ? adminColor(option) : "#374151",
+                                        opacity: !canEditThisMember || savingKey === accessKey ? 0.55 : 1,
+                                      }}
+                                      disabled={!canEditThisMember || savingKey === accessKey}
+                                      onClick={() => updateStaffField(member, { admin_level: option }, isSpanish ? `Acceso de ${member.full_name || "staff"} actualizado a ${adminLabel(option)}.` : `Access for ${member.full_name || "staff"} updated to ${adminText(option)}.`)}
+                                    >
+                                      {adminText(option)}
+                                    </button>
+                                  ))}
+                                  {level === "owner" && (
+                                    <span className="meta-badge" style={{ color: adminColor("owner"), background: `${adminColor("owner")}18` }}>
+                                      {isSpanish ? "Protegido" : "Protected"}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </details>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </section>
+
               <section className="card">
                 <div className="header-row">
                   <div>
@@ -1170,7 +1330,7 @@ export default function AdminPage() {
                 </div>
               </section>
 
-              <section className="card">
+              <section className="card" id="bloqueos">
                 <div className="header-row">
                   <div>
                     <p className="card-title">{isSpanish ? "Accesos bloqueados" : "Blocked access"}</p>
@@ -1251,6 +1411,9 @@ export default function AdminPage() {
                     <button className="main-btn" onClick={copyInviteLink} disabled={!inviteLink}>
                       {isSpanish ? "Copiar enlace" : "Copy link"}
                     </button>
+                    <button className="ghost-btn" onClick={sendInviteText} disabled={!inviteLink}>
+                      SMS
+                    </button>
                     <button className="ghost-btn" onClick={shareInviteLink} disabled={!inviteLink}>
                       {isSpanish ? "Compartir" : "Share"}
                     </button>
@@ -1299,133 +1462,6 @@ export default function AdminPage() {
 
             </div>
           </div>
-
-          <section className="card" id="equipo" style={{ marginTop: 16 }}>
-            <div className="header-row">
-              <div>
-                <p className="card-title">{isSpanish ? "Equipo y permisos" : "Team and permissions"}</p>
-                <p className="muted">
-                  {isSpanish
-                    ? "Aquí corriges la sede del equipo y decides quién también puede entrar al centro de control. Los cambios se guardan al instante y verás una confirmación en pantalla."
-                    : "Here you can correct team office assignments and decide who can also enter the control center. Changes save immediately and you will see an on-screen confirmation."}
-                </p>
-              </div>
-            </div>
-
-            {staff.length === 0 ? (
-              <div className="empty-state">
-                <div style={{ fontSize: 40, marginBottom: 8 }}>👥</div>
-                <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "Todavía no hay equipo" : "No team members yet"}</p>
-                <p className="muted">{isSpanish ? "Cuando se registren aparecerán aquí." : "They will appear here once they register."}</p>
-              </div>
-            ) : (
-              staff.map((member) => {
-                const memberEmail = member.id === viewerId ? viewerEmail : "";
-                const level = normalizeAdminLevel(member.admin_level, memberEmail);
-                const memberOffice = normalizeOffice(member.office_location);
-                const memberWorksBoth = member.office_location === null;
-                const memberOfficeText = memberWorksBoth ? (isSpanish ? "🌐 Ambas sedes" : "🌐 Both offices") : officeLabel(memberOffice);
-                const canEditThisMember = canManageAdmins && !(level === "owner" && !canManageOwner);
-                const accessKey = `${member.id}-admin_level`;
-                const officeKey = `${member.id}-office_location`;
-
-                return (
-                  <div key={member.id} className="staff-row">
-                    <div className="avatar">
-                      {member.avatar_url ? (
-                        <img src={member.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      ) : (
-                        initials(member.full_name || member.display_name)
-                      )}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 4 }}>{member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name")}</p>
-                      <div>
-                        <span className="meta-badge" style={{ color: roleColor(member.role), background: `${roleColor(member.role)}18` }}>{roleText(member.role)}</span>
-                        <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>{adminText(level)}</span>
-                        <span className="meta-badge" style={{ color: memberWorksBoth || memberOffice ? "#1D4ED8" : "#6B7280", background: memberWorksBoth || memberOffice ? "#EFF6FF" : "#F3F4F6" }}>
-                          {memberOfficeText}
-                        </span>
-                      </div>
-
-                      <div className="setting-group">
-                        <p className="group-label">{isSpanish ? "Sede del equipo" : "Team office"}</p>
-                        <div className="mini-actions">
-                          {[
-                            { value: "Guadalajara" as Office, label: "🏙️ Guadalajara", active: memberOffice === "Guadalajara" && !memberWorksBoth },
-                            { value: "Tijuana" as Office, label: "🌊 Tijuana", active: memberOffice === "Tijuana" && !memberWorksBoth },
-                            { value: null as string | null, label: isSpanish ? "🌐 Ambas sedes" : "🌐 Both offices", active: memberWorksBoth },
-                          ].map((officeOption) => (
-                            <button
-                              key={`${member.id}-${officeOption.label}`}
-                              className="mini-btn"
-                              style={{
-                                background: officeOption.active ? "#DBEAFE" : "#EFF3F8",
-                                color: officeOption.active ? "#1D4ED8" : "#374151",
-                                opacity: savingKey === officeKey ? 0.6 : 1,
-                              }}
-                              disabled={savingKey === officeKey}
-                              onClick={() => updateStaffField(
-                                member,
-                                { office_location: officeOption.value },
-                                isSpanish
-                                  ? `Sede de ${member.full_name || "staff"} actualizada a ${officeOption.value || "Ambas sedes"}.`
-                                  : `Office for ${member.full_name || "staff"} updated to ${officeOption.value || "Both offices"}.`,
-                              )}
-                            >
-                              {officeOption.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="setting-group">
-                        <p className="group-label">{isSpanish ? "Acceso al centro de control" : "Control center access"}</p>
-                        <div className="mini-actions">
-                          {(["none", "admin", "super_admin"] as AdminLevel[]).map((option) => (
-                            <button
-                              key={`${member.id}-${option}`}
-                              className="mini-btn"
-                              style={{
-                                background: level === option ? `${adminColor(option)}18` : "#EFF3F8",
-                                color: level === option ? adminColor(option) : "#374151",
-                                opacity: !canEditThisMember || savingKey === accessKey ? 0.55 : 1,
-                              }}
-                              disabled={!canEditThisMember || savingKey === accessKey}
-                              onClick={() => updateStaffField(member, { admin_level: option }, isSpanish ? `Acceso de ${member.full_name || "staff"} actualizado a ${adminLabel(option)}.` : `Access for ${member.full_name || "staff"} updated to ${adminText(option)}.`)}
-                            >
-                              {adminText(option)}
-                            </button>
-                          ))}
-                          {level === "owner" && (
-                            <span className="meta-badge" style={{ color: adminColor("owner"), background: `${adminColor("owner")}18` }}>
-                              {isSpanish ? "Protegido" : "Protected"}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <p className="small-note" style={{ marginTop: 10 }}>
-                        {isSpanish ? "Estado actual" : "Current status"}: {memberWorksBoth ? (isSpanish ? "Ambas sedes" : "Both offices") : (memberOffice || (isSpanish ? "Sin sede" : "No office"))} · {adminText(level)}
-                      </p>
-                    </div>
-
-                    <div style={{ display: "grid", gap: 8, minWidth: 132 }}>
-                      <button
-                        className="mini-btn"
-                        style={{ background: "#FFF1F2", color: "#E11D48", opacity: !canManageAdmins || (level === "owner" && !canManageOwner) ? 0.45 : 1 }}
-                        disabled={deletingId === member.id || !canManageAdmins || (level === "owner" && !canManageOwner)}
-                        onClick={() => deleteStaff(member)}
-                      >
-                        {deletingId === member.id ? (isSpanish ? "Eliminando..." : "Deleting...") : (isSpanish ? "🗑️ Eliminar" : "🗑️ Delete")}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </section>
-
           <div className="admin-bottom-actions">
             <button type="button" className="back-top-inline-btn" onClick={scrollAdminToTop}>
               {isSpanish ? "⬆️ Volver arriba" : "⬆️ Back to top"}

@@ -85,12 +85,12 @@ const T = {
     medications: "Medicamentos Actuales",
     medicationsPH: "Ej: Ibuprofeno, metformina, vitaminas...",
     careTeam: "Equipo Asignado",
-    careTeamHint: "Selecciona quién tendrá acceso y alertas. Al crear la sala, el equipo seleccionado verá el paciente como no leído.",
-    careTeamFocused: "Mostrando primero personal de la sede elegida para evitar errores.",
-    careTeamShowAll: "Mostrar todo el personal",
-    careTeamShowOffice: "Ver solo sede elegida",
-    careTeamSelectAll: "Seleccionar todos",
-    careTeamClear: "Limpiar selección",
+    careTeamHint: "Elige quién verá esta sala dentro del portal/app. No se envían SMS ni enlaces al equipo.",
+    careTeamFocused: "Sede elegida",
+    careTeamShowAll: "Todos",
+    careTeamShowOffice: "Sede",
+    careTeamSelectAll: "Todos",
+    careTeamClear: "Solo yo",
     careTeamSelected: "Seleccionados",
     careTeamRoleDoctor: "Doctores",
     careTeamRoleEnfermeria: "Enfermería",
@@ -135,8 +135,8 @@ const T = {
     profilePic: "Foto de Perfil", beforePhotos: "Fotos Pre-Op",
     tapProfilePic: "Toca para subir foto de perfil",
     tapBeforePhotos: "Toca para subir fotos pre-op",
-    createRoom: "Crear sala y obtener enlace", creating: "Creando sala...",
-    cancel: "Cancelar", roomCreated: "¡Sala Creada!", shareLink: "Comparte este enlace con",
+    createRoom: "Crear sala del paciente", creating: "Creando sala...",
+    cancel: "Cancelar", roomCreated: "¡Sala Creada!", shareLink: "Comparte este enlace con el paciente:",
     copyLink: "📋 Copiar Enlace", copied: "✅ ¡Copiado!", whatsapp: "💬 Enviar por WhatsApp",
     done: "Listo", required: "Nombre del paciente y procedimiento son obligatorios.",
     fixErrors: "Corrige los errores antes de continuar.",
@@ -203,12 +203,12 @@ const T = {
     medications: "Current Medications",
     medicationsPH: "e.g. Ibuprofen, metformin, vitamins...",
     careTeam: "Assigned Care Team",
-    careTeamHint: "Choose who gets access and alerts. When the room is created, selected staff will see it as unread.",
-    careTeamFocused: "Showing staff from the selected office first to avoid assignment mistakes.",
-    careTeamShowAll: "Show all staff",
-    careTeamShowOffice: "Show selected office only",
-    careTeamSelectAll: "Select all",
-    careTeamClear: "Clear selection",
+    careTeamHint: "Choose who will see this room inside the portal/app. No SMS or staff links are sent.",
+    careTeamFocused: "Selected office",
+    careTeamShowAll: "All",
+    careTeamShowOffice: "Office",
+    careTeamSelectAll: "All",
+    careTeamClear: "Only me",
     careTeamSelected: "Selected",
     careTeamRoleDoctor: "Doctors",
     careTeamRoleEnfermeria: "Nursing",
@@ -253,8 +253,8 @@ const T = {
     profilePic: "Profile Photo", beforePhotos: "Pre-Op Photos",
     tapProfilePic: "Tap to upload profile photo",
     tapBeforePhotos: "Tap to upload pre-op photos",
-    createRoom: "Create room and get link", creating: "Creating room...",
-    cancel: "Cancel", roomCreated: "Room Created!", shareLink: "Share this link with",
+    createRoom: "Create patient room", creating: "Creating room...",
+    cancel: "Cancel", roomCreated: "Room Created!", shareLink: "Share this link with the patient:",
     copyLink: "📋 Copy Link", copied: "✅ Copied!", whatsapp: "💬 Send via WhatsApp",
     done: "Done", required: "Patient name and procedure are required.",
     fixErrors: "Please correct the errors before continuing.",
@@ -628,10 +628,6 @@ export default function InboxPage() {
     ? staffDirectory
     : staffDirectory.filter((member) => !member.office_location || member.office_location === newLocation);
   const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id));
-  const careTeamGroups = CARE_TEAM_ROLE_ORDER.map((role) => ({
-    role,
-    members: careTeamDirectory.filter((member) => (member.role || "staff") === role),
-  })).filter((group) => group.members.length > 0);
   const careTeamRoleLabel = (role: string) => {
     if (role === "doctor") return t.careTeamRoleDoctor;
     if (role === "enfermeria") return t.careTeamRoleEnfermeria;
@@ -2454,9 +2450,9 @@ export default function InboxPage() {
         .slash-popup { position: fixed; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 45; pointer-events: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: min(42dvh, 260px); overflow-y: auto; padding: 0 0 8px; }
         .slash-item { width: fit-content; max-width: calc(100vw - 20px); border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(0,0,0,0.10)"}; background: ${darkMode?"#253244":"white"}; color: ${textColor}; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 16px; font-weight: 600; box-shadow: 0 8px 24px rgba(15,23,42,0.16); pointer-events: auto; cursor: pointer; font-family: inherit; }
         .slash-item:hover { background: ${darkMode?"#30415A":"#F8FAFC"}; }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(6px); overflow: hidden; }
         .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
-        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
+        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
         .modal-title { font-size: 20px; font-weight: 700; color: ${textColor}; margin-bottom: 20px; }
         .room-create-modal { max-width: 680px; top: 4vh; background: ${darkMode?"#111B21":"#F8FBFF"}; padding-top: 18px; }
         .room-modal-head { background: linear-gradient(135deg,#07334D 0%,#0E4C75 100%); border-radius: 22px; padding: 18px; color: white; margin-bottom: 14px; box-shadow: 0 16px 34px rgba(7,51,77,0.18); }
@@ -2484,7 +2480,22 @@ export default function InboxPage() {
         .room-toggle[open] .room-toggle-chevron { transform: rotate(180deg); }
         .room-toggle-body { padding: 0 18px 18px; }
         .room-note { background: ${darkMode?"rgba(37,99,235,0.16)":"#EAF5FF"}; border: 1px solid ${darkMode?"rgba(125,211,252,0.16)":"#CFE5FA"}; color: ${darkMode?"#DBEAFE":"#174769"}; border-radius: 16px; padding: 12px 14px; font-size: 13px; font-weight: 750; line-height: 1.45; margin-bottom: 12px; }
-        .room-action-bar { position: sticky; bottom: 0; background: ${darkMode?"rgba(17,27,33,0.96)":"rgba(248,251,255,0.96)"}; backdrop-filter: blur(12px); margin: 8px calc(-1 * max(20px, env(safe-area-inset-right))) calc(-60px - env(safe-area-inset-bottom)) calc(-1 * max(20px, env(safe-area-inset-left))); padding: 12px max(20px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); border-top: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"#DDE9F6"}; }
+        .room-action-bar { position: static; background: ${darkMode?"rgba(17,27,33,0.96)":"rgba(248,251,255,0.96)"}; backdrop-filter: blur(12px); margin: 16px calc(-1 * max(20px, env(safe-area-inset-right))) 0 calc(-1 * max(20px, env(safe-area-inset-left))); padding: 12px max(20px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); border-top: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"#DDE9F6"}; }
+        .care-team-panel { background: ${darkMode?"#2C2C2E":"#F8FBFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; border-radius: 18px; padding: 14px; }
+        .care-team-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        .care-team-count { font-size: 12px; font-weight: 850; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.6px; }
+        .care-team-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .care-team-chip { padding: 8px 12px; border-radius: 999px; border: none; background: #E8F0FE; color: #2563EB; font-size: 12px; font-weight: 850; cursor: pointer; font-family: inherit; }
+        .care-team-chip.secondary { background: #EEF2F7; color: #475569; }
+        .care-team-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 10px; }
+        .care-team-option { display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 10px 12px; border-radius: 14px; background: ${darkMode?"#111827":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#E6EEF7"}; cursor: pointer; }
+        .care-team-option.selected { background: #EBF5FF; border-color: #93C5FD; }
+        .care-team-option.selected .care-team-name { color: #0F172A; }
+        .care-team-option.selected .care-team-meta { color: #475569; }
+        .care-team-avatar { width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg,#0F172A,#2563EB); display: grid; place-items: center; color: white; font-size: 12px; font-weight: 900; flex-shrink: 0; }
+        .care-team-name { color: ${textColor}; font-size: 14px; font-weight: 900; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .care-team-meta { color: ${subTextColor}; font-size: 12px; font-weight: 700; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .care-team-empty { color: ${subTextColor}; font-size: 13px; font-weight: 700; padding: 8px 2px 0; }
         .flabel { font-size: 13px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
         .finput { width: 100%; padding: 13px 16px; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; border-radius: 14px; font-size: 16px; font-family: inherit; color: ${textColor}; outline: none; margin-bottom: 14px; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
         .finput::placeholder { color: #AEAEB2; }
@@ -2741,61 +2752,55 @@ export default function InboxPage() {
               </summary>
               <div className="room-toggle-body">
                 <p className="room-note">{t.careTeamHint}</p>
-                <div style={{background:darkMode?"#2C2C2E":"#F8FBFF",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,borderRadius:18,padding:14,marginBottom:10}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
-                    <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{showAllCareTeamOptions ? t.careTeamShowAll : t.careTeamFocused}</p>
-                    <button type="button" onClick={()=>setShowAllCareTeamOptions((prev)=>!prev)} style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#E8F0FE",color:"#2563EB",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
-                      {showAllCareTeamOptions ? t.careTeamShowOffice : t.careTeamShowAll}
-                    </button>
+                <div className="care-team-panel">
+                  <div className="care-team-toolbar">
+                    <p className="care-team-count">
+                      {showAllCareTeamOptions ? t.careTeamShowAll : t.careTeamFocused} · {t.careTeamSelected}: {careTeamSelectedMembers.length}
+                    </p>
+                    <div className="care-team-actions">
+                      <button type="button" className="care-team-chip" onClick={()=>setShowAllCareTeamOptions((prev)=>!prev)}>
+                        {showAllCareTeamOptions ? t.careTeamShowOffice : t.careTeamShowAll}
+                      </button>
+                      <button
+                        type="button"
+                        className="care-team-chip"
+                        onClick={() => {
+                          const ids = [currentUserId, ...careTeamDirectory.map((member)=>member.id)].filter(Boolean) as string[];
+                          setSelectedCareTeamIds(Array.from(new Set(ids)));
+                        }}
+                      >
+                        {t.careTeamSelectAll}
+                      </button>
+                      <button
+                        type="button"
+                        className="care-team-chip secondary"
+                        onClick={() => setSelectedCareTeamIds(currentUserId ? [currentUserId] : [])}
+                      >
+                        {t.careTeamClear}
+                      </button>
+                    </div>
                   </div>
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const ids = [currentUserId, ...careTeamDirectory.map((member)=>member.id)].filter(Boolean) as string[];
-                        setSelectedCareTeamIds(Array.from(new Set(ids)));
-                      }}
-                      style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
-                    >
-                      {t.careTeamSelectAll}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCareTeamIds(currentUserId ? [currentUserId] : [])}
-                      style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#EEF2F7",color:"#475569",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
-                    >
-                      {t.careTeamClear}
-                    </button>
-                    <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,fontSize:12,fontWeight:800,color:textColor}}>
-                      {t.careTeamSelected}: {careTeamSelectedMembers.length}
-                    </span>
-                  </div>
-                  <div style={{display:"grid",gap:10}}>
-                    {careTeamGroups.map((group)=>(
-                      <div key={group.role} style={{background:darkMode?"#1F2937":"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#E6EEF7"}`,borderRadius:16,padding:12}}>
-                        <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{careTeamRoleLabel(group.role)}</p>
-                        <div style={{display:"grid",gap:8}}>
-                          {group.members.map((member)=>(
-                            <label key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:selectedCareTeamIds.includes(member.id)?"#EBF5FF":(darkMode?"#111827":"#F8FBFF"),border:selectedCareTeamIds.includes(member.id)?"1px solid #93C5FD":`1px solid ${darkMode?"rgba(255,255,255,0.05)":"#E6EEF7"}`,cursor:"pointer"}}>
-                              <input type="checkbox" checked={selectedCareTeamIds.includes(member.id)} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB"}} />
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:14,fontWeight:800,color:textColor}}>{member.full_name || (lang==="es"?"Personal":"Staff")}</div>
-                                <div style={{fontSize:12,color:subTextColor}}>{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
-                              </div>
-                            </label>
-                          ))}
-                          {group.members.length === 0 && (
-                            <div style={{fontSize:13,color:subTextColor}}>{lang==="es" ? "Sin personal en este grupo." : "No staff in this group."}</div>
-                          )}
+                  <div className="care-team-list">
+                    {careTeamDirectory.map((member)=>(
+                      <label key={member.id} className={`care-team-option${selectedCareTeamIds.includes(member.id) ? " selected" : ""}`}>
+                        <input type="checkbox" checked={selectedCareTeamIds.includes(member.id)} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB",flexShrink:0}} />
+                        <div className="care-team-avatar">
+                          {member.avatar_url ? <img src={member.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(member.full_name || "S")}
                         </div>
-                      </div>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div className="care-team-name">{member.full_name || (lang==="es"?"Personal":"Staff")}</div>
+                          <div className="care-team-meta">{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
+                        </div>
+                      </label>
                     ))}
-                    {careTeamGroups.length === 0 && (
-                      <div className="room-note">{lang==="es" ? "No hay personal visible para la sede elegida." : "No visible staff for the selected office."}</div>
-                    )}
                   </div>
+                  {careTeamDirectory.length === 0 && (
+                    <div className="care-team-empty">{lang==="es" ? "No hay personal visible para la sede elegida." : "No visible staff for the selected office."}</div>
+                  )}
                 </div>
-                <p style={{fontSize:12,color:subTextColor,marginBottom:0}}>{t.noTeamSelected}</p>
+                <p style={{fontSize:12,color:subTextColor,marginTop:10,marginBottom:0,lineHeight:1.45,fontWeight:650}}>
+                  {t.noTeamSelected}
+                </p>
               </div>
             </details>
 
@@ -2819,6 +2824,11 @@ export default function InboxPage() {
               <div style={{fontSize:52,marginBottom:10}}>🎉</div>
               <p style={{fontSize:20,fontWeight:700,color:textColor}}>{t.roomCreated}</p>
               <p style={{fontSize:15,color:subTextColor,marginTop:4}}>{t.shareLink} <strong style={{color:textColor}}>{createdPatientName}</strong></p>
+              <p style={{fontSize:13,color:subTextColor,marginTop:8,lineHeight:1.45}}>
+                {lang==="es"
+                  ? "El equipo asignado verá la sala dentro del portal; no se les manda enlace por texto."
+                  : "Assigned staff will see the room inside the portal; no text link is sent to them."}
+              </p>
             </div>
             <div style={{background:darkMode?"#3A3A3C":"#F2F2F7",borderRadius:12,padding:"12px 14px",marginBottom:16,wordBreak:"break-all",fontSize:13,color:"#007AFF"}}>{createdRoomLink}</div>
             <button onClick={copyLink} style={{width:"100%",padding:14,background:linkCopied?"#34C759":"#007AFF",border:"none",borderRadius:14,color:"white",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>{linkCopied?t.copied:t.copyLink}</button>

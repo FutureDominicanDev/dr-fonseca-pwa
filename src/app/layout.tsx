@@ -49,6 +49,9 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Dr. Fonseca" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#1C1C1E" />
+        <link rel="icon" href="/icon.png" sizes="any" />
+        <link rel="shortcut icon" href="/icon.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <style>{`
