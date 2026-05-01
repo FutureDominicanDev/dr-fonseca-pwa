@@ -4,7 +4,7 @@ import { isOwnerEmail } from "@/lib/securityConfig";
 import { normalizePhone } from "@/lib/authIdentity";
 import nodemailer from "nodemailer";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://pdebkexayomjaougrlhr.supabase.co";
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missing-key");
@@ -85,8 +85,8 @@ const sendWelcomeEmail = async (params: { fullName: string; email: string; role:
 
 export async function POST(request: NextRequest) {
   try {
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json({ error: "Missing SUPABASE_SERVICE_ROLE_KEY." }, { status: 503 });
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: "Missing Supabase server configuration." }, { status: 503 });
     }
 
     const body = await request.json().catch(() => ({}));

@@ -1261,6 +1261,17 @@ export default function InboxPage() {
     return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
   };
 
+  const sendPushNotification = useCallback(async (payload: Record<string, unknown>) => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+    fetch("/api/push",{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},
+      body:JSON.stringify(payload),
+    }).catch(()=>{});
+  }, []);
+
   const subscribeStaffToPush = async () => {
     try {
       if (!("serviceWorker" in navigator)||!("PushManager" in window)) return;
@@ -1269,7 +1280,8 @@ export default function InboxPage() {
       const reg = await navigator.serviceWorker.ready;
       const existing = await reg.pushManager.getSubscription();
       const sub = existing || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlBase64ToUint8Array(vapidKey) });
-      await syncPushSubscription({ subscription: sub.toJSON(), userType: "staff" });
+      const { data } = await supabase.auth.getSession();
+      await syncPushSubscription({ subscription: sub.toJSON(), userType: "staff", accessToken: data.session?.access_token });
     } catch(_) {}
   };
 
@@ -1749,11 +1761,11 @@ export default function InboxPage() {
     if (error) setMessages(p=>p.filter(m=>m.id!==tempId));
     else if (nm) setMessages(p=>p.map(m=>m.id===tempId?nm:m));
     // Push notification to patient — works even if their PWA is closed
-    fetch("/api/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    sendPushNotification({
       roomId:selectedRoom.id, userType:"patient",
       title: sName, body: msg.length>80?msg.slice(0,80)+"…":msg,
       url: window.location.href, tag: selectedRoom.id,
-    })}).catch(()=>{});
+    });
     isSending.current=false; setSending(false);
   };
 
@@ -1959,18 +1971,14 @@ export default function InboxPage() {
       setMessages((prev) => prev.map((entry) => (entry.id === tempId ? inserted : entry)));
     }
 
-    fetch("/api/push", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    sendPushNotification({
         roomId: selectedRoom.id,
         userType: "patient",
         title: sName,
         body: t.videoCallInvite,
         url: window.location.href,
         tag: selectedRoom.id,
-      }),
-    }).catch(() => {});
+    });
     await joinVideoCall(providerRoomName);
     isSending.current = false;
     setSending(false);
@@ -2076,18 +2084,14 @@ export default function InboxPage() {
     } else if (data) {
       setMessages((prev) => prev.map((entry) => entry.id === tempId ? data : entry));
       setInternalNoteDraft("");
-      fetch("/api/push",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
+      sendPushNotification({
           roomId:selectedRoom.id,
           userType:"staff",
           title: lang === "es" ? `Nota interna · ${roomPatientName(selectedRoom.id)}` : `Internal note · ${roomPatientName(selectedRoom.id)}`,
           body: `${data.content || ""}`.trim().slice(0, 120) || (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up."),
           url: window.location.href,
           tag: `internal-note-${selectedRoom.id}`,
-        }),
-      }).catch(()=>{});
+      });
       alert(t.noteSaved);
     }
 

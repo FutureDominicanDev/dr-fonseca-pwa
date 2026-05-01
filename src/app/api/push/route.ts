@@ -11,22 +11,74 @@ if (vapidConfigured) {
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
 }
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://pdebkexayomjaougrlhr.supabase.co";
-const SUPABASE_SERVER_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_SERVER_KEY);
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVER_KEY || "missing-key");
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY);
+const authClient = supabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const supabase = supabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) : null;
 
 const subscriptionEndpoint = (subscription: webpush.PushSubscription | Record<string, any> | null | undefined) =>
   typeof subscription?.endpoint === "string" ? subscription.endpoint : "";
 
-async function storeSubscription(body: any) {
+async function getAuthenticatedStaff(req: NextRequest) {
+  if (!authClient || !supabase) return null;
+  const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  if (!token) return null;
+  const { data: authData, error: authError } = await authClient.auth.getUser(token);
+  const userId = authData?.user?.id || "";
+  if (authError || !userId) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, admin_level")
+    .eq("id", userId)
+    .maybeSingle();
+
+  return profile?.id ? { id: profile.id, adminLevel: `${profile.admin_level || ""}`.toLowerCase() } : null;
+}
+
+async function canNotifyPatientRoom(userId: string, adminLevel: string, roomId: string) {
+  if (!supabase) return false;
+  if (adminLevel === "owner" || adminLevel === "super_admin") return true;
+
+  const { data: membership } = await supabase
+    .from("room_members")
+    .select("id")
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return Boolean(membership?.id);
+}
+
+async function storeSubscription(req: NextRequest, body: any) {
+  if (!supabase) return NextResponse.json({ error: "Push is not configured on server." }, { status: 503 });
   const userType = body?.userType === "staff" ? "staff" : body?.userType === "patient" ? "patient" : null;
   const roomId = typeof body?.roomId === "string" ? body.roomId : undefined;
+  const roomToken = typeof body?.roomToken === "string" ? body.roomToken : "";
   const subscription = body?.subscription;
   const endpoint = subscriptionEndpoint(subscription);
 
   if (!userType || !endpoint) {
     return NextResponse.json({ error: "Invalid subscription payload" }, { status: 400 });
+  }
+
+  if (userType === "staff") {
+    const staff = await getAuthenticatedStaff(req);
+    if (!staff) return NextResponse.json({ error: "Missing or invalid staff session." }, { status: 401 });
+  }
+
+  if (userType === "patient") {
+    if (!roomId || !roomToken) return NextResponse.json({ error: "Missing patient room access." }, { status: 401 });
+    const { data: room } = await supabase
+      .from("rooms")
+      .select("id, patient_access_token")
+      .eq("id", roomId)
+      .maybeSingle();
+    if (!room?.id || room.patient_access_token !== roomToken) {
+      return NextResponse.json({ error: "Invalid patient room access." }, { status: 403 });
+    }
   }
 
   let existingQuery = supabase
@@ -72,18 +124,21 @@ async function storeSubscription(body: any) {
 
 export async function POST(req: NextRequest) {
   try {
-    if (!supabaseConfigured) {
+    if (!supabaseConfigured || !supabase) {
       return NextResponse.json({ error: "Push is not configured on server." }, { status: 503 });
     }
     const body = await req.json();
 
     if (body?.action === "subscribe") {
-      return await storeSubscription(body);
+      return await storeSubscription(req, body);
     }
 
     if (!vapidConfigured) {
       return NextResponse.json({ error: "Push VAPID credentials are not configured." }, { status: 503 });
     }
+
+    const staff = await getAuthenticatedStaff(req);
+    if (!staff) return NextResponse.json({ error: "Missing or invalid staff session." }, { status: 401 });
 
     const { roomId, title, body: messageBody, url, userType } = body;
     if (userType !== "patient" && userType !== "staff") {
@@ -97,6 +152,10 @@ export async function POST(req: NextRequest) {
     }
     if (userType === "patient" && (typeof roomId !== "string" || !roomId.trim())) {
       return NextResponse.json({ error: "roomId is required for patient notifications." }, { status: 400 });
+    }
+    if (userType === "patient") {
+      const allowed = await canNotifyPatientRoom(staff.id, staff.adminLevel, roomId);
+      if (!allowed) return NextResponse.json({ error: "You do not have access to this patient room." }, { status: 403 });
     }
 
     // Fetch matching push subscriptions
