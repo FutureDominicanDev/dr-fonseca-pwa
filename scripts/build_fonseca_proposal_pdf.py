@@ -23,7 +23,7 @@ from reportlab.platypus import (
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "proposals" / "Dr_Fonseca_Portal_Proposal_and_User_Guide_Ramon_Diaz_DIT.pdf"
 ASSETS = ROOT / "docs" / "training" / "phone-screens"
-LOGO = ROOT / "public" / "fonseca_blue.png"
+LOGO = ROOT / "public" / "Fonsecalogo-cover.png"
 
 PAGE_W, PAGE_H = letter
 NAVY = colors.HexColor("#12344D")
@@ -135,8 +135,13 @@ def cover_page(canvas, doc):
     if LOGO.exists():
         img = Image.open(LOGO)
         ratio = img.width / img.height
-        width = 3.8 * inch
-        canvas.drawImage(str(LOGO), (PAGE_W - width) / 2, PAGE_H - 1.35 * inch, width=width, height=width / ratio, mask="auto")
+        width = 5.25 * inch
+        height = width / ratio
+        x = (PAGE_W - width) / 2
+        y = PAGE_H - 1.48 * inch
+        canvas.setFillColor(colors.Color(0, 0, 0, alpha=0.06))
+        canvas.roundRect(x - 0.12 * inch, y - 0.06 * inch, width + 0.24 * inch, height + 0.12 * inch, 10, fill=1, stroke=0)
+        canvas.drawImage(str(LOGO), x, y, width=width, height=height, mask="auto")
 
     canvas.setFillColor(NAVY)
     canvas.setFont("Helvetica-Bold", 25)
