@@ -69,8 +69,8 @@ const T = {
     preparingCamera: "Abriendo cámara...",
     noMessages: "Sin mensajes aún", noMessagesHint: "Envía el primero para comenzar",
     selectPatient: "Selecciona un paciente", selectPatientHint: "para abrir su sala de chat",
-    newRoom: "Nueva Sala de Paciente", patientFirstName: "Nombre *", patientLastName: "Apellido *",
-    patientFirstNamePH: "Ej: María", patientLastNamePH: "Ej: González", phone: "Teléfono (WhatsApp)",
+    newRoom: "Crear sala de paciente", patientFirstName: "Paciente *", patientLastName: "Apellido",
+    patientFirstNamePH: "Ej: María González", patientLastNamePH: "Ej: González", phone: "Teléfono (WhatsApp)",
     phoneCode: "Clave internacional", phonePH: "123-456-7890", birthdate: "Fecha de Nacimiento",
     birthdatePH: "dd/mm/aaaa",
     email: "Correo Electrónico",
@@ -135,10 +135,10 @@ const T = {
     profilePic: "Foto de Perfil", beforePhotos: "Fotos Pre-Op",
     tapProfilePic: "Toca para subir foto de perfil",
     tapBeforePhotos: "Toca para subir fotos pre-op",
-    createRoom: "✅ Crear Sala del Paciente", creating: "Creando sala...",
+    createRoom: "Crear sala y obtener enlace", creating: "Creando sala...",
     cancel: "Cancelar", roomCreated: "¡Sala Creada!", shareLink: "Comparte este enlace con",
     copyLink: "📋 Copiar Enlace", copied: "✅ ¡Copiado!", whatsapp: "💬 Enviar por WhatsApp",
-    done: "Listo", required: "Nombre, apellido y procedimiento son obligatorios.",
+    done: "Listo", required: "Nombre del paciente y procedimiento son obligatorios.",
     fixErrors: "Corrige los errores antes de continuar.",
     invalidEmail: "El correo debe incluir un formato válido, por ejemplo nombre@correo.com.",
     invalidPhone: "El teléfono debe tener al menos 7 dígitos.",
@@ -187,8 +187,8 @@ const T = {
     preparingCamera: "Opening camera...",
     noMessages: "No messages yet", noMessagesHint: "Send the first one to get started",
     selectPatient: "Select a patient", selectPatientHint: "to open their chat room",
-    newRoom: "New Patient Room", patientFirstName: "First Name *", patientLastName: "Last Name *",
-    patientFirstNamePH: "e.g. Maria", patientLastNamePH: "e.g. Gonzalez", phone: "Phone (WhatsApp)",
+    newRoom: "Create patient room", patientFirstName: "Patient *", patientLastName: "Last name",
+    patientFirstNamePH: "e.g. Maria Gonzalez", patientLastNamePH: "e.g. Gonzalez", phone: "Phone (WhatsApp)",
     phoneCode: "Country Code", phonePH: "123-456-7890", birthdate: "Date of Birth",
     birthdatePH: "dd/mm/yyyy",
     email: "Email",
@@ -253,10 +253,10 @@ const T = {
     profilePic: "Profile Photo", beforePhotos: "Pre-Op Photos",
     tapProfilePic: "Tap to upload profile photo",
     tapBeforePhotos: "Tap to upload pre-op photos",
-    createRoom: "✅ Create Patient Room", creating: "Creating room...",
+    createRoom: "Create room and get link", creating: "Creating room...",
     cancel: "Cancel", roomCreated: "Room Created!", shareLink: "Share this link with",
     copyLink: "📋 Copy Link", copied: "✅ Copied!", whatsapp: "💬 Send via WhatsApp",
-    done: "Done", required: "First name, last name, and procedure are required.",
+    done: "Done", required: "Patient name and procedure are required.",
     fixErrors: "Please correct the errors before continuing.",
     invalidEmail: "Email must use a valid format, for example name@email.com.",
     invalidPhone: "Phone number must contain at least 7 digits.",
@@ -1686,7 +1686,7 @@ export default function InboxPage() {
       return;
     }
     setNewRoomError("");
-    if (!newPatientFirstName.trim()||!newPatientLastName.trim()||!newProcedureName.trim()){setNewRoomError(t.required);return;}
+    if (!patientFullName.trim()||!newProcedureName.trim()){setNewRoomError(t.required);return;}
     if (newPatientEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatientEmail.trim())) { setNewRoomError(t.invalidEmail); return; }
     if (newPatientPhoneLocal.trim() && newPatientPhoneLocal.replace(/\D/g, "").length < 7) { setNewRoomError(t.invalidPhone); return; }
     const birthdateIso = newBirthdate ? displayToIsoDate(newBirthdate) : "";
@@ -2458,6 +2458,33 @@ export default function InboxPage() {
         .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; padding: 24px max(20px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
         .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: 560px; position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 24px max(20px, env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
         .modal-title { font-size: 20px; font-weight: 700; color: ${textColor}; margin-bottom: 20px; }
+        .room-create-modal { max-width: 680px; top: 4vh; background: ${darkMode?"#111B21":"#F8FBFF"}; padding-top: 18px; }
+        .room-modal-head { background: linear-gradient(135deg,#07334D 0%,#0E4C75 100%); border-radius: 22px; padding: 18px; color: white; margin-bottom: 14px; box-shadow: 0 16px 34px rgba(7,51,77,0.18); }
+        .room-modal-kicker { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.72); margin-bottom: 8px; }
+        .room-modal-title { font-size: 25px; font-weight: 900; line-height: 1.08; margin-bottom: 8px; }
+        .room-modal-copy { color: rgba(255,255,255,0.84); font-size: 14px; line-height: 1.55; font-weight: 650; }
+        .room-progress { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 16px; }
+        .room-progress-step { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px 10px; border-radius: 14px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.12); color: white; font-size: 12px; font-weight: 850; }
+        .room-progress-num { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,0.92); color: #07334D; font-size: 12px; font-weight: 950; flex-shrink: 0; }
+        .room-create-card { background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"#DDE9F6"}; border-radius: 22px; padding: 18px; margin-bottom: 12px; box-shadow: ${darkMode?"none":"0 10px 28px rgba(28,66,104,0.07)"}; }
+        .room-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+        .room-section-num { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #EAF5FF; color: #075EA8; font-size: 14px; font-weight: 950; flex-shrink: 0; }
+        .room-section-title { color: ${textColor}; font-size: 18px; font-weight: 900; line-height: 1.15; }
+        .room-section-copy { color: ${subTextColor}; font-size: 13px; line-height: 1.45; margin-top: 2px; font-weight: 650; }
+        .room-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .room-phone-grid { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 10px; }
+        .room-field { min-width: 0; }
+        .room-field .finput { margin-bottom: 12px; background: ${darkMode?"#253244":"#FFFFFF"}; }
+        .room-toggle { background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"#DDE9F6"}; border-radius: 20px; padding: 0; margin-bottom: 12px; box-shadow: ${darkMode?"none":"0 8px 22px rgba(28,66,104,0.06)"}; overflow: hidden; }
+        .room-toggle > summary { list-style: none; cursor: pointer; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .room-toggle > summary::-webkit-details-marker { display: none; }
+        .room-toggle-title { color: ${textColor}; font-size: 16px; font-weight: 900; margin-bottom: 3px; }
+        .room-toggle-copy { color: ${subTextColor}; font-size: 13px; line-height: 1.45; font-weight: 650; }
+        .room-toggle-chevron { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; font-size: 18px; font-weight: 900; flex-shrink: 0; transition: transform 0.16s ease; }
+        .room-toggle[open] .room-toggle-chevron { transform: rotate(180deg); }
+        .room-toggle-body { padding: 0 18px 18px; }
+        .room-note { background: ${darkMode?"rgba(37,99,235,0.16)":"#EAF5FF"}; border: 1px solid ${darkMode?"rgba(125,211,252,0.16)":"#CFE5FA"}; color: ${darkMode?"#DBEAFE":"#174769"}; border-radius: 16px; padding: 12px 14px; font-size: 13px; font-weight: 750; line-height: 1.45; margin-bottom: 12px; }
+        .room-action-bar { position: sticky; bottom: 0; background: ${darkMode?"rgba(17,27,33,0.96)":"rgba(248,251,255,0.96)"}; backdrop-filter: blur(12px); margin: 8px calc(-1 * max(20px, env(safe-area-inset-right))) calc(-60px - env(safe-area-inset-bottom)) calc(-1 * max(20px, env(safe-area-inset-left))); padding: 12px max(20px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); border-top: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"#DDE9F6"}; }
         .flabel { font-size: 13px; font-weight: 700; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
         .finput { width: 100%; padding: 13px 16px; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; border-radius: 14px; font-size: 16px; font-family: inherit; color: ${textColor}; outline: none; margin-bottom: 14px; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
         .finput::placeholder { color: #AEAEB2; }
@@ -2484,6 +2511,12 @@ export default function InboxPage() {
           .phone-btn img { width: 30px; height: 30px; }
           .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
+          .room-create-modal { top: 0; max-height: 100dvh; border-radius: 0; }
+          .room-modal-head { border-radius: 0 0 22px 22px; margin-left: calc(-1 * max(20px, env(safe-area-inset-left))); margin-right: calc(-1 * max(20px, env(safe-area-inset-right))); margin-top: -18px; padding-top: calc(18px + env(safe-area-inset-top)); }
+          .room-modal-title { font-size: 22px; }
+          .room-progress { grid-template-columns: 1fr; }
+          .room-grid-2, .room-phone-grid { grid-template-columns: 1fr; }
+          .room-progress-step { padding: 8px 10px; }
         }
       `}</style>
 
@@ -2569,131 +2602,212 @@ export default function InboxPage() {
 
       {showNewRoom&&(
         <div className="modal-overlay" onClick={()=>setShowNewRoom(false)}>
-          <div className="modal-scroll" onClick={e=>e.stopPropagation()}>
-            <p className="modal-title">➕ {t.newRoom}</p>
+          <div className="modal-scroll room-create-modal" onClick={e=>e.stopPropagation()}>
+            <div className="room-modal-head">
+              <p className="room-modal-kicker">{lang==="es" ? "Nuevo expediente" : "New record"}</p>
+              <p className="room-modal-title">{t.newRoom}</p>
+              <p className="room-modal-copy">
+                {lang==="es"
+                  ? "Crea la sala con lo esencial. El equipo puede completar datos clínicos después desde el expediente."
+                  : "Create the room with only the essentials. The team can complete clinical details later from the record."}
+              </p>
+              <div className="room-progress" aria-hidden="true">
+                <div className="room-progress-step"><span className="room-progress-num">1</span>{lang==="es" ? "Paciente" : "Patient"}</div>
+                <div className="room-progress-step"><span className="room-progress-num">2</span>{lang==="es" ? "Cirugía" : "Surgery"}</div>
+                <div className="room-progress-step"><span className="room-progress-num">3</span>{lang==="es" ? "Enlace" : "Link"}</div>
+              </div>
+            </div>
             {newRoomError && <div style={{background:"#FFF1F2",color:"#E11D48",borderRadius:14,padding:"12px 14px",fontSize:14,fontWeight:800,marginBottom:14}}>⚠️ {t.fixErrors} {newRoomError}</div>}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <div>
+
+            <section className="room-create-card">
+              <div className="room-section-head">
+                <div className="room-section-num">1</div>
+                <div>
+                  <p className="room-section-title">{lang==="es" ? "Datos para abrir la sala" : "Room essentials"}</p>
+                  <p className="room-section-copy">
+                    {lang==="es" ? "Solo nombre del paciente, procedimiento y sede son necesarios." : "Only patient name, procedure, and office are needed."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="room-field">
                 <label className="flabel">{t.patientFirstName}</label>
                 <input className="finput" placeholder={t.patientFirstNamePH} value={newPatientFirstName} onChange={e=>{setNewPatientFirstName(e.target.value);if(newRoomError)setNewRoomError("");}}/>
               </div>
-              <div>
-                <label className="flabel">{t.patientLastName}</label>
-                <input className="finput" placeholder={t.patientLastNamePH} value={newPatientLastName} onChange={e=>{setNewPatientLastName(e.target.value);if(newRoomError)setNewRoomError("");}}/>
-              </div>
-            </div>
-            <label className="flabel">{t.phone}</label>
-            <div style={{display:"grid",gridTemplateColumns:"minmax(150px, 220px) 1fr",gap:10}}>
-              <select className="finput" value={newPatientPhoneCountry} onChange={e=>setNewPatientPhoneCountry(e.target.value)}>
-                {PHONE_COUNTRY_OPTIONS.map((option)=>(
-                  <option key={option.code} value={option.code}>{option.label}</option>
-                ))}
-              </select>
-              <input className="finput" inputMode="tel" placeholder={t.phonePH} value={newPatientPhoneLocal} onChange={e=>{setNewPatientPhoneLocal(formatPhoneLocal(e.target.value));if(newRoomError)setNewRoomError("");}}/>
-            </div>
-            <label className="flabel">{t.email}</label>
-            <input className="finput" type="email" placeholder={t.emailPH} value={newPatientEmail} onChange={e=>{setNewPatientEmail(e.target.value);if(newRoomError)setNewRoomError("");}}/>
-            <label className="flabel">{t.birthdate}</label>
-            <input className="finput" inputMode="numeric" placeholder={t.birthdatePH} value={isoToDisplayDate(newBirthdate)} onChange={e=>setNewBirthdate(formatDateTyping(e.target.value))}/>
-            <label className="flabel">{t.procedure}</label>
-            <input className="finput" placeholder={t.procedurePH} value={newProcedureName} onChange={e=>setNewProcedureName(e.target.value)}/>
-            <label className="flabel">{t.surgeryDate}</label>
-            <input className="finput" inputMode="numeric" placeholder={t.surgeryDatePH} value={isoToDisplayDate(newSurgeryDate)} onChange={e=>setNewSurgeryDate(formatDateTyping(e.target.value))}/>
-            <label className="flabel">{t.preferredLanguage}</label>
-            <div className="loc-group">
-              {PATIENT_LANGUAGE_OPTIONS.map((option)=>(
-                <div key={option.value} className={`loc-opt${newPatientLanguage===option.value?" sel":""}`} onClick={()=>setNewPatientLanguage(option.value)}>
-                  {lang==="es" ? option.labelEs : option.labelEn}
+
+              <div className="room-phone-grid">
+                <div className="room-field">
+                  <label className="flabel">{t.phoneCode}</label>
+                  <select className="finput" value={newPatientPhoneCountry} onChange={e=>setNewPatientPhoneCountry(e.target.value)}>
+                    {PHONE_COUNTRY_OPTIONS.map((option)=>(
+                      <option key={option.code} value={option.code}>{option.label}</option>
+                    ))}
+                  </select>
                 </div>
-              ))}
-            </div>
-            <label className="flabel">{t.timezone}</label>
-            <select className="finput" value={newPatientTimezone} onChange={e=>setNewPatientTimezone(e.target.value)}>
-              {PATIENT_TIMEZONE_OPTIONS.map((option)=>(
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-            <p style={{fontSize:12,color:subTextColor,margin:"-6px 0 12px"}}>
-              {lang==="es"
-                ? "Este horario se muestra al equipo médico para evitar confusiones al responder."
-                : "This is shown to the care team to avoid timing confusion when replying."}
-            </p>
-            <label className="flabel">{t.allergies}</label>
-            <textarea className="finput" placeholder={t.allergiesPH} value={newPatientAllergies} onChange={e=>setNewPatientAllergies(e.target.value)} rows={3} style={{resize:"vertical"}}/>
-            <label className="flabel">{t.medications}</label>
-            <textarea className="finput" placeholder={t.medicationsPH} value={newPatientMedications} onChange={e=>setNewPatientMedications(e.target.value)} rows={3} style={{resize:"vertical"}}/>
-            <label className="flabel">{t.location}</label>
-            <div className="loc-group">
-              <div className={`loc-opt${newLocation==="Guadalajara"?" sel":""}`} onClick={()=>setNewLocation("Guadalajara")}>{t.gdl}</div>
-              <div className={`loc-opt${newLocation==="Tijuana"?" sel":""}`} onClick={()=>setNewLocation("Tijuana")}>{t.tjn}</div>
-            </div>
-            <label className="flabel">{t.careTeam}</label>
-            <p style={{fontSize:13,color:subTextColor,margin:"-4px 0 10px"}}>{t.careTeamHint}</p>
-            <div style={{background:darkMode?"#2C2C2E":"#F8FBFF",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,borderRadius:18,padding:14,marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
-                <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{showAllCareTeamOptions ? t.careTeamShowAll : t.careTeamFocused}</p>
-                <button type="button" onClick={()=>setShowAllCareTeamOptions((prev)=>!prev)} style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#E8F0FE",color:"#2563EB",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
-                  {showAllCareTeamOptions ? t.careTeamShowOffice : t.careTeamShowAll}
-                </button>
+                <div className="room-field">
+                  <label className="flabel">{t.phone}</label>
+                  <input className="finput" inputMode="tel" placeholder={t.phonePH} value={newPatientPhoneLocal} onChange={e=>{setNewPatientPhoneLocal(formatPhoneLocal(e.target.value));if(newRoomError)setNewRoomError("");}}/>
+                </div>
               </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const ids = [currentUserId, ...careTeamDirectory.map((member)=>member.id)].filter(Boolean) as string[];
-                    setSelectedCareTeamIds(Array.from(new Set(ids)));
-                  }}
-                  style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
-                >
-                  {t.careTeamSelectAll}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCareTeamIds(currentUserId ? [currentUserId] : [])}
-                  style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#EEF2F7",color:"#475569",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
-                >
-                  {t.careTeamClear}
-                </button>
-                <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,fontSize:12,fontWeight:800,color:textColor}}>
-                  {t.careTeamSelected}: {careTeamSelectedMembers.length}
-                </span>
+
+              <div className="room-grid-2">
+                <div className="room-field">
+                  <label className="flabel">{t.procedure}</label>
+                  <input className="finput" placeholder={t.procedurePH} value={newProcedureName} onChange={e=>{setNewProcedureName(e.target.value);if(newRoomError)setNewRoomError("");}}/>
+                </div>
+                <div className="room-field">
+                  <label className="flabel">{t.surgeryDate}</label>
+                  <input className="finput" inputMode="numeric" placeholder={t.surgeryDatePH} value={isoToDisplayDate(newSurgeryDate)} onChange={e=>setNewSurgeryDate(formatDateTyping(e.target.value))}/>
+                </div>
               </div>
-              <div style={{display:"grid",gap:10}}>
-                {careTeamGroups.map((group)=>(
-                  <div key={group.role} style={{background:darkMode?"#1F2937":"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#E6EEF7"}`,borderRadius:16,padding:12}}>
-                    <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{careTeamRoleLabel(group.role)}</p>
-                    <div style={{display:"grid",gap:8}}>
-                      {group.members.map((member)=>(
-                        <label key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:selectedCareTeamIds.includes(member.id)?"#EBF5FF":(darkMode?"#111827":"#F8FBFF"),border:selectedCareTeamIds.includes(member.id)?"1px solid #93C5FD":`1px solid ${darkMode?"rgba(255,255,255,0.05)":"#E6EEF7"}`,cursor:"pointer"}}>
-                          <input type="checkbox" checked={selectedCareTeamIds.includes(member.id)} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB"}} />
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:14,fontWeight:800,color:textColor}}>{member.full_name || (lang==="es"?"Personal":"Staff")}</div>
-                            <div style={{fontSize:12,color:subTextColor}}>{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
+
+              <label className="flabel">{t.location}</label>
+              <div className="loc-group">
+                <div className={`loc-opt${newLocation==="Guadalajara"?" sel":""}`} onClick={()=>setNewLocation("Guadalajara")}>{t.gdl}</div>
+                <div className={`loc-opt${newLocation==="Tijuana"?" sel":""}`} onClick={()=>setNewLocation("Tijuana")}>{t.tjn}</div>
+              </div>
+
+              <label className="flabel">{t.preferredLanguage}</label>
+              <div className="loc-group" style={{marginBottom:0}}>
+                {PATIENT_LANGUAGE_OPTIONS.map((option)=>(
+                  <div key={option.value} className={`loc-opt${newPatientLanguage===option.value?" sel":""}`} onClick={()=>setNewPatientLanguage(option.value)}>
+                    {lang==="es" ? option.labelEs : option.labelEn}
                   </div>
                 ))}
               </div>
-            </div>
-            <p style={{fontSize:12,color:subTextColor,marginBottom:14}}>{t.noTeamSelected}</p>
-            <label className="flabel">📸 {t.profilePic}</label>
-            <div className="file-box" onClick={()=>profilePicRef.current?.click()}>
-              {profilePicFile?<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><img src={URL.createObjectURL(profilePicFile)} alt="" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover"}}/><span>{profilePicFile.name}</span></div>:t.tapProfilePic}
-            </div>
-            <label className="flabel">📷 {t.beforePhotos}</label>
-            {beforePhotosFiles.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{beforePhotosFiles.map((f,i)=><img key={i} src={URL.createObjectURL(f)} style={{width:60,height:60,borderRadius:10,objectFit:"cover"}} alt=""/>)}</div>}
-            <div className="file-box" onClick={()=>beforePhotosRef.current?.click()}>
-              {beforePhotosFiles.length===0?t.tapBeforePhotos:`📷 ${beforePhotosFiles.length} foto(s)`}
-            </div>
-            <button className="pbtn" onClick={createRoom} disabled={creatingRoom}>{creatingRoom?t.creating:t.createRoom}</button>
-            {newRoomError && (
-              <div style={{background:"#FFF1F2",color:"#E11D48",borderRadius:12,padding:"10px 12px",fontSize:13,fontWeight:800,marginTop:8,marginBottom:4}}>
-                ⚠️ {newRoomError}
+            </section>
+
+            <details className="room-toggle">
+              <summary>
+                <div>
+                  <p className="room-toggle-title">{lang==="es" ? "Datos opcionales del paciente" : "Optional patient details"}</p>
+                  <p className="room-toggle-copy">
+                    {lang==="es" ? "Correo, nacimiento, horario, alergias, medicamentos y fotos." : "Email, birth date, time zone, allergies, medications, and photos."}
+                  </p>
+                </div>
+                <span className="room-toggle-chevron">⌄</span>
+              </summary>
+              <div className="room-toggle-body">
+                <div className="room-field">
+                  <label className="flabel">{t.email}</label>
+                  <input className="finput" type="email" placeholder={t.emailPH} value={newPatientEmail} onChange={e=>{setNewPatientEmail(e.target.value);if(newRoomError)setNewRoomError("");}}/>
+                </div>
+                <div className="room-grid-2">
+                  <div className="room-field">
+                    <label className="flabel">{t.birthdate}</label>
+                    <input className="finput" inputMode="numeric" placeholder={t.birthdatePH} value={isoToDisplayDate(newBirthdate)} onChange={e=>setNewBirthdate(formatDateTyping(e.target.value))}/>
+                  </div>
+                  <div className="room-field">
+                    <label className="flabel">{t.timezone}</label>
+                    <select className="finput" value={newPatientTimezone} onChange={e=>setNewPatientTimezone(e.target.value)}>
+                      {PATIENT_TIMEZONE_OPTIONS.map((option)=>(
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <p className="room-note">
+                  {lang==="es"
+                    ? "El horario ayuda al equipo médico a responder sin confundir la hora local del paciente."
+                    : "The time zone helps the medical team reply without confusing the patient's local time."}
+                </p>
+                <label className="flabel">{t.allergies}</label>
+                <textarea className="finput" placeholder={t.allergiesPH} value={newPatientAllergies} onChange={e=>setNewPatientAllergies(e.target.value)} rows={3} style={{resize:"vertical"}}/>
+                <label className="flabel">{t.medications}</label>
+                <textarea className="finput" placeholder={t.medicationsPH} value={newPatientMedications} onChange={e=>setNewPatientMedications(e.target.value)} rows={3} style={{resize:"vertical"}}/>
+                <label className="flabel">📸 {t.profilePic}</label>
+                <div className="file-box" onClick={()=>profilePicRef.current?.click()}>
+                  {profilePicFile?<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><img src={URL.createObjectURL(profilePicFile)} alt="" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover"}}/><span>{profilePicFile.name}</span></div>:t.tapProfilePic}
+                </div>
+                <label className="flabel">📷 {t.beforePhotos}</label>
+                {beforePhotosFiles.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{beforePhotosFiles.map((f,i)=><img key={i} src={URL.createObjectURL(f)} style={{width:60,height:60,borderRadius:10,objectFit:"cover"}} alt=""/>)}</div>}
+                <div className="file-box" onClick={()=>beforePhotosRef.current?.click()}>
+                  {beforePhotosFiles.length===0?t.tapBeforePhotos:`📷 ${beforePhotosFiles.length} foto(s)`}
+                </div>
               </div>
-            )}
-            <button className="sbtn" onClick={()=>setShowNewRoom(false)}>{t.cancel}</button>
+            </details>
+
+            <details className="room-toggle">
+              <summary>
+                <div>
+                  <p className="room-toggle-title">{t.careTeam}</p>
+                  <p className="room-toggle-copy">
+                    {careTeamSelectedMembers.length > 0
+                      ? `${t.careTeamSelected}: ${careTeamSelectedMembers.length}`
+                      : t.noTeamSelected}
+                  </p>
+                </div>
+                <span className="room-toggle-chevron">⌄</span>
+              </summary>
+              <div className="room-toggle-body">
+                <p className="room-note">{t.careTeamHint}</p>
+                <div style={{background:darkMode?"#2C2C2E":"#F8FBFF",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,borderRadius:18,padding:14,marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+                    <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{showAllCareTeamOptions ? t.careTeamShowAll : t.careTeamFocused}</p>
+                    <button type="button" onClick={()=>setShowAllCareTeamOptions((prev)=>!prev)} style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#E8F0FE",color:"#2563EB",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
+                      {showAllCareTeamOptions ? t.careTeamShowOffice : t.careTeamShowAll}
+                    </button>
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ids = [currentUserId, ...careTeamDirectory.map((member)=>member.id)].filter(Boolean) as string[];
+                        setSelectedCareTeamIds(Array.from(new Set(ids)));
+                      }}
+                      style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
+                    >
+                      {t.careTeamSelectAll}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCareTeamIds(currentUserId ? [currentUserId] : [])}
+                      style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#EEF2F7",color:"#475569",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
+                    >
+                      {t.careTeamClear}
+                    </button>
+                    <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}`,fontSize:12,fontWeight:800,color:textColor}}>
+                      {t.careTeamSelected}: {careTeamSelectedMembers.length}
+                    </span>
+                  </div>
+                  <div style={{display:"grid",gap:10}}>
+                    {careTeamGroups.map((group)=>(
+                      <div key={group.role} style={{background:darkMode?"#1F2937":"white",border:`1px solid ${darkMode?"rgba(255,255,255,0.08)":"#E6EEF7"}`,borderRadius:16,padding:12}}>
+                        <p style={{fontSize:12,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{careTeamRoleLabel(group.role)}</p>
+                        <div style={{display:"grid",gap:8}}>
+                          {group.members.map((member)=>(
+                            <label key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:12,background:selectedCareTeamIds.includes(member.id)?"#EBF5FF":(darkMode?"#111827":"#F8FBFF"),border:selectedCareTeamIds.includes(member.id)?"1px solid #93C5FD":`1px solid ${darkMode?"rgba(255,255,255,0.05)":"#E6EEF7"}`,cursor:"pointer"}}>
+                              <input type="checkbox" checked={selectedCareTeamIds.includes(member.id)} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB"}} />
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:14,fontWeight:800,color:textColor}}>{member.full_name || (lang==="es"?"Personal":"Staff")}</div>
+                                <div style={{fontSize:12,color:subTextColor}}>{roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}</div>
+                              </div>
+                            </label>
+                          ))}
+                          {group.members.length === 0 && (
+                            <div style={{fontSize:13,color:subTextColor}}>{lang==="es" ? "Sin personal en este grupo." : "No staff in this group."}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {careTeamGroups.length === 0 && (
+                      <div className="room-note">{lang==="es" ? "No hay personal visible para la sede elegida." : "No visible staff for the selected office."}</div>
+                    )}
+                  </div>
+                </div>
+                <p style={{fontSize:12,color:subTextColor,marginBottom:0}}>{t.noTeamSelected}</p>
+              </div>
+            </details>
+
+            <div className="room-action-bar">
+              <button className="pbtn" onClick={createRoom} disabled={creatingRoom}>{creatingRoom?t.creating:t.createRoom}</button>
+              {newRoomError && (
+                <div style={{background:"#FFF1F2",color:"#E11D48",borderRadius:12,padding:"10px 12px",fontSize:13,fontWeight:800,marginTop:8,marginBottom:4}}>
+                  ⚠️ {newRoomError}
+                </div>
+              )}
+              <button className="sbtn" onClick={()=>setShowNewRoom(false)}>{t.cancel}</button>
+            </div>
           </div>
         </div>
       )}

@@ -168,6 +168,10 @@ export default function AdminPage() {
   const inviteLink = typeof window !== "undefined" && inviteCode
     ? `${window.location.origin}/register?code=${encodeURIComponent(inviteCode)}`
     : "";
+  const activePatientCount = patients.filter((patient) => normalizeRecordStatus(patient.record_status) === "active").length;
+  const blockedAccessCount = blockedEmails.length + blockedPhones.length;
+  const adminAccessCount = staff.filter((member) => normalizeAdminLevel(member.admin_level, member.id === viewerId ? viewerEmail : "") !== "none").length;
+  const inviteCodePreview = inviteCode ? `${inviteCode.slice(0, Math.min(7, inviteCode.length))}••••` : "";
 
   const updateSuccess = (message: string) => {
     setPageError("");
@@ -784,21 +788,27 @@ export default function AdminPage() {
         * { box-sizing: border-box; }
         body { background: #F5F7FB; }
         .admin-shell { position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: radial-gradient(circle at top, rgba(59,130,246,0.10), transparent 26%), #F5F7FB; }
-        .admin-topbar { background: rgba(15,23,42,0.96); backdrop-filter: blur(18px); min-height: calc(88px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 18px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 14px; position: sticky; top: 0; z-index: 100; }
+        .admin-topbar { background: #07334D; backdrop-filter: blur(18px); min-height: calc(102px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 14px; position: sticky; top: 0; z-index: 100; box-shadow: 0 8px 26px rgba(7,51,77,0.22); }
         .admin-body { width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-        .topbar-title { min-width: 0; }
+        .topbar-title { min-width: 0; display: flex; align-items: center; gap: 16px; }
+        .admin-brand-logo { width: min(330px, 38vw); height: 74px; object-fit: contain; object-position: left center; display: block; }
+        .admin-title-copy { min-width: 0; padding-left: 14px; border-left: 1px solid rgba(255,255,255,0.18); }
         .topbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
         .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
         .topbar-btn { height: 42px; padding: 0 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; }
         .topbar-select { appearance: none; -webkit-appearance: none; width: 152px; height: 42px; padding: 0 36px 0 13px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px); background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
         .menu-btn { display: none; width: 42px; height: 42px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; cursor: pointer; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
         .menu-panel { display: none; }
-        .hero { background: linear-gradient(135deg, #111827 0%, #1E3A8A 100%); color: white; border-radius: 30px; padding: 26px; margin-bottom: 18px; box-shadow: 0 18px 50px rgba(15,23,42,0.2); }
+        .hero { background: linear-gradient(135deg, #0B2438 0%, #0E3F63 58%, #155C95 100%); color: white; border-radius: 30px; padding: 26px; margin-bottom: 18px; box-shadow: 0 18px 50px rgba(7,51,77,0.20); border: 1px solid rgba(255,255,255,0.12); }
         .hero-grid { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 18px; align-items: end; }
         .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr); gap: 16px; align-items: start; }
         .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 18px 0; }
-        .stat-card, .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 8px 28px rgba(15,23,42,0.06); }
-        .stat-card { padding: 18px 16px; }
+        .stat-card, .card { background: rgba(255,255,255,0.98); border: 1px solid rgba(102,132,163,0.14); border-radius: 20px; padding: 20px; box-shadow: 0 8px 28px rgba(28,66,104,0.06); }
+        .stat-card { padding: 18px 16px; min-height: 124px; }
+        .stat-icon { width: 38px; height: 38px; border-radius: 14px; display: grid; place-items: center; background: #EAF5FF; color: #075EA8; font-size: 18px; margin-bottom: 12px; }
+        .stat-label { color: #64748B; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+        .stat-value { color: #0E2D4A; font-size: 30px; line-height: 1; font-weight: 950; }
+        .stat-help { color: #64748B; font-size: 12px; font-weight: 700; line-height: 1.4; margin-top: 8px; }
         .section-title { font-size: 13px; font-weight: 900; color: #6B7280; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
         .big-title { font-size: 34px; font-weight: 900; margin: 0 0 8px; }
         .subtle { color: rgba(255,255,255,0.84); line-height: 1.6; font-size: 15px; }
@@ -815,6 +825,10 @@ export default function AdminPage() {
         .filter-chip { padding: 10px 13px; border-radius: 999px; border: 1px solid #DCE7F5; background: #F8FBFF; color: #334155; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit; }
         .filter-chip.active { background: #1D4ED8; color: white; border-color: #1D4ED8; box-shadow: 0 10px 24px rgba(29,78,216,0.18); }
         .search-status { padding: 14px 16px; border-radius: 18px; background: linear-gradient(135deg, #F8FBFF, #EEF4FF); color: #1E3A8A; font-size: 14px; font-weight: 800; line-height: 1.5; border: 1px solid #DBEAFE; }
+        .secure-invite { border: 1px solid #DBEAFE; background: linear-gradient(135deg, #F8FBFF, #EEF6FF); border-radius: 18px; padding: 16px; margin-bottom: 14px; }
+        .secure-invite-label { color: #64748B; font-size: 12px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+        .secure-invite-main { color: #0E2D4A; font-size: 16px; font-weight: 900; margin: 0 0 4px; }
+        .secure-invite-code { color: #1D4ED8; font-size: 13px; font-weight: 850; margin: 0; }
         .summary-panel { display: grid; gap: 14px; }
         .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .summary-item { padding: 14px; border-radius: 18px; background: #F8FAFC; border: 1px solid #E7EEF7; }
@@ -866,6 +880,9 @@ export default function AdminPage() {
         @media (max-width: 560px) {
           .stats-grid { grid-template-columns: 1fr 1fr; }
           .admin-topbar { position: static; min-height: calc(84px + env(safe-area-inset-top)); padding-bottom: 14px; align-items: center; }
+          .topbar-title { gap: 10px; }
+          .admin-brand-logo { width: min(245px, 68vw); height: 62px; }
+          .admin-title-copy { display: none; }
           .topbar-right { display: none; }
           .menu-btn { display: inline-flex; }
           .menu-panel { display: grid; gap: 10px; background: rgba(15,23,42,0.98); border-top: 1px solid rgba(255,255,255,0.08); padding: 0 max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); }
@@ -893,8 +910,11 @@ export default function AdminPage() {
       <div className="admin-shell">
         <div className="admin-topbar">
           <div className="topbar-title">
-            <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>{isSpanish ? "Centro de control" : "Control center"}</p>
-            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.86)", margin: 0 }}>{isSpanish ? "Expedientes, equipo y accesos del portal" : "Records, team, and portal access"}</p>
+            <img className="admin-brand-logo" src="/fonseca_blue.png" alt="Dr. Miguel Fonseca" />
+            <div className="admin-title-copy">
+              <p style={{ fontSize: 18, fontWeight: 900, color: "white", margin: 0 }}>{isSpanish ? "Centro de control" : "Control center"}</p>
+              <p style={{ fontSize: 13, color: "rgba(255,255,255,0.86)", margin: 0 }}>{isSpanish ? "Expedientes, equipo y accesos del portal" : "Records, team, and portal access"}</p>
+            </div>
           </div>
           <div className="topbar-right">
             <select className="topbar-select" value={lang} onChange={(event) => setLang(event.target.value as "es" | "en")}>
@@ -935,21 +955,48 @@ export default function AdminPage() {
           <section className="hero">
             <div className="hero-grid">
               <div>
-                <h1 className="big-title">{isSpanish ? "Busca al paciente y abre su expediente" : "Find the patient and open the record"}</h1>
+                <h1 className="big-title">{isSpanish ? "Centro médico administrativo" : "Medical administration center"}</h1>
                 <p className="subtle">
                   {isSpanish
-                    ? "Busca por nombre, teléfono, correo o procedimiento. Cuando encuentres al paciente correcto, abre su expediente para revisar toda la información con calma."
-                    : "Search by name, phone, email, or procedure. Once you find the right patient, open the record to review everything carefully."}
+                    ? "Busca pacientes, revisa expedientes, administra accesos del equipo y controla invitaciones desde una sola pantalla segura."
+                    : "Search patients, review records, manage team access, and control invitations from one secure screen."}
                 </p>
               </div>
               <div className="hero-note">
-                <p className="section-title" style={{ color: "rgba(255,255,255,0.84)", marginBottom: 8 }}>{isSpanish ? "Cómo usar esta pantalla" : "How to use this screen"}</p>
+                <p className="section-title" style={{ color: "rgba(255,255,255,0.84)", marginBottom: 8 }}>{isSpanish ? "Flujo recomendado" : "Recommended flow"}</p>
                 <p style={{ margin: 0, fontSize: 16, fontWeight: 800, lineHeight: 1.6 }}>
                   {isSpanish
-                    ? "Primero busca. Después abre el expediente. La exportación y el resto de acciones viven dentro de cada expediente."
-                    : "Search first. Then open the record. Export and the rest of the actions live inside each record."}
+                    ? "Primero busca al paciente. Después abre su expediente. Las acciones sensibles quedan separadas y confirmadas."
+                    : "Search for the patient first. Then open the record. Sensitive actions stay separated and confirmed."}
                 </p>
               </div>
+            </div>
+          </section>
+
+          <section className="stats-grid" aria-label={isSpanish ? "Resumen administrativo" : "Administrative summary"}>
+            <div className="stat-card">
+              <div className="stat-icon">🏥</div>
+              <p className="stat-label">{isSpanish ? "Pacientes activos" : "Active patients"}</p>
+              <p className="stat-value">{activePatientCount}</p>
+              <p className="stat-help">{isSpanish ? "Expedientes en seguimiento" : "Records in follow-up"}</p>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon">💬</div>
+              <p className="stat-label">{isSpanish ? "Salas" : "Rooms"}</p>
+              <p className="stat-value">{rooms.length}</p>
+              <p className="stat-help">{isSpanish ? "Chats creados" : "Created chats"}</p>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon">👥</div>
+              <p className="stat-label">{isSpanish ? "Equipo" : "Team"}</p>
+              <p className="stat-value">{staff.length}</p>
+              <p className="stat-help">{isSpanish ? `${adminAccessCount} con acceso admin` : `${adminAccessCount} with admin access`}</p>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon">🔒</div>
+              <p className="stat-label">{isSpanish ? "Bloqueos" : "Blocks"}</p>
+              <p className="stat-value">{blockedAccessCount}</p>
+              <p className="stat-help">{isSpanish ? "Correos y teléfonos restringidos" : "Restricted emails and phones"}</p>
             </div>
           </section>
 
@@ -1094,7 +1141,7 @@ export default function AdminPage() {
                             {isSpanish ? "📂 Ver expediente" : "📂 Open record"}
                           </button>
                           <button className="ghost-btn" onClick={() => handleExport(card.patient.id)}>
-                            Export Patient Data
+                            {isSpanish ? "Exportar datos" : "Export data"}
                           </button>
                         </div>
                       </div>
@@ -1188,10 +1235,17 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="export-card" style={{ marginBottom: 14 }}>
-                  <p className="section-title">{isSpanish ? "Enlace de invitación" : "Invitation link"}</p>
-                  <p style={{ fontSize: 14, fontWeight: 800, color: "#1D4ED8", margin: 0, wordBreak: "break-word", lineHeight: 1.6 }}>
-                    {inviteLink || (isSpanish ? "Primero carga un código de invitación." : "Load an invitation code first.")}
+                <div className="secure-invite">
+                  <p className="secure-invite-label">{isSpanish ? "Invitación segura" : "Secure invitation"}</p>
+                  <p className="secure-invite-main">
+                    {inviteLink
+                      ? (isSpanish ? "Enlace listo para copiar" : "Invitation link ready to copy")
+                      : (isSpanish ? "Primero carga un código de invitación" : "Load an invitation code first")}
+                  </p>
+                  <p className="secure-invite-code">
+                    {inviteCodePreview
+                      ? (isSpanish ? `Código activo: ${inviteCodePreview}` : `Active code: ${inviteCodePreview}`)
+                      : (isSpanish ? "Sin código activo" : "No active code")}
                   </p>
                   <div className="inline-actions" style={{ marginTop: 10 }}>
                     <button className="main-btn" onClick={copyInviteLink} disabled={!inviteLink}>
