@@ -731,7 +731,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const formatDateLabel = (createdAt?: string) => {
     if (!createdAt) return "";
     const date = new Date(createdAt);
-    return date.toLocaleDateString(uiLang === "es" ? "es-MX" : "en-US", { weekday: "short", month: "short", day: "numeric" });
+    const startOf = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+    const today = startOf(new Date());
+    const messageDay = startOf(date);
+    if (messageDay === today) return uiLang === "es" ? "Hoy" : "Today";
+    if (messageDay === today - 86400000) return uiLang === "es" ? "Ayer" : "Yesterday";
+    return date.toLocaleDateString(uiLang === "es" ? "es-MX" : "en-US", { month: "long", day: "numeric" });
   };
   const senderLabel = (message: Message) => {
     if (message.sender_name?.trim()) return message.sender_name.trim();

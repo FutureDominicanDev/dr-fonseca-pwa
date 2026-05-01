@@ -606,7 +606,16 @@ export default function InboxPage() {
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
-  const fmtChatDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"short",month:"short",day:"numeric"}); };
+  const fmtChatDateLabel = (ts: string) => {
+    if (!ts) return "";
+    const date = new Date(ts);
+    const startOf = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+    const today = startOf(new Date());
+    const messageDay = startOf(date);
+    if (messageDay === today) return lang === "es" ? "Hoy" : "Today";
+    if (messageDay === today - 86400000) return lang === "es" ? "Ayer" : "Yesterday";
+    return date.toLocaleDateString(lang==="es"?"es-MX":"en-US",{month:"long",day:"numeric"});
+  };
   const fmtSize = (b: number) => !b?"":b<1048576?(b/1024).toFixed(1)+" KB":(b/1048576).toFixed(1)+" MB";
   const fmtRec = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
   const isImageUrl = (url: string) => { if (!url) return false; const u=url.toLowerCase(); return u.includes("supabase")&&(u.endsWith(".jpg")||u.endsWith(".jpeg")||u.endsWith(".png")||u.endsWith(".gif")||u.endsWith(".webp")||u.includes("before")||u.includes("patient-photo")); };
