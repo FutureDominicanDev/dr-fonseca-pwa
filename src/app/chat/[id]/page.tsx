@@ -600,7 +600,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const panelBg = darkMode ? "#172033" : "#fff";
   const footerBg = darkMode ? "#111827" : "#ededed";
   const inputPanelBg = darkMode ? "#1f2937" : "#fff";
-  const messageFontSize = textSize === "large" ? 21 : 18;
+  const messageFontSize = textSize === "large" ? 22 : 19;
   const translations = {
     en: {
       messagePlaceholder: "Message",
@@ -624,10 +624,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       normal: "Normal",
       large: "Large",
       language: "Language",
-      privacySupport: "Privacy and support",
-      privacyPolicy: "Privacy policy",
-      support: "Support",
-      accountDeletion: "Delete account",
     },
     es: {
       messagePlaceholder: "Mensaje",
@@ -651,10 +647,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       normal: "Normal",
       large: "Grande",
       language: "Idioma",
-      privacySupport: "Privacidad y soporte",
-      privacyPolicy: "Politica de privacidad",
-      support: "Soporte",
-      accountDeletion: "Eliminar cuenta",
     },
   };
   const labels = translations[uiLang] || translations.en;
@@ -784,7 +776,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 </div>
               )}
               <div style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", marginBottom: 5, animation: "messageIn 180ms ease-out" }}>
-                <div onClick={(event) => { event.stopPropagation(); if (canDeletePatientMessage) setDeleteMenuMessageId((current) => current === message.id ? null : message.id); }} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "min(82%, 680px)", background: bubbleBg, color: "#07111f", borderRadius: mine ? "16px 6px 16px 16px" : "6px 16px 16px 16px", padding: "10px 12px 8px", boxShadow: "0 1px 2px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 560, lineHeight: 1.38, letterSpacing: 0, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
+                <div onClick={(event) => { event.stopPropagation(); if (canDeletePatientMessage) setDeleteMenuMessageId((current) => current === message.id ? null : message.id); }} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "min(84%, 680px)", background: bubbleBg, color: "#07111f", borderRadius: mine ? "16px 6px 16px 16px" : "6px 16px 16px 16px", padding: "11px 13px 9px", boxShadow: "0 1px 2px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 560, lineHeight: 1.42, letterSpacing: 0, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
                 <div style={{ marginBottom: 5, lineHeight: 1.15 }}>
                   <span style={{ fontSize: Math.max(messageFontSize - 3, 15), fontWeight: 850, color: "#334155" }}>{senderLabel(message)}</span>
                 </div>
@@ -824,9 +816,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {newPrescriptionCount > 0 && <span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",minWidth:22,height:22,borderRadius:999,background:"#DC2626",color:"white",display:"grid",placeItems:"center",fontSize:12,fontWeight:900}}>{newPrescriptionCount}</span>}
             </button>
             <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
-            {viewerType === "staff" && (
-              <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
-            )}
+            <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
           </div>
         )}
 
@@ -855,7 +845,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               sendText();
             }
           }}
-          style={{ minWidth: 0, flex: 1, minHeight: 58, maxHeight: 96, overflowY: "auto", border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: "#1f2937", padding: "16px 20px", fontSize: messageFontSize, fontWeight: 500, lineHeight: 1.4, WebkitUserSelect: "text", userSelect: "text" }}
+          style={{ minWidth: 0, flex: 1, minHeight: 58, maxHeight: 104, overflowY: "auto", border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: darkMode ? "#f8fafc" : "#1f2937", padding: "16px 20px", fontSize: messageFontSize, fontWeight: 500, lineHeight: 1.42, WebkitUserSelect: "text", userSelect: "text" }}
         />
 
         <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
@@ -965,7 +955,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         </div>
       )}
 
-      {settingsOpen && viewerType === "staff" && (
+      {settingsOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 20 }}>
           <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
@@ -980,20 +970,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <button onClick={() => setTextSize("normal")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.normal}</button>
               <button onClick={() => setTextSize("large")} style={{ height: 46, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: 16 }}>{labels.large}</button>
-            </div>
-            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(148,163,184,0.28)" }}>
-              <div style={{ fontSize: 16, marginBottom: 10, fontWeight: 700 }}>{labels.privacySupport}</div>
-              <div style={{ display: "grid", gap: 8 }}>
-                {[
-                  { href: "/privacy", label: labels.privacyPolicy },
-                  { href: "/support", label: labels.support },
-                  { href: "/account-deletion", label: labels.accountDeletion },
-                ].map((link) => (
-                  <a key={link.href} href={link.href} style={{ minHeight: 42, display: "flex", alignItems: "center", border: "1px solid rgba(148,163,184,0.30)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "0 12px", textDecoration: "none", fontSize: 15, fontWeight: 800 }}>
-                    {link.label}
-                  </a>
-                ))}
-              </div>
             </div>
           </div>
         </div>
