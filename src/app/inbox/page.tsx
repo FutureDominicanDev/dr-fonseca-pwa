@@ -113,8 +113,10 @@ const T = {
     mediaLibrary: "Archivos",
     prescriptions: "Recetas",
     noPrescriptions: "Sin recetas todavía.",
-    prescriptionLabel: "Medicamento o indicación",
-    prescriptionLabelPH: "Ej: Ibuprofeno 800 mg - tomar cada 8 horas",
+    prescriptionLabel: "Nombre de la receta",
+    prescriptionLabelPH: "Ej: Ibuprofeno 800 mg",
+    prescriptionInstructions: "Indicaciones de uso",
+    prescriptionInstructionsPH: "Ej: Tomar una tableta cada 8 horas por 5 días.",
     prescriptionFile: "Archivo seleccionado",
     savePrescription: "Guardar en recetas",
     startVideoCall: "Iniciar videollamada",
@@ -243,8 +245,10 @@ const T = {
     mediaLibrary: "Files",
     prescriptions: "Prescriptions",
     noPrescriptions: "No prescriptions yet.",
-    prescriptionLabel: "Medication or instruction",
-    prescriptionLabelPH: "e.g. Ibuprofen 800 mg - take every 8 hours",
+    prescriptionLabel: "Prescription name",
+    prescriptionLabelPH: "e.g. Ibuprofen 800 mg",
+    prescriptionInstructions: "Instructions for use",
+    prescriptionInstructionsPH: "e.g. Take one tablet every 8 hours for 5 days.",
     prescriptionFile: "Selected file",
     savePrescription: "Save to prescriptions",
     startVideoCall: "Start video call",
@@ -485,6 +489,7 @@ export default function InboxPage() {
   const [previewType, setPreviewType] = useState<"image" | "video" | "audio" | "file">("file");
   const [pendingPrescriptionFile, setPendingPrescriptionFile] = useState<File | null>(null);
   const [prescriptionLabel, setPrescriptionLabel] = useState("");
+  const [prescriptionInstructions, setPrescriptionInstructions] = useState("");
   const [userProfile, setUserProfile] = useState<any>(null);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([
     { shortcut: "hola", message: "¡Hola! ¿Cómo se siente hoy?" },
@@ -2638,7 +2643,7 @@ export default function InboxPage() {
         }
       `}</style>
 
-      <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setShowMediaMenu(false);}e.target.value="";}}/>
+      <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setPrescriptionInstructions("");setShowMediaMenu(false);}e.target.value="";}}/>
       <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
@@ -3001,7 +3006,7 @@ export default function InboxPage() {
       )}
 
       {pendingPrescriptionFile && (
-        <div className="modal-overlay" onClick={()=>{setPendingPrescriptionFile(null);setPrescriptionLabel("");}}>
+        <div className="modal-overlay" onClick={()=>{setPendingPrescriptionFile(null);setPrescriptionLabel("");setPrescriptionInstructions("");}}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520}}>
             <p className="modal-title">{t.prescriptions}</p>
             <label className="flabel">{t.prescriptionFile}</label>
@@ -3011,10 +3016,19 @@ export default function InboxPage() {
             <label className="flabel">{t.prescriptionLabel}</label>
             <textarea
               className="finput"
-              rows={3}
+              rows={2}
               value={prescriptionLabel}
               onChange={(e)=>setPrescriptionLabel(e.target.value)}
               placeholder={t.prescriptionLabelPH}
+              style={{resize:"vertical",minHeight:72}}
+            />
+            <label className="flabel">{t.prescriptionInstructions}</label>
+            <textarea
+              className="finput"
+              rows={3}
+              value={prescriptionInstructions}
+              onChange={(e)=>setPrescriptionInstructions(e.target.value)}
+              placeholder={t.prescriptionInstructionsPH}
               style={{resize:"vertical",minHeight:96}}
             />
             <button
@@ -3023,15 +3037,17 @@ export default function InboxPage() {
               onClick={async()=>{
                 const file = pendingPrescriptionFile;
                 const label = prescriptionLabel.trim();
+                const instructions = prescriptionInstructions.trim();
                 if (!file || !label) return;
                 setPendingPrescriptionFile(null);
                 setPrescriptionLabel("");
-                await uploadFile(file,"medication",label);
+                setPrescriptionInstructions("");
+                await uploadFile(file,"medication",instructions ? `${label}\n${instructions}` : label);
               }}
             >
               {sending ? (lang==="es" ? "Guardando..." : "Saving...") : t.savePrescription}
             </button>
-            <button className="sbtn" onClick={()=>{setPendingPrescriptionFile(null);setPrescriptionLabel("");}}>{t.cancel}</button>
+            <button className="sbtn" onClick={()=>{setPendingPrescriptionFile(null);setPrescriptionLabel("");setPrescriptionInstructions("");}}>{t.cancel}</button>
           </div>
         </div>
       )}
@@ -3086,7 +3102,16 @@ export default function InboxPage() {
                 {roomPrescriptionEntries.map((entry:any)=>(
                   <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
                     <span style={{fontSize:22}}>💊</span>
-                    <div style={{fontWeight:700,fontSize:14}}>{`${entry.file_name || t.prescriptions}`.replace(/^\[MED\]\s*/,"")}</div>
+                    {(() => {
+                      const clean = `${entry.file_name || t.prescriptions}`.replace(/^\[MED\]\s*/,"").trim();
+                      const [title, ...instructions] = clean.split(/\n+/);
+                      return (
+                        <div style={{display:"grid",gap:3}}>
+                          <div style={{fontWeight:800,fontSize:14}}>{title || t.prescriptions}</div>
+                          {instructions.join("\n").trim() && <div style={{fontWeight:600,fontSize:12,color:subTextColor,lineHeight:1.35,whiteSpace:"pre-wrap"}}>{instructions.join("\n").trim()}</div>}
+                        </div>
+                      );
+                    })()}
                   </a>
                 ))}
                 <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginTop:8}}>{lang==="es" ? "Otros archivos" : "Other files"}</div>

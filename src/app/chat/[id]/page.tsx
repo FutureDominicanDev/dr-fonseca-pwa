@@ -47,6 +47,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
   const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
   const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
+  const [lastPrescriptionSeenAt, setLastPrescriptionSeenAt] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>(["Gracias", "Tengo una pregunta", "Voy en camino"]);
   const [replyDraft, setReplyDraft] = useState("");
@@ -94,6 +95,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     composerRef.current = node;
     applyComposerInputHints(node);
   };
+  const prescriptionSeenKey = `patient_seen_recetas_${id}`;
 
   const normalizeLang = (value?: string | null): "es" | "en" | null => {
     const normalized = `${value || ""}`.toLowerCase();
@@ -120,6 +122,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const patientLang = normalizeLang(Array.isArray(patient) ? patient[0]?.preferred_language : patient?.preferred_language);
     if (patientLang) setUiLang(patientLang);
   }, [room, roomLanguageStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setLastPrescriptionSeenAt(window.localStorage.getItem(prescriptionSeenKey) || "");
+  }, [prescriptionSeenKey]);
 
   useEffect(() => {
     let mounted = true;
@@ -584,6 +591,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       video: "Video",
       documents: "Prescriptions",
       noPrescriptions: "No prescriptions yet.",
+      prescriptionInstructions: "Instructions",
       createReply: "Create quick reply",
       saveReply: "Save Reply",
       saveChanges: "Save Changes",
@@ -610,6 +618,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       video: "Video",
       documents: "Recetas",
       noPrescriptions: "Todavía no hay recetas.",
+      prescriptionInstructions: "Indicaciones",
       createReply: "Crear respuesta rápida",
       saveReply: "Guardar respuesta",
       saveChanges: "Guardar cambios",
@@ -629,6 +638,22 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
   const labels = translations[uiLang] || translations.en;
   const prescriptionMessages = messages.filter((message) => `${message.file_name || ""}`.startsWith("[MED]"));
+  const newPrescriptionCount = prescriptionMessages.filter((message) => !lastPrescriptionSeenAt || `${message.created_at || ""}` > lastPrescriptionSeenAt).length;
+  const openPrescriptions = () => {
+    const latest = prescriptionMessages[prescriptionMessages.length - 1]?.created_at || new Date().toISOString();
+    setPrescriptionsOpen(true);
+    setMenuOpen(false);
+    setLastPrescriptionSeenAt(latest);
+    if (typeof window !== "undefined") window.localStorage.setItem(prescriptionSeenKey, latest);
+  };
+  const parsePrescriptionText = (value?: string | null) => {
+    const clean = `${value || labels.documents}`.replace(/^\[MED\]\s*/i, "").trim();
+    const [title, ...rest] = clean.split(/\n+/);
+    return {
+      title: title?.trim() || labels.documents,
+      instructions: rest.join("\n").trim(),
+    };
+  };
   const visibleChatMessages = messages.filter((message) => {
     const fileName = `${message.file_name || ""}`;
     if (isLegacyRoomCreatedMessage(message)) return false;
@@ -766,7 +791,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
             <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
             <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
-            <button onClick={() => { setPrescriptionsOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.documents}</button>
+            <button onClick={openPrescriptions} style={{ ...menuButtonStyle, position:"relative" }}>
+              {labels.documents}
+              {newPrescriptionCount > 0 && <span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",minWidth:22,height:22,borderRadius:999,background:"#DC2626",color:"white",display:"grid",placeItems:"center",fontSize:12,fontWeight:900}}>{newPrescriptionCount}</span>}
+            </button>
             <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
             {viewerType === "staff" && (
               <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
@@ -774,8 +802,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           </div>
         )}
 
-        <button onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ width: 42, height: 42, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <button onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ position:"relative", width: 42, height: 42, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {menuOpen ? "×" : "+"}
+          {newPrescriptionCount > 0 && <span style={{position:"absolute",right:0,top:0,width:12,height:12,borderRadius:"50%",background:"#DC2626",border:"2px solid #ededed"}} />}
         </button>
 
         <div
@@ -872,11 +901,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               )}
               {prescriptionMessages.map((message) => {
                 const url = message.file_url || message.content;
-                const fileName = `${message.file_name || labels.documents}`.replace(/^\[MED\]\s*/i, "");
+                const prescription = parsePrescriptionText(message.file_name);
                 return (
-                  <a key={message.id} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textDecoration: "none", fontSize: 16, fontWeight: 700 }}>
+                  <a key={message.id} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "flex-start", gap: 10, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textDecoration: "none", fontSize: 16, fontWeight: 700 }}>
                     <span style={{ fontSize: 22 }}>📄</span>
-                    <span style={{ wordBreak: "break-word" }}>{fileName}</span>
+                    <span style={{ wordBreak: "break-word", display:"grid", gap:4 }}>
+                      <span>{prescription.title}</span>
+                      {prescription.instructions && <span style={{fontSize:13,fontWeight:600,color:darkMode?"#CBD5E1":"#64748B",lineHeight:1.35}}>{labels.prescriptionInstructions}: {prescription.instructions}</span>}
+                    </span>
                   </a>
                 );
               })}
