@@ -354,6 +354,8 @@ interface CareTeamMember {
   role?: string | null;
   office_location?: string | null;
   avatar_url?: string | null;
+  phone?: string | null;
+  email?: string | null;
 }
 
 const CARE_TEAM_ROLE_ORDER = ["doctor", "enfermeria", "coordinacion", "post_quirofano", "staff"] as const;
@@ -441,6 +443,10 @@ export default function InboxPage() {
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [pressedMsgId, setPressedMsgId] = useState<string|null>(null);
+  const [activeMessageAction, setActiveMessageAction] = useState<any | null>(null);
+  const [editingMessage, setEditingMessage] = useState<any | null>(null);
+  const [editingMessageText, setEditingMessageText] = useState("");
+  const [staffContactMember, setStaffContactMember] = useState<CareTeamMember | null>(null);
   const [unreadRooms, setUnreadRooms] = useState<Set<string>>(new Set());
   const [totalUnread, setTotalUnread] = useState(0);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
@@ -611,11 +617,25 @@ export default function InboxPage() {
     if (message.sender_type === "patient") return message.sender_name || t.patientLabel;
     return message.sender_name || (isOutgoing ? roleName(message.sender_role) : "Staff");
   };
+  const findStaffMemberForMessage = (message: any): CareTeamMember | null => {
+    if (!message?.sender_id || message.sender_type !== "staff") return null;
+    return (
+      staffDirectory.find((member) => member.id === message.sender_id) ||
+      selectedRoomTeam.find((member) => member.id === message.sender_id) ||
+      null
+    );
+  };
+  const closeMessageActions = () => {
+    setPressedMsgId(null);
+    setActiveMessageAction(null);
+    setStaffContactMember(null);
+  };
   const startStaffMessagePress = (messageId: string, enabled: boolean) => {
     if (!enabled) return;
     if (messagePressTimerRef.current) clearTimeout(messagePressTimerRef.current);
     messagePressTimerRef.current = setTimeout(() => {
       setPressedMsgId(messageId);
+      setActiveMessageAction(messages.find((entry) => entry.id === messageId) || null);
       messagePressTimerRef.current = null;
     }, 550);
   };
@@ -1119,7 +1139,7 @@ export default function InboxPage() {
     if (list.length === 0) {
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name, display_name, role, office_location, avatar_url")
+        .select("id, full_name, display_name, role, office_location, avatar_url, phone, email")
         .order("full_name", { ascending: true });
       list = (data || []) as CareTeamMember[];
     }
@@ -1131,6 +1151,8 @@ export default function InboxPage() {
       role: userProfile.role || "staff",
       office_location: userProfile.office_location || null,
       avatar_url: userProfile.avatar_url || null,
+      phone: userProfile.phone || null,
+      email: userProfile.email || null,
     }] : [];
     const merged = [...list];
     fallback.forEach((entry) => {
@@ -1153,7 +1175,7 @@ export default function InboxPage() {
     const memberIds = Array.from(new Set(members.map((entry: any) => entry.user_id).filter(Boolean)));
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, full_name, role, office_location, avatar_url")
+      .select("id, full_name, display_name, role, office_location, avatar_url, phone, email")
       .in("id", memberIds);
 
     setSelectedRoomTeam((profiles || []) as CareTeamMember[]);
@@ -1424,6 +1446,34 @@ export default function InboxPage() {
       url: window.location.href, tag: selectedRoom.id,
     })}).catch(()=>{});
     isSending.current=false; setSending(false);
+  };
+
+  const updateStaffMessage = async () => {
+    const next = editingMessageText.trim();
+    if (!editingMessage || !next) return;
+    const messageId = editingMessage.id;
+    setMessages((prev) => prev.map((entry) => (entry.id === messageId ? { ...entry, content: next } : entry)));
+    setEditingMessage(null);
+    setEditingMessageText("");
+    setActiveMessageAction(null);
+    const { error } = await supabase
+      .from("messages")
+      .update({ content: next })
+      .eq("id", messageId)
+      .eq("sender_id", currentUserId || "");
+    if (error) fetchMessages(selectedRoom?.id || "");
+  };
+
+  const deleteStaffMessage = async (messageId: string) => {
+    const deletedAt = new Date().toISOString();
+    setActiveMessageAction(null);
+    setPressedMsgId(null);
+    setMessages((prev) => prev.map((entry) => (entry.id === messageId ? { ...entry, deleted_by_staff: true, deleted_at: deletedAt } : entry)));
+    await supabase
+      .from("messages")
+      .update({ deleted_by_staff: true, deleted_at: deletedAt })
+      .eq("id", messageId)
+      .eq("sender_id", currentUserId || "");
   };
 
   const postSystemMessage = async (roomId: string, text: string) => {
@@ -2086,6 +2136,7 @@ export default function InboxPage() {
       msg.sender_id === currentUserId;
     const sc=senderColor(msg.sender_type||"staff",msg.sender_role||"staff");
     const sn = displaySenderName(msg, isOut);
+    const staffContact = !isOut ? findStaffMemberForMessage(msg) : null;
     const videoCallRoomName = parseVideoCallMessage(msg.content);
     const callRequestToken = parseCallRequestMessage(msg.content);
     const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id && !videoCallRoomName && !callRequestToken
@@ -2107,7 +2158,16 @@ export default function InboxPage() {
     const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
     const bubbleHeader = (style: React.CSSProperties = {}) => (
       <div style={{marginBottom:5,lineHeight:1.15,...style}}>
-        <span style={{fontSize:Math.max(fontSize - 4, 15),fontWeight:850,color:sc}}>{sn}</span>
+        <button
+          type="button"
+          onClick={(event)=>{
+            event.stopPropagation();
+            if (staffContact) setStaffContactMember(staffContact);
+          }}
+          style={{border:"none",background:"transparent",padding:0,margin:0,fontFamily:"inherit",fontSize:Math.max(fontSize - 4, 15),fontWeight:850,color:sc,cursor:staffContact?"pointer":"default"}}
+        >
+          {sn}
+        </button>
       </div>
     );
     const bubbleTime = (showTicks = false, style: React.CSSProperties = {}) => (
@@ -2120,13 +2180,16 @@ export default function InboxPage() {
     return (
       <div
         key={msg.id}
-        onClick={(event)=>event.stopPropagation()}
+        onClick={(event)=>{
+          event.stopPropagation();
+          if (canDeleteOwnStaffMessage) setActiveMessageAction(msg);
+        }}
         onMouseDown={()=>startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
         onMouseUp={cancelStaffMessagePress}
         onMouseLeave={cancelStaffMessagePress}
         onTouchStart={()=>startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
         onTouchEnd={cancelStaffMessagePress}
-        onContextMenu={(event)=>{ if (canDeleteOwnStaffMessage) { event.preventDefault(); setPressedMsgId(msg.id); } }}
+        onContextMenu={(event)=>{ if (canDeleteOwnStaffMessage) { event.preventDefault(); setPressedMsgId(msg.id); setActiveMessageAction(msg); } }}
         style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:5,position:"relative"}}
       >
         {effectiveType==="image"?(
@@ -2198,33 +2261,6 @@ export default function InboxPage() {
             {patientDeletedNotice}
             {bubbleTime(isOut)}
           </div>
-        )}
-        {canDeleteOwnStaffMessage && pressedMsgId === msg.id && (
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              if (!confirm(t.deleteMsg)) return;
-              supabase
-                .from("messages")
-                .update({ deleted_by_staff: true, deleted_at: new Date().toISOString() })
-                .eq("id", msg.id)
-                .then(() => {
-                  setPressedMsgId(null);
-                  setMessages((prev) => prev.map((entry) => (entry.id === msg.id ? { ...entry, deleted_by_staff: true } : entry)));
-                });
-            }}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: "#DC2626",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: "pointer",
-              padding: "2px 4px",
-            }}
-          >
-            🗑️ {lang==="es"?"Eliminar":"Delete"}
-          </button>
         )}
       </div>
     );
@@ -3130,6 +3166,84 @@ export default function InboxPage() {
 
       {showSettings && SettingsPanel()}
       {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
+      {activeMessageAction && (
+        <div className="modal-overlay" onClick={closeMessageActions}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
+            <p className="modal-title">{lang==="es" ? "Mensaje" : "Message"}</p>
+            {activeMessageAction.message_type === "text" && (
+              <button
+                className="pbtn"
+                onClick={()=>{
+                  setEditingMessage(activeMessageAction);
+                  setEditingMessageText(activeMessageAction.content || "");
+                  setActiveMessageAction(null);
+                }}
+              >
+                {lang==="es" ? "Editar mensaje" : "Edit message"}
+              </button>
+            )}
+            <button
+              className="sbtn"
+              onClick={()=>{
+                if (confirm(t.deleteMsg)) deleteStaffMessage(activeMessageAction.id);
+              }}
+              style={{color:"#B91C1C"}}
+            >
+              {lang==="es" ? "Eliminar mensaje" : "Delete message"}
+            </button>
+            <button className="sbtn" onClick={closeMessageActions}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
+      {editingMessage && (
+        <div className="modal-overlay" onClick={()=>{setEditingMessage(null);setEditingMessageText("");}}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520}}>
+            <p className="modal-title">{lang==="es" ? "Editar mensaje" : "Edit message"}</p>
+            <textarea
+              className="finput"
+              rows={4}
+              value={editingMessageText}
+              onChange={(event)=>setEditingMessageText(event.target.value)}
+              style={{resize:"vertical",minHeight:110}}
+            />
+            <button className="pbtn" disabled={!editingMessageText.trim()} onClick={updateStaffMessage}>{t.save}</button>
+            <button className="sbtn" onClick={()=>{setEditingMessage(null);setEditingMessageText("");}}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
+      {staffContactMember && (
+        <div className="modal-overlay" onClick={()=>setStaffContactMember(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
+            <p className="modal-title">{staffContactMember.full_name || staffContactMember.display_name || (lang==="es" ? "Personal" : "Staff")}</p>
+            <div style={{fontSize:14,color:subTextColor,marginBottom:14}}>
+              {roleName(staffContactMember.role)}{staffContactMember.office_location ? ` · ${staffContactMember.office_location}` : ""}
+            </div>
+            <button
+              className="pbtn"
+              disabled={!staffContactMember.phone}
+              onClick={()=>{ if (staffContactMember.phone) window.location.href = `tel:${staffContactMember.phone}`; }}
+            >
+              {lang==="es" ? "Llamar" : "Call"}
+            </button>
+            <button
+              className="sbtn"
+              disabled={!staffContactMember.phone && !staffContactMember.email}
+              onClick={()=>{
+                if (staffContactMember.phone) window.location.href = `sms:${staffContactMember.phone}`;
+                else if (staffContactMember.email) window.location.href = `mailto:${staffContactMember.email}`;
+              }}
+            >
+              {lang==="es" ? "Mensaje privado" : "Private message"}
+            </button>
+            {!staffContactMember.phone && !staffContactMember.email && (
+              <div style={{fontSize:13,color:subTextColor,marginTop:10}}>
+                {lang==="es" ? "Este miembro no tiene teléfono o correo registrado." : "This staff member has no phone or email listed."}
+              </div>
+            )}
+            <button className="sbtn" onClick={()=>setStaffContactMember(null)}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
       {preOpViewerUrl && (
         <div className="modal-overlay" onClick={()=>setPreOpViewerUrl("")}>
           <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:760,maxHeight:"92dvh",padding:14,display:"grid",gap:10}}>
@@ -3159,7 +3273,7 @@ export default function InboxPage() {
         subTextColor={subTextColor}
       />
 
-      <div className="shell" onClick={()=>{setPressedMsgId(null);setShowSlashMenu(false);}}>
+      <div className="shell" onClick={()=>{closeMessageActions();setShowSlashMenu(false);}}>
         <div className="topbar">
           <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
           <div className="topbar-actions">
@@ -3351,7 +3465,7 @@ export default function InboxPage() {
                     <button onClick={()=>stopRec(false)} style={{padding:"8px 16px",background:"#FF3B30",color:"white",border:"none",borderRadius:20,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⏹ {t.stopAndReview}</button>
                   </div>
                 ):(
-                  <div className="input-area" onClick={e=>{e.stopPropagation();setPressedMsgId(null);}}>
+                  <div className="input-area" onClick={e=>{e.stopPropagation();closeMessageActions();}}>
                     {showMediaMenu&&(
                       <div className="staff-menu-popup">
                         <button className="staff-menu-item" onClick={()=>{
@@ -3391,7 +3505,7 @@ export default function InboxPage() {
                       role="textbox"
                       aria-label={lang==="es" ? "Mensaje" : "Message"}
                       data-placeholder={lang==="es" ? "Mensaje" : "Message"}
-                      onFocus={()=>{setPressedMsgId(null);jumpToLatest();}}
+                      onFocus={()=>{closeMessageActions();jumpToLatest();}}
                       onInput={e=>{
                         const v=e.currentTarget.textContent || "";
                         setNewMessage(v);

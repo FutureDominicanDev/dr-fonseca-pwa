@@ -65,6 +65,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [fileAccept, setFileAccept] = useState("*");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [deleteMenuMessageId, setDeleteMenuMessageId] = useState<string | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [editingMessageText, setEditingMessageText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -351,6 +353,25 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (error) return;
     setDeleteMenuMessageId(null);
     setMessages((current) => current.map((message) => (message.id === messageId ? { ...message, deleted_by_patient: true, deleted_at: deletedAt } : message)));
+  };
+
+  const updatePatientMessage = async () => {
+    const next = editingMessageText.trim();
+    if (!editingMessage || !next) return;
+    const messageId = editingMessage.id;
+    setEditingMessage(null);
+    setEditingMessageText("");
+    setDeleteMenuMessageId(null);
+    setMessages((current) => current.map((message) => (message.id === messageId ? { ...message, content: next } : message)));
+    const { error } = await supabase
+      .from("messages")
+      .update({ content: next })
+      .eq("id", messageId)
+      .eq("room_id", id)
+      .eq("sender_type", "patient");
+    if (error) {
+      setMessages((current) => current.map((message) => (message.id === messageId ? editingMessage : message)));
+    }
   };
 
   const startMessageLongPress = (messageId: string, enabled: boolean) => {
@@ -763,7 +784,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 </div>
               )}
               <div style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", marginBottom: 5, animation: "messageIn 180ms ease-out" }}>
-                <div onClick={(event) => event.stopPropagation()} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "min(82%, 680px)", background: bubbleBg, color: "#07111f", borderRadius: mine ? "16px 6px 16px 16px" : "6px 16px 16px 16px", padding: "10px 12px 8px", boxShadow: "0 1px 2px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 560, lineHeight: 1.38, letterSpacing: 0, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
+                <div onClick={(event) => { event.stopPropagation(); if (canDeletePatientMessage) setDeleteMenuMessageId((current) => current === message.id ? null : message.id); }} onMouseDown={() => startMessageLongPress(message.id, canDeletePatientMessage)} onMouseUp={cancelMessageLongPress} onMouseLeave={cancelMessageLongPress} onTouchStart={() => startMessageLongPress(message.id, canDeletePatientMessage)} onTouchEnd={cancelMessageLongPress} style={{ maxWidth: "min(82%, 680px)", background: bubbleBg, color: "#07111f", borderRadius: mine ? "16px 6px 16px 16px" : "6px 16px 16px 16px", padding: "10px 12px 8px", boxShadow: "0 1px 2px rgba(15,23,42,0.13)", fontSize: messageFontSize, fontWeight: 560, lineHeight: 1.38, letterSpacing: 0, transition: "box-shadow 170ms ease, transform 170ms ease", userSelect: "none" }}>
                 <div style={{ marginBottom: 5, lineHeight: 1.15 }}>
                   <span style={{ fontSize: Math.max(messageFontSize - 3, 15), fontWeight: 850, color: "#334155" }}>{senderLabel(message)}</span>
                 </div>
@@ -773,9 +794,16 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 )}
                 <div style={{ fontSize: Math.max(messageFontSize - 5, 13), fontWeight: 520, color: "#64748b", whiteSpace: "nowrap", lineHeight: 1.1, marginTop: 4, textAlign: "right" }}>{formatTime(message.created_at)}</div>
                 {canDeletePatientMessage && deleteMenuMessageId === message.id && (
-                  <button onClick={(event) => { event.stopPropagation(); deletePatientMessage(message.id); }} style={{ display: "block", marginTop: 7, marginLeft: "auto", border: "none", background: "transparent", color: "#b91c1c", fontSize: 12, fontWeight: 800, padding: 0 }}>
-                    {labels.delete}
-                  </button>
+                  <div style={{display:"flex",gap:12,justifyContent:"flex-end",marginTop:8}}>
+                    {message.message_type === "text" && (
+                      <button onClick={(event) => { event.stopPropagation(); setEditingMessage(message); setEditingMessageText(message.content || ""); setDeleteMenuMessageId(null); }} style={{ border: "none", background: "transparent", color: "#075e54", fontSize: 13, fontWeight: 900, padding: 0 }}>
+                        {labels.edit}
+                      </button>
+                    )}
+                    <button onClick={(event) => { event.stopPropagation(); deletePatientMessage(message.id); }} style={{ border: "none", background: "transparent", color: "#b91c1c", fontSize: 13, fontWeight: 900, padding: 0 }}>
+                      {labels.delete}
+                    </button>
+                  </div>
                 )}
               </div>
               </div>
@@ -913,6 +941,26 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {editingMessage && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 18, zIndex: 24 }} onClick={() => { setEditingMessage(null); setEditingMessageText(""); }}>
+          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }} onClick={(event)=>event.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <strong style={{ fontSize: 18 }}>{labels.edit}</strong>
+              <button onClick={() => { setEditingMessage(null); setEditingMessageText(""); }} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
+            </div>
+            <textarea
+              value={editingMessageText}
+              onChange={(event)=>setEditingMessageText(event.target.value)}
+              rows={4}
+              style={{ width: "100%", border: "1px solid rgba(148,163,184,0.35)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "12px 14px", fontSize: 16, resize: "vertical", marginBottom: 12, fontFamily: "inherit" }}
+            />
+            <button onClick={updatePatientMessage} disabled={!editingMessageText.trim()} style={{ width: "100%", height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800, opacity: editingMessageText.trim() ? 1 : 0.5 }}>
+              {labels.saveChanges}
+            </button>
           </div>
         </div>
       )}
