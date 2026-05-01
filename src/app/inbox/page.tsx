@@ -113,6 +113,10 @@ const T = {
     mediaLibrary: "Archivos",
     prescriptions: "Recetas",
     noPrescriptions: "Sin recetas todavía.",
+    prescriptionLabel: "Medicamento o indicación",
+    prescriptionLabelPH: "Ej: Ibuprofeno 800 mg - tomar cada 8 horas",
+    prescriptionFile: "Archivo seleccionado",
+    savePrescription: "Guardar en recetas",
     startVideoCall: "Iniciar videollamada",
     joinVideoCall: "Unirse a videollamada",
     videoCallInvite: "Invitación de videollamada",
@@ -239,6 +243,10 @@ const T = {
     mediaLibrary: "Files",
     prescriptions: "Prescriptions",
     noPrescriptions: "No prescriptions yet.",
+    prescriptionLabel: "Medication or instruction",
+    prescriptionLabelPH: "e.g. Ibuprofen 800 mg - take every 8 hours",
+    prescriptionFile: "Selected file",
+    savePrescription: "Save to prescriptions",
     startVideoCall: "Start video call",
     joinVideoCall: "Join video call",
     videoCallInvite: "Video call invite",
@@ -475,6 +483,8 @@ export default function InboxPage() {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewType, setPreviewType] = useState<"image" | "video" | "audio" | "file">("file");
+  const [pendingPrescriptionFile, setPendingPrescriptionFile] = useState<File | null>(null);
+  const [prescriptionLabel, setPrescriptionLabel] = useState("");
   const [userProfile, setUserProfile] = useState<any>(null);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([
     { shortcut: "hola", message: "¡Hola! ¿Cómo se siente hoy?" },
@@ -1600,11 +1610,6 @@ export default function InboxPage() {
   };
 
   const confirmUpload = async (cat: FileCategory) => { if (!pendingFile) return; setShowUploadMenu(false); await uploadFile(pendingFile,cat); setPendingFile(null); };
-  const uploadSelectedFile = async (file: File, cat: FileCategory = "general") => {
-    setPendingFile(null);
-    setShowUploadMenu(false);
-    await uploadFile(file, cat);
-  };
   const stagePreview = (file: File) => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewFile(file);
@@ -1632,7 +1637,7 @@ export default function InboxPage() {
     await uploadFile(file);
   };
 
-  const uploadFile = async (file: File, cat: FileCategory="general") => {
+  const uploadFile = async (file: File, cat: FileCategory="general", folderLabel = "") => {
     if (!selectedRoom) return; setSending(true);
     try {
       const fn=`patients/${selectedRoom.id}/${Date.now()}-${file.name}`;
@@ -1644,12 +1649,13 @@ export default function InboxPage() {
       else if (file.type.startsWith("video/")) mt="video";
       else if (file.type.startsWith("audio/")) mt="audio";
       const prefix=cat==="medication"?"[MED] ":cat==="before_photo"?"[BEFORE] ":"";
+      const displayFileName = cat==="medication" ? `${prefix}${folderLabel.trim() || file.name}` : `${prefix}${file.name}`;
       const sName=userProfile?.full_name||userProfile?.display_name||"Staff";
       const sRole=userProfile?.role||"staff";
       const sOffice=userProfile?.office_location||selectedRoom?.procedures?.office_location||null;
       const tempId="temp-file-"+Date.now();
-      setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:prefix+file.name,file_size:file.size,sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
-      const { data: nm } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:prefix+file.name,file_size:file.size,sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
+      setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
+      const { data: nm } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
       if (nm) setMessages(p=>p.map(m=>m.id===tempId?nm:m));
       else setMessages(p=>p.filter(m=>m.id!==tempId));
       if (cat === "medication") {
@@ -1994,8 +2000,8 @@ export default function InboxPage() {
   const roomMediaEntries = messages
     .filter((entry) => !entry.deleted_by_staff && !entry.deleted_by_patient && !entry.is_internal)
     .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
-  const roomImageVideoEntries = roomMediaEntries.filter((entry) => entry.message_type === "image" || entry.message_type === "video");
-  const roomAudioEntries = roomMediaEntries.filter((entry) => entry.message_type === "audio");
+  const roomImageVideoEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && (entry.message_type === "image" || entry.message_type === "video"));
+  const roomAudioEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && entry.message_type === "audio");
   const roomPrescriptionEntries = roomMediaEntries.filter((entry) => isPrescriptionEntry(entry));
   const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry));
   const appendEmojiToDraft = (emoji: string) => {
@@ -2632,7 +2638,7 @@ export default function InboxPage() {
         }
       `}</style>
 
-      <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)uploadSelectedFile(f,"medication");e.target.value="";}}/>
+      <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setShowMediaMenu(false);}e.target.value="";}}/>
       <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
@@ -2990,6 +2996,42 @@ export default function InboxPage() {
               style={{border:"none",width:"100%",height:"100%",background:"#000"}}
               title="Video Call"
             />
+          </div>
+        </div>
+      )}
+
+      {pendingPrescriptionFile && (
+        <div className="modal-overlay" onClick={()=>{setPendingPrescriptionFile(null);setPrescriptionLabel("");}}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520}}>
+            <p className="modal-title">{t.prescriptions}</p>
+            <label className="flabel">{t.prescriptionFile}</label>
+            <div style={{padding:"13px 16px",border:`1px solid ${borderColor}`,borderRadius:14,background:cardBg,color:textColor,fontWeight:800,marginBottom:14,wordBreak:"break-word"}}>
+              {pendingPrescriptionFile.name}
+            </div>
+            <label className="flabel">{t.prescriptionLabel}</label>
+            <textarea
+              className="finput"
+              rows={3}
+              value={prescriptionLabel}
+              onChange={(e)=>setPrescriptionLabel(e.target.value)}
+              placeholder={t.prescriptionLabelPH}
+              style={{resize:"vertical",minHeight:96}}
+            />
+            <button
+              className="pbtn"
+              disabled={!prescriptionLabel.trim() || sending}
+              onClick={async()=>{
+                const file = pendingPrescriptionFile;
+                const label = prescriptionLabel.trim();
+                if (!file || !label) return;
+                setPendingPrescriptionFile(null);
+                setPrescriptionLabel("");
+                await uploadFile(file,"medication",label);
+              }}
+            >
+              {sending ? (lang==="es" ? "Guardando..." : "Saving...") : t.savePrescription}
+            </button>
+            <button className="sbtn" onClick={()=>{setPendingPrescriptionFile(null);setPrescriptionLabel("");}}>{t.cancel}</button>
           </div>
         </div>
       )}
