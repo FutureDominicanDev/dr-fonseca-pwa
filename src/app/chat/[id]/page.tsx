@@ -36,6 +36,19 @@ type RoomAccess = {
   } | null;
 };
 
+const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
+  const normalized = `${value || ""}`.toLowerCase();
+  if (normalized.startsWith("es")) return "es";
+  if (normalized.startsWith("en")) return "en";
+  return null;
+};
+
+const deviceUiLang = (): "es" | "en" => {
+  if (typeof navigator === "undefined") return "es";
+  const options = [navigator.language, ...(navigator.languages || [])];
+  return options.map((entry) => normalizeUiLang(entry)).find(Boolean) || "es";
+};
+
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const searchParams = useSearchParams();
@@ -56,7 +69,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [darkMode, setDarkMode] = useState(false);
   const [textSize, setTextSize] = useState<"normal" | "large">("normal");
   const [recording, setRecording] = useState(false);
-  const [uiLang, setUiLang] = useState<"es" | "en">("en");
+  const [uiLang, setUiLang] = useState<"es" | "en">(() => deviceUiLang());
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
@@ -100,20 +113,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
   const prescriptionSeenKey = `patient_seen_recetas_${id}`;
 
-  const normalizeLang = (value?: string | null): "es" | "en" | null => {
-    const normalized = `${value || ""}`.toLowerCase();
-    if (normalized.startsWith("es")) return "es";
-    if (normalized.startsWith("en")) return "en";
-    return null;
-  };
   useEffect(() => {
-    const browserLang = typeof navigator !== "undefined" ? normalizeLang(navigator.language) : null;
-    setUiLang(browserLang || "es");
+    setUiLang(deviceUiLang());
   }, []);
 
   useEffect(() => {
     const patient = room?.procedures?.patients;
-    const patientLang = normalizeLang(Array.isArray(patient) ? patient[0]?.preferred_language : patient?.preferred_language);
+    const patientLang = normalizeUiLang(Array.isArray(patient) ? patient[0]?.preferred_language : patient?.preferred_language);
     if (patientLang) setUiLang(patientLang);
   }, [room]);
 
@@ -637,14 +643,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       close: "Cerrar",
       share: "Compartir",
       print: "Imprimir",
-      email: "Email",
+      email: "Correo",
       messages: "Mensajes",
       createReply: "Crear respuesta rápida",
       saveReply: "Guardar respuesta",
       saveChanges: "Guardar cambios",
       edit: "Editar",
       delete: "Eliminar",
-      deletedByUser: "This message was Deleted by user",
+      deletedByUser: "Este mensaje fue eliminado por el usuario",
       darkMode: "Modo oscuro",
       textSize: "Tamaño de texto",
       normal: "Normal",
