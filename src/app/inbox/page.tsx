@@ -625,6 +625,10 @@ export default function InboxPage() {
       null
     );
   };
+  const openStaffContact = (member: CareTeamMember | null) => {
+    if (!member || member.id === currentUserId) return;
+    setStaffContactMember(member);
+  };
   const closeMessageActions = () => {
     setPressedMsgId(null);
     setActiveMessageAction(null);
@@ -643,6 +647,14 @@ export default function InboxPage() {
     if (!messagePressTimerRef.current) return;
     clearTimeout(messagePressTimerRef.current);
     messagePressTimerRef.current = null;
+  };
+  const startStaffContactPress = (member: CareTeamMember | null) => {
+    if (!member || member.id === currentUserId) return;
+    if (messagePressTimerRef.current) clearTimeout(messagePressTimerRef.current);
+    messagePressTimerRef.current = setTimeout(() => {
+      setStaffContactMember(member);
+      messagePressTimerRef.current = null;
+    }, 450);
   };
   const setComposerText = (value: string) => {
     setNewMessage(value);
@@ -2136,7 +2148,10 @@ export default function InboxPage() {
       msg.sender_id === currentUserId;
     const sc=senderColor(msg.sender_type||"staff",msg.sender_role||"staff");
     const sn = displaySenderName(msg, isOut);
-    const staffContact = !isOut ? findStaffMemberForMessage(msg) : null;
+    const staffContact =
+      msg.sender_type === "staff" && msg.sender_id !== currentUserId
+        ? findStaffMemberForMessage(msg)
+        : null;
     const videoCallRoomName = parseVideoCallMessage(msg.content);
     const callRequestToken = parseCallRequestMessage(msg.content);
     const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id && !videoCallRoomName && !callRequestToken
@@ -2162,7 +2177,7 @@ export default function InboxPage() {
           type="button"
           onClick={(event)=>{
             event.stopPropagation();
-            if (staffContact) setStaffContactMember(staffContact);
+            openStaffContact(staffContact);
           }}
           style={{border:"none",background:"transparent",padding:0,margin:0,fontFamily:"inherit",fontSize:Math.max(fontSize - 4, 15),fontWeight:850,color:sc,cursor:staffContact?"pointer":"default"}}
         >
@@ -2363,8 +2378,23 @@ export default function InboxPage() {
                 <p style={{fontSize:14,color:subTextColor}}>{t.teamEmpty}</p>
               ) : (
                 <div style={{display:"grid",gap:10}}>
-                  {selectedRoomTeam.map((member) => (
-                    <div key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
+                  {selectedRoomTeam.map((member) => {
+                    const canContactStaff = member.id !== currentUserId;
+                    return (
+                    <button
+                      key={member.id}
+                      type="button"
+                      onClick={()=>openStaffContact(member)}
+                      onMouseDown={()=>startStaffContactPress(member)}
+                      onMouseUp={cancelStaffMessagePress}
+                      onMouseLeave={cancelStaffMessagePress}
+                      onTouchStart={()=>startStaffContactPress(member)}
+                      onTouchEnd={cancelStaffMessagePress}
+                      onContextMenu={(event)=>{ if (canContactStaff) { event.preventDefault(); openStaffContact(member); } }}
+                      disabled={!canContactStaff}
+                      aria-label={`${lang==="es" ? "Contactar a" : "Contact"} ${member.full_name || member.display_name || "Staff"}`}
+                      style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,textAlign:"left",fontFamily:"inherit",cursor:canContactStaff?"pointer":"default",opacity:canContactStaff?1:0.72}}
+                    >
                       <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800}}>
                         {member.avatar_url ? <img src={member.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(member.full_name || "S")}
                       </div>
@@ -2372,8 +2402,8 @@ export default function InboxPage() {
                         <div style={{fontSize:15,fontWeight:700,color:textColor}}>{member.full_name || (lang==="es" ? "Sin nombre" : "No name")}</div>
                         <div style={{fontSize:13,color:subTextColor}}>{roleName(member.role)} · {member.office_location || "—"}</div>
                       </div>
-                    </div>
-                  ))}
+                    </button>
+                  );})}
                 </div>
               )}
               {canManageCareTeam && (
