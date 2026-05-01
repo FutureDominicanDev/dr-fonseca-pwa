@@ -105,25 +105,16 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (normalized.startsWith("en")) return "en";
     return null;
   };
-  const roomLanguageStorageKey = `patient_chat_lang_${id}`;
-  const setPatientLanguage = (next: "es" | "en") => {
-    setUiLang(next);
-    if (typeof window !== "undefined") window.localStorage.setItem(roomLanguageStorageKey, next);
-  };
-
   useEffect(() => {
-    const savedLang = typeof window !== "undefined" ? normalizeLang(window.localStorage.getItem(roomLanguageStorageKey)) : null;
     const browserLang = typeof navigator !== "undefined" ? normalizeLang(navigator.language) : null;
-    setUiLang(savedLang || browserLang || "es");
-  }, [roomLanguageStorageKey]);
+    setUiLang(browserLang || "es");
+  }, []);
 
   useEffect(() => {
-    const savedLang = typeof window !== "undefined" ? normalizeLang(window.localStorage.getItem(roomLanguageStorageKey)) : null;
-    if (savedLang) return;
     const patient = room?.procedures?.patients;
     const patientLang = normalizeLang(Array.isArray(patient) ? patient[0]?.preferred_language : patient?.preferred_language);
     if (patientLang) setUiLang(patientLang);
-  }, [room, roomLanguageStorageKey]);
+  }, [room]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -623,7 +614,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       textSize: "Text size",
       normal: "Normal",
       large: "Large",
-      language: "Language",
     },
     es: {
       messagePlaceholder: "Mensaje",
@@ -646,7 +636,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       textSize: "Tamaño de texto",
       normal: "Normal",
       large: "Grande",
-      language: "Idioma",
     },
   };
   const labels = translations[uiLang] || translations.en;
@@ -740,15 +729,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       `}</style>
       <header style={{ position: "relative", height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
-        {viewerType === "patient" && (
-          <div aria-label={labels.language} style={{ position: "absolute", right: 10, bottom: 8, display: "flex", gap: 4, padding: 4, borderRadius: 999, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)" }}>
-            {(["es", "en"] as const).map((option) => (
-              <button key={option} onClick={() => setPatientLanguage(option)} style={{ minWidth: 42, height: 34, border: "none", borderRadius: 999, background: uiLang === option ? "#FFFFFF" : "transparent", color: uiLang === option ? "#0B3C5D" : "#E0F2FE", fontSize: 13, fontWeight: 900, letterSpacing: 0, fontFamily: chatFontFamily }}>
-                {option.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        )}
       </header>
 
       <section style={{ flex: 1, overflowY: "auto", padding: "12px 10px 16px" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>

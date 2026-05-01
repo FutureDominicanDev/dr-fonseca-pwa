@@ -13,11 +13,8 @@ import {
   normalizeAdminLevel,
   normalizeOffice,
   normalizeRecordStatus,
-  officeLabel,
   recordStatusColor,
   recordStatusLabel,
-  roleColor,
-  roleLabel,
   type AdminLevel,
   type Office,
   type PatientRecord,
@@ -59,12 +56,12 @@ export default function AdminPage() {
   const [savingCode, setSavingCode] = useState(false);
   const [savingPhones, setSavingPhones] = useState(false);
   const [savingKey, setSavingKey] = useState("");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [unblockBusyKey, setUnblockBusyKey] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [pageError, setPageError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [exportMenu, setExportMenu] = useState<{ type: "patient" | "staff"; id: string; title: string; body: string } | null>(null);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
   const hasAdminAccess = isOwnerEmail(viewerEmail);
@@ -76,21 +73,6 @@ export default function AdminPage() {
     if (office === "Tijuana") return "📍 Tijuana";
     return isSpanish ? "📍 Sin sede" : "📍 No office";
   };
-
-  const roleText = (role: string | null | undefined) =>
-    isSpanish
-      ? roleLabel(role)
-      : (
-          {
-            doctor: "👨‍⚕️ Doctor",
-            enfermeria: "💉 Nursing",
-            coordinacion: "📋 Coordination",
-            post_quirofano: "🏥 Post-Op",
-            staff: "👤 Staff",
-            patient: "🧑 Patient",
-            system: "⚙️ System",
-          } as Record<string, string>
-        )[role || ""] || "👤 Staff";
 
   const parseSettingList = (value: unknown) => {
     if (typeof value !== "string") return [] as string[];
@@ -123,25 +105,13 @@ export default function AdminPage() {
           } as const
         )[value];
 
-  const patientCards = useMemo<PatientCard[]>(() => {
-    const normalizedSearch = patientSearch.trim().toLowerCase();
-
+  const allPatientCards = useMemo<PatientCard[]>(() => {
     return patients
       .map((patient) => {
         const patientProcedures = procedures.filter((procedure) => procedure.patient_id === patient.id);
         const patientProcedureIds = new Set(patientProcedures.map((procedure) => procedure.id));
         const patientRooms = rooms.filter((room) => patientProcedureIds.has(room.procedure_id || ""));
         const offices = [...new Set(patientProcedures.map((procedure) => normalizeOffice(procedure.office_location)).filter(Boolean))] as Office[];
-
-        const haystack = [
-          patient.full_name,
-          patient.phone,
-          patient.email,
-          ...patientProcedures.map((procedure) => procedure.procedure_name || ""),
-          ...offices,
-        ]
-          .join(" ")
-          .toLowerCase();
 
         return {
           patient,
@@ -155,12 +125,30 @@ export default function AdminPage() {
               .filter(Boolean)
               .sort()
               .reverse()[0] || "",
-          matchesSearch: !normalizedSearch || haystack.includes(normalizedSearch),
+          matchesSearch: true,
         };
       })
-      .filter((card) => card.matchesSearch)
       .sort((a, b) => (a.patient.full_name || "").localeCompare(b.patient.full_name || "", "es"));
-  }, [patientSearch, patients, procedures, rooms]);
+  }, [patients, procedures, rooms]);
+
+  const patientCards = useMemo<PatientCard[]>(() => {
+    const normalizedSearch = patientSearch.trim().toLowerCase();
+
+    return allPatientCards
+      .map((card) => {
+        const haystack = [
+          card.patient.full_name,
+          card.patient.phone,
+          card.patient.email,
+          ...card.procedures.map((procedure) => procedure.procedure_name || ""),
+          ...card.offices,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return { ...card, matchesSearch: !normalizedSearch || haystack.includes(normalizedSearch) };
+      })
+      .filter((card) => card.matchesSearch);
+  }, [allPatientCards, patientSearch]);
 
   const hasActiveSearch = patientSearch.trim().length > 0;
   const visiblePatientCards = hasActiveSearch ? patientCards.slice(0, 12) : [];
@@ -169,6 +157,7 @@ export default function AdminPage() {
     ? `${window.location.origin}/register?code=${encodeURIComponent(inviteCode)}`
     : "";
   const activePatientCount = patients.filter((patient) => normalizeRecordStatus(patient.record_status) === "active").length;
+  const activePatientCards = allPatientCards.filter((card) => card.recordStatus === "active");
   const blockedAccessCount = blockedEmails.length + blockedPhones.length;
   const adminAccessCount = staff.filter((member) => normalizeAdminLevel(member.admin_level, member.id === viewerId ? viewerEmail : "") !== "none").length;
   const inviteCodePreview = inviteCode ? `${inviteCode.slice(0, Math.min(7, inviteCode.length))}••••` : "";
@@ -412,57 +401,58 @@ export default function AdminPage() {
     updateSuccess(isSpanish ? "Abrí Mensajes con la invitación lista." : "Messages opened with the invitation ready.");
   };
 
-  const deleteStaff = async (member: StaffProfile) => {
-    const name = member.full_name || "este usuario";
-    if (!confirm(isSpanish ? `¿Revocar y eliminar la cuenta de ${name}?\n\nEsto bloqueará su correo y rotará automáticamente el código de invitación por seguridad.` : `Revoke and remove ${name}'s account?\n\nThis will block their email and automatically rotate the invitation code for security.`)) return;
-    setDeletingId(member.id);
-    const response = await fetch("/api/staff/revoke", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: member.id }),
+  const openPatientExportMenu = (card: PatientCard) => {
+    const body = [
+      `Paciente: ${card.patient.full_name || "Sin nombre"}`,
+      `Tel: ${card.patient.phone || "Sin teléfono"}`,
+      `Correo: ${card.patient.email || "Sin correo"}`,
+      `Procedimientos: ${card.procedures.map((procedure) => procedure.procedure_name).filter(Boolean).join(", ") || "Sin procedimientos"}`,
+      `Chats: ${card.rooms.length}`,
+    ].join("\n");
+    setExportMenu({
+      type: "patient",
+      id: card.patient.id,
+      title: card.patient.full_name || (isSpanish ? "Paciente" : "Patient"),
+      body,
     });
-    const payload = await response.json().catch(() => ({}));
-    setDeletingId(null);
+  };
 
-    if (!response.ok) {
-      setPageError(payload?.error || "No pude revocar la cuenta.");
-      return;
-    }
-
-    setStaff((previous) => previous.filter((item) => item.id !== member.id));
-    if (typeof payload?.newInviteCode === "string" && payload.newInviteCode.trim()) {
-      setInviteCode(payload.newInviteCode.trim());
-    }
-    await logAdminEvent({
-      action: "staff_revoked",
-      entityType: "staff_auth_profile",
-      entityId: member.id,
-      entityName: member.full_name || member.display_name || "Personal",
-      actorId: viewerId,
-      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
-      actorEmail: viewerEmail,
-      notes: isSpanish ? `Cuenta revocada para ${name}.` : `Account revoked for ${name}.`,
-      metadata: {
-        blocked_email: payload?.removedEmail || null,
-        blocked_phone: payload?.removedPhone || null,
-        invite_code_rotated: true,
-      },
-    });
-    updateSuccess(
+  const openStaffChatExportMenu = (member: StaffProfile) => {
+    const title = member.full_name || member.display_name || (isSpanish ? "Staff" : "Staff");
+    const body = [
+      `Staff: ${title}`,
+      `Tel: ${member.phone || "Sin teléfono"}`,
+      `Correo: ${member.email || (member.id === viewerId ? viewerEmail : "Sin correo")}`,
       isSpanish
-        ? `Cuenta de ${name} revocada. Correo bloqueado y código renovado.`
-        : `${name}'s account revoked. Email blocked and invite code rotated.`,
-    );
-    setBlockedEmails((previous) => {
-      const next = new Set(previous);
-      if (typeof payload?.removedEmail === "string" && payload.removedEmail.trim()) next.add(payload.removedEmail.trim().toLowerCase());
-      return Array.from(next).sort();
-    });
-    setBlockedPhones((previous) => {
-      const next = new Set(previous);
-      if (typeof payload?.removedPhone === "string" && payload.removedPhone.trim()) next.add(payload.removedPhone.trim());
-      return Array.from(next).sort();
-    });
+        ? "Historial staff-to-staff: listo para exportación cuando existan conversaciones internas registradas."
+        : "Staff-to-staff history: ready for export once internal conversations are recorded.",
+    ].join("\n");
+    setExportMenu({ type: "staff", id: member.id, title, body });
+  };
+
+  const shareExportMenu = async () => {
+    if (!exportMenu) return;
+    const nav = navigator as Navigator & { share?: (data?: ShareData) => Promise<void> };
+    if (typeof nav.share === "function") {
+      try {
+        await nav.share({ title: exportMenu.title, text: exportMenu.body });
+        return;
+      } catch (error: any) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+    await navigator.clipboard.writeText(exportMenu.body);
+    updateSuccess(isSpanish ? "Datos copiados para compartir." : "Data copied for sharing.");
+  };
+
+  const printExportMenu = () => {
+    if (!exportMenu) return;
+    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!printWindow) return;
+    const safeBody = exportMenu.body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    printWindow.document.write(`<html><head><title>${exportMenu.title}</title></head><body><pre style="font:14px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;white-space:pre-wrap;">${safeBody}</pre></body></html>`);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const unblockAccess = async (type: "email" | "phone", value: string) => {
@@ -874,6 +864,14 @@ export default function AdminPage() {
         .danger-inline-btn { flex-shrink: 0; padding: 8px 10px; border-radius: 999px; border: none; background: #FFF1F2; color: #E11D48; font-size: 12px; font-weight: 900; cursor: pointer; font-family: inherit; }
         .danger-inline-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg,#111827,#1D4ED8); color: white; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; flex-shrink: 0; overflow: hidden; }
+        .small-avatar { width: 42px; height: 42px; font-size: 13px; }
+        .list-action-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; border: 1px solid #E7EEF7; background: #F8FAFC; color: #111827; text-align: left; cursor: pointer; font-family: inherit; }
+        .list-action-row strong { display: block; font-size: 15px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .list-action-row span span { display: block; margin-top: 3px; color: #64748B; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+        .list-action-row:hover, .list-action-row:focus-visible { border-color: #BFDBFE; background: #EFF6FF; outline: none; }
+        .export-overlay { position: fixed; inset: 0; z-index: 170; display: grid; place-items: center; padding: 18px; background: rgba(15,23,42,0.42); }
+        .export-modal { width: min(440px, 100%); border-radius: 22px; background: white; padding: 20px; box-shadow: 0 24px 80px rgba(15,23,42,0.28); }
+        .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
         .meta-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; margin-right: 6px; margin-top: 8px; }
         .mini-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
         .mini-btn { padding: 9px 12px; border-radius: 12px; border: none; cursor: pointer; font-size: 12px; font-weight: 800; font-family: inherit; transition: transform 0.15s ease, background 0.15s ease; }
@@ -1001,17 +999,17 @@ export default function AdminPage() {
           </section>
 
           <section className="stats-grid" aria-label={isSpanish ? "Resumen administrativo" : "Administrative summary"}>
-            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("expedientes")}>
+            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("pacientes-activos")}>
               <div className="stat-icon">🏥</div>
               <p className="stat-label">{isSpanish ? "Pacientes activos" : "Active patients"}</p>
               <p className="stat-value">{activePatientCount}</p>
-              <p className="stat-help">{isSpanish ? "Expedientes en seguimiento" : "Records in follow-up"}</p>
+              <p className="stat-help">{isSpanish ? "Lista completa de pacientes" : "Complete patient list"}</p>
             </button>
-            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("expedientes")}>
+            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("staff-to-staff")}>
               <div className="stat-icon">💬</div>
-              <p className="stat-label">{isSpanish ? "Salas" : "Rooms"}</p>
-              <p className="stat-value">{rooms.length}</p>
-              <p className="stat-help">{isSpanish ? "Chats creados" : "Created chats"}</p>
+              <p className="stat-label">Staff to Staff Chat</p>
+              <p className="stat-value">{staff.length}</p>
+              <p className="stat-help">{isSpanish ? "Conversaciones internas" : "Internal conversations"}</p>
             </button>
             <button type="button" className="stat-card" onClick={() => scrollToAdminSection("equipo")}>
               <div className="stat-icon">👥</div>
@@ -1029,6 +1027,68 @@ export default function AdminPage() {
 
           <div className="workspace-grid">
             <div className="stack">
+              <section className="card" id="staff-to-staff">
+                <div className="header-row">
+                  <div>
+                    <p className="card-title">Staff to Staff Chat</p>
+                    <p className="muted">
+                      {isSpanish
+                        ? "Lista administrativa para revisar y exportar conversaciones internas del equipo."
+                        : "Administrative list for reviewing and exporting internal team conversations."}
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {staff.length === 0 ? (
+                    <p className="muted">{isSpanish ? "No hay personal registrado." : "No staff registered."}</p>
+                  ) : (
+                    staff.map((member) => (
+                      <button
+                        key={`staff-chat-${member.id}`}
+                        type="button"
+                        className="list-action-row"
+                        onClick={() => openStaffChatExportMenu(member)}
+                      >
+                        <span className="avatar small-avatar">{initials(member.full_name || member.display_name)}</span>
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <strong>{member.full_name || member.display_name || "Staff"}</strong>
+                          <span>{[member.phone, member.email || (member.id === viewerId ? viewerEmail : "")].filter(Boolean).join(" · ") || (isSpanish ? "Sin teléfono o correo" : "No phone or email")}</span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              <section className="card" id="pacientes-activos">
+                <div className="header-row">
+                  <div>
+                    <p className="card-title">{isSpanish ? "Pacientes activos" : "Active patients"}</p>
+                    <p className="muted">{isSpanish ? "Lista completa de pacientes activos. Toca un paciente para opciones de exportación." : "Complete active patient list. Tap a patient for export options."}</p>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {activePatientCards.length === 0 ? (
+                    <p className="muted">{isSpanish ? "No hay pacientes activos." : "No active patients."}</p>
+                  ) : (
+                    activePatientCards.map((card) => (
+                      <button
+                        key={`active-${card.patient.id}`}
+                        type="button"
+                        className="list-action-row"
+                        onClick={() => openPatientExportMenu(card)}
+                      >
+                        <span className="avatar small-avatar">{initials(card.patient.full_name)}</span>
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <strong>{card.patient.full_name || (isSpanish ? "Paciente sin nombre" : "Unnamed patient")}</strong>
+                          <span>{card.patient.phone || (isSpanish ? "Sin teléfono" : "No phone")} · {card.patient.email || (isSpanish ? "Sin correo" : "No email")}</span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </section>
+
               <section className="card search-panel">
                 <div className="header-row" style={{ marginBottom: 0 }}>
                   <div>
@@ -1139,7 +1199,7 @@ export default function AdminPage() {
                           {isSpanish ? "Tel" : "Phone"}: {card.patient.phone || (isSpanish ? "Sin teléfono" : "No phone")} · {isSpanish ? "Correo" : "Email"}: {card.patient.email || (isSpanish ? "Sin correo" : "No email")}
                         </p>
                         <p className="muted">
-                          {card.procedures.length} {isSpanish ? "procedimiento(s)" : "procedure(s)"} · {card.rooms.length} {isSpanish ? "sala(s)" : "room(s)"} · {isSpanish ? "Última cirugía" : "Last surgery"}: {formatDate(card.latestSurgery)}
+                          {card.procedures.length} {isSpanish ? "procedimiento(s)" : "procedure(s)"} · {card.rooms.length} chat(s) · {isSpanish ? "Última cirugía" : "Last surgery"}: {formatDate(card.latestSurgery)}
                         </p>
                         <div>
                           <span
@@ -1203,12 +1263,8 @@ export default function AdminPage() {
                     const memberEmail = member.id === viewerId ? viewerEmail : member.email || "";
                     const contactLine = [member.phone, memberEmail].filter(Boolean).join(" · ");
                     const level = normalizeAdminLevel(member.admin_level, memberEmail);
-                    const memberOffice = normalizeOffice(member.office_location);
-                    const memberWorksBoth = member.office_location === null;
-                    const memberOfficeText = memberWorksBoth ? (isSpanish ? "🌐 Ambas sedes" : "🌐 Both offices") : officeLabel(memberOffice);
                     const canEditThisMember = canManageAdmins && !(level === "owner" && !canManageOwner);
                     const accessKey = `${member.id}-admin_level`;
-                    const officeKey = `${member.id}-office_location`;
 
                     return (
                       <div key={member.id} className="staff-row compact">
@@ -1220,67 +1276,21 @@ export default function AdminPage() {
                           )}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div className="staff-heading-line">
-                            <div style={{ minWidth: 0 }}>
-                              <p style={{ fontSize: 16, fontWeight: 900, color: "#111827", marginBottom: 2 }}>{member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name")}</p>
-                              <p className="staff-contact">{contactLine || (isSpanish ? "Sin teléfono o correo registrado" : "No phone or email listed")}</p>
-                            </div>
-                            <button
-                              className="danger-inline-btn"
-                              disabled={deletingId === member.id || !canManageAdmins || (level === "owner" && !canManageOwner)}
-                              onClick={() => deleteStaff(member)}
-                            >
-                              {deletingId === member.id ? (isSpanish ? "..." : "...") : (isSpanish ? "Eliminar" : "Delete")}
-                            </button>
-                          </div>
+	                          <div className="staff-heading-line">
+	                            <div style={{ minWidth: 0 }}>
+	                              <p style={{ fontSize: 16, fontWeight: 900, color: "#111827", marginBottom: 2 }}>{member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name")}</p>
+	                              <p className="staff-contact">{contactLine || (isSpanish ? "Sin teléfono o correo registrado" : "No phone or email listed")}</p>
+	                            </div>
+	                          </div>
 
-                          <div>
-                            <span className="meta-badge" style={{ color: roleColor(member.role), background: `${roleColor(member.role)}18` }}>{roleText(member.role)}</span>
-                            <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>{adminText(level)}</span>
-                            <span className="meta-badge" style={{ color: memberWorksBoth || memberOffice ? "#1D4ED8" : "#6B7280", background: memberWorksBoth || memberOffice ? "#EFF6FF" : "#F3F4F6" }}>
-                              {memberOfficeText}
-                            </span>
-                          </div>
-
-                          <details className="staff-controls">
-                            <summary>
-                              {isSpanish ? "Ajustar permisos" : "Adjust permissions"}
-                              <span>⌄</span>
-                            </summary>
-                            <div className="staff-controls-body">
-                              <div className="setting-group">
-                                <p className="group-label">{isSpanish ? "Sede" : "Office"}</p>
-                                <div className="mini-actions">
-                                  {[
-                                    { value: "Guadalajara" as Office, label: "Guadalajara", active: memberOffice === "Guadalajara" && !memberWorksBoth },
-                                    { value: "Tijuana" as Office, label: "Tijuana", active: memberOffice === "Tijuana" && !memberWorksBoth },
-                                    { value: null as string | null, label: isSpanish ? "Ambas" : "Both", active: memberWorksBoth },
-                                  ].map((officeOption) => (
-                                    <button
-                                      key={`${member.id}-${officeOption.label}`}
-                                      className="mini-btn"
-                                      style={{
-                                        background: officeOption.active ? "#DBEAFE" : "#EFF3F8",
-                                        color: officeOption.active ? "#1D4ED8" : "#374151",
-                                        opacity: savingKey === officeKey ? 0.6 : 1,
-                                      }}
-                                      disabled={savingKey === officeKey}
-                                      onClick={() => updateStaffField(
-                                        member,
-                                        { office_location: officeOption.value },
-                                        isSpanish
-                                          ? `Sede de ${member.full_name || "staff"} actualizada a ${officeOption.value || "Ambas sedes"}.`
-                                          : `Office for ${member.full_name || "staff"} updated to ${officeOption.value || "Both offices"}.`,
-                                      )}
-                                    >
-                                      {officeOption.label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div className="setting-group">
-                                <p className="group-label">{isSpanish ? "Admin" : "Admin"}</p>
+	                          <details className="staff-controls">
+	                            <summary>
+	                              {isSpanish ? "Ajustar permisos" : "Adjust permissions"}
+	                              <span>⌄</span>
+	                            </summary>
+	                            <div className="staff-controls-body">
+	                              <div className="setting-group">
+	                                <p className="group-label">{isSpanish ? "Admin" : "Admin"}</p>
                                 <div className="mini-actions">
                                   {(["none", "admin", "super_admin"] as AdminLevel[]).map((option) => (
                                     <button
@@ -1468,6 +1478,31 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
+
+        {exportMenu && (
+          <div className="export-overlay" onClick={() => setExportMenu(null)}>
+            <div className="export-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="header-row" style={{ marginBottom: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <p className="card-title" style={{ margin: 0 }}>{exportMenu.title}</p>
+                  <p className="muted" style={{ marginTop: 4 }}>{isSpanish ? "Opciones de exportación y compartir" : "Export and sharing options"}</p>
+                </div>
+                <button className="topbar-btn" onClick={() => setExportMenu(null)}>×</button>
+              </div>
+              <pre style={{ margin: 0, maxHeight: 160, overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 14, padding: 12, color: "#111827", fontFamily: "inherit", fontSize: 13, lineHeight: 1.45 }}>{exportMenu.body}</pre>
+              <div className="export-grid">
+                <button className="main-btn" onClick={shareExportMenu}>{isSpanish ? "Compartir" : "Share"}</button>
+                <button className="ghost-btn" onClick={printExportMenu}>{isSpanish ? "Imprimir" : "Print"}</button>
+                <button className="ghost-btn" onClick={() => { window.location.href = `https://wa.me/?text=${encodeURIComponent(exportMenu.body)}`; }}>WhatsApp</button>
+                <button className="ghost-btn" onClick={() => { window.location.href = `mailto:?subject=${encodeURIComponent(exportMenu.title)}&body=${encodeURIComponent(exportMenu.body)}`; }}>Email</button>
+                <button className="ghost-btn" onClick={() => { window.location.href = `sms:?&body=${encodeURIComponent(exportMenu.body)}`; }}>Messages</button>
+                {exportMenu.type === "patient" && (
+                  <button className="ghost-btn" onClick={() => handleExport(exportMenu.id)}>{isSpanish ? "Descargar" : "Download"}</button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="toast-stack" aria-live="polite">
           {pageError && <div className="toast error">⚠️ {pageError}</div>}

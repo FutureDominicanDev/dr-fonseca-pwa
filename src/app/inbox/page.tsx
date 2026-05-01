@@ -9,7 +9,7 @@ import { isOwnerEmail } from "@/lib/securityConfig";
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
 type PhoneCountryOption = { code: string; label: string };
-type MediaTab = "media" | "audio" | "docs";
+type MediaTab = "media" | "audio" | "prescriptions" | "docs";
 type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
 
 const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
@@ -537,6 +537,7 @@ export default function InboxPage() {
   const lastMessageCountRef = useRef(0);
   const selectedRoomRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -2663,7 +2664,8 @@ export default function InboxPage() {
       `}</style>
 
       <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setPrescriptionInstructions("");setShowMediaMenu(false);}e.target.value="";}}/>
-      <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
+      <input ref={galleryInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
@@ -2753,11 +2755,6 @@ export default function InboxPage() {
                   ? "Crea el chat con lo esencial. El equipo puede completar datos clínicos después desde el expediente."
                   : "Create the chat with only the essentials. The team can complete clinical details later from the record."}
               </p>
-              <div className="room-progress" aria-hidden="true">
-                <div className="room-progress-step"><span className="room-progress-num">1</span>{lang==="es" ? "Paciente" : "Patient"}</div>
-                <div className="room-progress-step"><span className="room-progress-num">2</span>{lang==="es" ? "Cirugía" : "Surgery"}</div>
-                <div className="room-progress-step"><span className="room-progress-num">3</span>{lang==="es" ? "Enlace" : "Link"}</div>
-              </div>
             </div>
             {newRoomError && <div style={{background:"#FFF1F2",color:"#E11D48",borderRadius:14,padding:"12px 14px",fontSize:14,fontWeight:800,marginBottom:14}}>⚠️ {t.fixErrors} {newRoomError}</div>}
 
@@ -3082,6 +3079,7 @@ export default function InboxPage() {
               {([
                 { key:"media", label: lang==="es" ? "Media" : "Media" },
                 { key:"audio", label: lang==="es" ? "Audios" : "Audio" },
+                { key:"prescriptions", label: lang==="es" ? "Recetas" : "Prescriptions" },
                 { key:"docs", label: lang==="es" ? "Archivos" : "Files" },
               ] as { key: MediaTab; label: string }[]).map((tab)=>(
                 <button key={tab.key} onClick={()=>setMediaLibraryTab(tab.key)} style={{padding:"10px 14px",borderRadius:999,border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:800,background:mediaLibraryTab===tab.key?"#DBEAFE":cardBg,color:mediaLibraryTab===tab.key?"#1D4ED8":textColor}}>
@@ -3114,7 +3112,7 @@ export default function InboxPage() {
                 ))}
               </div>
             )}
-            {mediaLibraryTab==="docs" && (
+            {mediaLibraryTab==="prescriptions" && (
               <div style={{display:"grid",gap:10}}>
                 <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{t.prescriptions}</div>
                 {roomPrescriptionEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{t.noPrescriptions}</div>}
@@ -3133,7 +3131,11 @@ export default function InboxPage() {
                     })()}
                   </a>
                 ))}
-                <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginTop:8}}>{lang==="es" ? "Otros archivos" : "Other files"}</div>
+              </div>
+            )}
+            {mediaLibraryTab==="docs" && (
+              <div style={{display:"grid",gap:10}}>
+                <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{lang==="es" ? "Archivos" : "Files"}</div>
                 {roomFileEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{lang==="es"?"Sin archivos todavía.":"No files yet."}</div>}
                 {roomFileEntries.map((entry:any)=>(
                   <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
@@ -3443,9 +3445,13 @@ export default function InboxPage() {
                       <div className="staff-menu-popup">
                         <button className="staff-menu-item" onClick={()=>{
                           setShowMediaMenu(false);
+                          galleryInputRef.current?.click();
+                        }}>{lang==="es" ? "Foto de galería" : "Photo from gallery"}</button>
+                        <button className="staff-menu-item" onClick={()=>{
+                          setShowMediaMenu(false);
                           if (prefersNativeCapture) cameraInputRef.current?.click();
                           else openCapture("photo");
-                        }}>{lang==="es" ? "Fotos" : "Photos"}</button>
+                        }}>{lang==="es" ? "Tomar foto" : "Take photo"}</button>
                         <button className="staff-menu-item" onClick={()=>{
                           setShowMediaMenu(false);
                           if (prefersNativeCapture) videoInputRef.current?.click();
