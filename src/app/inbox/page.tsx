@@ -506,7 +506,7 @@ export default function InboxPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [patientTyping, setPatientTyping] = useState(false);
-  const [toastAlert, setToastAlert] = useState<{ roomId: string; title: string; body: string } | null>(null);
+  const [toastAlert, setToastAlert] = useState<{ roomId: string; title: string; body: string; kind?: "message" | "note" } | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [notificationBusy, setNotificationBusy] = useState(false);
@@ -517,6 +517,7 @@ export default function InboxPage() {
   const [activeCallUrl, setActiveCallUrl] = useState<string | null>(null);
   const [activeCallRoomName, setActiveCallRoomName] = useState<string | null>(null);
   const [callInviteFeedback, setCallInviteFeedback] = useState("");
+  const [preOpViewerUrl, setPreOpViewerUrl] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -664,8 +665,9 @@ export default function InboxPage() {
     const ids = [currentUserId, ...members.map((member) => member.id)].filter(Boolean) as string[];
     setSelectedCareTeamIds((current) => Array.from(new Set([...current, ...ids])));
   };
-  const canOpenAdmin = isOwnerEmail(currentUserEmail);
-  const canManageCareTeam = (userProfile?.role || "").toLowerCase() === "doctor" || ["owner","super_admin"].includes(userProfile?.admin_level || "");
+  const isSuperAdmin = isOwnerEmail(currentUserEmail) || ["owner","super_admin"].includes((userProfile?.admin_level || "").toLowerCase());
+  const canOpenAdmin = isSuperAdmin;
+  const canManageCareTeam = isSuperAdmin;
   const canCreatePatientRooms =
     isOwnerEmail(currentUserEmail) ||
     ["owner", "super_admin", "admin"].includes((userProfile?.admin_level || "").toLowerCase());
@@ -790,8 +792,8 @@ export default function InboxPage() {
     }
   }, []);
 
-  const showToastAlert = useCallback((roomId: string, title: string, body: string) => {
-    setToastAlert({ roomId, title, body });
+  const showToastAlert = useCallback((roomId: string, title: string, body: string, kind: "message" | "note" = "message") => {
+    setToastAlert({ roomId, title, body, kind });
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     toastTimeoutRef.current = setTimeout(() => setToastAlert(null), 4500);
   }, []);
@@ -846,16 +848,17 @@ export default function InboxPage() {
     }
 
     const patientName = roomPatientName(roomId);
+    const author = message.sender_name || roleName(message.sender_role);
     const title = lang === "es" ? `Nota interna · ${patientName}` : `Internal note · ${patientName}`;
     const rawBody = `${message.content || ""}`.trim();
     const body = rawBody
-      ? rawBody.slice(0, 120)
+      ? `${author}: ${rawBody}`.slice(0, 120)
       : (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up.");
     const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
     const isActiveRoom = selectedRoomRef.current?.id === roomId;
 
     playIncomingTone();
-    showToastAlert(roomId, title, body);
+    showToastAlert(roomId, title, body, "note");
     if (!isVisible || !isActiveRoom) {
       pushNotif(title, body);
     }
@@ -2320,7 +2323,18 @@ export default function InboxPage() {
   const PatientInfoPanel = () => {
     const patient = selectedRoom?.procedures?.patients;
     const beforeEntries = messages.filter((entry) => (entry.file_name || "").startsWith("[BEFORE]"));
-    const internalNotes = messages.filter((entry) => entry.is_internal).sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+    const isOldBrokenNote = (entry: any) => {
+      const content = `${entry?.content || ""}`.trim();
+      return (
+        !content ||
+        (content.startsWith("http") && (content.includes("/patient-photos/") || content.includes("/patient-profiles/") || isImageUrl(content))) ||
+        `${entry?.file_name || ""}`.startsWith("[BEFORE]") ||
+        `${entry?.file_name || ""}`.startsWith("[PROFILE]")
+      );
+    };
+    const internalNotes = messages
+      .filter((entry) => entry.is_internal && !isOldBrokenNote(entry))
+      .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
     const locale = lang === "es" ? "es-MX" : "en-US";
     const localTime = currentTimeInZone(patient?.timezone, locale);
     const panelCareTeamDirectory = staffDirectory.filter((member) => !member.office_location || member.office_location === selectedRoom?.procedures?.office_location);
@@ -2349,7 +2363,6 @@ export default function InboxPage() {
                 <p style={{fontSize:14,color:subTextColor,marginTop:4}}>{selectedRoom?.procedures?.procedure_name || (lang==="es" ? "Sin procedimiento" : "No procedure")}</p>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
                   <span style={{padding:"6px 10px",borderRadius:999,background:"#EBF5FF",color:"#2563EB",fontSize:12,fontWeight:700}}>{selectedRoom?.procedures?.office_location || (lang==="es" ? "Sin sede" : "No office")}</span>
-                  <span style={{padding:"6px 10px",borderRadius:999,background:"#EEFDF3",color:"#15803D",fontSize:12,fontWeight:700}}>{labelPatientLanguage(patient?.preferred_language, lang)}</span>
                 </div>
               </div>
             </div>
@@ -2390,23 +2403,6 @@ export default function InboxPage() {
                 <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${borderColor}`}}>
                   <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:10}}>{t.manageTeam}</p>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const ids = [selectedRoom?.created_by, ...panelCareTeamDirectory.map((member)=>member.id)].filter(Boolean) as string[];
-                        setManagedTeamIds(Array.from(new Set(ids)));
-                      }}
-                      style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
-                    >
-                      {t.careTeamSelectAll}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setManagedTeamIds(selectedRoom?.created_by ? [selectedRoom.created_by] : [])}
-                      style={{padding:"8px 12px",borderRadius:999,border:"none",background:"#EEF2F7",color:"#475569",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}
-                    >
-                      {t.careTeamClear}
-                    </button>
                     <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${borderColor}`,fontSize:12,fontWeight:800,color:textColor}}>
                       {t.careTeamSelected}: {managedTeamIds.length}
                     </span>
@@ -2441,13 +2437,13 @@ export default function InboxPage() {
               {beforeEntries.length===0 ? (
                 <p style={{fontSize:14,color:subTextColor}}>{lang==="es" ? "No hay material preoperatorio cargado todavía." : "No pre-op material has been uploaded yet."}</p>
               ) : (
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(84px, 1fr))",gap:10}}>
+                <div style={{display:"flex",gap:12,overflowX:"auto",overflowY:"hidden",overscrollBehaviorX:"contain",touchAction:"pan-x",padding:"2px 2px 8px",maxWidth:"100%"}}>
                   {beforeEntries.map((entry) => (
-                    <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",textDecoration:"none"}}>
+                    <button key={entry.id} type="button" onClick={()=>setPreOpViewerUrl(entry.content)} style={{display:"block",border:"none",padding:0,background:"transparent",cursor:"pointer",flex:"0 0 118px"}}>
                       <div style={{aspectRatio:"1 / 1",borderRadius:14,overflow:"hidden",background:"#E5E7EB"}}>
                         <img src={entry.content} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                       </div>
-                    </a>
+                    </button>
                   ))}
                 </div>
               )}
@@ -2463,7 +2459,7 @@ export default function InboxPage() {
                   {internalNotes.map((note)=>(
                     <div key={note.id} style={{padding:"12px 14px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
                       <div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:6}}>
-                        <strong style={{color:textColor,fontSize:14}}>{note.sender_name || roleName(note.sender_role)}</strong>
+                        <strong style={{color:textColor,fontSize:14}}>{note.sender_name && note.sender_name !== "Sistema" ? note.sender_name : roleName(note.sender_role)}</strong>
                         <span style={{fontSize:12,color:subTextColor}}>{fmtTime(note.created_at)} · {new Date(note.created_at).toLocaleDateString(locale)}</span>
                       </div>
                       <div style={{fontSize:14,color:textColor,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{note.content}</div>
@@ -3109,6 +3105,16 @@ export default function InboxPage() {
 
       {showSettings && SettingsPanel()}
       {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
+      {preOpViewerUrl && (
+        <div className="modal-overlay" onClick={()=>setPreOpViewerUrl("")}>
+          <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:760,maxHeight:"92dvh",padding:14,display:"grid",gap:10}}>
+            <button onClick={()=>setPreOpViewerUrl("")} style={{justifySelf:"end",width:44,height:44,border:"none",borderRadius:999,background:"rgba(255,255,255,0.96)",color:"#111827",fontSize:20,fontWeight:900,cursor:"pointer"}}>×</button>
+            <div style={{borderRadius:18,overflow:"hidden",background:"#0F172A",boxShadow:"0 18px 50px rgba(0,0,0,0.28)"}}>
+              <img src={preOpViewerUrl} alt="" style={{display:"block",width:"100%",maxHeight:"78dvh",objectFit:"contain"}}/>
+            </div>
+          </div>
+        </div>
+      )}
 
       <QREditor
         show={showQREditor}
@@ -3141,7 +3147,11 @@ export default function InboxPage() {
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:"#25D366",flexShrink:0}} />
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:13,fontWeight:800,color:"#16A34A",marginBottom:2}}>{lang==="es" ? "Nuevo mensaje del paciente" : "New patient message"}</div>
+                <div style={{fontSize:13,fontWeight:800,color:toastAlert.kind==="note"?"#2563EB":"#16A34A",marginBottom:2}}>
+                  {toastAlert.kind==="note"
+                    ? (lang==="es" ? "Nueva nota interna" : "New internal note")
+                    : (lang==="es" ? "Nuevo mensaje del paciente" : "New patient message")}
+                </div>
                 <div style={{fontSize:15,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.title}</div>
                 <div style={{fontSize:13,color:subTextColor,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.body}</div>
               </div>

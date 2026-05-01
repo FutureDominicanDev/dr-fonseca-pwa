@@ -7,6 +7,7 @@ import { COUNTRY_OPTIONS } from "@/lib/countryDialing";
 
 type Lang = "es" | "en";
 type View = "login" | "forgot" | "sent";
+type LoginMethod = "phone" | "email";
 
 const COPY = {
   es: {
@@ -15,9 +16,12 @@ const COPY = {
     subtitle: "Entra al portal médico para ver tus salas asignadas.",
     panelTitle: "Acceso seguro",
     panelCopy: "Usa el celular o correo asociado a tu cuenta.",
+    loginWith: "Entrar con",
+    loginPhone: "Celular",
+    loginEmail: "Correo",
     country: "País",
-    identifier: "Correo o celular",
-    identifierPlaceholder: "correo@ejemplo.com o 664 123 4567",
+    identifier: "Celular",
+    identifierPlaceholder: "664 123 4567",
     password: "Contraseña",
     passwordPlaceholder: "Tu contraseña",
     show: "Ver",
@@ -51,6 +55,7 @@ const COPY = {
     step3Text: "Mensajes, archivos y seguimiento en un solo lugar.",
     errors: {
       loginRequired: "Por favor ingresa tu correo o celular y contraseña.",
+      invalidEmail: "Por favor ingresa un correo electrónico válido.",
       badLogin: "Correo, celular o contraseña incorrectos.",
       resetRequired: "Por favor ingresa tu correo electrónico.",
       resetFailed: "No pude enviar el correo. Verifica el correo ingresado.",
@@ -62,9 +67,12 @@ const COPY = {
     subtitle: "Enter the medical portal to see your assigned rooms.",
     panelTitle: "Secure access",
     panelCopy: "Use the phone or email connected to your account.",
+    loginWith: "Sign in with",
+    loginPhone: "Phone",
+    loginEmail: "Email",
     country: "Country",
-    identifier: "Email or mobile phone",
-    identifierPlaceholder: "email@example.com or 664 123 4567",
+    identifier: "Mobile phone",
+    identifierPlaceholder: "664 123 4567",
     password: "Password",
     passwordPlaceholder: "Your password",
     show: "Show",
@@ -98,6 +106,7 @@ const COPY = {
     step3Text: "Messages, files, and follow-up in one place.",
     errors: {
       loginRequired: "Please enter your email or phone and password.",
+      invalidEmail: "Please enter a valid email address.",
       badLogin: "Email, phone, or password is incorrect.",
       resetRequired: "Please enter your email address.",
       resetFailed: "I could not send the email. Check the address entered.",
@@ -122,6 +131,7 @@ export default function LoginPage() {
   const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://portal.drfonsecacirujanoplastico.com").replace(/\/+$/, "");
   const [lang, setLang] = useState<Lang>("es");
   const [view, setView] = useState<View>("login");
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>("phone");
   const [identifier, setIdentifier] = useState("");
   const [phoneCountryCode, setPhoneCountryCode] = useState("+52");
   const [resetEmail, setResetEmail] = useState("");
@@ -160,10 +170,14 @@ export default function LoginPage() {
       return;
     }
 
+    if (loginMethod === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim())) {
+      setError(t.errors.invalidEmail);
+      return;
+    }
+
     setLoading(true);
     setError("");
-    const isEmailLogin = identifier.includes("@");
-    const payload = isEmailLogin
+    const payload = loginMethod === "email"
       ? { email: identifier.trim().toLowerCase(), password }
       : { email: phoneAliasEmail(normalizeStaffPhone(identifier, phoneCountryCode)), password };
     const { error: err } = await supabase.auth.signInWithPassword(payload as any);
@@ -273,6 +287,9 @@ export default function LoginPage() {
         }
         .input:focus { background: #fff; border-color: #2B78B7; box-shadow: 0 0 0 4px rgba(43,120,183,0.12); }
         .input::placeholder { color: #9AAFC3; font-weight: 600; }
+        .login-method { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 5px; border-radius: 16px; background: #EEF5FB; border: 1px solid #DCE8F3; margin-bottom: 14px; }
+        .method-btn { min-height: 44px; border: none; border-radius: 12px; background: transparent; color: #426987; font-size: 15px; font-weight: 850; cursor: pointer; font-family: inherit; }
+        .method-btn.active { background: #FFFFFF; color: #165D9C; box-shadow: 0 8px 20px rgba(32,86,132,0.12); }
         .phone-row { display: grid; grid-template-columns: minmax(136px, 0.72fr) minmax(0, 1fr); gap: 10px; align-items: end; }
         .password-wrap { position: relative; }
         .password-input { padding-right: 82px; }
@@ -405,37 +422,57 @@ export default function LoginPage() {
                   {error && <div className="error">Error: {error}</div>}
 
                   <div className="field">
-                    <label className="field-label">{t.identifier}</label>
-                    <div className="phone-row">
-                      <div>
-                        <label className="field-label" htmlFor="login-country">{t.country}</label>
-                        <select
-                          id="login-country"
-                          className="input select"
-                          value={phoneCountryCode}
-                          onChange={(event) => setPhoneCountryCode(event.target.value)}
-                        >
-                          {COUNTRY_OPTIONS.map((country) => (
-                            <option key={`${country.code}-${country.en}`} value={country.code}>
-                              {lang === "es" ? country.es : country.en} {country.code}
-                            </option>
-                          ))}
-                        </select>
+                    <label className="field-label">{t.loginWith}</label>
+                    <div className="login-method" role="radiogroup" aria-label={t.loginWith}>
+                      <button type="button" className={`method-btn${loginMethod==="phone" ? " active" : ""}`} onClick={()=>{setLoginMethod("phone");setIdentifier("");setError("");}}>{t.loginPhone}</button>
+                      <button type="button" className={`method-btn${loginMethod==="email" ? " active" : ""}`} onClick={()=>{setLoginMethod("email");setIdentifier("");setError("");}}>{t.loginEmail}</button>
+                    </div>
+                    {loginMethod === "phone" ? (
+                      <div className="phone-row">
+                        <div>
+                          <label className="field-label" htmlFor="login-country">{t.country}</label>
+                          <select
+                            id="login-country"
+                            className="input select"
+                            value={phoneCountryCode}
+                            onChange={(event) => setPhoneCountryCode(event.target.value)}
+                          >
+                            {COUNTRY_OPTIONS.map((country) => (
+                              <option key={`${country.code}-${country.en}`} value={country.code}>
+                                {lang === "es" ? country.es : country.en} {country.code}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="field-label" htmlFor="login-id">{t.identifier}</label>
+                          <input
+                            id="login-id"
+                            className="input"
+                            type="tel"
+                            placeholder={t.identifierPlaceholder}
+                            value={identifier}
+                            onChange={(event) => setIdentifier(event.target.value)}
+                            onKeyDown={(event) => { if (event.key === "Enter") handleLogin(); }}
+                            autoComplete="tel"
+                          />
+                        </div>
                       </div>
+                    ) : (
                       <div>
-                        <label className="field-label" htmlFor="login-id">{t.identifier}</label>
+                        <label className="field-label" htmlFor="login-id">{t.emailLabel}</label>
                         <input
                           id="login-id"
                           className="input"
-                          type="text"
-                          placeholder={t.identifierPlaceholder}
+                          type="email"
+                          placeholder={t.emailPlaceholder}
                           value={identifier}
                           onChange={(event) => setIdentifier(event.target.value)}
                           onKeyDown={(event) => { if (event.key === "Enter") handleLogin(); }}
-                          autoComplete="username"
+                          autoComplete="email"
                         />
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   <div className="field">
