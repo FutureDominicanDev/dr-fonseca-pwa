@@ -56,7 +56,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [accessReady, setAccessReady] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [room, setRoom] = useState<RoomAccess | null>(null);
-  const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
   const [fileAccept, setFileAccept] = useState("*");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [deleteMenuMessageId, setDeleteMenuMessageId] = useState<string | null>(null);
@@ -103,19 +102,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       const value = error as { message?: string; details?: string; hint?: string };
       const message = `${value?.message || ""} ${value?.details || ""} ${value?.hint || ""}`.toLowerCase();
       return message.includes("column") || message.includes("schema cache") || message.includes("relation");
-    };
-
-    const loadOfficePhones = async () => {
-      const { data } = await supabase
-        .from("app_settings")
-        .select("key, value")
-        .in("key", ["office_phone_guadalajara", "office_phone_tijuana"]);
-
-      if (!mounted || !data) return;
-      setOfficePhones({
-        Guadalajara: data.find((entry) => entry.key === "office_phone_guadalajara")?.value || "",
-        Tijuana: data.find((entry) => entry.key === "office_phone_tijuana")?.value || "",
-      });
     };
 
     supabase.auth.getUser().then(({ data }) => {
@@ -170,7 +156,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       if (mounted) setMessages((data || []) as Message[]);
     };
 
-    loadOfficePhones();
     validateRoom().then((allowed) => {
       if (allowed) loadMessages();
     });
@@ -499,7 +484,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     return <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{message.content}</span>;
   };
 
-  const emergencyPhone = room?.procedures?.office_location === "Tijuana" ? officePhones.Tijuana : officePhones.Guadalajara || officePhones.Tijuana;
   const chatFontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
   const appBg = darkMode ? "#0f172a" : "#f7f7f7";
   const textPrimary = darkMode ? "#f8fafc" : "#111";
@@ -613,11 +597,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             <div style={{ fontSize: 42, marginBottom: 10 }}>🔒</div>
             <h1 style={{ margin: "0 0 8px", fontSize: 24 }}>No pudimos abrir este chat</h1>
             <p style={{ margin: "0 0 18px", color: "#555", lineHeight: 1.5 }}>Por seguridad, este enlace no es válido o necesita ser actualizado por el equipo del Dr. Fonseca.</p>
-            {emergencyPhone && (
-              <a href={`tel:${emergencyPhone.replace(/[^\d+]/g, "")}`} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 44, padding: "0 18px", borderRadius: 999, background: "#075e54", color: "#fff", textDecoration: "none", fontWeight: 800 }}>
-                Llamar a la oficina
-              </a>
-            )}
           </div>
         </section>
       </main>

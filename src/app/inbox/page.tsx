@@ -110,8 +110,6 @@ const T = {
     patientInfoHint: "Datos clínicos y operativos del caso",
     callPatient: "Llamar paciente",
     videoCall: "Videollamada",
-    emergencyCall: "Emergencia",
-    emergencyCallTitle: "Llamar al consultorio",
     mediaLibrary: "Archivos",
     prescriptions: "Recetas",
     noPrescriptions: "Sin recetas todavía.",
@@ -238,8 +236,6 @@ const T = {
     patientInfoHint: "Clinical and operational case details",
     callPatient: "Call patient",
     videoCall: "Video call",
-    emergencyCall: "Emergency",
-    emergencyCallTitle: "Call office",
     mediaLibrary: "Files",
     prescriptions: "Prescriptions",
     noPrescriptions: "No prescriptions yet.",
@@ -511,7 +507,6 @@ export default function InboxPage() {
   const [activeCallUrl, setActiveCallUrl] = useState<string | null>(null);
   const [activeCallRoomName, setActiveCallRoomName] = useState<string | null>(null);
   const [callInviteFeedback, setCallInviteFeedback] = useState("");
-  const [officePhones, setOfficePhones] = useState({ Guadalajara: "", Tijuana: "" });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -543,12 +538,6 @@ export default function InboxPage() {
   const outgoingTypingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioUnlockedRef = useRef(false);
-
-  const officeEmergencyPhone =
-    selectedRoom?.procedures?.office_location === "Tijuana"
-      ? officePhones.Tijuana || officePhones.Guadalajara
-      : officePhones.Guadalajara || officePhones.Tijuana;
-  const officeEmergencyHref = officeEmergencyPhone ? `tel:${officeEmergencyPhone.replace(/[^\d+]/g, "")}` : "";
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const translationCacheRef = useRef<Record<string, string>>({});
   const pauseBackgroundRefreshRef = useRef(false);
@@ -899,7 +888,7 @@ export default function InboxPage() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) { window.location.href = "/login"; return; }
-      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); setCurrentUserId(session.user.id); fetchRooms(); fetchProfile(session.user.id); fetchAssignableStaff(); fetchOfficePhones(); }
+      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); setCurrentUserId(session.user.id); fetchRooms(); fetchProfile(session.user.id); fetchAssignableStaff(); }
     });
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
     if ("Notification" in window) {
@@ -1090,18 +1079,6 @@ export default function InboxPage() {
   const fetchProfile = async (id: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id",id).single();
     if (data) { setUserProfile(data); setDisplayNameEdit(data.full_name||data.display_name||""); if (data.quick_replies?.length) setQuickReplies(data.quick_replies); }
-  };
-
-  const fetchOfficePhones = async () => {
-    const { data } = await supabase
-      .from("app_settings")
-      .select("key, value")
-      .in("key", ["office_phone_guadalajara", "office_phone_tijuana"]);
-    if (!data) return;
-    setOfficePhones({
-      Guadalajara: `${data.find((entry: any) => entry.key === "office_phone_guadalajara")?.value || ""}`.trim(),
-      Tijuana: `${data.find((entry: any) => entry.key === "office_phone_tijuana")?.value || ""}`.trim(),
-    });
   };
 
   const fetchAssignableStaff = async () => {
@@ -2549,10 +2526,6 @@ export default function InboxPage() {
         .chat-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; box-shadow: 0 4px 14px rgba(16,52,83,0.18); }
         .chat-head-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chat-head-sub { font-size: 12px; color: ${subTextColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-weight: 650; }
-        .chat-head-actions { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
-        .chat-head-action { min-width: 38px; height: 38px; border-radius: 999px; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#D5E4F2"}; background: ${darkMode?"#1F2C34":"#EEF6FF"}; color: ${darkMode?"#DBEAFE":"#075EA8"}; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 11px; font-size: 13px; font-weight: 900; text-decoration: none; cursor: pointer; font-family: inherit; box-shadow: ${darkMode?"none":"0 3px 12px rgba(15,23,42,0.08)"}; }
-        .chat-head-action.emergency { background: #ECFDF3; border-color: #B7E4C7; color: #05603A; }
-        .chat-head-action:disabled { opacity: 0.42; cursor: not-allowed; }
         .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
@@ -2644,9 +2617,6 @@ export default function InboxPage() {
           .patient-list { padding-left: 10px; padding-right: 10px; }
           .chat-head { min-height: 62px; }
           .input-area { gap: 8px; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
-          .chat-head-actions { gap: 6px; }
-          .chat-head-action { min-width: 36px; width: 36px; padding: 0; font-size: 15px; }
-          .chat-head-action .action-label { display: none; }
           .plus-btn { width: 42px; height: 42px; font-size: 28px; }
           .icon-btn, .send-btn { width: 42px; height: 42px; font-size: 20px; }
           .phone-btn, .mic-btn { width: 42px; height: 42px; }
@@ -3253,16 +3223,6 @@ export default function InboxPage() {
                       <div style={{fontSize:12,color:"#93C5FD",fontWeight:700,marginTop:4}}>
                         {(selectedRoom.procedures?.patients?.full_name || t.patientLabel)} {t.typingSuffix}
                       </div>
-                    )}
-                  </div>
-                  <div className="chat-head-actions">
-                    <button className="chat-head-action" onClick={()=>setShowMediaLibrary(true)} title={t.mediaLibrary} aria-label={t.mediaLibrary}>
-                      <span>📁</span><span className="action-label">{t.mediaLibrary}</span>
-                    </button>
-                    {officeEmergencyHref && (
-                      <a className="chat-head-action emergency" href={officeEmergencyHref} title={t.emergencyCallTitle} aria-label={t.emergencyCallTitle}>
-                        <span>☎</span><span className="action-label">{t.emergencyCall}</span>
-                      </a>
                     )}
                   </div>
                 </div>
