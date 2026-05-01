@@ -90,6 +90,13 @@ def draw_centered_wrapped(canvas, text: str, y: float, font: str, size: int, col
     return y - len(lines) * leading
 
 
+def reset_alpha(canvas):
+    if hasattr(canvas, "setFillAlpha"):
+        canvas.setFillAlpha(1)
+    if hasattr(canvas, "setStrokeAlpha"):
+        canvas.setStrokeAlpha(1)
+
+
 def draw_phone_mockup(canvas, x: float, y: float, width: float, screenshot: Path):
     img = Image.open(screenshot)
     ratio = img.height / img.width
@@ -105,6 +112,7 @@ def draw_phone_mockup(canvas, x: float, y: float, width: float, screenshot: Path
         canvas.setFillColor(colors.Color(0, 0, 0, alpha=alpha))
         canvas.roundRect(x + offset * 0.05, y - offset * 0.05, phone_w, phone_h, radius, fill=1, stroke=0)
 
+    reset_alpha(canvas)
     canvas.setFillColor(colors.HexColor("#0C1220"))
     canvas.roundRect(x, y, phone_w, phone_h, radius, fill=1, stroke=0)
     canvas.setFillColor(colors.HexColor("#1F2937"))
@@ -141,6 +149,7 @@ def cover_page(canvas, doc):
         y = PAGE_H - 1.48 * inch
         canvas.setFillColor(colors.Color(0, 0, 0, alpha=0.06))
         canvas.roundRect(x - 0.12 * inch, y - 0.06 * inch, width + 0.24 * inch, height + 0.12 * inch, 10, fill=1, stroke=0)
+        reset_alpha(canvas)
         canvas.drawImage(str(LOGO), x, y, width=width, height=height, mask="auto")
 
     canvas.setFillColor(NAVY)
