@@ -57,6 +57,8 @@ const COPY = {
     hide: "Ocultar",
     submit: "Crear cuenta y entrar",
     submitting: "Creando cuenta...",
+    existingLogin: "Ir a iniciar sesión",
+    existingReset: "Necesito ayuda",
     back: "Usar otro código",
     afterTitle: "Después del registro",
     afterText: "El doctor o el equipo administrativo asigna los pacientes. Al entrar al portal, verás únicamente tus salas asignadas.",
@@ -76,6 +78,7 @@ const COPY = {
       confirm: "Las contraseñas no coinciden.",
       prepare: "No pude preparar el acceso. Revisa el celular.",
       blockedPhone: "Este teléfono ya no tiene acceso. Contacta al administrador.",
+      alreadyRegistered: "Este celular ya está registrado. Si la contraseña es correcta, te entraré al portal automáticamente. Si no, inicia sesión o pide ayuda al administrador para restablecer el acceso.",
       save: "No pude guardar el perfil.",
     },
   },
@@ -119,6 +122,8 @@ const COPY = {
     hide: "Hide",
     submit: "Create account and enter",
     submitting: "Creating account...",
+    existingLogin: "Go to sign in",
+    existingReset: "I need help",
     back: "Use another code",
     afterTitle: "After registration",
     afterText: "The doctor or admin team assigns patients. When you enter the portal, you will only see your assigned rooms.",
@@ -138,10 +143,16 @@ const COPY = {
       confirm: "Passwords do not match.",
       prepare: "I could not prepare access. Check the phone number.",
       blockedPhone: "This phone number no longer has access. Contact the administrator.",
+      alreadyRegistered: "This phone is already registered. If the password is correct, I will take you into the portal automatically. If not, sign in or ask an administrator to reset access.",
       save: "I could not save the profile.",
     },
   },
 } as const;
+
+const isAlreadyRegisteredAuthError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return normalized.includes("already registered") || normalized.includes("already exists") || normalized.includes("user already");
+};
 
 const getBrowserLang = (): Lang => {
   if (typeof window === "undefined") return "es";
@@ -169,6 +180,7 @@ export default function RegisterPage() {
   const [officeLocation, setOfficeLocation] = useState<OfficeLocation>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [existingAccountHint, setExistingAccountHint] = useState(false);
   const [checkedInitialCode, setCheckedInitialCode] = useState(false);
   const detailsPageRef = useRef<HTMLDivElement | null>(null);
 
@@ -180,9 +192,11 @@ export default function RegisterPage() {
   };
 
   const legalHref = (path: string) => `${path}?lang=${lang}`;
+  const loginHref = `/login?lang=${lang}`;
 
   const applyPhoneInput = (value: string) => {
     setPhoneInput(value.replace(/[^\d+\s().-]/g, "").slice(0, 24));
+    setExistingAccountHint(false);
   };
 
   const checkCode = async () => {
@@ -193,6 +207,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     setError("");
+    setExistingAccountHint(false);
 
     const { data, error: err } = await supabase.from("app_settings").select("value").eq("key", "invite_code").single();
 
@@ -309,6 +324,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     setError("");
+    setExistingAccountHint(false);
 
     const effectiveEmail = phoneAliasEmail(normalizedPhone);
     if (!effectiveEmail) {
@@ -344,6 +360,24 @@ export default function RegisterPage() {
     const { data: authData, error: authErr } = await supabase.auth.signUp(signUpPayload as any);
 
     if (authErr) {
+      if (isAlreadyRegisteredAuthError(authErr.message)) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: effectiveEmail,
+          password,
+        });
+
+        if (!signInErr) {
+          setLoading(false);
+          window.location.href = "/inbox";
+          return;
+        }
+
+        setExistingAccountHint(true);
+        setError(t.errors.alreadyRegistered);
+        setLoading(false);
+        return;
+      }
+
       setError(authErr.message);
       setLoading(false);
       return;
@@ -515,6 +549,28 @@ export default function RegisterPage() {
           font-weight: 750;
           color: #B42318;
         }
+        .existing-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin: -6px 0 16px;
+        }
+        .secondary-action {
+          min-height: 46px;
+          display: grid;
+          place-items: center;
+          border: 1px solid #D8E5F1;
+          border-radius: 12px;
+          background: #F8FBFF;
+          color: #165D9C;
+          cursor: pointer;
+          font-family: inherit;
+          font-size: 15px;
+          font-weight: 850;
+          text-decoration: none;
+          text-align: center;
+          padding: 0 12px;
+        }
         .login-link { margin: 17px 0 0; color: #52677d; text-align: center; font-size: 14px; font-weight: 650; }
         .login-link a { color: #165D9C; font-weight: 850; text-decoration: none; }
         .steps { display: grid; gap: 16px; margin-top: 20px; }
@@ -559,6 +615,7 @@ export default function RegisterPage() {
           .top-actions { min-height: 34px; }
           .brand { margin-top: 0; }
           .phone-row { grid-template-columns: 1fr; gap: 12px; }
+          .existing-actions { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -599,7 +656,7 @@ export default function RegisterPage() {
               <section className="panel invite-panel" aria-label={t.inviteHeading}>
                 <h2 className="panel-title">{t.inviteHeading}</h2>
                 <p className="panel-copy">{t.inviteCopy}</p>
-                {error && <div className="error">Error: {error}</div>}
+                {error && <div className="error">{error}</div>}
                 <div className="field">
                   <label className="field-label">{t.inviteLabel}</label>
                   <input
@@ -614,14 +671,24 @@ export default function RegisterPage() {
                 <button className="primary-btn" onClick={checkCode} disabled={loading}>
                   {loading ? t.verifying : t.verify}
                 </button>
-                <p className="login-link">{t.already} <a href={`/login?lang=${lang}`}>{t.login}</a></p>
+                <p className="login-link">{t.already} <a href={loginHref}>{t.login}</a></p>
               </section>
             </div>
           ) : (
             <section className="panel simple-card" aria-label={t.formTitle}>
               <h2 className="panel-title">{t.formTitle}</h2>
               <p className="panel-copy">{t.formHelp}</p>
-              {error && <div className="error">Error: {error}</div>}
+              {error && <div className="error">{error}</div>}
+              {existingAccountHint && (
+                <div className="existing-actions" aria-label={t.errors.alreadyRegistered}>
+                  <button className="secondary-action" type="button" onClick={() => { window.location.href = loginHref; }}>
+                    {t.existingLogin}
+                  </button>
+                  <a className="secondary-action" href={legalHref("/support")}>
+                    {t.existingReset}
+                  </a>
+                </div>
+              )}
 
               <div className="field">
                 <label className="field-label">{t.nameLabel}</label>
