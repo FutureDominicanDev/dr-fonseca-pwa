@@ -17,6 +17,7 @@ import {
   recordStatusLabel,
   type AdminLevel,
   type Office,
+  type MessageRecord,
   type PatientRecord,
   type PatientRecordStatus,
   type ProcedureRecord,
@@ -44,6 +45,7 @@ export default function AdminPage() {
   const [viewerId, setViewerId] = useState("");
   const [viewerProfile, setViewerProfile] = useState<StaffProfile | null>(null);
   const [staff, setStaff] = useState<StaffProfile[]>([]);
+  const [staffMessages, setStaffMessages] = useState<MessageRecord[]>([]);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [procedures, setProcedures] = useState<ProcedureRecord[]>([]);
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
@@ -56,6 +58,7 @@ export default function AdminPage() {
   const [savingCode, setSavingCode] = useState(false);
   const [savingPhones, setSavingPhones] = useState(false);
   const [savingKey, setSavingKey] = useState("");
+  const [staffNameDrafts, setStaffNameDrafts] = useState<Record<string, string>>({});
   const [unblockBusyKey, setUnblockBusyKey] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -161,6 +164,7 @@ export default function AdminPage() {
   const blockedAccessCount = blockedEmails.length + blockedPhones.length;
   const adminAccessCount = staff.filter((member) => normalizeAdminLevel(member.admin_level, member.id === viewerId ? viewerEmail : "") !== "none").length;
   const inviteCodePreview = inviteCode ? `${inviteCode.slice(0, Math.min(7, inviteCode.length))}••••` : "";
+  const staffMessageCount = (memberId: string) => staffMessages.filter((message) => message.sender_id === memberId).length;
 
   const updateSuccess = (message: string) => {
     setPageError("");
@@ -191,11 +195,12 @@ export default function AdminPage() {
   const fetchData = async () => {
     setPageError("");
 
-    const [staffRes, patientsRes, proceduresRes, roomsRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
+    const [staffRes, patientsRes, proceduresRes, roomsRes, staffMessagesRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("patients").select("*").order("full_name"),
       supabase.from("procedures").select("*"),
       supabase.from("rooms").select("*").order("created_at", { ascending: false }),
+      supabase.from("messages").select("id, room_id, sender_id, sender_name, sender_role, sender_office, sender_type, message_type, content, file_name, created_at, is_internal").eq("is_internal", true).order("created_at", { ascending: false }).limit(500),
       supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle(),
@@ -208,6 +213,7 @@ export default function AdminPage() {
       patientsRes.error ? "No pude cargar los pacientes." : "",
       proceduresRes.error ? "No pude cargar los procedimientos." : "",
       roomsRes.error ? "No pude cargar las salas." : "",
+      staffMessagesRes.error ? "No pude cargar mensajes internos del equipo." : "",
       inviteRes.error ? "No pude cargar el código de invitación." : "",
       blockedEmailsRes.error ? "No pude cargar correos bloqueados." : "",
       blockedPhonesRes.error ? "No pude cargar teléfonos bloqueados." : "",
@@ -219,6 +225,7 @@ export default function AdminPage() {
     setPatients((patientsRes.data || []) as PatientRecord[]);
     setProcedures((proceduresRes.data || []) as ProcedureRecord[]);
     setRooms((roomsRes.data || []) as RoomRecord[]);
+    setStaffMessages((staffMessagesRes.data || []) as MessageRecord[]);
     setInviteCode((inviteRes.data?.value as string) || "");
     setBlockedEmails(parseSettingList(blockedEmailsRes.data?.value).map((item) => item.toLowerCase()));
     setBlockedPhones(parseSettingList(blockedPhonesRes.data?.value));
@@ -293,8 +300,14 @@ export default function AdminPage() {
     }
 
     setStaff((previous) => previous.map((item) => (item.id === member.id ? { ...item, ...payload } : item)));
+    const action = Object.prototype.hasOwnProperty.call(payload, "admin_level")
+      ? "staff_admin_updated"
+      : Object.prototype.hasOwnProperty.call(payload, "full_name") || Object.prototype.hasOwnProperty.call(payload, "display_name")
+        ? "staff_name_updated"
+        : "staff_profile_updated";
+
     await logAdminEvent({
-      action: Object.prototype.hasOwnProperty.call(payload, "admin_level") ? "staff_admin_updated" : "staff_office_updated",
+      action,
       entityType: "staff_profile",
       entityId: member.id,
       entityName: member.full_name || member.display_name || "Personal",
@@ -419,13 +432,18 @@ export default function AdminPage() {
 
   const openStaffChatExportMenu = (member: StaffProfile) => {
     const title = member.full_name || member.display_name || (isSpanish ? "Staff" : "Staff");
+    const recentMessages = staffMessages
+      .filter((message) => message.sender_id === member.id)
+      .slice(0, 25)
+      .map((message) => `${message.created_at ? new Date(message.created_at).toLocaleString() : ""} - ${message.content || message.file_name || ""}`)
+      .filter(Boolean);
     const body = [
       `Staff: ${title}`,
       `Tel: ${member.phone || "Sin teléfono"}`,
       `Correo: ${member.email || (member.id === viewerId ? viewerEmail : "Sin correo")}`,
-      isSpanish
-        ? "Historial staff-to-staff: listo para exportación cuando existan conversaciones internas registradas."
-        : "Staff-to-staff history: ready for export once internal conversations are recorded.",
+      `Mensajes internos: ${staffMessageCount(member.id)}`,
+      "",
+      ...(recentMessages.length ? recentMessages : [isSpanish ? "Sin mensajes internos registrados." : "No internal messages recorded."]),
     ].join("\n");
     setExportMenu({ type: "staff", id: member.id, title, body });
   };
@@ -1052,7 +1070,7 @@ export default function AdminPage() {
                         <span className="avatar small-avatar">{initials(member.full_name || member.display_name)}</span>
                         <span style={{ minWidth: 0, flex: 1 }}>
                           <strong>{member.full_name || member.display_name || "Staff"}</strong>
-                          <span>{[member.phone, member.email || (member.id === viewerId ? viewerEmail : "")].filter(Boolean).join(" · ") || (isSpanish ? "Sin teléfono o correo" : "No phone or email")}</span>
+                          <span>{staffMessageCount(member.id)} {isSpanish ? "mensaje(s) internos" : "internal message(s)"} · {[member.phone, member.email || (member.id === viewerId ? viewerEmail : "")].filter(Boolean).join(" · ") || (isSpanish ? "Sin teléfono o correo" : "No phone or email")}</span>
                         </span>
                       </button>
                     ))
@@ -1246,8 +1264,8 @@ export default function AdminPage() {
                     <p className="card-title">{isSpanish ? "Equipo y permisos" : "Team and permissions"}</p>
                     <p className="muted">
                       {isSpanish
-                        ? "Contactos, sede y acceso administrativo en una vista compacta."
-                        : "Contacts, office, and admin access in a compact view."}
+                        ? "Nombre, teléfono, correo y acceso administrativo en una vista compacta."
+                        : "Name, phone, email, and admin access in a compact view."}
                     </p>
                   </div>
                 </div>
@@ -1265,6 +1283,9 @@ export default function AdminPage() {
                     const level = normalizeAdminLevel(member.admin_level, memberEmail);
                     const canEditThisMember = canManageAdmins && !(level === "owner" && !canManageOwner);
                     const accessKey = `${member.id}-admin_level`;
+                    const nameKey = `${member.id}-full_name-display_name`;
+                    const nameDraft = staffNameDrafts[member.id] ?? (member.full_name || member.display_name || "");
+                    const cleanNameDraft = nameDraft.trim();
 
                     return (
                       <div key={member.id} className="staff-row compact">
@@ -1288,9 +1309,33 @@ export default function AdminPage() {
 	                              {isSpanish ? "Ajustar permisos" : "Adjust permissions"}
 	                              <span>⌄</span>
 	                            </summary>
-	                            <div className="staff-controls-body">
-	                              <div className="setting-group">
-	                                <p className="group-label">{isSpanish ? "Admin" : "Admin"}</p>
+		                            <div className="staff-controls-body">
+                                  <div className="setting-group">
+                                    <p className="group-label">{isSpanish ? "Nombre" : "Name"}</p>
+                                    <div className="mini-actions" style={{ alignItems: "stretch" }}>
+                                      <input
+                                        className="line-input"
+                                        value={nameDraft}
+                                        disabled={!canEditThisMember}
+                                        onChange={(event) => setStaffNameDrafts((current) => ({ ...current, [member.id]: event.target.value }))}
+                                        placeholder={isSpanish ? "Nombre visible" : "Display name"}
+                                        style={{ minWidth: 180, flex: "1 1 220px", height: 42, padding: "0 12px", fontSize: 14 }}
+                                      />
+                                      <button
+                                        className="mini-btn"
+                                        disabled={!canEditThisMember || savingKey === nameKey || !cleanNameDraft}
+                                        onClick={() => updateStaffField(
+                                          member,
+                                          { full_name: cleanNameDraft, display_name: cleanNameDraft },
+                                          isSpanish ? `Nombre actualizado a ${cleanNameDraft}.` : `Name updated to ${cleanNameDraft}.`
+                                        )}
+                                      >
+                                        {savingKey === nameKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar nombre" : "Save name")}
+                                      </button>
+                                    </div>
+                                  </div>
+		                              <div className="setting-group">
+		                                <p className="group-label">{isSpanish ? "Admin" : "Admin"}</p>
                                 <div className="mini-actions">
                                   {(["none", "admin", "super_admin"] as AdminLevel[]).map((option) => (
                                     <button

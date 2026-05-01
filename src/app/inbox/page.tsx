@@ -518,6 +518,8 @@ export default function InboxPage() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [patientTyping, setPatientTyping] = useState(false);
   const [toastAlert, setToastAlert] = useState<{ roomId: string; title: string; body: string; kind?: "message" | "note" } | null>(null);
+  const [medicationDraft, setMedicationDraft] = useState("");
+  const [savingMedication, setSavingMedication] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [notificationBusy, setNotificationBusy] = useState(false);
@@ -546,6 +548,7 @@ export default function InboxPage() {
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
   const beforePhotosRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
+  const internalNoteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
   const captureStreamRef = useRef<MediaStream | null>(null);
@@ -833,8 +836,24 @@ export default function InboxPage() {
   const showToastAlert = useCallback((roomId: string, title: string, body: string, kind: "message" | "note" = "message") => {
     setToastAlert({ roomId, title, body, kind });
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = setTimeout(() => setToastAlert(null), 4500);
+    if (kind !== "note") {
+      toastTimeoutRef.current = setTimeout(() => setToastAlert(null), 4500);
+    }
   }, []);
+
+  const openToastRoom = useCallback((mode: "chat" | "read-note" | "add-note" = "chat") => {
+    if (!toastAlert) return;
+    const room = patients.flatMap((patient) => patient.rooms || []).find((entry: any) => entry.id === toastAlert.roomId) || null;
+    if (room) setSelectedRoom(room);
+    setMobileView("chat");
+    if (mode !== "chat") {
+      setShowPatientInfo(true);
+      if (mode === "add-note") {
+        window.setTimeout(() => internalNoteInputRef.current?.focus(), 120);
+      }
+    }
+    setToastAlert(null);
+  }, [patients, toastAlert]);
 
   const markRoomAsRead = useCallback((roomId: string) => {
     if (typeof window !== "undefined") {
@@ -877,6 +896,8 @@ export default function InboxPage() {
 
   const registerIncomingInternalNote = useCallback((message: any) => {
     const roomId = message.room_id;
+    const roomIsAssigned = selectedRoomRef.current?.id === roomId || patients.some((patient: any) => (patient.rooms || []).some((room: any) => room.id === roomId));
+    if (!roomIsAssigned) return;
     const messageKey = incomingMessageKey(message);
     if (typeof window !== "undefined" && messageKey) {
       const lastAlertedMessage = window.localStorage.getItem(alertMessageStorageKey(roomId)) || "";
@@ -900,7 +921,7 @@ export default function InboxPage() {
     if (!isVisible || !isActiveRoom) {
       pushNotif(title, body);
     }
-  }, [alertMessageStorageKey, incomingMessageKey, lang, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
+  }, [alertMessageStorageKey, incomingMessageKey, lang, patients, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
 
   const broadcastTypingState = useCallback((isTyping: boolean, roomId: string, name: string) => {
     if (!typingChannelRef.current) return;
@@ -1798,6 +1819,78 @@ export default function InboxPage() {
     setSavingInternalNote(false);
   };
 
+  const updateSelectedPatientMedications = (nextValue: string) => {
+    const patientId = selectedRoom?.procedures?.patients?.id;
+    setSelectedRoom((current: any) => {
+      if (!current?.procedures?.patients) return current;
+      return {
+        ...current,
+        procedures: {
+          ...current.procedures,
+          patients: {
+            ...current.procedures.patients,
+            current_medications: nextValue,
+          },
+        },
+      };
+    });
+    if (patientId) {
+      setPatients((current) => current.map((patient: any) => {
+        if (patient.id === patientId) return { ...patient, current_medications: nextValue };
+        return {
+          ...patient,
+          rooms: (patient.rooms || []).map((room: any) => room.id === selectedRoom?.id
+            ? {
+                ...room,
+                procedures: {
+                  ...room.procedures,
+                  patients: { ...(room.procedures?.patients || {}), current_medications: nextValue },
+                },
+              }
+            : room),
+        };
+      }));
+    }
+  };
+
+  const saveMedicationText = async (nextValue: string) => {
+    const patientId = selectedRoom?.procedures?.patients?.id;
+    if (!patientId) return false;
+    const { error } = await supabase.from("patients").update({ current_medications: nextValue || null }).eq("id", patientId);
+    if (error) {
+      alert(error.message || (lang === "es" ? "No pude actualizar medicamentos." : "I could not update medications."));
+      return false;
+    }
+    updateSelectedPatientMedications(nextValue);
+    return true;
+  };
+
+  const addPatientMedication = async () => {
+    const nextMedication = medicationDraft.trim();
+    if (!nextMedication || savingMedication) return;
+    const currentValue = `${selectedRoom?.procedures?.patients?.current_medications || ""}`.trim();
+    const nextValue = [currentValue, nextMedication].filter(Boolean).join("\n");
+    setSavingMedication(true);
+    const saved = await saveMedicationText(nextValue);
+    setSavingMedication(false);
+    if (saved) setMedicationDraft("");
+  };
+
+  const removePatientMedication = async (index: number) => {
+    if (!isSuperAdmin) {
+      alert(lang === "es" ? "No tienes privilegios para eliminar medicamentos actuales. Solo super admin puede hacerlo." : "You do not have privileges to delete current medications. Only a super admin can do that.");
+      return;
+    }
+    const medications = `${selectedRoom?.procedures?.patients?.current_medications || ""}`
+      .split(/\n+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    const nextValue = medications.filter((_, entryIndex) => entryIndex !== index).join("\n");
+    setSavingMedication(true);
+    await saveMedicationText(nextValue);
+    setSavingMedication(false);
+  };
+
   const saveManagedTeam = async () => {
     if (!canManageCareTeam) {
       alert(lang === "es" ? "Solo el doctor o un super admin puede cambiar el equipo asignado." : "Only the doctor or a super admin can change the assigned care team.");
@@ -2291,6 +2384,19 @@ export default function InboxPage() {
         </div>
         <div style={{padding:"0 20px"}}>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>{lang==="es"?"Mi nombre":"My name"}</p>
+            <label style={{display:"block",fontSize:14,fontWeight:700,color:textColor,marginBottom:8}}>{t.displayName}</label>
+            <input
+              value={displayNameEdit}
+              onChange={(event)=>setDisplayNameEdit(event.target.value)}
+              placeholder={lang==="es"?"Nombre visible para pacientes y equipo":"Name shown to patients and team"}
+              style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 14px",fontSize:16,fontFamily:"inherit",fontWeight:650,marginBottom:10}}
+            />
+            <button onClick={saveDisplayName} disabled={savingName || !displayNameEdit.trim()} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingName || !displayNameEdit.trim()?0.55:1}}>
+              {savingName ? (lang==="es"?"Guardando...":"Saving...") : savedName ? t.saved : t.save}
+            </button>
+          </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
             <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:14}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
               <span style={{fontSize:16,color:textColor,fontWeight:500}}>🌙 {t.darkMode}</span>
@@ -2335,6 +2441,10 @@ export default function InboxPage() {
       role,
       members: panelCareTeamDirectory.filter((member) => (member.role || "staff") === role),
     })).filter((group) => group.members.length > 0);
+    const patientMedications = `${patient?.current_medications || ""}`
+      .split(/\n+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
 
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:210,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))"}} onClick={()=>setShowPatientInfo(false)}>
@@ -2369,7 +2479,43 @@ export default function InboxPage() {
                 <div><strong style={{color:textColor}}>{t.timezone}:</strong> <span style={{color:subTextColor}}>{labelTimeZone(patient?.timezone)}</span></div>
                 {localTime && <div><strong style={{color:textColor}}>{t.patientLocalTime}:</strong> <span style={{color:subTextColor}}>{localTime}</span></div>}
                 <div><strong style={{color:textColor}}>{t.allergies}:</strong> <span style={{color:subTextColor}}>{patient?.allergies || "—"}</span></div>
-                <div><strong style={{color:textColor}}>{t.medications}:</strong> <span style={{color:subTextColor}}>{patient?.current_medications || "—"}</span></div>
+              </div>
+            </div>
+
+            <div style={{background:cardBg,borderRadius:18,padding:16}}>
+              <p style={{fontSize:13,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6,marginBottom:6}}>{t.medications}</p>
+              <p style={{fontSize:13,color:subTextColor,marginBottom:12}}>
+                {lang==="es" ? "El equipo asignado puede ver y agregar medicamentos. Solo super admin puede eliminar." : "Assigned staff can view and add medications. Only super admins can delete."}
+              </p>
+              {patientMedications.length === 0 ? (
+                <p style={{fontSize:14,color:subTextColor,marginBottom:12}}>{lang==="es" ? "Sin medicamentos registrados." : "No medications listed."}</p>
+              ) : (
+                <div style={{display:"grid",gap:8,marginBottom:12}}>
+                  {patientMedications.map((medication, index)=>(
+                    <div key={`${medication}-${index}`} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
+                      <div style={{flex:1,minWidth:0,fontSize:15,fontWeight:750,color:textColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{medication}</div>
+                      <button
+                        type="button"
+                        onClick={()=>removePatientMedication(index)}
+                        disabled={savingMedication}
+                        style={{border:"none",borderRadius:12,background:isSuperAdmin?"#FEE2E2":"#F3F4F6",color:isSuperAdmin?"#B91C1C":subTextColor,padding:"8px 10px",fontSize:12,fontWeight:850,fontFamily:"inherit",cursor:savingMedication?"not-allowed":"pointer",opacity:savingMedication?0.55:1}}
+                      >
+                        {lang==="es" ? "Eliminar" : "Delete"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{display:"grid",gridTemplateColumns:"minmax(0, 1fr) auto",gap:8}}>
+                <input
+                  value={medicationDraft}
+                  onChange={(event)=>setMedicationDraft(event.target.value)}
+                  placeholder={t.medicationsPH}
+                  style={{minWidth:0,height:46,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#0F172A":"white",color:textColor,padding:"0 12px",fontSize:15,fontFamily:"inherit",fontWeight:650}}
+                />
+                <button onClick={addPatientMedication} disabled={savingMedication || !medicationDraft.trim()} style={{height:46,border:"none",borderRadius:14,background:"#2563EB",color:"white",padding:"0 14px",fontSize:14,fontWeight:850,cursor:"pointer",fontFamily:"inherit",opacity:savingMedication || !medicationDraft.trim()?0.55:1}}>
+                  {lang==="es" ? "Agregar" : "Add"}
+                </button>
               </div>
             </div>
 
@@ -2475,7 +2621,7 @@ export default function InboxPage() {
                   ))}
                 </div>
               )}
-              <textarea value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:14,resize:"vertical",marginBottom:10}} />
+              <textarea ref={internalNoteInputRef} value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:14,resize:"vertical",marginBottom:10}} />
               <button onClick={saveInternalNote} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{width:"100%",padding:12,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:savingInternalNote || !internalNoteDraft.trim()?0.5:1}}>
                 {savingInternalNote ? (lang==="es" ? "Guardando..." : "Saving...") : t.addInternalNote}
               </button>
@@ -3257,7 +3403,7 @@ export default function InboxPage() {
         </div>
 
         {toastAlert && (
-          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:250,width:"min(360px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.96)":"rgba(255,255,255,0.98)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 46px rgba(15,23,42,0.2)",padding:"14px 16px",cursor:"pointer"}} onClick={()=>{const room = patients.flatMap((patient)=>patient.rooms||[]).find((entry:any)=>entry.id===toastAlert.roomId) || null; setSelectedRoom(room); setMobileView("chat"); setToastAlert(null);}}>
+          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:250,width:"min(380px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.96)":"rgba(255,255,255,0.98)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 46px rgba(15,23,42,0.2)",padding:"14px 16px",cursor:"pointer"}} onClick={()=>openToastRoom(toastAlert.kind==="note"?"read-note":"chat")}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:"#25D366",flexShrink:0}} />
               <div style={{minWidth:0,flex:1}}>
@@ -3271,6 +3417,13 @@ export default function InboxPage() {
               </div>
               <button onClick={(event)=>{event.stopPropagation();setToastAlert(null);}} style={{border:"none",background:"transparent",color:subTextColor,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
             </div>
+            {toastAlert.kind==="note" && (
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12}}>
+                <button onClick={(event)=>{event.stopPropagation();openToastRoom("read-note");}} style={{border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",padding:"10px 8px",fontSize:12,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{lang==="es" ? "Leer" : "Read it"}</button>
+                <button onClick={(event)=>{event.stopPropagation();openToastRoom("add-note");}} style={{border:"none",borderRadius:12,background:"#DCFCE7",color:"#166534",padding:"10px 8px",fontSize:12,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{lang==="es" ? "Agregar" : "Add to it"}</button>
+                <button onClick={(event)=>{event.stopPropagation();setToastAlert(null);}} style={{border:"none",borderRadius:12,background:darkMode?"#253244":"#F1F5F9",color:textColor,padding:"10px 8px",fontSize:12,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{lang==="es" ? "Entendido" : "Acknowledge"}</button>
+              </div>
+            )}
           </div>
         )}
 

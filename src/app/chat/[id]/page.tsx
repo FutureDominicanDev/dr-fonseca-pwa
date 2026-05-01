@@ -47,6 +47,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
   const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
   const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
+  const [selectedPrescription, setSelectedPrescription] = useState<Message | null>(null);
   const [lastPrescriptionSeenAt, setLastPrescriptionSeenAt] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>(["Gracias", "Tengo una pregunta", "Voy en camino"]);
@@ -604,6 +605,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       documents: "Prescriptions",
       noPrescriptions: "No prescriptions yet.",
       prescriptionInstructions: "Instructions",
+      close: "Close",
+      share: "Share",
+      print: "Print",
+      email: "Email",
+      messages: "Messages",
       createReply: "Create quick reply",
       saveReply: "Save Reply",
       saveChanges: "Save Changes",
@@ -626,6 +632,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       documents: "Recetas",
       noPrescriptions: "Todavía no hay recetas.",
       prescriptionInstructions: "Indicaciones",
+      close: "Cerrar",
+      share: "Compartir",
+      print: "Imprimir",
+      email: "Email",
+      messages: "Mensajes",
       createReply: "Crear respuesta rápida",
       saveReply: "Guardar respuesta",
       saveChanges: "Guardar cambios",
@@ -655,6 +666,47 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       title: title?.trim() || labels.documents,
       instructions: rest.join("\n").trim(),
     };
+  };
+  const prescriptionUrl = (message?: Message | null) => message?.file_url || message?.content || "";
+  const selectedPrescriptionInfo = selectedPrescription ? parsePrescriptionText(selectedPrescription.file_name) : null;
+  const selectedPrescriptionUrl = prescriptionUrl(selectedPrescription);
+  const selectedPrescriptionIsImage = /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(selectedPrescriptionUrl) || `${selectedPrescription?.file_type || ""}`.startsWith("image/");
+  const selectedPrescriptionShareText = selectedPrescriptionInfo
+    ? `${selectedPrescriptionInfo.title}${selectedPrescriptionInfo.instructions ? `\n${labels.prescriptionInstructions}: ${selectedPrescriptionInfo.instructions}` : ""}\n${selectedPrescriptionUrl}`
+    : selectedPrescriptionUrl;
+  const sharePrescription = async () => {
+    if (!selectedPrescriptionUrl || !selectedPrescriptionInfo) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: selectedPrescriptionInfo.title, text: selectedPrescriptionShareText, url: selectedPrescriptionUrl });
+        return;
+      } catch {}
+    }
+    await navigator.clipboard?.writeText(selectedPrescriptionShareText).catch(() => {});
+    alert(uiLang === "es" ? "Enlace de receta copiado." : "Prescription link copied.");
+  };
+  const printPrescription = () => {
+    if (!selectedPrescriptionUrl || !selectedPrescriptionInfo) return;
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!printWindow) {
+      window.open(selectedPrescriptionUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const escapedTitle = selectedPrescriptionInfo.title.replace(/[<>&"]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "\"": "&quot;" }[char] || char));
+    const escapedInstructions = selectedPrescriptionInfo.instructions.replace(/[<>&"]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "\"": "&quot;" }[char] || char));
+    const viewer = selectedPrescriptionIsImage
+      ? `<img src="${selectedPrescriptionUrl}" alt="${escapedTitle}" style="max-width:100%;height:auto;display:block;margin:18px auto 0;" />`
+      : `<iframe src="${selectedPrescriptionUrl}" title="${escapedTitle}" style="width:100%;height:78vh;border:0;margin-top:18px;"></iframe>`;
+    printWindow.document.write(`<!doctype html><html><head><title>${escapedTitle}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;margin:24px;color:#111}h1{font-size:22px;margin:0 0 6px}.instructions{font-size:15px;color:#475569;white-space:pre-wrap}@media print{body{margin:12mm}}</style></head><body><h1>${escapedTitle}</h1>${escapedInstructions ? `<div class="instructions">${escapedInstructions}</div>` : ""}${viewer}<script>window.addEventListener('load',()=>setTimeout(()=>window.print(),450));</script></body></html>`);
+    printWindow.document.close();
+  };
+  const emailPrescription = () => {
+    if (!selectedPrescriptionInfo) return;
+    window.location.href = `mailto:?subject=${encodeURIComponent(selectedPrescriptionInfo.title)}&body=${encodeURIComponent(selectedPrescriptionShareText)}`;
+  };
+  const messagePrescription = () => {
+    const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
+    window.location.href = `sms:${separator}body=${encodeURIComponent(selectedPrescriptionShareText)}`;
   };
   const visibleChatMessages = messages.filter((message) => {
     const fileName = `${message.file_name || ""}`;
@@ -898,19 +950,45 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 <div style={{ border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", fontSize: 16 }}>{labels.noPrescriptions}</div>
               )}
               {prescriptionMessages.map((message) => {
-                const url = message.file_url || message.content;
                 const prescription = parsePrescriptionText(message.file_name);
                 return (
-                  <a key={message.id} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "flex-start", gap: 10, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textDecoration: "none", fontSize: 16, fontWeight: 700 }}>
+                  <button key={message.id} type="button" onClick={() => setSelectedPrescription(message)} style={{ display: "flex", alignItems: "flex-start", gap: 10, border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textDecoration: "none", fontSize: 16, fontWeight: 700, textAlign:"left", fontFamily:"inherit", width:"100%" }}>
                     <span style={{ fontSize: 22 }}>📄</span>
                     <span style={{ wordBreak: "break-word", display:"grid", gap:4 }}>
                       <span>{prescription.title}</span>
                       {prescription.instructions && <span style={{fontSize:13,fontWeight:600,color:darkMode?"#CBD5E1":"#64748B",lineHeight:1.35}}>{labels.prescriptionInstructions}: {prescription.instructions}</span>}
                     </span>
-                  </a>
+                  </button>
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPrescription && (
+        <div style={{ position: "fixed", inset: 0, background: darkMode ? "#0f172a" : "#f8fafc", color: textPrimary, zIndex: 30, display: "flex", flexDirection: "column" }}>
+          <div style={{ flexShrink: 0, padding: "calc(14px + env(safe-area-inset-top)) 14px 12px", background: panelBg, borderBottom: "1px solid rgba(148,163,184,0.25)", boxShadow: "0 6px 18px rgba(15,23,42,0.08)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{selectedPrescriptionInfo?.title || labels.documents}</div>
+                {selectedPrescriptionInfo?.instructions && <div style={{ fontSize: 13, color: darkMode ? "#CBD5E1" : "#64748B", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{labels.prescriptionInstructions}: {selectedPrescriptionInfo.instructions}</div>}
+              </div>
+              <button onClick={() => setSelectedPrescription(null)} style={{ border: "none", borderRadius: 999, background: inputPanelBg, color: textPrimary, minWidth: 78, height: 42, padding: "0 14px", fontSize: 15, fontWeight: 850, fontFamily: "inherit" }}>{labels.close}</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+              <button onClick={sharePrescription} style={{ border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", minHeight: 42, fontSize: 13, fontWeight: 850, fontFamily: "inherit" }}>{labels.share}</button>
+              <button onClick={messagePrescription} style={{ border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", minHeight: 42, fontSize: 13, fontWeight: 850, fontFamily: "inherit" }}>{labels.messages}</button>
+              <button onClick={emailPrescription} style={{ border: "none", borderRadius: 12, background: "#FDE68A", color: "#854D0E", minHeight: 42, fontSize: 13, fontWeight: 850, fontFamily: "inherit" }}>{labels.email}</button>
+              <button onClick={printPrescription} style={{ border: "none", borderRadius: 12, background: "#E0E7FF", color: "#3730A3", minHeight: 42, fontSize: 13, fontWeight: 850, fontFamily: "inherit" }}>{labels.print}</button>
+            </div>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>
+            {selectedPrescriptionIsImage ? (
+              <img src={selectedPrescriptionUrl} alt={selectedPrescriptionInfo?.title || labels.documents} style={{ display: "block", width: "100%", maxWidth: 900, height: "auto", margin: "0 auto", borderRadius: 14, background: "#fff", boxShadow: "0 8px 28px rgba(15,23,42,0.14)" }} />
+            ) : (
+              <iframe src={selectedPrescriptionUrl} title={selectedPrescriptionInfo?.title || labels.documents} style={{ width: "100%", height: "100%", minHeight: "70dvh", border: "none", borderRadius: 14, background: "#fff", boxShadow: "0 8px 28px rgba(15,23,42,0.14)" }} />
+            )}
           </div>
         </div>
       )}
