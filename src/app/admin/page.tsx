@@ -83,6 +83,7 @@ export default function AdminPage() {
   const [savingPhones, setSavingPhones] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [staffNameDrafts, setStaffNameDrafts] = useState<Record<string, string>>({});
+  const [staffPhoneDrafts, setStaffPhoneDrafts] = useState<Record<string, string>>({});
   const [deletingStaffId, setDeletingStaffId] = useState("");
   const [unblockBusyKey, setUnblockBusyKey] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
@@ -1399,8 +1400,11 @@ export default function AdminPage() {
                     const canDeleteThisMember = canManageAdmins && !isSelf && level !== "owner";
                     const accessKey = `${member.id}-admin_level`;
                     const nameKey = `${member.id}-full_name-display_name`;
+                    const phoneKey = `${member.id}-phone`;
                     const nameDraft = staffNameDrafts[member.id] ?? (member.full_name || member.display_name || "");
                     const cleanNameDraft = nameDraft.trim();
+                    const phoneDraft = staffPhoneDrafts[member.id] ?? (member.phone || "");
+                    const cleanPhoneDraft = phoneDraft.trim();
                     const deleteBusy = deletingStaffId === member.id;
 
                     return (
@@ -1447,6 +1451,32 @@ export default function AdminPage() {
                                         )}
                                       >
                                         {savingKey === nameKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar nombre" : "Save name")}
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="setting-group">
+                                    <p className="group-label">{isSpanish ? "Teléfono" : "Phone"}</p>
+                                    <div className="mini-actions" style={{ alignItems: "stretch" }}>
+                                      <input
+                                        className="line-input"
+                                        value={phoneDraft}
+                                        disabled={!canEditThisMember}
+                                        inputMode="tel"
+                                        autoComplete="tel"
+                                        onChange={(event) => setStaffPhoneDrafts((current) => ({ ...current, [member.id]: event.target.value }))}
+                                        placeholder="+52 664 123 4567"
+                                        style={{ minWidth: 180, flex: "1 1 220px", height: 42, padding: "0 12px", fontSize: 14 }}
+                                      />
+                                      <button
+                                        className="mini-btn"
+                                        disabled={!canEditThisMember || savingKey === phoneKey}
+                                        onClick={() => updateStaffField(
+                                          member,
+                                          { phone: cleanPhoneDraft || null },
+                                          isSpanish ? `Teléfono de ${member.full_name || "staff"} actualizado.` : `Phone for ${member.full_name || "staff"} updated.`
+                                        )}
+                                      >
+                                        {savingKey === phoneKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar teléfono" : "Save phone")}
                                       </button>
                                     </div>
                                   </div>

@@ -3742,8 +3742,8 @@ export default function InboxPage() {
         </div>
       )}
       {staffContactMember && (
-        <div className="modal-overlay" onClick={closeStaffContact}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
+        <div className="modal-overlay" onClick={closeStaffContact} style={{alignItems:"center",padding:"max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left))"}}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:460,borderRadius:24,paddingBottom:"max(24px, env(safe-area-inset-bottom))"}}>
             <p className="modal-title">{staffContactMember.full_name || staffContactMember.display_name || (lang==="es" ? "Personal" : "Staff")}</p>
             <div style={{fontSize:uiBaseSize,color:subTextColor,marginBottom:14,lineHeight:1.45,overflowWrap:"anywhere"}}>
               {roleName(staffContactMember.role)}{staffContactMember.office_location ? ` · ${staffContactMember.office_location}` : ""}
@@ -3752,9 +3752,17 @@ export default function InboxPage() {
               className="pbtn"
               disabled={!staffContactMember.phone}
               onClick={()=>{ if (staffContactMember.phone) window.location.href = `tel:${staffContactMember.phone}`; }}
+              style={{opacity:staffContactMember.phone ? 1 : 0.55,cursor:staffContactMember.phone ? "pointer" : "not-allowed"}}
             >
-              {lang==="es" ? "Llamar" : "Call"}
+              {staffContactMember.phone ? (lang==="es" ? "Llamar" : "Call") : (lang==="es" ? "Sin teléfono registrado" : "No phone listed")}
             </button>
+            {!staffContactMember.phone && (
+              <div style={{fontSize:uiSmallSize,color:subTextColor,marginTop:8,marginBottom:12,lineHeight:1.45}}>
+                {lang==="es"
+                  ? "Para llamar, este miembro debe agregar su teléfono en Ajustes o un admin puede guardarlo en Equipo y permisos."
+                  : "To call, this team member needs to add a phone number in Settings, or an admin can save it in Team and permissions."}
+              </div>
+            )}
             <label className="flabel" style={{marginTop:12}}>{lang==="es" ? "Mensaje privado" : "Private message"}</label>
             <textarea
               className="finput"
@@ -3771,11 +3779,6 @@ export default function InboxPage() {
             >
               {savingStaffPrivateMessage ? (lang==="es" ? "Enviando..." : "Sending...") : (lang==="es" ? "Enviar mensaje privado" : "Send private message")}
             </button>
-            {!staffContactMember.phone && !staffContactMember.email && (
-              <div style={{fontSize:uiSmallSize,color:subTextColor,marginTop:10,lineHeight:1.45}}>
-                {lang==="es" ? "Este miembro no tiene teléfono o correo registrado." : "This staff member has no phone or email listed."}
-              </div>
-            )}
             <button className="sbtn" onClick={closeStaffContact}>{t.cancel}</button>
           </div>
         </div>
