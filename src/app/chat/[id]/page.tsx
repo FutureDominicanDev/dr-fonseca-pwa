@@ -346,6 +346,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     return Array.isArray(patient) ? patient[0] : patient;
   };
 
+  const isMissingSchemaObjectError = (error: { message?: string; details?: string; hint?: string } | null | undefined) => {
+    const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+    return message.includes("schema cache") || message.includes("could not find the table") || message.includes("column") || message.includes("relation");
+  };
+
   const triggerHelpAlert = async () => {
     if (viewerType !== "patient" || accessDenied || !accessReady || alertSending) return;
     const patientId = roomPatient()?.id;
@@ -365,7 +370,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       created_at: createdAt,
     });
 
-    if (error) {
+    const alertFallbackOnly = Boolean(error && isMissingSchemaObjectError(error));
+    if (error && !alertFallbackOnly) {
       setAlertSending(false);
       setAlertFeedback(uiLang === "es" ? "No se pudo enviar la alerta." : "The alert could not be sent.");
       return;
@@ -394,12 +400,22 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       created_at: createdAt,
     }));
 
+    let notificationSaved = rows.length === 0;
     if (rows.length) {
       const insert = await supabase.from("media_notifications").insert(rows);
       if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
         const compatibleRows = rows.map(({ type: _type, chat_id: _chatId, ...row }) => row);
-        await supabase.from("media_notifications").insert(compatibleRows);
+        const compatibleInsert = await supabase.from("media_notifications").insert(compatibleRows);
+        notificationSaved = !compatibleInsert.error;
+      } else {
+        notificationSaved = !insert.error;
       }
+    }
+
+    if (alertFallbackOnly && !notificationSaved) {
+      setAlertSending(false);
+      setAlertFeedback(uiLang === "es" ? "No se pudo enviar la alerta." : "The alert could not be sent.");
+      return;
     }
 
     setAlertFeedback(uiLang === "es" ? "Alerta enviada al equipo." : "Alert sent to the team.");
