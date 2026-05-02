@@ -16,6 +16,14 @@ const parsePhones = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
+const parseEmails = (value: unknown): string[] => {
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[,\n;]/g)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+};
+
 const COPY = {
   es: {
     toggle: "English",
@@ -34,21 +42,23 @@ const COPY = {
     step1: "Abre tu enlace",
     step1Text: "El consultorio te comparte una invitación segura.",
     step2: "Crea tu acceso",
-    step2Text: "Solo nombre, celular y contraseña.",
+    step2Text: "Nombre, correo, celular y contraseña.",
     step3: "Entra al portal",
     step3Text: "Verás las salas de pacientes que te asignen.",
     detailsTitle: "Crear acceso del personal",
     detailsSubtitle: "Completa estos 3 pasos para entrar al portal.",
     formTitle: "Tu cuenta",
-    formHelp: "Usa el nombre y celular que usas para comunicarte con el consultorio.",
+    formHelp: "Usa el nombre, correo y celular que usas para comunicarte con el consultorio.",
     nameLabel: "1. Nombre o nombre preferido",
     namePlaceholder: "Ej: Ray",
+    emailLabel: "2. Correo electrónico",
+    emailPlaceholder: "tu@correo.com",
     countryLabel: "País",
-    phoneLabel: "2. Celular",
+    phoneLabel: "3. Celular",
     numberLabel: "Número",
     phonePlaceholder: "Ej: 664 123 4567",
     phoneHint: "Selecciona el país y escribe tu número.",
-    passwordTitle: "3. Contraseña",
+    passwordTitle: "4. Contraseña",
     passwordLabel: "Contraseña",
     passwordPlaceholder: "Mínimo 6 caracteres",
     confirmLabel: "Confirmar contraseña",
@@ -72,6 +82,8 @@ const COPY = {
       wrongCode: "Código de invitación incorrecto.",
       expired: "Este enlace ya no es válido. Pide un enlace nuevo.",
       name: "Por favor ingresa tu nombre o nombre preferido.",
+      email: "Ingresa un correo electrónico válido para recibir la bienvenida.",
+      blockedEmail: "Este correo ya no tiene acceso. Contacta al administrador.",
       phone: "Ingresa tu número de celular.",
       phoneShort: "Revisa el celular. Debe tener al menos 10 dígitos.",
       password: "La contraseña debe tener al menos 6 caracteres.",
@@ -99,21 +111,23 @@ const COPY = {
     step1: "Open your link",
     step1Text: "The office sends you a secure invitation.",
     step2: "Create access",
-    step2Text: "Only name, phone, and password.",
+    step2Text: "Name, email, phone, and password.",
     step3: "Enter the portal",
     step3Text: "You will see the patient rooms assigned to you.",
     detailsTitle: "Create staff access",
     detailsSubtitle: "Complete these 3 steps to enter the portal.",
     formTitle: "Your account",
-    formHelp: "Use the name and phone number you use with the office.",
+    formHelp: "Use the name, email, and phone number you use with the office.",
     nameLabel: "1. Name or preferred name",
     namePlaceholder: "Example: Ray",
+    emailLabel: "2. Email address",
+    emailPlaceholder: "you@email.com",
     countryLabel: "Country",
-    phoneLabel: "2. Mobile phone",
+    phoneLabel: "3. Mobile phone",
     numberLabel: "Number",
     phonePlaceholder: "Example: 664 123 4567",
     phoneHint: "Select the country and enter your number.",
-    passwordTitle: "3. Password",
+    passwordTitle: "4. Password",
     passwordLabel: "Password",
     passwordPlaceholder: "At least 6 characters",
     confirmLabel: "Confirm password",
@@ -137,6 +151,8 @@ const COPY = {
       wrongCode: "Incorrect invitation code.",
       expired: "This link is no longer valid. Request a new link.",
       name: "Please enter your name or preferred name.",
+      email: "Enter a valid email address to receive the welcome email.",
+      blockedEmail: "This email no longer has access. Contact the administrator.",
       phone: "Enter your mobile phone number.",
       phoneShort: "Check the phone number. It must have at least 10 digits.",
       password: "Password must be at least 6 characters.",
@@ -171,6 +187,7 @@ export default function RegisterPage() {
   const [inviteCode, setInviteCode] = useState("");
   const [hasInviteLink, setHasInviteLink] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [staffEmail, setStaffEmail] = useState("");
   const [phoneCountryCode, setPhoneCountryCode] = useState("+52");
   const [phoneInput, setPhoneInput] = useState("");
   const [password, setPassword] = useState("");
@@ -301,6 +318,12 @@ export default function RegisterPage() {
       return;
     }
 
+    const cleanStaffEmail = staffEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanStaffEmail)) {
+      setError(t.errors.email);
+      return;
+    }
+
     if (!phoneInput.trim()) {
       setError(t.errors.phone);
       return;
@@ -334,7 +357,14 @@ export default function RegisterPage() {
     }
 
     const { data: blockedPhoneSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle();
+    const { data: blockedEmailSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle();
     const blockedPhones = new Set(parsePhones(blockedPhoneSetting?.value));
+    const blockedEmails = new Set(parseEmails(blockedEmailSetting?.value));
+    if (blockedEmails.has(cleanStaffEmail)) {
+      setError(t.errors.blockedEmail);
+      setLoading(false);
+      return;
+    }
     if (blockedPhones.has(normalizedPhone)) {
       setError(t.errors.blockedPhone);
       setLoading(false);
@@ -352,7 +382,7 @@ export default function RegisterPage() {
           office_location: persistedOfficeLocation,
           phone: normalizedPhone,
           login_method: "phone",
-          real_email: null,
+          real_email: cleanStaffEmail,
         },
       },
     };
@@ -394,7 +424,7 @@ export default function RegisterPage() {
           role: "staff",
           officeLocation: persistedOfficeLocation,
           phone: normalizedPhone,
-          email: null,
+          email: cleanStaffEmail,
           adminLevel: "none",
         }),
       });
@@ -698,6 +728,21 @@ export default function RegisterPage() {
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
                   autoComplete="name"
+                />
+              </div>
+
+              <div className="field">
+                <label className="field-label">{t.emailLabel}</label>
+                <input
+                  className="input"
+                  type="email"
+                  placeholder={t.emailPlaceholder}
+                  value={staffEmail}
+                  onChange={(event) => {
+                    setStaffEmail(event.target.value);
+                    setExistingAccountHint(false);
+                  }}
+                  autoComplete="email"
                 />
               </div>
 

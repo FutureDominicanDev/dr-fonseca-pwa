@@ -517,7 +517,9 @@ type PatientAlert = {
   patient_id?: string | null;
   chat_id?: string | null;
   status?: string | null;
+  escalation_level?: number | null;
   created_at?: string | null;
+  acknowledged_at?: string | null;
 };
 type PatientLabel = {
   id: string;
@@ -735,6 +737,7 @@ export default function InboxPage() {
   const [careStaffSearch, setCareStaffSearch] = useState("");
   const [mediaUnreadCounts, setMediaUnreadCounts] = useState<Record<string, number>>({});
   const [pendingAlertRoomIds, setPendingAlertRoomIds] = useState<Set<string>>(new Set());
+  const [pendingAlertLevels, setPendingAlertLevels] = useState<Record<string, number>>({});
   const [userLabels, setUserLabels] = useState<PatientLabel[]>([]);
   const [activeLabelFilter, setActiveLabelFilter] = useState("");
   const [showLabelSelector, setShowLabelSelector] = useState(false);
@@ -1663,12 +1666,13 @@ export default function InboxPage() {
     return patient?.id || "";
   }, [patients]);
 
-  const registerPatientAlertRoom = useCallback((roomId?: string | null, patientId?: string | null, notify = false) => {
+  const registerPatientAlertRoom = useCallback((roomId?: string | null, patientId?: string | null, notify = false, escalationLevel = 1) => {
     const alertRoomId = `${roomId || ""}`.trim();
     if (!alertRoomId) return;
     const assignedPatient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === alertRoomId));
     const isAssigned = !!assignedPatient || selectedRoomRef.current?.id === alertRoomId;
     if (!isAssigned) return;
+    const cleanLevel = Math.min(3, Math.max(1, Number(escalationLevel) || 1));
 
     setPendingAlertRoomIds((current) => {
       if (current.has(alertRoomId)) return current;
@@ -1676,24 +1680,47 @@ export default function InboxPage() {
       next.add(alertRoomId);
       return next;
     });
+    setPendingAlertLevels((current) => current[alertRoomId] === cleanLevel ? current : { ...current, [alertRoomId]: cleanLevel });
 
     if (!notify) return;
     const patientName = assignedPatient?.full_name || (patientId ? patients.find((entry) => entry.id === patientId)?.full_name : "") || roomPatientName(alertRoomId);
-    const body = lang === "es" ? "🚨 Necesito ayuda" : "🚨 I need help";
+    const body = cleanLevel >= 3
+      ? (lang === "es" ? "🚨 URGENTE — atención inmediata requerida" : "🚨 URGENT — immediate attention required")
+      : cleanLevel >= 2
+        ? (lang === "es" ? "🚨 Alerta escalada" : "🚨 Alert escalated")
+        : (lang === "es" ? "🚨 Necesito ayuda" : "🚨 I need help");
     playIncomingTone();
     showToastAlert(alertRoomId, patientName, body);
     pushNotif(patientName, body);
   }, [lang, patients, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
 
   const registerIncomingPatientAlert = useCallback((alert: PatientAlert) => {
-    if (`${alert.status || "pending"}` !== "pending") return;
-    registerPatientAlertRoom(alert.chat_id, alert.patient_id, false);
+    const roomId = `${alert.chat_id || ""}`.trim();
+    if (!roomId) return;
+    if (`${alert.status || "pending"}` !== "pending" || alert.acknowledged_at) {
+      setPendingAlertRoomIds((current) => {
+        if (!current.has(roomId)) return current;
+        const next = new Set(current);
+        next.delete(roomId);
+        return next;
+      });
+      setPendingAlertLevels((current) => {
+        if (!(roomId in current)) return current;
+        const next = { ...current };
+        delete next[roomId];
+        return next;
+      });
+      return;
+    }
+    registerPatientAlertRoom(roomId, alert.patient_id, false, alert.escalation_level || 1);
   }, [registerPatientAlertRoom]);
 
   const registerIncomingMediaNotification = useCallback((notification: MediaNotification) => {
     const notificationType = `${notification.type || notification.media_type || ""}`.toLowerCase();
-    if (notificationType === "alert") {
-      registerPatientAlertRoom(notification.chat_id || notification.room_id, notification.patient_id, true);
+    if (notificationType === "alert" || notificationType === "alert_escalation") {
+      const levelMatch = `${notification.message || ""}`.match(/nivel\s+(\d+)|level\s+(\d+)/i);
+      const level = Number(levelMatch?.[1] || levelMatch?.[2] || (notificationType === "alert_escalation" ? 2 : 1));
+      registerPatientAlertRoom(notification.chat_id || notification.room_id, notification.patient_id, true, level);
       return;
     }
     const patientId = notification.patient_id || (notification.room_id ? patientIdForRoom(notification.room_id) : "");
@@ -1712,10 +1739,15 @@ export default function InboxPage() {
   const fetchPendingPatientAlerts = useCallback(async () => {
     const { data, error } = await supabase
       .from("patient_alerts")
-      .select("chat_id, patient_id, status")
+      .select("chat_id, patient_id, status, escalation_level, acknowledged_at")
       .eq("status", "pending");
     if (error) return;
-    setPendingAlertRoomIds(new Set((data || []).map((alert: any) => alert.chat_id).filter(Boolean)));
+    const nextLevels: Record<string, number> = {};
+    (data || []).forEach((alert: any) => {
+      if (alert.chat_id && !alert.acknowledged_at) nextLevels[alert.chat_id] = Math.min(3, Math.max(1, Number(alert.escalation_level) || 1));
+    });
+    setPendingAlertRoomIds(new Set(Object.keys(nextLevels)));
+    setPendingAlertLevels(nextLevels);
   }, []);
 
   const fetchMediaNotificationCounts = useCallback(async () => {
@@ -2458,6 +2490,31 @@ export default function InboxPage() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "patient_alerts" },
         ({ new: alert }) => registerIncomingPatientAlert(alert as PatientAlert)
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "patient_alerts" },
+        ({ new: alert }) => registerIncomingPatientAlert(alert as PatientAlert)
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "patient_alerts" },
+        ({ old: alert }) => {
+          const roomId = `${(alert as PatientAlert)?.chat_id || ""}`.trim();
+          if (!roomId) return;
+          setPendingAlertRoomIds((current) => {
+            if (!current.has(roomId)) return current;
+            const next = new Set(current);
+            next.delete(roomId);
+            return next;
+          });
+          setPendingAlertLevels((current) => {
+            if (!(roomId in current)) return current;
+            const next = { ...current };
+            delete next[roomId];
+            return next;
+          });
+        }
       )
       .subscribe();
 
@@ -4416,7 +4473,7 @@ export default function InboxPage() {
         .chat-exit-btn { width: 44px; height: 44px; min-height: 44px; padding: 0; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#D5E4F2"}; border-radius: 50%; background: ${darkMode?"#1F2C34":"#F5F9FF"}; color: ${darkMode?"#DBEAFE":"#075EA8"}; cursor: pointer; flex-shrink: 0; font-family: inherit; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
         .chat-exit-btn:hover { background: ${darkMode?"#263846":"#EAF3FF"}; }
         .logout-icon { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; display: block; }
-        .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
+        .body { display: flex; flex: 1; overflow: hidden; overflow-x: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; touch-action: pan-y; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 16px 16px 12px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
         .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -4442,7 +4499,9 @@ export default function InboxPage() {
         .patient-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 86px; padding: 13px 13px; cursor: pointer; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(102,132,163,0.16)"}; border-radius: 18px; background: ${darkMode?"#15232B":"rgba(255,255,255,0.96)"}; margin-bottom: 9px; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.07)"}; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease; }
         .patient-row:hover { background: ${darkMode?"#1B2D36":"#FFFFFF"}; transform: translateY(-1px); }
         .patient-row.active { background: ${darkMode?"#203744":"#EAF5FF"}; border-color: ${darkMode?"rgba(125,211,252,0.30)":"#B9D8F2"}; }
-        .patient-alert-badge { position: absolute; top: 8px; right: 10px; z-index: 3; min-height: 24px; border-radius: 999px; background: #DC2626; color: #FFFFFF; padding: 4px 9px; font-size: 12px; font-weight: 950; box-shadow: 0 8px 20px rgba(220,38,38,0.32); border: 2px solid ${darkMode ? "#15232B" : "#FFFFFF"}; }
+        .patient-alert-badge { position: absolute; top: 8px; right: 10px; z-index: 3; min-width: 18px; min-height: 18px; border-radius: 999px; background: #DC2626; color: #FFFFFF; padding: 2px 6px; font-size: 12px; line-height: 1.1; font-weight: 950; display: grid; place-items: center; box-shadow: 0 8px 20px rgba(220,38,38,0.32); border: 2px solid ${darkMode ? "#15232B" : "#FFFFFF"}; }
+        .patient-alert-badge.level-2 { animation: alertPulse 1.6s ease-in-out infinite; }
+        .patient-alert-badge.level-3 { min-height: 24px; padding: 4px 9px; font-size: 11px; letter-spacing: 0.04em; }
         .av { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; position: relative; box-shadow: 0 5px 16px rgba(16,52,83,0.18); }
         .av-badge { position: absolute; top: 0; right: 0; width: 14px; height: 14px; background: #25D366; border-radius: 50%; border: 2px solid ${darkMode ? "#15232B" : "#FFFFFF"}; }
         .av-badge.media { background: #EF4444; }
@@ -4457,7 +4516,7 @@ export default function InboxPage() {
         .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; transition: transform 0.25s ease; z-index: 20; }
         .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
         .main-area.hidden { transform: translateX(100%); pointer-events: none; }
-        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${darkMode ? "#0B141A" : "#F7FAFD"}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.040) 1px, transparent 1px)"}; background-size: 18px 18px; }
+        .chat-bg { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${darkMode ? "#0B141A" : "#F7FAFD"}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.040) 1px, transparent 1px)"}; background-size: 18px 18px; overscroll-behavior-x: none; }
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 16px 0 12px; }
 	        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.92)":"rgba(255,255,255,0.96)"}; border-radius: 10px; padding: 6px 13px; font-size: var(--app-ui-small-size); color: ${darkMode?"#F8FAFC":"#111827"}; font-weight: 850; box-shadow: 0 1px 4px rgba(15,23,42,0.10); border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; }
@@ -4467,25 +4526,28 @@ export default function InboxPage() {
         .chat-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; box-shadow: 0 4px 14px rgba(16,52,83,0.18); }
         .chat-head-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	        .chat-head-sub { font-size: var(--app-ui-small-size); color: ${subTextColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-weight: 650; }
-        .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
+        .chat-alert-banner { position: sticky; top: 0; z-index: 49; margin: 0; padding: 9px max(16px, env(safe-area-inset-right)) 9px max(16px, env(safe-area-inset-left)); background: ${darkMode ? "rgba(127,29,29,0.34)" : "#FEE2E2"}; color: ${darkMode ? "#FECACA" : "#991B1B"}; border-bottom: 1px solid ${darkMode ? "rgba(248,113,113,0.22)" : "#FECACA"}; font-size: var(--app-ui-small-size); font-weight: 950; line-height: 1.25; }
+        .chat-alert-banner.level-3 { background: #DC2626; color: #FFFFFF; border-bottom-color: #B91C1C; }
+        .input-area { position: sticky; bottom: 0; flex-shrink: 0; background: ${darkMode ? "rgba(17,27,33,0.98)" : "rgba(239,244,249,0.98)"}; backdrop-filter: blur(10px); padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); z-index: 42; }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
         .msg-input:empty::before { content: attr(data-placeholder); color: #AEAEB2; pointer-events: none; }
         .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
-        .plus-btn { width: 38px; height: 38px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
+        .plus-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
         .staff-menu-popup { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: calc(64px + env(safe-area-inset-bottom)); width: min(310px, calc(100vw - 32px)); background: white; border: 1px solid rgba(15,23,42,0.10); border-radius: 18px; overflow: hidden; box-shadow: 0 18px 45px rgba(15,23,42,0.22); z-index: 40; }
         .staff-menu-item { width: 100%; border: none; border-bottom: 1px solid rgba(15,23,42,0.08); background: white; color: #111827; padding: 18px 24px; text-align: left; cursor: pointer; font-family: inherit; font-size: 20px; font-weight: 900; }
         .staff-menu-item:last-child { border-bottom: none; }
-        .send-btn { width: 38px; height: 38px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
+        .send-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .phone-btn { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
+        .phone-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
         .phone-btn img { width: 30px; height: 30px; object-fit: contain; display: block; }
-        .mic-btn { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .mic-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .mic-btn img { width: 36px; height: 36px; object-fit: contain; display: block; }
         .slash-popup { position: fixed; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 45; pointer-events: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: min(42dvh, 260px); overflow-y: auto; padding: 0 0 8px; }
         .slash-item { width: fit-content; max-width: calc(100vw - 20px); border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(0,0,0,0.10)"}; background: ${darkMode?"#253244":"white"}; color: ${textColor}; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 16px; font-weight: 600; box-shadow: 0 8px 24px rgba(15,23,42,0.16); pointer-events: auto; cursor: pointer; font-family: inherit; }
         .slash-item:hover { background: ${darkMode?"#30415A":"#F8FAFC"}; }
+        @keyframes alertPulse { 0%, 100% { transform: scale(1); box-shadow: 0 8px 20px rgba(220,38,38,0.32); } 50% { transform: scale(1.12); box-shadow: 0 0 0 7px rgba(220,38,38,0.16); } }
 	        .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); overflow-y: auto; overflow-x: hidden; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
 	        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px; width: min(560px, calc(100vw - 36px)); max-width: 100%; max-height: calc(100dvh - 36px); overflow-y: auto; overflow-x: hidden; padding: 24px; box-shadow: 0 18px 50px rgba(15,23,42,0.18); }
 	        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: min(560px, 100vw); position: fixed; top: 6vh; bottom: 0; left: 50%; transform: translateX(-50%); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 24px max(18px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
@@ -5005,14 +5067,14 @@ export default function InboxPage() {
               ))}
             </div>
             {mediaLibraryTab==="media" && (
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
+              <div style={{display:"flex",gap:10,overflowX:"auto",overflowY:"hidden",scrollSnapType:"x mandatory",overscrollBehaviorX:"contain",touchAction:"pan-x",padding:"2px 2px 10px",maxWidth:"100%",WebkitOverflowScrolling:"touch"}}>
                 {roomImageVideoEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{lang==="es"?"Sin imágenes o videos todavía.":"No images or videos yet."}</div>}
                 {roomImageVideoEntries.map((entry:any)=>(
-                  <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",borderRadius:14,overflow:"hidden",textDecoration:"none",background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
+                  <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",borderRadius:14,overflow:"hidden",textDecoration:"none",background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`,width:"min(76vw,240px)",minWidth:"min(76vw,240px)",scrollSnapAlign:"start"}}>
                     {entry.message_type==="image" ? (
-                      <img src={entry.content} alt="" style={{width:"100%",height:120,objectFit:"cover",display:"block"}} />
+                      <img src={entry.content} alt="" style={{width:"100%",height:180,maxHeight:300,objectFit:"cover",display:"block"}} />
                     ) : (
-                      <video src={entry.content} style={{width:"100%",height:120,objectFit:"cover",display:"block"}} />
+                      <video src={entry.content} style={{width:"100%",height:180,maxHeight:300,objectFit:"cover",display:"block"}} />
                     )}
                     <div style={{padding:"8px 10px",display:"grid",gap:3}}>
                       <div style={{fontSize:12,color:subTextColor}}>{fmtDateLabel(entry.created_at)}</div>
@@ -5504,9 +5566,10 @@ export default function InboxPage() {
                 const latestTime=roomPreviewTime(firstRoom);
                 const ptLabels=patientLabelsFor(pt);
                 const ptHasAlert=!!alertRoom;
+                const alertLevel=alertRoom ? Math.min(3, Math.max(1, pendingAlertLevels[alertRoom.id] || 1)) : 0;
                 return (
                   <div key={pt.id} className={`patient-row${isActive?" active":""}`} onClick={()=>{setSelectedRoom(firstRoom);setMobileView("chat");}}>
-                    {ptHasAlert&&<div className="patient-alert-badge">🚨 Ayuda</div>}
+                    {ptHasAlert&&<div className={`patient-alert-badge level-${alertLevel}`}>{alertLevel>=3?"URGENTE":"●"}</div>}
                     <div className="av">
                       {pt.profile_picture_url?<img src={pt.profile_picture_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:ini(pt.full_name)}
                       {(ptUnread||ptMediaUnread)&&<div className={`av-badge${ptMediaUnread?" media":""}`}/>}
@@ -5580,6 +5643,14 @@ export default function InboxPage() {
                     🏷
                   </button>
                 </div>
+
+                {pendingAlertRoomIds.has(selectedRoom.id) && (
+                  <div className={`chat-alert-banner level-${Math.min(3, Math.max(1, pendingAlertLevels[selectedRoom.id] || 1))}`}>
+                    {(pendingAlertLevels[selectedRoom.id] || 1) >= 3
+                      ? "🚨 URGENTE — atención inmediata requerida"
+                      : "🚨 Paciente requiere atención"}
+                  </div>
+                )}
 
                 <div
                   className="chat-bg"
