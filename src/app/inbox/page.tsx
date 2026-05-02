@@ -526,6 +526,7 @@ type PatientLabel = {
   name_en?: string | null;
   name?: string | null;
   color?: string | null;
+  assigned_patient_ids?: string[] | null;
 };
 
 const STAFF_ROOM_PREFIX = "__DRF_STAFF_ROOM__:";
@@ -885,14 +886,20 @@ export default function InboxPage() {
     return primary || fallback || label.name || (lang === "es" ? "Etiqueta" : "Label");
   };
   const patientLabelIdsFor = useCallback((patient: any) => {
+    const patientId = `${patient?.id || ""}`;
     const value = patient?.labels;
     if (Array.isArray(value)) return value.filter(Boolean);
     if (value && typeof value === "object") {
       const ownLabels = value[currentUserId] || value[String(currentUserId || "")];
-      return Array.isArray(ownLabels) ? ownLabels.filter(Boolean) : [];
+      if (Array.isArray(ownLabels)) return ownLabels.filter(Boolean);
+    }
+    if (patientId) {
+      return userLabels
+        .filter((label) => Array.isArray(label.assigned_patient_ids) && label.assigned_patient_ids.map(String).includes(patientId))
+        .map((label) => label.id);
     }
     return [] as string[];
-  }, [currentUserId]);
+  }, [currentUserId, userLabels]);
   const patientLabelsFor = (patient: any) => {
     const ids = new Set(patientLabelIdsFor(patient));
     return userLabels.filter((label) => ids.has(label.id));
@@ -1525,11 +1532,7 @@ export default function InboxPage() {
         title={lang==="es" ? "Salir" : "Exit"}
         aria-label={lang==="es" ? "Salir" : "Exit"}
       >
-        <svg className="logout-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-          <path d="M16 17l5-5-5-5" />
-          <path d="M21 12H9" />
-        </svg>
+        <img src="/Exit_icon.png" alt="" style={{width:28,height:28,objectFit:"contain",display:"block"}} />
       </button>
     </div>
   );
@@ -2153,6 +2156,7 @@ export default function InboxPage() {
     const token = sessionData.session?.access_token || "";
     let error: { message?: string } | null = null;
     let savedLabels = nextLabels;
+    let savedViaLabelRows = false;
     if (token) {
       try {
         const response = await fetch("/api/labels", {
@@ -2163,6 +2167,7 @@ export default function InboxPage() {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) error = { message: payload?.error };
         else if (payload?.labels) savedLabels = payload.labels;
+        if (response.ok && payload?.assignmentStore === "labels") savedViaLabelRows = true;
       } catch (requestError) {
         error = { message: requestError instanceof Error ? requestError.message : "" };
       }
@@ -2171,19 +2176,24 @@ export default function InboxPage() {
       error = result.error;
     }
     if (error) {
-      if (isMissingColumnError(error)) {
-        alert(lang === "es" ? "La etiqueta fue creada, pero falta ejecutar el SQL de labels para asignarla al paciente." : "The label was created, but the labels SQL still needs to be run before assigning it to a patient.");
-      } else {
-        alert(error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
-      }
+      alert(error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
       return;
     }
-    setPatients((current) => current.map((patient) => patient.id === selectedPatient.id ? { ...patient, labels: savedLabels } : patient));
+    setUserLabels((current) => current.map((label) => {
+      const assignedIds = new Set((label.assigned_patient_ids || []).map(String).filter(Boolean));
+      if (nextLabelIds.includes(label.id)) assignedIds.add(selectedPatient.id);
+      else assignedIds.delete(selectedPatient.id);
+      return { ...label, assigned_patient_ids: Array.from(assignedIds) };
+    }));
+    setPatients((current) => current.map((patient) => {
+      if (patient.id !== selectedPatient.id) return patient;
+      return savedViaLabelRows ? patient : { ...patient, labels: savedLabels };
+    }));
     setSelectedRoom((room: any) => room ? {
       ...room,
       procedures: {
         ...room.procedures,
-        patients: {
+        patients: savedViaLabelRows ? room.procedures?.patients : {
           ...room.procedures?.patients,
           labels: savedLabels,
         },
@@ -3897,8 +3907,8 @@ export default function InboxPage() {
                   : (lang==="es"?"Mensajes privados y salas internas del equipo.":"Private messages and internal team rooms.")}
               </p>
             </div>
-            <button onClick={closePanel} style={{background:cardBg,border:`1px solid ${borderColor}`,borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:800,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>
-              {lang==="es" ? "Salir" : "Exit"}
+            <button onClick={closePanel} title={lang==="es" ? "Salir" : "Exit"} aria-label={lang==="es" ? "Salir" : "Exit"} style={{width:58,height:58,minHeight:58,background:cardBg,border:`1px solid ${borderColor}`,borderRadius:999,padding:8,cursor:"pointer",display:"grid",placeItems:"center",flexShrink:0}}>
+              <img src="/Exit_icon.png" alt="" style={{width:36,height:36,objectFit:"contain",display:"block"}} />
             </button>
           </div>
 
@@ -4002,11 +4012,13 @@ export default function InboxPage() {
           ) : activeRoom ? (
             <div style={{display:"grid",gap:12}}>
               <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                <button className="sbtn" onClick={()=>{setActiveStaffRoomId(null);setStaffRoomReply("");}} style={{width:"auto",padding:"0 14px"}}>{lang==="es"?"Volver":"Back"}</button>
+                <button className="sbtn" onClick={()=>{setActiveStaffRoomId(null);setStaffRoomReply("");}} title={lang==="es"?"Volver":"Back"} aria-label={lang==="es"?"Volver":"Back"} style={{width:58,minWidth:58,height:58,minHeight:58,padding:6,borderRadius:999,display:"grid",placeItems:"center",flexShrink:0}}>
+                  <img src="/Back_icon.jpg" alt="" style={{width:46,height:46,borderRadius:"50%",objectFit:"cover",display:"block"}} />
+                </button>
                 <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{activeRoomMembers.length} {lang==="es"?"participantes":"participants"}</span>
                 {activeRoom.currentUserStatus === "accepted" && (
-                  <button className="sbtn" onClick={leaveActiveStaffRoom} style={{width:"auto",padding:"0 14px",marginLeft:"auto",color:"#B91C1C"}}>
-                    {lang==="es"?"Salir del chat":"Leave chat"}
+                  <button className="sbtn" onClick={leaveActiveStaffRoom} title={lang==="es"?"Salir del chat":"Leave chat"} aria-label={lang==="es"?"Salir del chat":"Leave chat"} style={{width:58,minWidth:58,height:58,minHeight:58,padding:6,borderRadius:999,marginLeft:"auto",display:"grid",placeItems:"center",flexShrink:0}}>
+                    <img src="/Exit_icon.png" alt="" style={{width:38,height:38,objectFit:"contain",display:"block"}} />
                   </button>
                 )}
               </div>
@@ -4064,14 +4076,18 @@ export default function InboxPage() {
           ) : (
             <div style={{display:"grid",gap:12}}>
               <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                <button className="sbtn" onClick={()=>{setActiveStaffChatPeerId(null);setStaffPrivateReply("");}} style={{width:"auto",padding:"0 14px"}}>{lang==="es"?"Volver":"Back"}</button>
+                <button className="sbtn" onClick={()=>{setActiveStaffChatPeerId(null);setStaffPrivateReply("");}} title={lang==="es"?"Volver":"Back"} aria-label={lang==="es"?"Volver":"Back"} style={{width:58,minWidth:58,height:58,minHeight:58,padding:6,borderRadius:999,display:"grid",placeItems:"center",flexShrink:0}}>
+                  <img src="/Back_icon.jpg" alt="" style={{width:46,height:46,borderRadius:"50%",objectFit:"cover",display:"block"}} />
+                </button>
                 <button
                   className="pbtn"
                   disabled={!activePeer?.phone}
                   onClick={()=>{ if (activePeer?.phone) window.location.href = `tel:${activePeer.phone}`; }}
-                  style={{width:"auto",padding:"0 14px",opacity:activePeer?.phone?1:0.5}}
+                  title={lang==="es"?"Llamar":"Call"}
+                  aria-label={lang==="es"?"Llamar":"Call"}
+                  style={{width:58,minWidth:58,height:58,minHeight:58,padding:5,borderRadius:999,opacity:activePeer?.phone?1:0.5,display:"grid",placeItems:"center",flexShrink:0}}
                 >
-                  {lang==="es"?"Llamar":"Call"}
+                  <img src="/Call_icon.png" alt="" style={{width:48,height:48,borderRadius:"50%",objectFit:"cover",display:"block"}} />
                 </button>
                 {!activePeer?.phone && <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{lang==="es"?"Sin teléfono registrado. Puede agregarlo en Ajustes.":"No phone listed. They can add it in Settings."}</span>}
               </div>
@@ -5366,9 +5382,8 @@ export default function InboxPage() {
                     <span>☰</span>
                     <span>{t.settings}</span>
                   </button>
-                  <button className="top-menu-item" onClick={()=>{closeTopMenu();leaveCurrentChatView();}}>
-                    <span>↪</span>
-                    <span>{lang==="es" ? "Salir" : "Exit"}</span>
+                  <button className="top-menu-item" onClick={()=>{closeTopMenu();leaveCurrentChatView();}} title={lang==="es" ? "Salir" : "Exit"} aria-label={lang==="es" ? "Salir" : "Exit"}>
+                    <img src="/Exit_icon.png" alt="" style={{width:24,height:24,objectFit:"contain",display:"block"}} />
                   </button>
                 </div>
               )}

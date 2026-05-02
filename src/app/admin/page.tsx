@@ -1182,7 +1182,9 @@ export default function AdminPage() {
             <div className="topbar-actions">
               <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
               <button className="topbar-btn" onClick={() => goTo("/inbox")}>Portal</button>
-              <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Exit"}</button>
+              <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))} title={isSpanish ? "Salir" : "Exit"} aria-label={isSpanish ? "Salir" : "Exit"} style={{ width: 52, minWidth: 52, padding: 8 }}>
+                <img src="/Exit_icon.png" alt="" style={{ width: 30, height: 30, objectFit: "contain", display: "block" }} />
+              </button>
             </div>
           </div>
           <button
@@ -1205,7 +1207,9 @@ export default function AdminPage() {
             </select>
             <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
             <button className="topbar-btn" onClick={() => goTo("/inbox")}>Portal</button>
-            <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Exit"}</button>
+            <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))} title={isSpanish ? "Salir" : "Exit"} aria-label={isSpanish ? "Salir" : "Exit"}>
+              <img src="/Exit_icon.png" alt="" style={{ width: 30, height: 30, objectFit: "contain", display: "block" }} />
+            </button>
           </div>
         )}
 

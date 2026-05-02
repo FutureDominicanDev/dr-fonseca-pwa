@@ -15,6 +15,99 @@ function isSchemaColumnError(error: unknown) {
   return `${value?.message || ""} ${value?.details || ""} ${value?.hint || ""}`.toLowerCase().includes("column");
 }
 
+const LABEL_PATIENT_IDS_KEY = "__drf_patient_ids";
+
+function labelPatientIds(label: any) {
+  const ids = new Set<string>();
+  if (label?.patient_id) ids.add(`${label.patient_id}`);
+  const description = label?.description;
+  if (typeof description === "string" && description.trim()) {
+    try {
+      const parsed = JSON.parse(description);
+      const values = Array.isArray(parsed?.[LABEL_PATIENT_IDS_KEY])
+        ? parsed[LABEL_PATIENT_IDS_KEY]
+        : Array.isArray(parsed?.patient_ids)
+          ? parsed.patient_ids
+          : [];
+      values.forEach((id: unknown) => {
+        const value = `${id || ""}`.trim();
+        if (value) ids.add(value);
+      });
+    } catch {
+      // Older labels may have human text in description. Leave it intact when possible.
+    }
+  }
+  return Array.from(ids);
+}
+
+function serializeLabelPatientIds(label: any, patientIds: string[]) {
+  const description = typeof label?.description === "string" ? label.description.trim() : "";
+  let payload: Record<string, unknown> = {};
+  if (description) {
+    try {
+      const parsed = JSON.parse(description);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) payload = parsed;
+    } catch {
+      payload.note = description;
+    }
+  }
+  payload[LABEL_PATIENT_IDS_KEY] = patientIds;
+  return JSON.stringify(payload);
+}
+
+function withAssignmentMetadata(label: any) {
+  return {
+    ...label,
+    assigned_patient_ids: labelPatientIds(label),
+  };
+}
+
+async function getViewerLabels(viewerId: string) {
+  let query = await adminClient
+    .from("labels")
+    .select("*")
+    .eq("user_id", viewerId)
+    .order("created_at", { ascending: true });
+  if (query.error && isSchemaColumnError(query.error)) {
+    query = await adminClient
+      .from("labels")
+      .select("*")
+      .eq("created_by", viewerId)
+      .order("created_at", { ascending: true });
+  }
+  return query;
+}
+
+async function saveLabelRowAssignments(viewerId: string, patientId: string, cleanLabelIds: string[]) {
+  const labelsQuery = await getViewerLabels(viewerId);
+  if (labelsQuery.error) return { error: labelsQuery.error };
+
+  const selectedIds = new Set(cleanLabelIds);
+  const now = new Date().toISOString();
+  for (const label of labelsQuery.data || []) {
+    const nextPatientIds = new Set(labelPatientIds(label));
+    if (selectedIds.has(label.id)) nextPatientIds.add(patientId);
+    else nextPatientIds.delete(patientId);
+
+    const nextDescription = serializeLabelPatientIds(label, Array.from(nextPatientIds));
+    if (nextDescription === label.description) continue;
+
+    let update = await adminClient
+      .from("labels")
+      .update({ description: nextDescription, updated_at: now })
+      .eq("id", label.id);
+    if (update.error && isSchemaColumnError(update.error)) {
+      update = await adminClient
+        .from("labels")
+        .update({ description: nextDescription })
+        .eq("id", label.id);
+    }
+    if (update.error) return { error: update.error };
+  }
+
+  return { error: null };
+}
+
 async function getViewer(request: NextRequest) {
   const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!token) return null;
@@ -83,7 +176,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (query.error) return NextResponse.json({ error: query.error.message }, { status: 500 });
-    return NextResponse.json({ labels: query.data || [] });
+    return NextResponse.json({ labels: (query.data || []).map(withAssignmentMetadata) });
   } catch {
     return NextResponse.json({ error: "Unexpected labels error." }, { status: 500 });
   }
@@ -141,7 +234,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (insert.error) return NextResponse.json({ error: insert.error.message }, { status: 500 });
-    return NextResponse.json({ label: insert.data });
+    return NextResponse.json({ label: withAssignmentMetadata(insert.data) });
   } catch {
     return NextResponse.json({ error: "Unexpected label create error." }, { status: 500 });
   }
@@ -185,7 +278,15 @@ export async function PATCH(request: NextRequest) {
       .select("labels")
       .eq("id", patientId)
       .maybeSingle();
-    if (patientError) return NextResponse.json({ error: patientError.message }, { status: 500 });
+    if (patientError && !isSchemaColumnError(patientError)) {
+      return NextResponse.json({ error: patientError.message }, { status: 500 });
+    }
+
+    if (patientError && isSchemaColumnError(patientError)) {
+      const saved = await saveLabelRowAssignments(viewer.id, patientId, cleanLabelIds);
+      if (saved.error) return NextResponse.json({ error: saved.error.message }, { status: 500 });
+      return NextResponse.json({ labels: { [viewer.id]: cleanLabelIds }, assignmentStore: "labels" });
+    }
 
     const currentLabels = patient?.labels && typeof patient.labels === "object" && !Array.isArray(patient.labels)
       ? patient.labels
@@ -196,6 +297,11 @@ export async function PATCH(request: NextRequest) {
       .from("patients")
       .update({ labels: nextLabels })
       .eq("id", patientId);
+    if (updateError && isSchemaColumnError(updateError)) {
+      const saved = await saveLabelRowAssignments(viewer.id, patientId, cleanLabelIds);
+      if (saved.error) return NextResponse.json({ error: saved.error.message }, { status: 500 });
+      return NextResponse.json({ labels: nextLabels, assignmentStore: "labels" });
+    }
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
     return NextResponse.json({ labels: nextLabels });
