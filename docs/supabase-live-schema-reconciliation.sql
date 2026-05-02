@@ -73,6 +73,59 @@ create index if not exists media_uploads_message_id_idx
 create index if not exists media_uploads_uploaded_by_idx
   on public.media_uploads(uploaded_by);
 
+alter table public.patients
+  add column if not exists labels jsonb default '{}'::jsonb;
+
+update public.patients
+set labels = '{}'::jsonb
+where labels is null;
+
+alter table public.patients
+  alter column labels set default '{}'::jsonb;
+
+alter table public.patients
+  alter column labels set not null;
+
+create table if not exists public.labels (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
+  name text not null,
+  name_es text,
+  name_en text,
+  color text,
+  description text,
+  scope text not null default 'patient',
+  patient_id uuid references public.patients(id) on delete cascade,
+  room_id uuid references public.rooms(id) on delete cascade,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.labels
+  add column if not exists user_id uuid references public.profiles(id) on delete cascade;
+
+alter table public.labels
+  add column if not exists name_es text;
+
+alter table public.labels
+  add column if not exists name_en text;
+
+alter table public.labels
+  add column if not exists color text;
+
+alter table public.labels
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.labels
+  add column if not exists updated_at timestamptz not null default now();
+
+create index if not exists labels_user_id_idx
+  on public.labels(user_id);
+
+create index if not exists patients_labels_idx
+  on public.patients using gin(labels);
+
 alter table public.media_notifications
   add column if not exists patient_id uuid references public.patients(id) on delete cascade;
 

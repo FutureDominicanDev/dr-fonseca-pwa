@@ -62,7 +62,10 @@ end $$;
 
 create table if not exists public.labels (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
   name text not null,
+  name_es text,
+  name_en text,
   color text,
   description text,
   scope text not null default 'patient',
@@ -73,8 +76,30 @@ create table if not exists public.labels (
   updated_at timestamptz not null default now()
 );
 
+alter table public.patients
+  add column if not exists labels jsonb default '{}'::jsonb;
+
+update public.patients
+set labels = '{}'::jsonb
+where labels is null;
+
+alter table public.patients
+  alter column labels set default '{}'::jsonb;
+
+alter table public.patients
+  alter column labels set not null;
+
+alter table public.labels
+  add column if not exists user_id uuid references public.profiles(id) on delete cascade;
+
 alter table public.labels
   add column if not exists name text;
+
+alter table public.labels
+  add column if not exists name_es text;
+
+alter table public.labels
+  add column if not exists name_en text;
 
 alter table public.labels
   add column if not exists color text;
@@ -248,8 +273,14 @@ create index if not exists staff_access_requests_target_staff_id_idx
 create index if not exists labels_patient_id_idx
   on public.labels(patient_id);
 
+create index if not exists labels_user_id_idx
+  on public.labels(user_id);
+
 create index if not exists labels_room_id_idx
   on public.labels(room_id);
+
+create index if not exists patients_labels_idx
+  on public.patients using gin(labels);
 
 create index if not exists media_notifications_recipient_id_idx
   on public.media_notifications(recipient_id);

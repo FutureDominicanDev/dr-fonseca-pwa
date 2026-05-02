@@ -493,6 +493,14 @@ type MediaNotification = {
   seen?: boolean | null;
   created_at?: string | null;
 };
+type PatientLabel = {
+  id: string;
+  user_id?: string | null;
+  name_es?: string | null;
+  name_en?: string | null;
+  name?: string | null;
+  color?: string | null;
+};
 
 const STAFF_ROOM_PREFIX = "__DRF_STAFF_ROOM__:";
 const makeStaffRoomId = () =>
@@ -699,6 +707,12 @@ export default function InboxPage() {
   const [careStaffInviteIds, setCareStaffInviteIds] = useState<string[]>([]);
   const [careStaffSearch, setCareStaffSearch] = useState("");
   const [mediaUnreadCounts, setMediaUnreadCounts] = useState<Record<string, number>>({});
+  const [userLabels, setUserLabels] = useState<PatientLabel[]>([]);
+  const [activeLabelFilter, setActiveLabelFilter] = useState("");
+  const [showLabelSelector, setShowLabelSelector] = useState(false);
+  const [newLabelName, setNewLabelName] = useState("");
+  const [newLabelColor, setNewLabelColor] = useState("#EF4444");
+  const [savingLabel, setSavingLabel] = useState(false);
   const [displayNameEdit, setDisplayNameEdit] = useState("");
   const [phoneEdit, setPhoneEdit] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -831,6 +845,28 @@ export default function InboxPage() {
     if (!raw) return "";
     return raw.startsWith("+") ? raw : raw.replace(/[^\d+]/g, "");
   };
+  const labelName = (label: PatientLabel) => {
+    const primary = lang === "es" ? label.name_es : label.name_en;
+    const fallback = lang === "es" ? label.name_en : label.name_es;
+    return primary || fallback || label.name || (lang === "es" ? "Etiqueta" : "Label");
+  };
+  const patientLabelIdsFor = useCallback((patient: any) => {
+    const value = patient?.labels;
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (value && typeof value === "object") {
+      const ownLabels = value[currentUserId] || value[String(currentUserId || "")];
+      return Array.isArray(ownLabels) ? ownLabels.filter(Boolean) : [];
+    }
+    return [] as string[];
+  }, [currentUserId]);
+  const patientLabelsFor = (patient: any) => {
+    const ids = new Set(patientLabelIdsFor(patient));
+    return userLabels.filter((label) => ids.has(label.id));
+  };
+  const selectedPatient = selectedRoom?.procedures?.patients || null;
+  const selectedPatientLabelIds = patientLabelIdsFor(selectedPatient);
+  const selectedPatientLabelSet = new Set(selectedPatientLabelIds);
+  const labelColors = ["#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6", "#EC4899"];
   const findStaffMemberForMessage = (message: any): CareTeamMember | null => {
     if (!message?.sender_id || message.sender_type !== "staff") return null;
     const senderName = normalizedName(message.sender_name);
@@ -1960,6 +1996,76 @@ export default function InboxPage() {
     if (data) { setUserProfile(data); setDisplayNameEdit(data.full_name||data.display_name||""); setPhoneEdit(data.phone || ""); if (data.quick_replies?.length) setQuickReplies(data.quick_replies); }
   };
 
+  const fetchUserLabels = useCallback(async () => {
+    if (!currentUserId) return;
+    const { data, error } = await supabase
+      .from("labels")
+      .select("*")
+      .eq("user_id", currentUserId)
+      .order("created_at", { ascending: true });
+    if (!error) setUserLabels((data || []) as PatientLabel[]);
+  }, [currentUserId]);
+
+  const createPatientLabel = async () => {
+    const name = newLabelName.trim();
+    if (!currentUserId || !name || savingLabel) return;
+    setSavingLabel(true);
+    const { data, error } = await supabase
+      .from("labels")
+      .insert({
+        user_id: currentUserId,
+        name_es: name,
+        name_en: name,
+        name,
+        color: newLabelColor,
+        scope: "patient",
+        created_by: currentUserId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+    setSavingLabel(false);
+    if (error) {
+      alert(error.message || (lang === "es" ? "No pude crear la etiqueta." : "I could not create the label."));
+      return;
+    }
+    if (data) setUserLabels((current) => [...current, data as PatientLabel]);
+    setNewLabelName("");
+  };
+
+  const updateSelectedPatientLabels = async (nextLabelIds: string[]) => {
+    if (!selectedPatient?.id || !currentUserId) return;
+    const currentValue = selectedPatient.labels;
+    const nextLabels =
+      currentValue && typeof currentValue === "object" && !Array.isArray(currentValue)
+        ? { ...currentValue, [currentUserId]: nextLabelIds }
+        : { [currentUserId]: nextLabelIds };
+    const { error } = await supabase.from("patients").update({ labels: nextLabels }).eq("id", selectedPatient.id);
+    if (error) {
+      alert(error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
+      return;
+    }
+    setPatients((current) => current.map((patient) => patient.id === selectedPatient.id ? { ...patient, labels: nextLabels } : patient));
+    setSelectedRoom((room: any) => room ? {
+      ...room,
+      procedures: {
+        ...room.procedures,
+        patients: {
+          ...room.procedures?.patients,
+          labels: nextLabels,
+        },
+      },
+    } : room);
+  };
+
+  const toggleSelectedPatientLabel = (labelId: string) => {
+    const next = selectedPatientLabelSet.has(labelId)
+      ? selectedPatientLabelIds.filter((id) => id !== labelId)
+      : [...selectedPatientLabelIds, labelId];
+    updateSelectedPatientLabels(next);
+  };
+
   const fetchAssignableStaff = async () => {
     let list: CareTeamMember[] = [];
     const { data: sessionData } = await supabase.auth.getSession();
@@ -2129,6 +2235,10 @@ export default function InboxPage() {
   useEffect(() => {
     if (currentUserId) fetchAssignableStaff();
   }, [currentUserId, userProfile]);
+
+  useEffect(() => {
+    fetchUserLabels();
+  }, [fetchUserLabels]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -2354,7 +2464,7 @@ export default function InboxPage() {
   }, [callOverlayOpen]);
 
   const fetchRooms = async () => {
-    const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications))";
+    const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications, labels))";
     const fallbackSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, profile_picture_url, birthdate))";
     const query = await supabase.from("rooms").select(extendedSelect).order("created_at",{ascending:false});
     let data = query.data;
@@ -3295,6 +3405,7 @@ export default function InboxPage() {
   const filtPts = patients
     .filter(p=>{
       const q=searchQuery.toLowerCase();
+      if (activeLabelFilter && !patientLabelIdsFor(p).includes(activeLabelFilter)) return false;
       return (
         p.full_name?.toLowerCase().includes(q) ||
         String(p.phone || "").toLowerCase().includes(q) ||
@@ -4095,6 +4206,18 @@ export default function InboxPage() {
         .search-bar svg { stroke: ${darkMode?"#CBD5E1":"#64748B"}; }
         .search-input { flex: 1; border: none; background: transparent; font-size: 17px; outline: none; color: ${textColor}; font-family: inherit; font-weight: 650; min-width: 0; }
         .search-input::placeholder { color: ${darkMode?"#94A3B8":"#7C8797"}; opacity: 1; font-weight: 650; }
+        .label-filter-row { display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px 0; scrollbar-width: none; }
+        .label-filter-row::-webkit-scrollbar { display: none; }
+        .label-chip { min-height: 32px; max-width: 150px; border: none; border-radius: 999px; padding: 6px 10px; color: #FFFFFF; font-size: 13px; font-weight: 900; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; cursor: pointer; }
+        .label-chip.all { color: ${textColor}; background: ${darkMode?"#253244":"#EAF2FB"}; border: 1px solid ${borderColor}; }
+        .label-chip.active { box-shadow: 0 0 0 2px ${darkMode?"#E5E7EB":"#0F172A"} inset; }
+        .patient-label-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+        .patient-label-chip { max-width: 120px; border-radius: 999px; padding: 4px 8px; color: #FFFFFF; font-size: 11px; line-height: 1.2; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .label-option-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 9px 10px; border: 1px solid ${borderColor}; border-radius: 14px; background: ${cardBg}; cursor: pointer; }
+        .label-option-row input { width: 20px; height: 20px; min-height: 20px; flex-shrink: 0; }
+        .label-color-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0 10px; }
+        .label-color-btn { width: 34px; height: 34px; min-height: 34px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; flex-shrink: 0; }
+        .label-color-btn.active { border-color: ${textColor}; box-shadow: 0 0 0 2px ${cardBg}; }
         .patient-list { flex: 1; overflow-y: auto; padding: 10px 12px calc(18px + env(safe-area-inset-bottom)); }
         .patient-list::-webkit-scrollbar { display: none; }
         .patient-row { display: flex; align-items: center; gap: 12px; min-height: 86px; padding: 13px 13px; cursor: pointer; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(102,132,163,0.16)"}; border-radius: 18px; background: ${darkMode?"#15232B":"rgba(255,255,255,0.96)"}; margin-bottom: 9px; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.07)"}; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease; }
@@ -4911,6 +5034,61 @@ export default function InboxPage() {
         subTextColor={subTextColor}
       />
 
+      {showLabelSelector && selectedPatient && (
+        <div className="modal-overlay" onClick={()=>setShowLabelSelector(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:16}}>
+              <div>
+                <p className="modal-title" style={{marginBottom:4}}>{lang === "es" ? "Etiquetas" : "Labels"}</p>
+                <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{selectedPatient.full_name}</p>
+              </div>
+              <button onClick={()=>setShowLabelSelector(false)} style={{width:40,height:40,minHeight:40,border:"none",borderRadius:999,background:cardBg,color:textColor,fontSize:20,fontWeight:900,cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{display:"grid",gap:8,marginBottom:18}}>
+              {userLabels.length === 0 ? (
+                <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45}}>
+                  {lang === "es" ? "Todavía no tienes etiquetas." : "You do not have labels yet."}
+                </p>
+              ) : userLabels.map((label)=>(
+                <label key={label.id} className="label-option-row">
+                  <input
+                    type="checkbox"
+                    checked={selectedPatientLabelSet.has(label.id)}
+                    onChange={()=>toggleSelectedPatientLabel(label.id)}
+                  />
+                  <span className="label-chip" style={{background: label.color || "#64748B"}}>
+                    {labelName(label)}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div style={{borderTop:`1px solid ${borderColor}`,paddingTop:16}}>
+              <label className="flabel">{lang === "es" ? "Crear etiqueta" : "Create label"}</label>
+              <input
+                className="finput"
+                value={newLabelName}
+                onChange={e=>setNewLabelName(e.target.value)}
+                placeholder={lang === "es" ? "Nombre de etiqueta" : "Label name"}
+              />
+              <div className="label-color-row">
+                {labelColors.map((color)=>(
+                  <button
+                    key={color}
+                    className={`label-color-btn${newLabelColor === color ? " active" : ""}`}
+                    style={{background: color}}
+                    onClick={()=>setNewLabelColor(color)}
+                    aria-label={color}
+                  />
+                ))}
+              </div>
+              <button className="pbtn" disabled={!newLabelName.trim() || savingLabel} onClick={createPatientLabel}>
+                {savingLabel ? (lang === "es" ? "Creando..." : "Creating...") : "+ Crear etiqueta"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 	      <div className="shell" data-text-size={fontSizeLevel} onClick={()=>{closeMessageActions();setShowSlashMenu(false);}}>
         <div className="topbar">
           <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
@@ -4991,6 +5169,23 @@ export default function InboxPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input className="search-input" placeholder={t.search} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
               </div>
+              {userLabels.length > 0 && (
+                <div className="label-filter-row">
+                  <button className={`label-chip all${!activeLabelFilter ? " active" : ""}`} onClick={()=>setActiveLabelFilter("")}>
+                    {lang === "es" ? "Todos" : "All"}
+                  </button>
+                  {userLabels.map((label)=>(
+                    <button
+                      key={label.id}
+                      className={`label-chip${activeLabelFilter === label.id ? " active" : ""}`}
+                      style={{background: label.color || "#64748B"}}
+                      onClick={()=>setActiveLabelFilter(label.id)}
+                    >
+                      {labelName(label)}
+                    </button>
+                  ))}
+                </div>
+              )}
               {notificationFeedback && (
                 <div style={{marginTop:10,padding:"10px 12px",borderRadius:14,background:notificationFeedback.tone==="success"?"#DCFCE7":notificationFeedback.tone==="error"?"#FEE2E2":"#DBEAFE",color:notificationFeedback.tone==="success"?"#166534":notificationFeedback.tone==="error"?"#991B1B":"#1D4ED8",fontSize:13,fontWeight:700,lineHeight:1.4}}>
                   {notificationFeedback.text}
@@ -5016,6 +5211,7 @@ export default function InboxPage() {
                 const isActive=pt.rooms.some((r:any)=>r.id===selectedRoom?.id);
                 const latestPreview=roomPreview(firstRoom);
                 const latestTime=roomPreviewTime(firstRoom);
+                const ptLabels=patientLabelsFor(pt);
                 return (
                   <div key={pt.id} className={`patient-row${isActive?" active":""}`} onClick={()=>{setSelectedRoom(firstRoom);setMobileView("chat");}}>
                     <div className="av">
@@ -5027,6 +5223,15 @@ export default function InboxPage() {
                         <div className="patient-name">{pt.full_name}</div>
                         {latestTime&&<div className="patient-time">{latestTime}</div>}
                       </div>
+                      {ptLabels.length > 0 && (
+                        <div className="patient-label-row">
+                          {ptLabels.slice(0, 3).map((label)=>(
+                            <span key={label.id} className="patient-label-chip" style={{background: label.color || "#64748B"}}>
+                              {labelName(label)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div className="patient-meta">
                         {proc?.procedure_name&&<span>{proc.procedure_name}</span>}
                         {surgDate&&<span> · {surgDate}</span>}
@@ -5072,6 +5277,15 @@ export default function InboxPage() {
                       </div>
                     )}
                   </div>
+                  <button
+                    className="phone-btn"
+                    onClick={()=>setShowLabelSelector(true)}
+                    title={lang === "es" ? "Etiquetas" : "Labels"}
+                    aria-label={lang === "es" ? "Etiquetas" : "Labels"}
+                    style={{color:textColor,fontSize:21,fontWeight:900}}
+                  >
+                    🏷
+                  </button>
                 </div>
 
                 <div
