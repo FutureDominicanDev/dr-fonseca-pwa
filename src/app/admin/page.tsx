@@ -212,7 +212,29 @@ export default function AdminPage() {
     const patientId = request.patient_id || (request.room_id ? procedureById.get(roomById.get(request.room_id)?.procedure_id || "")?.patient_id : "");
     return patientById.get(patientId || "")?.full_name || (isSpanish ? "Paciente sin nombre" : "Unnamed patient");
   };
-  const privateMessageText = (message: StaffPrivateMessage) => message.content || message.message || message.body || "";
+  const parseStaffRoomPayload = (content?: string | null) => {
+    const value = `${content || ""}`;
+    const prefix = "__DRF_STAFF_ROOM__:";
+    if (!value.startsWith(prefix)) return null;
+    try {
+      const parsed = JSON.parse(value.slice(prefix.length));
+      if (parsed?.kind !== "staff_room") return null;
+      return {
+        roomName: `${parsed.roomName || ""}`.trim(),
+        text: `${parsed.text || ""}`.trim(),
+      };
+    } catch {
+      return null;
+    }
+  };
+  const privateMessageText = (message: StaffPrivateMessage) => {
+    const raw = message.content || message.message || message.body || "";
+    const staffRoomPayload = parseStaffRoomPayload(raw);
+    if (staffRoomPayload) {
+      return staffRoomPayload.text || staffRoomPayload.roomName || (isSpanish ? "Mensaje de chat staff" : "Staff chat message");
+    }
+    return raw;
+  };
   const privateRecipientId = (message: StaffPrivateMessage) => message.recipient_id || message.receiver_id || message.to_user_id || message.target_user_id || "";
   const staffPrivateConversations = useMemo<StaffPrivateConversation[]>(() => {
     const conversations = new Map<string, StaffPrivateMessage[]>();

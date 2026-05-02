@@ -4292,7 +4292,7 @@ export default function InboxPage() {
         .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
         .top-menu-wrap { position: relative; flex-shrink: 0; }
         .top-menu-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#BFDBFE"}; background: ${darkMode?"#253244":"#EEF6FF"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: 24px; font-weight: 950; line-height: 1; display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 8px rgba(15,23,42,0.08); font-family: inherit; }
-        .top-menu-panel { position: absolute; top: calc(100% + 10px); right: 0; width: min(265px, calc(100vw - 28px)); background: ${darkMode?"#1F2C34":"#FFFFFF"}; color: ${textColor}; border: 1px solid ${borderColor}; border-radius: 16px; box-shadow: 0 18px 46px rgba(15,23,42,0.22); overflow: hidden; z-index: 260; }
+        .top-menu-panel { position: absolute; top: calc(100% + 10px); right: 0; width: min(265px, calc(100vw - 28px)); max-width: min(265px, calc(100vw - 28px)); background: ${darkMode?"#1F2C34":"#FFFFFF"}; color: ${textColor}; border: 1px solid ${borderColor}; border-radius: 16px; box-shadow: 0 18px 46px rgba(15,23,42,0.22); overflow: hidden; z-index: 260; }
         .top-menu-item { width: 100%; min-height: 48px; border: none; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; background: transparent; color: ${textColor}; padding: 13px 16px; text-align: left; cursor: pointer; font-family: inherit; font-size: 15px; font-weight: 850; display: flex; align-items: center; gap: 10px; }
         .top-menu-item:last-child { border-bottom: none; }
         .top-menu-item:hover { background: ${darkMode?"#263846":"#F1F7FF"}; }
@@ -5311,9 +5311,6 @@ export default function InboxPage() {
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patients}</span>
                   {totalUnread>0&&<span style={{background:"#25D366",color:"white",fontSize:12,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{totalUnread}</span>}
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                  {canOpenAdmin&&<button className="admin-inline-btn" onClick={()=>window.location.href="/admin"}>Admin</button>}
                 </div>
               </div>
               <div className="search-bar">
