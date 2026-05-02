@@ -57,6 +57,9 @@ const T = {
     send: "Enviar", recording: "Grabando...", recordAudio: "Grabar audio",
     deleteMsg: "¿Eliminar este mensaje?", msgDeleted: "Mensaje eliminado",
     attachmentOptions: "Adjuntar",
+    capture: "Capturar",
+    photoMode: "Foto",
+    videoMode: "Video",
     takePhoto: "Tomar foto",
     recordVideoOption: "Grabar video",
     chooseFile: "Elegir archivo",
@@ -67,6 +70,7 @@ const T = {
     reviewPhoto: "Revisar foto",
     reviewVideo: "Revisar video",
     sendRecording: "Enviar grabación",
+    retake: "Volver a tomar",
     stopAndReview: "Detener y revisar",
     cancelCapture: "Cancelar",
     preparingCamera: "Abriendo cámara...",
@@ -118,8 +122,10 @@ const T = {
     patientLinkCopied: "Enlace copiado.",
     addCareStaff: "Agregar personal al cuidado",
     addCareStaffHint: "Selecciona personal de cualquier sede para agregarlo a este paciente.",
-    inviteStaff: "Agregar al chat",
-    staffAdded: "Personal agregado al expediente.",
+    inviteStaff: "Solicitar acceso",
+    staffAdded: "Solicitud enviada para aprobación.",
+    staffSearch: "Buscar personal...",
+    noStaffFound: "No encontré personal con esa búsqueda.",
     callPatient: "Llamar paciente",
     videoCall: "Videollamada",
     mediaLibrary: "Archivos",
@@ -212,6 +218,9 @@ const T = {
     send: "Send", recording: "Recording...", recordAudio: "Record audio",
     deleteMsg: "Delete this message?", msgDeleted: "Message deleted",
     attachmentOptions: "Attach",
+    capture: "Capture",
+    photoMode: "Photo",
+    videoMode: "Video",
     takePhoto: "Take photo",
     recordVideoOption: "Record video",
     chooseFile: "Choose file",
@@ -222,6 +231,7 @@ const T = {
     reviewPhoto: "Review photo",
     reviewVideo: "Review video",
     sendRecording: "Send recording",
+    retake: "Retake",
     stopAndReview: "Stop and review",
     cancelCapture: "Cancel",
     preparingCamera: "Opening camera...",
@@ -273,8 +283,10 @@ const T = {
     patientLinkCopied: "Link copied.",
     addCareStaff: "Add care staff",
     addCareStaffHint: "Select staff from any office to add them to this patient.",
-    inviteStaff: "Add to chat",
-    staffAdded: "Staff added to the record.",
+    inviteStaff: "Request access",
+    staffAdded: "Request sent for approval.",
+    staffSearch: "Search staff...",
+    noStaffFound: "No staff matched that search.",
     callPatient: "Call patient",
     videoCall: "Video call",
     mediaLibrary: "Files",
@@ -676,6 +688,8 @@ export default function InboxPage() {
   const [mediaLibraryTab, setMediaLibraryTab] = useState<MediaTab>("media");
   const [showCareStaffInvite, setShowCareStaffInvite] = useState(false);
   const [careStaffInviteIds, setCareStaffInviteIds] = useState<string[]>([]);
+  const [careStaffSearch, setCareStaffSearch] = useState("");
+  const [mediaUnreadCounts, setMediaUnreadCounts] = useState<Record<string, number>>({});
   const [displayNameEdit, setDisplayNameEdit] = useState("");
   const [phoneEdit, setPhoneEdit] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -1122,6 +1136,21 @@ export default function InboxPage() {
           : staffDirectory
   );
   const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id));
+  const careStaffInviteDirectory = sortCareTeamMembers(
+    staffDirectory.filter((member) => {
+      const search = careStaffSearch.trim().toLowerCase();
+      if (!search) return true;
+      return [
+        member.full_name,
+        member.display_name,
+        member.role,
+        member.office_location,
+        member.phone,
+      ]
+        .filter(Boolean)
+        .some((value) => `${value}`.toLowerCase().includes(search));
+    })
+  );
   const staffPrivateConversations = useMemo<StaffPrivateConversation[]>(() => {
     if (!currentUserId) return [];
     const grouped = new Map<string, StaffPrivateMessage[]>();
@@ -1509,10 +1538,12 @@ export default function InboxPage() {
   }, [patients, t.patientLabel]);
   const translationKey = useCallback((messageId: string | number, targetLang: "es" | "en") => `incoming_translate_${String(messageId)}_${targetLang}`, []);
   const alertMessageStorageKey = useCallback((roomId: string) => `last_alert_message_${roomId}`, []);
+  const mediaUnreadStorageKey = useCallback((roomId: string) => `media_unread_${roomId}`, []);
   const incomingMessageKey = useCallback((message: any) => {
     if (!message) return "";
     return `${message.room_id || ""}:${message.id || "no-id"}:${message.created_at || ""}:${message.sender_type || ""}:${message.message_type || ""}`;
   }, []);
+  const isMediaMessage = useCallback((message: any) => ["image", "video", "file"].includes(`${message?.message_type || ""}`), []);
 
   const updateAutoScrollPreference = useCallback(() => {
     const container = chatScrollRef.current;
@@ -1543,6 +1574,24 @@ export default function InboxPage() {
       toastTimeoutRef.current = setTimeout(() => setToastAlert(null), 4500);
     }
   }, []);
+
+  const registerIncomingStaffMedia = useCallback((message: any) => {
+    if (!message?.room_id || !isMediaMessage(message) || message.sender_id === currentUserId) return;
+    const roomId = message.room_id;
+    const staffName = message.sender_name || (lang === "es" ? "el equipo" : "the team");
+    const patientName = roomPatientName(roomId);
+    const body = lang === "es"
+      ? `Nuevo archivo agregado por ${staffName} para ${patientName}`
+      : `New file added by ${staffName} for ${patientName}`;
+
+    setMediaUnreadCounts((current) => {
+      const nextCount = (current[roomId] || Number(localStorage.getItem(mediaUnreadStorageKey(roomId)) || 0)) + 1;
+      localStorage.setItem(mediaUnreadStorageKey(roomId), String(nextCount));
+      return { ...current, [roomId]: nextCount };
+    });
+    showToastAlert(roomId, patientName, body);
+    pushNotif(patientName, body);
+  }, [currentUserId, isMediaMessage, lang, mediaUnreadStorageKey, pushNotif, roomPatientName, showToastAlert]);
 
   const openToastRoom = useCallback((mode: "chat" | "read-note" | "add-note" = "chat") => {
     if (!toastAlert) return;
@@ -2115,6 +2164,9 @@ export default function InboxPage() {
         if (m.sender_type === "staff" && m.is_internal && m.sender_id && m.sender_id !== currentUserId) {
           registerIncomingInternalNote(m);
         }
+        if (m.sender_type === "staff" && !m.is_internal && m.sender_id && m.sender_id !== currentUserId && isMediaMessage(m)) {
+          registerIncomingStaffMedia(m);
+        }
         if (selectedRoomRef.current?.id===m.room_id) {
           setMessages(prev=>{
             const ti=prev.findIndex(x=>typeof x.id==="string"&&x.id.startsWith("temp-")&&x.content===m.content&&x.sender_type===m.sender_type);
@@ -2127,7 +2179,7 @@ export default function InboxPage() {
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},({new:m})=>{ if (selectedRoomRef.current?.id===m.room_id) setMessages(p=>p.map(x=>x.id===m.id?m:x)); })
       .subscribe();
     return ()=>{ supabase.removeChannel(ch); };
-  },[currentUserId, registerIncomingInternalNote, registerIncomingPatientMessage]);
+  },[currentUserId, isMediaMessage, registerIncomingInternalNote, registerIncomingPatientMessage, registerIncomingStaffMedia]);
 
   useEffect(() => {
     const activeRoomId = selectedRoomRef.current?.id;
@@ -2150,6 +2202,17 @@ export default function InboxPage() {
     return ()=>{ clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
   },[]);
 
+  useEffect(() => {
+    const next: Record<string, number> = {};
+    patients.forEach((patient) => {
+      (patient.rooms || []).forEach((room: any) => {
+        const count = Number(localStorage.getItem(mediaUnreadStorageKey(room.id)) || 0);
+        if (count > 0) next[room.id] = count;
+      });
+    });
+    setMediaUnreadCounts(next);
+  }, [mediaUnreadStorageKey, patients]);
+
   useEffect(()=>{
     if (selectedRoom) {
       shouldAutoScrollRef.current = true;
@@ -2159,8 +2222,15 @@ export default function InboxPage() {
       fetchSelectedRoomTeam(selectedRoom.id);
       setMobileView("chat");
       markRoomAsRead(selectedRoom.id);
+      localStorage.removeItem(mediaUnreadStorageKey(selectedRoom.id));
+      setMediaUnreadCounts((current) => {
+        if (!current[selectedRoom.id]) return current;
+        const next = { ...current };
+        delete next[selectedRoom.id];
+        return next;
+      });
     }
-  },[markRoomAsRead, selectedRoom]);
+  },[markRoomAsRead, mediaUnreadStorageKey, selectedRoom]);
 
   // Fallback: refresh sidebar/messages frequently in case realtime drops events on mobile or background tabs
   useEffect(()=>{
@@ -2587,6 +2657,18 @@ export default function InboxPage() {
       const { data: nm } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
       if (nm) setMessages(p=>p.map(m=>m.id===tempId?nm:m));
       else setMessages(p=>p.filter(m=>m.id!==tempId));
+      if (mt === "image" || mt === "video") {
+        await supabase.from("media_uploads").insert({
+          patient_id: patientId,
+          room_id: selectedRoom.id,
+          message_id: nm?.id || null,
+          uploaded_by: currentUserId || null,
+          staff_name: sName,
+          type: mt === "image" ? "photo" : "video",
+          url: ud.publicUrl,
+          created_at: new Date().toISOString(),
+        }).then(() => undefined);
+      }
       if (cat === "medication") {
         setMediaLibraryTab("docs");
         setShowMediaLibrary(true);
@@ -2761,34 +2843,28 @@ export default function InboxPage() {
 
   const addCareStaffToSelectedRoom = async () => {
     if (!selectedRoom || careStaffInviteIds.length === 0 || savingTeam) return;
-    setSavingTeam(true);
+    const patientId = selectedRoom.procedures?.patients?.id || null;
     const existingIds = new Set(selectedRoomTeam.map((member) => member.id));
-    const nextIds = careStaffInviteIds.filter((id) => !existingIds.has(id));
-    const rows = nextIds.map((memberId) => {
-      const profile = staffDirectory.find((entry) => entry.id === memberId);
-      return {
-        room_id: selectedRoom.id,
-        user_id: memberId,
-        role: profile?.role || "staff",
-      };
-    });
-    const { error } = rows.length ? await supabase.from("room_members").insert(rows) : { error: null };
+    const targetIds = careStaffInviteIds.filter((id) => !existingIds.has(id));
+    if (targetIds.length === 0) return;
+    setSavingTeam(true);
+    const rows = targetIds.map((memberId) => ({
+      patient_id: patientId,
+      room_id: selectedRoom.id,
+      requested_by: currentUserId || null,
+      target_staff_id: memberId,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase.from("staff_access_requests").insert(rows);
     setSavingTeam(false);
     if (error) {
-      alert(lang === "es" ? "No pude agregar personal al paciente." : "I could not add staff to the patient.");
+      alert(error.message || (lang === "es" ? "No pude guardar la solicitud." : "I could not save the request."));
       return;
     }
-    await fetchSelectedRoomTeam(selectedRoom.id);
     setCareStaffInviteIds([]);
+    setCareStaffSearch("");
     setShowCareStaffInvite(false);
-    sendPushNotification({
-      roomId: selectedRoom.id,
-      userType: "staff",
-      title: lang === "es" ? "Nuevo paciente asignado" : "New assigned patient",
-      body: `${selectedRoom.procedures?.patients?.full_name || t.patientLabel}`,
-      url: window.location.href,
-      tag: `care-team-${selectedRoom.id}`,
-    });
     alert(t.staffAdded);
   };
 
@@ -4610,8 +4686,17 @@ export default function InboxPage() {
               </div>
               <button onClick={()=>setShowCareStaffInvite(false)} style={{background:cardBg,border:"none",borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
             </div>
+            <input
+              className="finput"
+              value={careStaffSearch}
+              onChange={(event)=>setCareStaffSearch(event.target.value)}
+              placeholder={t.staffSearch}
+              style={{marginBottom:12}}
+            />
             <div style={{display:"grid",gap:8,maxHeight:"50dvh",overflowY:"auto",paddingRight:2}}>
-              {staffDirectory.filter((member)=>member.id !== currentUserId).map((member)=> {
+              {careStaffInviteDirectory.length === 0 ? (
+                <p style={{fontSize:uiBaseSize,color:subTextColor,lineHeight:1.45}}>{t.noStaffFound}</p>
+              ) : careStaffInviteDirectory.map((member)=> {
                 const alreadyAssigned = selectedRoomTeam.some((entry)=>entry.id === member.id);
                 const checked = alreadyAssigned || careStaffInviteIds.includes(member.id);
                 return (
@@ -4954,18 +5039,8 @@ export default function InboxPage() {
                       <div className="staff-menu-popup">
                         <button className="staff-menu-item" onClick={()=>{
                           setShowMediaMenu(false);
-                          galleryInputRef.current?.click();
-                        }}>{lang==="es" ? "Foto de galería" : "Photo from gallery"}</button>
-                        <button className="staff-menu-item" onClick={()=>{
-                          setShowMediaMenu(false);
-                          if (prefersNativeCapture) cameraInputRef.current?.click();
-                          else openCapture("photo");
-                        }}>{lang==="es" ? "Tomar foto" : "Take photo"}</button>
-                        <button className="staff-menu-item" onClick={()=>{
-                          setShowMediaMenu(false);
-                          if (prefersNativeCapture) videoInputRef.current?.click();
-                          else openCapture("video");
-                        }}>{lang==="es" ? "Video" : "Video"}</button>
+                          openCapture("photo");
+                        }}>{t.capture}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}}>{lang==="es" ? "Recetas" : "Prescriptions"}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowMediaLibrary(true);}}>{t.mediaLibrary}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setCareStaffInviteIds([]);setShowCareStaffInvite(true);}}>{t.addCareStaff}</button>

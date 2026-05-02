@@ -60,6 +60,17 @@ type StaffPrivateConversation = {
   latestAt: string;
 };
 
+type StaffAccessRequest = {
+  id: string;
+  patient_id?: string | null;
+  room_id?: string | null;
+  requested_by?: string | null;
+  target_staff_id?: string | null;
+  requested_staff_id?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+};
+
 export default function AdminPage() {
   const { lang, setLang, isSpanish } = useAdminLang();
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -69,6 +80,7 @@ export default function AdminPage() {
   const [viewerId, setViewerId] = useState("");
   const [viewerProfile, setViewerProfile] = useState<StaffProfile | null>(null);
   const [staff, setStaff] = useState<StaffProfile[]>([]);
+  const [pendingAccessRequests, setPendingAccessRequests] = useState<StaffAccessRequest[]>([]);
   const [staffPrivateMessages, setStaffPrivateMessages] = useState<StaffPrivateMessage[]>([]);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [procedures, setProcedures] = useState<ProcedureRecord[]>([]);
@@ -93,9 +105,10 @@ export default function AdminPage() {
   const [exportMenu, setExportMenu] = useState<{ type: "patient" | "staff"; id: string; title: string; body: string } | null>(null);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
-  const hasAdminAccess = ["owner", "super_admin"].includes(viewerAdminLevel);
+  const hasAdminAccess = ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
   const canManageAdmins = ["owner", "super_admin"].includes(viewerAdminLevel);
   const canManageOwner = isOwnerEmail(viewerEmail);
+  const canReviewAccessRequests = ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
 
   const officeText = (office: Office) => {
     if (office === "Guadalajara") return "📍 Guadalajara";
@@ -191,6 +204,14 @@ export default function AdminPage() {
   const adminAccessCount = staff.filter((member) => normalizeAdminLevel(member.admin_level, member.id === viewerId ? viewerEmail : "") !== "none").length;
   const inviteCodePreview = inviteCode ? `${inviteCode.slice(0, Math.min(7, inviteCode.length))}••••` : "";
   const staffById = useMemo(() => new Map(staff.map((member) => [member.id, member])), [staff]);
+  const patientById = useMemo(() => new Map(patients.map((patient) => [patient.id, patient])), [patients]);
+  const procedureById = useMemo(() => new Map(procedures.map((procedure) => [procedure.id, procedure])), [procedures]);
+  const roomById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
+  const accessRequestTargetId = (request: StaffAccessRequest) => request.target_staff_id || request.requested_staff_id || "";
+  const accessRequestPatientName = (request: StaffAccessRequest) => {
+    const patientId = request.patient_id || (request.room_id ? procedureById.get(roomById.get(request.room_id)?.procedure_id || "")?.patient_id : "");
+    return patientById.get(patientId || "")?.full_name || (isSpanish ? "Paciente sin nombre" : "Unnamed patient");
+  };
   const privateMessageText = (message: StaffPrivateMessage) => message.content || message.message || message.body || "";
   const privateRecipientId = (message: StaffPrivateMessage) => message.recipient_id || message.receiver_id || message.to_user_id || message.target_user_id || "";
   const staffPrivateConversations = useMemo<StaffPrivateConversation[]>(() => {
@@ -253,12 +274,13 @@ export default function AdminPage() {
   const fetchData = async () => {
     setPageError("");
 
-    const [staffRes, patientsRes, proceduresRes, roomsRes, staffPrivateMessagesRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
+    const [staffRes, patientsRes, proceduresRes, roomsRes, staffPrivateMessagesRes, accessRequestsRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("patients").select("*").order("full_name"),
       supabase.from("procedures").select("*"),
       supabase.from("rooms").select("*").order("created_at", { ascending: false }),
       supabase.from("staff_private_messages").select("*").order("created_at", { ascending: false }).limit(500),
+      supabase.from("staff_access_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle(),
@@ -271,6 +293,7 @@ export default function AdminPage() {
       patientsRes.error ? "No pude cargar los pacientes." : "",
       proceduresRes.error ? "No pude cargar los procedimientos." : "",
       roomsRes.error ? "No pude cargar las salas." : "",
+      accessRequestsRes.error ? "No pude cargar solicitudes pendientes." : "",
       inviteRes.error ? "No pude cargar el código de invitación." : "",
       blockedEmailsRes.error ? "No pude cargar correos bloqueados." : "",
       blockedPhonesRes.error ? "No pude cargar teléfonos bloqueados." : "",
@@ -283,6 +306,7 @@ export default function AdminPage() {
     setProcedures((proceduresRes.data || []) as ProcedureRecord[]);
     setRooms((roomsRes.data || []) as RoomRecord[]);
     setStaffPrivateMessages(staffPrivateMessagesRes.error ? [] : ((staffPrivateMessagesRes.data || []) as StaffPrivateMessage[]));
+    setPendingAccessRequests(accessRequestsRes.error ? [] : ((accessRequestsRes.data || []) as StaffAccessRequest[]));
     setInviteCode((inviteRes.data?.value as string) || "");
     setBlockedEmails(parseSettingList(blockedEmailsRes.data?.value).map((item) => item.toLowerCase()));
     setBlockedPhones(parseSettingList(blockedPhonesRes.data?.value));
@@ -320,7 +344,7 @@ export default function AdminPage() {
     }
 
     const computedAdminLevel = normalizeAdminLevel((profile as StaffProfile | null)?.admin_level, email);
-    const computedAccess = ["owner", "super_admin"].includes(computedAdminLevel);
+    const computedAccess = ["owner", "super_admin", "admin"].includes(computedAdminLevel);
     if (!computedAccess) {
       setSessionChecked(true);
       setLoading(false);
@@ -488,6 +512,61 @@ export default function AdminPage() {
       metadata: { office_phone_guadalajara: officePhoneGdl, office_phone_tijuana: officePhoneTjn },
     });
     updateSuccess(isSpanish ? "Teléfonos de sede actualizados." : "Office phone numbers updated.");
+  };
+
+  const approveAccessRequest = async (request: StaffAccessRequest) => {
+    if (!canReviewAccessRequests) return;
+    const targetStaffId = accessRequestTargetId(request);
+    if (!request.room_id || !targetStaffId) {
+      setPageError(isSpanish ? "Solicitud incompleta." : "Incomplete request.");
+      return;
+    }
+
+    setSavingKey(`access-request-${request.id}`);
+    const targetStaff = staffById.get(targetStaffId);
+    const { error: memberError } = await supabase.from("room_members").insert({
+      room_id: request.room_id,
+      user_id: targetStaffId,
+      role: targetStaff?.role || "staff",
+    });
+
+    if (memberError) {
+      setSavingKey("");
+      setPageError(memberError.message || (isSpanish ? "No pude aprobar la solicitud." : "I could not approve the request."));
+      return;
+    }
+
+    const { error: requestError } = await supabase
+      .from("staff_access_requests")
+      .update({ status: "approved", reviewed_by: viewerId || null, reviewed_at: new Date().toISOString() })
+      .eq("id", request.id);
+
+    setSavingKey("");
+    if (requestError) {
+      setPageError(requestError.message || (isSpanish ? "No pude cerrar la solicitud." : "I could not close the request."));
+      return;
+    }
+
+    setPendingAccessRequests((current) => current.filter((item) => item.id !== request.id));
+    updateSuccess(isSpanish ? "Solicitud aprobada." : "Request approved.");
+  };
+
+  const rejectAccessRequest = async (request: StaffAccessRequest) => {
+    if (!canReviewAccessRequests) return;
+    setSavingKey(`access-request-${request.id}`);
+    const { error } = await supabase
+      .from("staff_access_requests")
+      .update({ status: "rejected", reviewed_by: viewerId || null, reviewed_at: new Date().toISOString() })
+      .eq("id", request.id);
+
+    setSavingKey("");
+    if (error) {
+      setPageError(error.message || (isSpanish ? "No pude rechazar la solicitud." : "I could not reject the request."));
+      return;
+    }
+
+    setPendingAccessRequests((current) => current.filter((item) => item.id !== request.id));
+    updateSuccess(isSpanish ? "Solicitud rechazada." : "Request rejected.");
   };
 
   const copyInviteLink = async () => {
@@ -1191,6 +1270,45 @@ export default function AdminPage() {
                   )}
                 </div>
               </section>
+
+              {canReviewAccessRequests && (
+                <section className="card" id="solicitudes-pendientes">
+                  <div className="header-row">
+                    <div>
+                      <p className="card-title">Solicitudes pendientes</p>
+                      <p className="muted">{isSpanish ? "Revisa quién pidió acceso a un paciente." : "Review who requested access to a patient."}</p>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {pendingAccessRequests.length === 0 ? (
+                      <p className="muted">{isSpanish ? "No hay solicitudes pendientes." : "No pending requests."}</p>
+                    ) : (
+                      pendingAccessRequests.map((request) => {
+                        const targetStaffId = accessRequestTargetId(request);
+                        const targetStaff = staffById.get(targetStaffId);
+                        const busy = savingKey === `access-request-${request.id}`;
+                        return (
+                          <div key={request.id} className="list-action-row">
+                            <span className="avatar small-avatar">{initials(targetStaff?.full_name || targetStaff?.display_name)}</span>
+                            <span style={{ minWidth: 0, flex: 1 }}>
+                              <strong>{targetStaff?.full_name || targetStaff?.display_name || (isSpanish ? "Personal" : "Staff")}</strong>
+                              <span>{accessRequestPatientName(request)}</span>
+                            </span>
+                            <div className="inline-actions">
+                              <button className="mini-btn" disabled={busy} onClick={() => approveAccessRequest(request)} style={{ background: "#DCFCE7", color: "#166534" }}>
+                                {busy ? (isSpanish ? "Guardando..." : "Saving...") : "Aprobar"}
+                              </button>
+                              <button className="mini-btn" disabled={busy} onClick={() => rejectAccessRequest(request)} style={{ background: "#FEE2E2", color: "#B91C1C" }}>
+                                {busy ? (isSpanish ? "Guardando..." : "Saving...") : "Rechazar"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </section>
+              )}
 
               <section className="card" id="pacientes-activos">
                 <div className="header-row">
