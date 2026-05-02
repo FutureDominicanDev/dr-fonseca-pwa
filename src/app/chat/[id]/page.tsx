@@ -183,9 +183,33 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       }
 
       if (roomData.patient_access_token && roomData.patient_access_token !== token) {
-        setAccessDenied(true);
-        setAccessReady(true);
-        return false;
+        const { data: authData } = await supabase.auth.getUser();
+        const staffId = authData.user?.id || "";
+        let staffCanOpenRoom = false;
+        if (staffId) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("admin_level")
+            .eq("id", staffId)
+            .maybeSingle();
+          const adminLevel = `${profile?.admin_level || ""}`.toLowerCase();
+          if (["owner", "super_admin"].includes(adminLevel)) {
+            staffCanOpenRoom = true;
+          } else {
+            const { data: membership } = await supabase
+              .from("room_members")
+              .select("id")
+              .eq("room_id", id)
+              .eq("user_id", staffId)
+              .maybeSingle();
+            staffCanOpenRoom = Boolean(membership?.id);
+          }
+        }
+        if (!staffCanOpenRoom) {
+          setAccessDenied(true);
+          setAccessReady(true);
+          return false;
+        }
       }
 
       setRoom(roomData);

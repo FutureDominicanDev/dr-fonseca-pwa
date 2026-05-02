@@ -41,6 +41,22 @@ const formatPhoneLocal = (value: string) => {
   return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 10)}-${digits.slice(10)}`;
 };
 
+const splitPhoneNumber = (value?: string | null) => {
+  const raw = `${value || ""}`.trim();
+  const option = PHONE_COUNTRY_OPTIONS.find((entry) => raw.replace(/\s/g, "").startsWith(entry.code));
+  const code = option?.code || "+52";
+  const local = raw
+    .replace(/\s/g, "")
+    .replace(new RegExp(`^\\${code}`), "")
+    .replace(/^\+/, "");
+  return { code, local: formatPhoneLocal(local) };
+};
+
+const joinPhoneNumber = (code: string, local: string) => {
+  const digits = local.replace(/\D/g, "");
+  return digits ? `${code}${digits}` : "";
+};
+
 const createPatientAccessToken = () => {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
@@ -726,11 +742,17 @@ export default function InboxPage() {
   const [savingLabel, setSavingLabel] = useState(false);
   const [showTopMenu, setShowTopMenu] = useState(false);
   const [displayNameEdit, setDisplayNameEdit] = useState("");
-  const [phoneEdit, setPhoneEdit] = useState("");
+  const [phoneCountryEdit, setPhoneCountryEdit] = useState("+52");
+  const [phoneLocalEdit, setPhoneLocalEdit] = useState("");
+  const phoneEdit = joinPhoneNumber(phoneCountryEdit, phoneLocalEdit);
   const [savingName, setSavingName] = useState(false);
   const [savedName, setSavedName] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
   const [savedPhone, setSavedPhone] = useState(false);
+  const [editingPrescriptionEntry, setEditingPrescriptionEntry] = useState<any | null>(null);
+  const [prescriptionEditTitle, setPrescriptionEditTitle] = useState("");
+  const [prescriptionEditInstructions, setPrescriptionEditInstructions] = useState("");
+  const [savingPrescriptionRename, setSavingPrescriptionRename] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [patientTyping, setPatientTyping] = useState(false);
@@ -2048,7 +2070,14 @@ export default function InboxPage() {
 
   const fetchProfile = async (id: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id",id).single();
-    if (data) { setUserProfile(data); setDisplayNameEdit(data.full_name||data.display_name||""); setPhoneEdit(data.phone || ""); if (data.quick_replies?.length) setQuickReplies(data.quick_replies); }
+    if (data) {
+      const phoneParts = splitPhoneNumber(data.phone);
+      setUserProfile(data);
+      setDisplayNameEdit(data.full_name||data.display_name||"");
+      setPhoneCountryEdit(phoneParts.code);
+      setPhoneLocalEdit(phoneParts.local);
+      if (data.quick_replies?.length) setQuickReplies(data.quick_replies);
+    }
   };
 
   const fetchUserLabels = useCallback(async () => {
@@ -3431,6 +3460,40 @@ export default function InboxPage() {
   const roomPrescriptionEntries = roomMediaEntries.filter((entry) => isPrescriptionEntry(entry));
   const roomFormEntries = roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content));
   const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry));
+  const prescriptionInfo = (entry: any) => {
+    const clean = `${entry?.file_name || t.prescriptions}`.replace(/^\[MED\]\s*/, "").trim();
+    const [title, ...instructions] = clean.split(/\n+/);
+    return {
+      title: (title || t.prescriptions).trim(),
+      instructions: instructions.join("\n").trim(),
+    };
+  };
+  const openPrescriptionRename = (entry: any) => {
+    const info = prescriptionInfo(entry);
+    setEditingPrescriptionEntry(entry);
+    setPrescriptionEditTitle(info.title);
+    setPrescriptionEditInstructions(info.instructions);
+  };
+  const savePrescriptionRename = async () => {
+    if (!editingPrescriptionEntry?.id || !prescriptionEditTitle.trim() || savingPrescriptionRename) return;
+    const nextName = `[MED] ${prescriptionEditTitle.trim()}${prescriptionEditInstructions.trim() ? `\n${prescriptionEditInstructions.trim()}` : ""}`;
+    setSavingPrescriptionRename(true);
+    const { data, error } = await supabase
+      .from("messages")
+      .update({ file_name: nextName })
+      .eq("id", editingPrescriptionEntry.id)
+      .select()
+      .single();
+    setSavingPrescriptionRename(false);
+    if (error) {
+      alert(error.message || (lang === "es" ? "No pude renombrar la receta." : "I could not rename this prescription."));
+      return;
+    }
+    if (data) setMessages((current) => current.map((entry) => entry.id === data.id ? data : entry));
+    setEditingPrescriptionEntry(null);
+    setPrescriptionEditTitle("");
+    setPrescriptionEditInstructions("");
+  };
   const formExportText = (entry: any) => {
     const payload = parseFormMessage(entry.content);
     if (!payload) return "";
@@ -3760,14 +3823,26 @@ export default function InboxPage() {
             <label style={{display:"block",fontSize:uiBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>
               {lang==="es"?"Número para llamadas internas del equipo":"Number for internal team calls"}
             </label>
-            <input
-              value={phoneEdit}
-              onChange={(event)=>setPhoneEdit(event.target.value)}
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="+52 664 123 4567"
-              style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 14px",fontSize:16,fontFamily:"inherit",fontWeight:650,marginBottom:10}}
-            />
+            <div style={{display:"grid",gridTemplateColumns:"minmax(132px, 0.45fr) 1fr",gap:8,marginBottom:10}}>
+              <select
+                value={phoneCountryEdit}
+                onChange={(event)=>setPhoneCountryEdit(event.target.value)}
+                aria-label={t.phoneCode}
+                style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 10px",fontSize:15,fontFamily:"inherit",fontWeight:850}}
+              >
+                {PHONE_COUNTRY_OPTIONS.map((option)=>(
+                  <option key={option.code} value={option.code}>{option.label}</option>
+                ))}
+              </select>
+              <input
+                value={phoneLocalEdit}
+                onChange={(event)=>setPhoneLocalEdit(formatPhoneLocal(event.target.value))}
+                inputMode="tel"
+                autoComplete="tel-national"
+                placeholder={t.phonePH}
+                style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 14px",fontSize:16,fontFamily:"inherit",fontWeight:650}}
+              />
+            </div>
             <button onClick={saveProfilePhone} disabled={savingPhone} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingPhone?0.55:1}}>
               {savingPhone ? (lang==="es"?"Guardando...":"Saving...") : savedPhone ? t.saved : t.save}
             </button>
@@ -4947,20 +5022,22 @@ export default function InboxPage() {
                 <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{t.prescriptions}</div>
                 {roomPrescriptionEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{t.noPrescriptions}</div>}
                 {roomPrescriptionEntries.map((entry:any)=>(
-                  <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
+                  <div key={entry.id} style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
                     <span style={{fontSize:22}}>💊</span>
                     {(() => {
-                      const clean = `${entry.file_name || t.prescriptions}`.replace(/^\[MED\]\s*/,"").trim();
-                      const [title, ...instructions] = clean.split(/\n+/);
+                      const info = prescriptionInfo(entry);
                       return (
-                        <div style={{display:"grid",gap:3}}>
-                          <div style={{fontWeight:800,fontSize:14}}>{title || t.prescriptions}</div>
-                          {instructions.join("\n").trim() && <div style={{fontWeight:600,fontSize:12,color:subTextColor,lineHeight:1.35,whiteSpace:"pre-wrap"}}>{instructions.join("\n").trim()}</div>}
+                        <a href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"grid",gap:3,flex:1,minWidth:0,textDecoration:"none",color:textColor}}>
+                          <div style={{fontWeight:800,fontSize:14,overflowWrap:"anywhere"}}>{info.title}</div>
+                          {info.instructions && <div style={{fontWeight:600,fontSize:12,color:subTextColor,lineHeight:1.35,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{info.instructions}</div>}
                           <div style={{fontWeight:800,fontSize:12,color:subTextColor}}>{t.uploadedBy}: {mediaUploaderName(entry)}</div>
-                        </div>
+                        </a>
                       );
                     })()}
-                  </a>
+                    <button type="button" onClick={()=>openPrescriptionRename(entry)} style={{border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",padding:"9px 10px",fontFamily:"inherit",fontSize:12,fontWeight:900,cursor:"pointer",flexShrink:0}}>
+                      {lang === "es" ? "Editar" : "Edit"}
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -5058,6 +5135,33 @@ export default function InboxPage() {
       {showSettings && SettingsPanel()}
       {showStaffChats && StaffChatsPanel()}
       {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
+      {editingPrescriptionEntry && (
+        <div className="modal-overlay" onClick={()=>setEditingPrescriptionEntry(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:460}}>
+            <p className="modal-title">{lang === "es" ? "Editar nombre de receta" : "Edit prescription name"}</p>
+            <label className="flabel">{lang === "es" ? "Nombre visible" : "Display name"}</label>
+            <input
+              className="finput"
+              value={prescriptionEditTitle}
+              onChange={(event)=>setPrescriptionEditTitle(event.target.value)}
+              placeholder={lang === "es" ? "Ej: Clindamicina" : "Example: Clindamycin"}
+            />
+            <label className="flabel" style={{marginTop:12}}>{t.prescriptionInstructions}</label>
+            <textarea
+              className="finput"
+              rows={3}
+              value={prescriptionEditInstructions}
+              onChange={(event)=>setPrescriptionEditInstructions(event.target.value)}
+              placeholder={lang === "es" ? "Ej: 1 tableta cada 8 horas por 7 días" : "Example: 1 tablet every 8 hours for 7 days"}
+              style={{resize:"vertical",minHeight:90}}
+            />
+            <button className="pbtn" disabled={!prescriptionEditTitle.trim() || savingPrescriptionRename} onClick={savePrescriptionRename}>
+              {savingPrescriptionRename ? (lang === "es" ? "Guardando..." : "Saving...") : t.save}
+            </button>
+            <button className="sbtn" onClick={()=>setEditingPrescriptionEntry(null)}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
       {activeMessageAction && (
         <div className="modal-overlay" onClick={closeMessageActions}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
