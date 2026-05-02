@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import AppUpdateWatcher from "./AppUpdateWatcher";
 import NativeKeyboardTuning from "./NativeKeyboardTuning";
 import "./globals.css";
 
@@ -67,6 +68,7 @@ export default function RootLayout({
       </head>
       <body>
         <NativeKeyboardTuning />
+        <AppUpdateWatcher />
         {children}
       </body>
     </html>

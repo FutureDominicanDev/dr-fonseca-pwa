@@ -10,7 +10,7 @@ import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
 type PhoneCountryOption = { code: string; label: string };
-type MediaTab = "media" | "audio" | "prescriptions" | "docs";
+type MediaTab = "media" | "audio" | "prescriptions" | "forms" | "docs";
 type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
 type InternalNoteVisibility = "team" | "private";
 
@@ -114,6 +114,14 @@ const T = {
     videoCall: "Videollamada",
     mediaLibrary: "Archivos",
     prescriptions: "Recetas",
+    forms: "Formulario",
+    formFolderTitle: "Formulario del paciente",
+    noForms: "Todavía no hay formularios enviados.",
+    exportForm: "Exportar",
+    shareForm: "Compartir",
+    emailForm: "Correo",
+    messageForm: "Mensaje",
+    printForm: "PDF / Imprimir",
     noPrescriptions: "Sin recetas todavía.",
     prescriptionLabel: "Nombre de la receta",
     prescriptionLabelPH: "Ej: Ibuprofeno 800 mg",
@@ -251,6 +259,14 @@ const T = {
     videoCall: "Video call",
     mediaLibrary: "Files",
     prescriptions: "Prescriptions",
+    forms: "Form",
+    formFolderTitle: "Patient form",
+    noForms: "No submitted forms yet.",
+    exportForm: "Export",
+    shareForm: "Share",
+    emailForm: "Email",
+    messageForm: "Message",
+    printForm: "PDF / Print",
     noPrescriptions: "No prescriptions yet.",
     prescriptionLabel: "Prescription name",
     prescriptionLabelPH: "e.g. Ibuprofen 800 mg",
@@ -2516,7 +2532,87 @@ export default function InboxPage() {
   const roomImageVideoEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && (entry.message_type === "image" || entry.message_type === "video"));
   const roomAudioEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && entry.message_type === "audio");
   const roomPrescriptionEntries = roomMediaEntries.filter((entry) => isPrescriptionEntry(entry));
+  const roomFormEntries = roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content));
   const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry));
+  const formExportText = (entry: any) => {
+    const payload = parseFormMessage(entry.content);
+    if (!payload) return "";
+    const labels = lang === "es"
+      ? {
+          title: "Formulario del paciente",
+          fullName: "Nombre completo",
+          birthdate: "Fecha de nacimiento",
+          phone: "Teléfono",
+          email: "Correo",
+          allergies: "Alergias",
+          medications: "Medicamentos actuales",
+          conditions: "Enfermedades o condiciones",
+          surgeries: "Cirugías previas",
+          notes: "Notas importantes",
+          submitted: "Enviado",
+        }
+      : {
+          title: "Patient form",
+          fullName: "Full name",
+          birthdate: "Date of birth",
+          phone: "Phone",
+          email: "Email",
+          allergies: "Allergies",
+          medications: "Current medications",
+          conditions: "Medical conditions",
+          surgeries: "Previous surgeries",
+          notes: "Important notes",
+          submitted: "Submitted",
+        };
+    const submitted = payload.submittedAt ? new Date(payload.submittedAt).toLocaleString(lang === "es" ? "es-MX" : "en-US") : fmtDateLabel(entry.created_at || "");
+    return [
+      labels.title,
+      `${labels.submitted}: ${submitted}`,
+      "",
+      `${labels.fullName}: ${payload.values.fullName || "-"}`,
+      `${labels.birthdate}: ${payload.values.birthdate || "-"}`,
+      `${labels.phone}: ${payload.values.phone || "-"}`,
+      `${labels.email}: ${payload.values.email || "-"}`,
+      `${labels.allergies}: ${payload.values.allergies || "-"}`,
+      `${labels.medications}: ${payload.values.medications || "-"}`,
+      `${labels.conditions}: ${payload.values.conditions || "-"}`,
+      `${labels.surgeries}: ${payload.values.surgeries || "-"}`,
+      `${labels.notes}: ${payload.values.notes || "-"}`,
+    ].join("\n");
+  };
+  const formExportTitle = (entry: any) => {
+    const payload = parseFormMessage(entry.content);
+    const patientName = payload?.values.fullName || selectedRoom?.procedures?.patients?.full_name || (lang === "es" ? "Paciente" : "Patient");
+    return `${lang === "es" ? "Formulario" : "Form"} - ${patientName}`;
+  };
+  const shareFormEntry = async (entry: any) => {
+    const text = formExportText(entry);
+    if (!text) return;
+    if (navigator.share) {
+      await navigator.share({ title: formExportTitle(entry), text });
+      return;
+    }
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    alert(lang === "es" ? "Formulario copiado para compartir." : "Form copied for sharing.");
+  };
+  const emailFormEntry = (entry: any) => {
+    const subject = encodeURIComponent(formExportTitle(entry));
+    const body = encodeURIComponent(formExportText(entry));
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+  const messageFormEntry = (entry: any) => {
+    const body = encodeURIComponent(formExportText(entry));
+    window.location.href = `sms:?&body=${body}`;
+  };
+  const printFormEntry = (entry: any) => {
+    const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const title = formExportTitle(entry);
+    const text = formExportText(entry);
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!printWindow) return;
+    printWindow.document.write(`<!doctype html><html><head><title>${escapeHtml(title)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;margin:24px;color:#111;line-height:1.55}h1{font-size:24px;margin:0 0 16px}pre{white-space:pre-wrap;font:16px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif}@media print{body{margin:12mm}}</style></head><body><h1>${escapeHtml(title)}</h1><pre>${escapeHtml(text)}</pre><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),350));</script></body></html>`);
+    printWindow.document.close();
+  };
   const appendEmojiToDraft = (emoji: string) => {
     const next = `${newMessage}${emoji}`;
     setComposerText(next);
@@ -3724,6 +3820,7 @@ export default function InboxPage() {
                 { key:"media", label: lang==="es" ? "Media" : "Media" },
                 { key:"audio", label: lang==="es" ? "Audios" : "Audio" },
                 { key:"prescriptions", label: lang==="es" ? "Recetas" : "Prescriptions" },
+                { key:"forms", label: t.forms },
                 { key:"docs", label: lang==="es" ? "Archivos" : "Files" },
               ] as { key: MediaTab; label: string }[]).map((tab)=>(
                 <button key={tab.key} onClick={()=>setMediaLibraryTab(tab.key)} style={{padding:"10px 14px",borderRadius:999,border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:800,background:mediaLibraryTab===tab.key?"#DBEAFE":cardBg,color:mediaLibraryTab===tab.key?"#1D4ED8":textColor}}>
@@ -3780,6 +3877,34 @@ export default function InboxPage() {
                     })()}
                   </a>
                 ))}
+              </div>
+            )}
+            {mediaLibraryTab==="forms" && (
+              <div style={{display:"grid",gap:10}}>
+                <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{t.formFolderTitle}</div>
+                {roomFormEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{t.noForms}</div>}
+                {roomFormEntries.map((entry:any)=> {
+                  const payload = parseFormMessage(entry.content);
+                  if (!payload) return null;
+                  return (
+                    <div key={entry.id} style={{display:"grid",gap:10,padding:12,borderRadius:16,background:cardBg,border:`1px solid ${borderColor}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                        <div>
+                          <div style={{fontSize:16,fontWeight:900,color:textColor}}>{formExportTitle(entry)}</div>
+                          <div style={{fontSize:12,fontWeight:800,color:subTextColor}}>{fmtDateLabel(entry.created_at || "")}</div>
+                        </div>
+                        <div style={{fontSize:12,fontWeight:900,color:"#1D4ED8",background:"#DBEAFE",borderRadius:999,padding:"6px 10px"}}>{t.forms}</div>
+                      </div>
+                      <FormMessage payload={payload} lang={lang} />
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(118px,1fr))",gap:8}}>
+                        <button type="button" onClick={()=>void shareFormEntry(entry)} style={{minHeight:44,border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",fontFamily:"inherit",fontSize:14,fontWeight:900,cursor:"pointer"}}>{t.shareForm}</button>
+                        <button type="button" onClick={()=>emailFormEntry(entry)} style={{minHeight:44,border:"none",borderRadius:12,background:"#FEF3C7",color:"#92400E",fontFamily:"inherit",fontSize:14,fontWeight:900,cursor:"pointer"}}>{t.emailForm}</button>
+                        <button type="button" onClick={()=>messageFormEntry(entry)} style={{minHeight:44,border:"none",borderRadius:12,background:"#DCFCE7",color:"#166534",fontFamily:"inherit",fontSize:14,fontWeight:900,cursor:"pointer"}}>{t.messageForm}</button>
+                        <button type="button" onClick={()=>printFormEntry(entry)} style={{minHeight:44,border:"none",borderRadius:12,background:"#E0E7FF",color:"#3730A3",fontFamily:"inherit",fontSize:14,fontWeight:900,cursor:"pointer"}}>{t.printForm}</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
             {mediaLibraryTab==="docs" && (
