@@ -1410,8 +1410,18 @@ export default function InboxPage() {
           +
         </button>
       )}
-      <button className="chat-exit-btn" type="button" onClick={leaveCurrentChatView}>
-        {lang==="es" ? "Salir" : "Exit"}
+      <button
+        className="chat-exit-btn"
+        type="button"
+        onClick={leaveCurrentChatView}
+        title={lang==="es" ? "Salir" : "Exit"}
+        aria-label={lang==="es" ? "Salir" : "Exit"}
+      >
+        <svg className="logout-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <path d="M16 17l5-5-5-5" />
+          <path d="M21 12H9" />
+        </svg>
       </button>
     </div>
   );
@@ -3916,6 +3926,9 @@ export default function InboxPage() {
 	        .admin-inline-btn { padding: 0 12px; min-height: 44px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: var(--app-ui-small-size); font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
         .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; max-width: 100%; }
         .staff-plus-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: #007AFF; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,122,255,0.3); font-size: 26px; line-height: 1; font-weight: 850; font-family: inherit; flex-shrink: 0; }
+        .chat-exit-btn { width: 44px; height: 44px; min-height: 44px; padding: 0; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#D5E4F2"}; border-radius: 50%; background: ${darkMode?"#1F2C34":"#F5F9FF"}; color: ${darkMode?"#DBEAFE":"#075EA8"}; cursor: pointer; flex-shrink: 0; font-family: inherit; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
+        .chat-exit-btn:hover { background: ${darkMode?"#263846":"#EAF3FF"}; }
+        .logout-icon { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; display: block; }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 16px 16px 12px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
@@ -3953,8 +3966,6 @@ export default function InboxPage() {
         .chat-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; box-shadow: 0 4px 14px rgba(16,52,83,0.18); }
         .chat-head-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	        .chat-head-sub { font-size: var(--app-ui-small-size); color: ${subTextColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-weight: 650; }
-        .chat-exit-btn { min-height: 44px; padding: 0 14px; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#D5E4F2"}; border-radius: 999px; background: ${darkMode?"#1F2C34":"#F5F9FF"}; color: ${darkMode?"#DBEAFE":"#075EA8"}; cursor: pointer; flex-shrink: 0; font-family: inherit; font-size: var(--app-ui-small-size); font-weight: 900; }
-        .chat-exit-btn:hover { background: ${darkMode?"#263846":"#EAF3FF"}; }
         .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
@@ -4042,7 +4053,8 @@ export default function InboxPage() {
           .topbar { height: calc(146px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
           .topbar-logo { grid-column: 1; justify-self: center; align-self: start; height: 92px; width: min(620px, 92vw); }
           .topbar-actions { right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); top: auto; bottom: 8px; transform: none; justify-content: flex-end; }
-          .topbar-actions .admin-inline-btn, .topbar-actions .chat-exit-btn { min-height: 40px; padding: 0 10px; font-size: 14px; }
+          .topbar-actions .admin-inline-btn { min-height: 40px; padding: 0 10px; font-size: 14px; }
+          .topbar-actions .chat-exit-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; }
           .topbar-actions .staff-plus-btn { width: 40px; height: 40px; min-height: 40px; }
           .sidebar-head { padding: 15px 14px 12px; }
           .patient-list { padding-left: 10px; padding-right: 10px; }
@@ -4061,7 +4073,7 @@ export default function InboxPage() {
 	          .room-progress { grid-template-columns: 1fr; }
 	          .room-grid-2, .room-phone-grid { grid-template-columns: 1fr; }
 	          .room-progress-step { padding: 8px 10px; }
-          .chat-exit-btn { padding: 0 12px; }
+          .chat-exit-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; }
 	        }
       `}</style>
 
@@ -4806,7 +4818,6 @@ export default function InboxPage() {
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
                   {canOpenAdmin&&<button className="admin-inline-btn" onClick={()=>window.location.href="/admin"}>Admin</button>}
-                  <StaffGlobalActions compact />
                 </div>
               </div>
               <div className="search-bar">
@@ -4893,7 +4904,6 @@ export default function InboxPage() {
                       </div>
                     )}
                   </div>
-                  <StaffGlobalActions compact />
                 </div>
 
                 <div
