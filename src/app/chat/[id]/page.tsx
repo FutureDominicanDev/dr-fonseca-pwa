@@ -792,12 +792,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         input { transition: box-shadow 170ms ease, background-color 170ms ease; }
         input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
         .chat-composer:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
+        .staff-exit-link { position: absolute; right: max(12px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); min-height: 44px; display: flex; align-items: center; justify-content: center; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.20); background: rgba(255,255,255,0.12); color: #fff; text-decoration: none; font-size: 14px; font-weight: 850; font-family: inherit; }
+        @media (max-width: 520px) { .staff-exit-link { right: max(8px, env(safe-area-inset-right)); padding: 0 11px; font-size: 13px; } }
         @keyframes messageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         @keyframes micPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(153,27,27,0.42); } 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(153,27,27,0); } }
       `}</style>
       <header style={{ position: "relative", height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
+        {viewerType === "staff" && (
+          <a className="staff-exit-link" href="/inbox">
+            Salir
+          </a>
+        )}
       </header>
 
       <section style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>

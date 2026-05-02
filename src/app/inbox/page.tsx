@@ -2743,7 +2743,9 @@ export default function InboxPage() {
                   : (lang==="es"?"Mensajes privados entre miembros del equipo.":"Private messages between team members.")}
               </p>
             </div>
-            <button onClick={()=>{setShowStaffChats(false);setActiveStaffChatPeerId(null);setStaffPrivateReply("");}} style={{background:cardBg,border:"none",borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:800,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
+            <button onClick={()=>{setShowStaffChats(false);setActiveStaffChatPeerId(null);setStaffPrivateReply("");}} style={{background:cardBg,border:`1px solid ${borderColor}`,borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:800,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>
+              {lang==="es" ? "Salir" : "Exit"}
+            </button>
           </div>
 
           {!activeStaffPrivateConversation ? (
@@ -3104,6 +3106,8 @@ export default function InboxPage() {
         .chat-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; box-shadow: 0 4px 14px rgba(16,52,83,0.18); }
         .chat-head-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	        .chat-head-sub { font-size: var(--app-ui-small-size); color: ${subTextColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-weight: 650; }
+        .chat-exit-btn { min-height: 44px; padding: 0 14px; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#D5E4F2"}; border-radius: 999px; background: ${darkMode?"#1F2C34":"#F5F9FF"}; color: ${darkMode?"#DBEAFE":"#075EA8"}; cursor: pointer; flex-shrink: 0; font-family: inherit; font-size: var(--app-ui-small-size); font-weight: 900; }
+        .chat-exit-btn:hover { background: ${darkMode?"#263846":"#EAF3FF"}; }
         .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
@@ -3208,6 +3212,7 @@ export default function InboxPage() {
 	          .room-progress { grid-template-columns: 1fr; }
 	          .room-grid-2, .room-phone-grid { grid-template-columns: 1fr; }
 	          .room-progress-step { padding: 8px 10px; }
+          .chat-exit-btn { padding: 0 12px; }
 	        }
       `}</style>
 
@@ -3989,6 +3994,13 @@ export default function InboxPage() {
                       </div>
                     )}
                   </div>
+                  <button
+                    className="chat-exit-btn"
+                    type="button"
+                    onClick={()=>{setMobileView("list");setSelectedRoom(null);setShowQREditor(false);setShowMediaMenu(false);setShowEmojiMenu(false);setShowSlashMenu(false);closeMessageActions();}}
+                  >
+                    {lang==="es" ? "Salir" : "Exit"}
+                  </button>
                 </div>
 
                 <div
