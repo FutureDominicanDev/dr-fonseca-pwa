@@ -416,67 +416,31 @@ export default function AdminPatientRecordPage() {
       return;
     }
 
-    const { data: patientData, error: patientError } = await supabase.from("patients").select("*").eq("id", patientId).maybeSingle();
-    if (patientError || !patientData) {
-      setPageError(patientError?.message || (isSpanish ? "No pude cargar este expediente." : "I could not load this record."));
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    if (!token) {
+      setPageError(isSpanish ? "Tu sesión expiró. Vuelve a iniciar sesión." : "Your session expired. Please sign in again.");
       setSessionChecked(true);
       setLoading(false);
       return;
     }
 
-    const { data: procedureData, error: procedureError } = await supabase.from("procedures").select("*").eq("patient_id", patientId);
-    if (procedureError) {
-      setPageError(procedureError.message || (isSpanish ? "No pude cargar los procedimientos." : "I could not load the procedures."));
+    const response = await fetch(`/api/admin/patient-record/${encodeURIComponent(patientId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setPageError(payload?.error || (isSpanish ? "No pude cargar este expediente." : "I could not load this record."));
       setSessionChecked(true);
       setLoading(false);
       return;
     }
 
-    const nextProcedures = (procedureData || []) as ProcedureRecord[];
-    const procedureIds = nextProcedures.map((procedure) => procedure.id);
-
-    let nextRooms: RoomRecord[] = [];
-    if (procedureIds.length > 0) {
-      const { data: roomData, error: roomError } = await supabase.from("rooms").select("*").in("procedure_id", procedureIds).order("created_at", { ascending: true });
-      if (roomError) {
-        setPageError(roomError.message || (isSpanish ? "No pude cargar las salas." : "I could not load the rooms."));
-        setSessionChecked(true);
-        setLoading(false);
-        return;
-      }
-      nextRooms = (roomData || []) as RoomRecord[];
-    }
-
-    const roomIds = nextRooms.map((room) => room.id);
-    let nextMessages: MessageRecord[] = [];
-    if (roomIds.length > 0) {
-      const { data: messageData, error: messageError } = await supabase
-        .from("messages")
-        .select("*")
-        .in("room_id", roomIds)
-        .order("created_at", { ascending: true });
-
-      if (messageError) {
-        setPageError(messageError.message || (isSpanish ? "No pude cargar el historial." : "I could not load the history."));
-        setSessionChecked(true);
-        setLoading(false);
-        return;
-      }
-      nextMessages = (messageData || []) as MessageRecord[];
-    }
-
-    const senderIds = [...new Set(nextMessages.map((message) => message.sender_id).filter(Boolean))] as string[];
-    let nextStaff: StaffProfile[] = [];
-    if (senderIds.length > 0) {
-      const { data: staffData } = await supabase.from("profiles").select("*").in("id", senderIds);
-      nextStaff = (staffData || []) as StaffProfile[];
-    }
-
-    setPatient(patientData as PatientRecord);
-    setProcedures(nextProcedures);
-    setRooms(nextRooms);
-    setMessages(nextMessages);
-    setStaffProfiles(nextStaff);
+    setPatient(payload.patient as PatientRecord);
+    setProcedures((payload.procedures || []) as ProcedureRecord[]);
+    setRooms((payload.rooms || []) as RoomRecord[]);
+    setMessages((payload.messages || []) as MessageRecord[]);
+    setStaffProfiles((payload.staffProfiles || []) as StaffProfile[]);
     setSessionChecked(true);
     setLoading(false);
   };
