@@ -724,6 +724,7 @@ export default function InboxPage() {
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#EF4444");
   const [savingLabel, setSavingLabel] = useState(false);
+  const [showTopMenu, setShowTopMenu] = useState(false);
   const [displayNameEdit, setDisplayNameEdit] = useState("");
   const [phoneEdit, setPhoneEdit] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -1510,6 +1511,8 @@ export default function InboxPage() {
       </button>
     </div>
   );
+
+  const closeTopMenu = () => setShowTopMenu(false);
   const careTeamOfficeGroups = [
     {
       key: "guadalajara",
@@ -2050,19 +2053,26 @@ export default function InboxPage() {
 
   const fetchUserLabels = useCallback(async () => {
     if (!currentUserId) return;
-    const { data, error } = await supabase
+    let query = await supabase
       .from("labels")
       .select("*")
       .eq("user_id", currentUserId)
       .order("created_at", { ascending: true });
-    if (!error) setUserLabels((data || []) as PatientLabel[]);
+    if (query.error && isMissingColumnError(query.error)) {
+      query = await supabase
+        .from("labels")
+        .select("*")
+        .eq("created_by", currentUserId)
+        .order("created_at", { ascending: true });
+    }
+    if (!query.error) setUserLabels((query.data || []) as PatientLabel[]);
   }, [currentUserId]);
 
   const createPatientLabel = async () => {
     const name = newLabelName.trim();
     if (!currentUserId || !name || savingLabel) return;
     setSavingLabel(true);
-    const { data, error } = await supabase
+    let insert = await supabase
       .from("labels")
       .insert({
         user_id: currentUserId,
@@ -2077,12 +2087,26 @@ export default function InboxPage() {
       })
       .select("*")
       .single();
+    if (insert.error && isMissingColumnError(insert.error)) {
+      insert = await supabase
+        .from("labels")
+        .insert({
+          name,
+          color: newLabelColor,
+          scope: "patient",
+          created_by: currentUserId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select("*")
+        .single();
+    }
     setSavingLabel(false);
-    if (error) {
-      alert(error.message || (lang === "es" ? "No pude crear la etiqueta." : "I could not create the label."));
+    if (insert.error) {
+      alert(insert.error.message || (lang === "es" ? "No pude crear la etiqueta." : "I could not create the label."));
       return;
     }
-    if (data) setUserLabels((current) => [...current, data as PatientLabel]);
+    if (insert.data) setUserLabels((current) => [...current, insert.data as PatientLabel]);
     setNewLabelName("");
   };
 
@@ -2095,7 +2119,11 @@ export default function InboxPage() {
         : { [currentUserId]: nextLabelIds };
     const { error } = await supabase.from("patients").update({ labels: nextLabels }).eq("id", selectedPatient.id);
     if (error) {
-      alert(error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
+      if (isMissingColumnError(error)) {
+        alert(lang === "es" ? "La etiqueta fue creada, pero falta ejecutar el SQL de labels para asignarla al paciente." : "The label was created, but the labels SQL still needs to be run before assigning it to a patient.");
+      } else {
+        alert(error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
+      }
       return;
     }
     setPatients((current) => current.map((patient) => patient.id === selectedPatient.id ? { ...patient, labels: nextLabels } : patient));
@@ -4261,6 +4289,12 @@ export default function InboxPage() {
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.18); box-shadow: 0 1px 0 rgba(0,0,0,0.14); }
         .topbar-logo { grid-column: 2; justify-self: center; align-self: center; height: 96px; width: min(760px, 96vw); object-fit: contain; object-position: center; display: block; }
         .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
+        .top-menu-wrap { position: relative; flex-shrink: 0; }
+        .top-menu-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#BFDBFE"}; background: ${darkMode?"#253244":"#EEF6FF"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: 24px; font-weight: 950; line-height: 1; display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 8px rgba(15,23,42,0.08); font-family: inherit; }
+        .top-menu-panel { position: absolute; top: calc(100% + 10px); right: 0; width: min(265px, calc(100vw - 28px)); background: ${darkMode?"#1F2C34":"#FFFFFF"}; color: ${textColor}; border: 1px solid ${borderColor}; border-radius: 16px; box-shadow: 0 18px 46px rgba(15,23,42,0.22); overflow: hidden; z-index: 260; }
+        .top-menu-item { width: 100%; min-height: 48px; border: none; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; background: transparent; color: ${textColor}; padding: 13px 16px; text-align: left; cursor: pointer; font-family: inherit; font-size: 15px; font-weight: 850; display: flex; align-items: center; gap: 10px; }
+        .top-menu-item:last-child { border-bottom: none; }
+        .top-menu-item:hover { background: ${darkMode?"#263846":"#F1F7FF"}; }
 	        .admin-inline-btn { padding: 0 12px; min-height: 44px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: var(--app-ui-small-size); font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
         .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; max-width: 100%; }
         .staff-plus-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: #007AFF; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,122,255,0.3); font-size: 26px; line-height: 1; font-weight: 850; font-family: inherit; flex-shrink: 0; }
@@ -4408,6 +4442,7 @@ export default function InboxPage() {
           .topbar-actions .admin-inline-btn { min-height: 40px; padding: 0 10px; font-size: 14px; }
           .topbar-actions .chat-exit-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; }
           .topbar-actions .staff-plus-btn { width: 40px; height: 40px; min-height: 40px; }
+          .top-menu-btn { width: 40px; height: 40px; min-height: 40px; }
           .sidebar-head { padding: 15px 14px 12px; }
           .patient-list { padding-left: 10px; padding-right: 10px; }
           .chat-head { min-height: 62px; }
@@ -5160,11 +5195,56 @@ export default function InboxPage() {
         </div>
       )}
 
-	      <div className="shell" data-text-size={fontSizeLevel} onClick={()=>{closeMessageActions();setShowSlashMenu(false);}}>
+	      <div className="shell" data-text-size={fontSizeLevel} onClick={()=>{closeMessageActions();setShowSlashMenu(false);closeTopMenu();}}>
         <div className="topbar">
           <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
           <div className="topbar-actions">
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
+            <div className="top-menu-wrap" onClick={e=>e.stopPropagation()}>
+              <button
+                className="top-menu-btn"
+                type="button"
+                onClick={()=>setShowTopMenu((open)=>!open)}
+                aria-label={lang==="es" ? "Abrir menú" : "Open menu"}
+                title={lang==="es" ? "Menú" : "Menu"}
+              >
+                ☰
+              </button>
+              {showTopMenu && (
+                <div className="top-menu-panel">
+                  <button className="top-menu-item" onClick={()=>{closeTopMenu();openStaffChatsHome();}}>
+                    <span>💬</span>
+                    <span>{lang==="es" ? "Chat staff" : "Staff chat"}</span>
+                  </button>
+                  {canOpenAdmin && (
+                    <button className="top-menu-item" onClick={()=>{closeTopMenu();window.location.href="/admin";}}>
+                      <span>⚙</span>
+                      <span>Admin</span>
+                    </button>
+                  )}
+                  {canCreatePatientRooms && (
+                    <button className="top-menu-item" onClick={()=>{closeTopMenu();requestNewPatientRoom();}}>
+                      <span>＋</span>
+                      <span>{lang==="es" ? "Crear paciente" : "Create patient"}</span>
+                    </button>
+                  )}
+                  {selectedPatient && (
+                    <button className="top-menu-item" onClick={()=>{closeTopMenu();setShowLabelSelector(true);}}>
+                      <span>🏷</span>
+                      <span>{lang==="es" ? "Etiquetas" : "Labels"}</span>
+                    </button>
+                  )}
+                  <button className="top-menu-item" onClick={()=>{closeTopMenu();setShowSettings(true);}}>
+                    <span>☰</span>
+                    <span>{t.settings}</span>
+                  </button>
+                  <button className="top-menu-item" onClick={()=>{closeTopMenu();leaveCurrentChatView();}}>
+                    <span>↪</span>
+                    <span>{lang==="es" ? "Salir" : "Exit"}</span>
+                  </button>
+                </div>
+              )}
+            </div>
             <StaffGlobalActions compact />
           </div>
         </div>
