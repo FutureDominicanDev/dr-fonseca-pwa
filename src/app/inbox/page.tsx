@@ -488,9 +488,19 @@ type MediaNotification = {
   id?: string;
   patient_id?: string | null;
   room_id?: string | null;
+  chat_id?: string | null;
   staff_id?: string | null;
+  type?: string | null;
+  media_type?: string | null;
   message?: string | null;
   seen?: boolean | null;
+  created_at?: string | null;
+};
+type PatientAlert = {
+  id?: string;
+  patient_id?: string | null;
+  chat_id?: string | null;
+  status?: string | null;
   created_at?: string | null;
 };
 type PatientLabel = {
@@ -707,6 +717,7 @@ export default function InboxPage() {
   const [careStaffInviteIds, setCareStaffInviteIds] = useState<string[]>([]);
   const [careStaffSearch, setCareStaffSearch] = useState("");
   const [mediaUnreadCounts, setMediaUnreadCounts] = useState<Record<string, number>>({});
+  const [pendingAlertRoomIds, setPendingAlertRoomIds] = useState<Set<string>>(new Set());
   const [userLabels, setUserLabels] = useState<PatientLabel[]>([]);
   const [activeLabelFilter, setActiveLabelFilter] = useState("");
   const [showLabelSelector, setShowLabelSelector] = useState(false);
@@ -1624,7 +1635,39 @@ export default function InboxPage() {
     return patient?.id || "";
   }, [patients]);
 
+  const registerPatientAlertRoom = useCallback((roomId?: string | null, patientId?: string | null, notify = false) => {
+    const alertRoomId = `${roomId || ""}`.trim();
+    if (!alertRoomId) return;
+    const assignedPatient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === alertRoomId));
+    const isAssigned = !!assignedPatient || selectedRoomRef.current?.id === alertRoomId;
+    if (!isAssigned) return;
+
+    setPendingAlertRoomIds((current) => {
+      if (current.has(alertRoomId)) return current;
+      const next = new Set(current);
+      next.add(alertRoomId);
+      return next;
+    });
+
+    if (!notify) return;
+    const patientName = assignedPatient?.full_name || (patientId ? patients.find((entry) => entry.id === patientId)?.full_name : "") || roomPatientName(alertRoomId);
+    const body = lang === "es" ? "🚨 Necesito ayuda" : "🚨 I need help";
+    playIncomingTone();
+    showToastAlert(alertRoomId, patientName, body);
+    pushNotif(patientName, body);
+  }, [lang, patients, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
+
+  const registerIncomingPatientAlert = useCallback((alert: PatientAlert) => {
+    if (`${alert.status || "pending"}` !== "pending") return;
+    registerPatientAlertRoom(alert.chat_id, alert.patient_id, false);
+  }, [registerPatientAlertRoom]);
+
   const registerIncomingMediaNotification = useCallback((notification: MediaNotification) => {
+    const notificationType = `${notification.type || notification.media_type || ""}`.toLowerCase();
+    if (notificationType === "alert") {
+      registerPatientAlertRoom(notification.chat_id || notification.room_id, notification.patient_id, true);
+      return;
+    }
     const patientId = notification.patient_id || (notification.room_id ? patientIdForRoom(notification.room_id) : "");
     const roomId = notification.room_id || patients.find((patient) => patient.id === patientId)?.rooms?.[0]?.id || "";
     if (!patientId) return;
@@ -1636,7 +1679,16 @@ export default function InboxPage() {
     if (roomId) showToastAlert(roomId, patientName, toastBody);
     playIncomingTone();
     pushNotif(patientName, body);
-  }, [lang, patientIdForRoom, patients, playIncomingTone, pushNotif, roomPatientName, showToastAlert, t.patientLabel]);
+  }, [lang, patientIdForRoom, patients, playIncomingTone, pushNotif, registerPatientAlertRoom, roomPatientName, showToastAlert, t.patientLabel]);
+
+  const fetchPendingPatientAlerts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("patient_alerts")
+      .select("chat_id, patient_id, status")
+      .eq("status", "pending");
+    if (error) return;
+    setPendingAlertRoomIds(new Set((data || []).map((alert: any) => alert.chat_id).filter(Boolean)));
+  }, []);
 
   const fetchMediaNotificationCounts = useCallback(async () => {
     if (!currentUserId) return;
@@ -2305,6 +2357,24 @@ export default function InboxPage() {
       supabase.removeChannel(channel);
     };
   }, [currentUserId, fetchMediaNotificationCounts, registerIncomingMediaNotification]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    fetchPendingPatientAlerts();
+
+    const channel = supabase
+      .channel(`patient-alerts:${currentUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "patient_alerts" },
+        ({ new: alert }) => registerIncomingPatientAlert(alert as PatientAlert)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, fetchPendingPatientAlerts, registerIncomingPatientAlert]);
 
   useEffect(() => {
     if (showNewRoom && currentUserId) {
@@ -4220,9 +4290,10 @@ export default function InboxPage() {
         .label-color-btn.active { border-color: ${textColor}; box-shadow: 0 0 0 2px ${cardBg}; }
         .patient-list { flex: 1; overflow-y: auto; padding: 10px 12px calc(18px + env(safe-area-inset-bottom)); }
         .patient-list::-webkit-scrollbar { display: none; }
-        .patient-row { display: flex; align-items: center; gap: 12px; min-height: 86px; padding: 13px 13px; cursor: pointer; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(102,132,163,0.16)"}; border-radius: 18px; background: ${darkMode?"#15232B":"rgba(255,255,255,0.96)"}; margin-bottom: 9px; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.07)"}; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease; }
+        .patient-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 86px; padding: 13px 13px; cursor: pointer; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(102,132,163,0.16)"}; border-radius: 18px; background: ${darkMode?"#15232B":"rgba(255,255,255,0.96)"}; margin-bottom: 9px; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.07)"}; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease; }
         .patient-row:hover { background: ${darkMode?"#1B2D36":"#FFFFFF"}; transform: translateY(-1px); }
         .patient-row.active { background: ${darkMode?"#203744":"#EAF5FF"}; border-color: ${darkMode?"rgba(125,211,252,0.30)":"#B9D8F2"}; }
+        .patient-alert-badge { position: absolute; top: 8px; right: 10px; z-index: 3; min-height: 24px; border-radius: 999px; background: #DC2626; color: #FFFFFF; padding: 4px 9px; font-size: 12px; font-weight: 950; box-shadow: 0 8px 20px rgba(220,38,38,0.32); border: 2px solid ${darkMode ? "#15232B" : "#FFFFFF"}; }
         .av { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; position: relative; box-shadow: 0 5px 16px rgba(16,52,83,0.18); }
         .av-badge { position: absolute; top: 0; right: 0; width: 14px; height: 14px; background: #25D366; border-radius: 50%; border: 2px solid ${darkMode ? "#15232B" : "#FFFFFF"}; }
         .av-badge.media { background: #EF4444; }
@@ -5205,15 +5276,18 @@ export default function InboxPage() {
                 const ptUnreadCount=pt.rooms.reduce((sum:number,r:any)=>sum+(unreadCounts[r.id]||0),0);
                 const ptUnread=ptUnreadCount>0;
                 const ptMediaUnread=(mediaUnreadCounts[pt.id]||0)>0;
-                const firstRoom=pt.rooms[0];
+                const alertRoom=pt.rooms.find((r:any)=>pendingAlertRoomIds.has(r.id));
+                const firstRoom=alertRoom||pt.rooms[0];
                 const proc=firstRoom?.procedures;
                 const surgDate=proc?.surgery_date?new Date(proc.surgery_date).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}):"";
                 const isActive=pt.rooms.some((r:any)=>r.id===selectedRoom?.id);
                 const latestPreview=roomPreview(firstRoom);
                 const latestTime=roomPreviewTime(firstRoom);
                 const ptLabels=patientLabelsFor(pt);
+                const ptHasAlert=!!alertRoom;
                 return (
                   <div key={pt.id} className={`patient-row${isActive?" active":""}`} onClick={()=>{setSelectedRoom(firstRoom);setMobileView("chat");}}>
+                    {ptHasAlert&&<div className="patient-alert-badge">🚨 Ayuda</div>}
                     <div className="av">
                       {pt.profile_picture_url?<img src={pt.profile_picture_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:ini(pt.full_name)}
                       {(ptUnread||ptMediaUnread)&&<div className={`av-badge${ptMediaUnread?" media":""}`}/>}

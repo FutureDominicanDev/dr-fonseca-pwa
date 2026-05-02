@@ -2,6 +2,8 @@
 -- Future access requests, labels, media notifications, and audit logs.
 -- Ejecuta este archivo en Supabase SQL Editor cuando se apruebe activar estas funciones.
 
+create extension if not exists "uuid-ossp";
+
 create table if not exists public.staff_access_requests (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references public.rooms(id) on delete cascade,
@@ -125,11 +127,41 @@ alter table public.labels
 alter table public.labels
   add column if not exists updated_at timestamptz not null default now();
 
+create table if not exists public.patient_alerts (
+  id uuid primary key default uuid_generate_v4(),
+  patient_id uuid not null references public.patients(id) on delete cascade,
+  chat_id uuid not null references public.rooms(id) on delete cascade,
+  status text not null default 'pending',
+  escalation_level integer not null default 1,
+  created_at timestamptz not null default now(),
+  acknowledged_at timestamptz
+);
+
+alter table public.patient_alerts
+  add column if not exists patient_id uuid not null references public.patients(id) on delete cascade;
+
+alter table public.patient_alerts
+  add column if not exists chat_id uuid not null references public.rooms(id) on delete cascade;
+
+alter table public.patient_alerts
+  add column if not exists status text not null default 'pending';
+
+alter table public.patient_alerts
+  add column if not exists escalation_level integer not null default 1;
+
+alter table public.patient_alerts
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.patient_alerts
+  add column if not exists acknowledged_at timestamptz;
+
 create table if not exists public.media_notifications (
   id uuid primary key default gen_random_uuid(),
   patient_id uuid references public.patients(id) on delete cascade,
+  chat_id uuid references public.rooms(id) on delete cascade,
   room_id uuid references public.rooms(id) on delete cascade,
   message_id uuid references public.messages(id) on delete cascade,
+  type text,
   media_type text not null,
   staff_id uuid references public.profiles(id) on delete cascade,
   recipient_id uuid references public.profiles(id) on delete cascade,
@@ -145,10 +177,16 @@ alter table public.media_notifications
   add column if not exists patient_id uuid references public.patients(id) on delete cascade;
 
 alter table public.media_notifications
+  add column if not exists chat_id uuid references public.rooms(id) on delete cascade;
+
+alter table public.media_notifications
   add column if not exists room_id uuid references public.rooms(id) on delete cascade;
 
 alter table public.media_notifications
   add column if not exists message_id uuid references public.messages(id) on delete cascade;
+
+alter table public.media_notifications
+  add column if not exists type text;
 
 alter table public.media_notifications
   add column if not exists media_type text;
@@ -282,6 +320,12 @@ create index if not exists labels_room_id_idx
 create index if not exists patients_labels_idx
   on public.patients using gin(labels);
 
+create index if not exists patient_alerts_chat_id_idx
+  on public.patient_alerts(chat_id);
+
+create index if not exists patient_alerts_patient_id_idx
+  on public.patient_alerts(patient_id);
+
 create index if not exists media_notifications_recipient_id_idx
   on public.media_notifications(recipient_id);
 
@@ -290,6 +334,9 @@ create index if not exists media_notifications_staff_id_seen_idx
 
 create index if not exists media_notifications_patient_id_idx
   on public.media_notifications(patient_id);
+
+create index if not exists media_notifications_chat_id_idx
+  on public.media_notifications(chat_id);
 
 create index if not exists media_notifications_room_id_idx
   on public.media_notifications(room_id);
@@ -308,3 +355,11 @@ create index if not exists audit_logs_patient_id_idx
 
 create index if not exists audit_logs_room_id_idx
   on public.audit_logs(room_id);
+
+do $$
+begin
+  alter publication supabase_realtime add table public.patient_alerts;
+exception
+  when duplicate_object then null;
+  when undefined_object then null;
+end $$;

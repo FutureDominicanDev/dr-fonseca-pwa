@@ -37,6 +37,7 @@ type RoomAccess = {
   procedures?: {
     office_location?: string | null;
     patients?: {
+      id?: string | null;
       full_name?: string | null;
       preferred_language?: string | null;
     } | null;
@@ -84,6 +85,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [accessReady, setAccessReady] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [room, setRoom] = useState<RoomAccess | null>(null);
+  const [alertSending, setAlertSending] = useState(false);
+  const [alertFeedback, setAlertFeedback] = useState("");
   const [fileAccept, setFileAccept] = useState("*");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [deleteMenuMessageId, setDeleteMenuMessageId] = useState<string | null>(null);
@@ -155,7 +158,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
       let roomQuery = await supabase
         .from("rooms")
-        .select("id, patient_access_token, procedures(office_location, patients(full_name, preferred_language))")
+        .select("id, patient_access_token, procedures(office_location, patients(id, full_name, preferred_language))")
         .eq("id", id)
         .single();
 
@@ -309,6 +312,72 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       room_id: id,
     });
     if (error) console.warn("audit log failed", error.message);
+  };
+
+  const roomPatient = () => {
+    const patient = room?.procedures?.patients;
+    return Array.isArray(patient) ? patient[0] : patient;
+  };
+
+  const triggerHelpAlert = async () => {
+    if (viewerType !== "patient" || accessDenied || !accessReady || alertSending) return;
+    const patientId = roomPatient()?.id;
+    if (!patientId) {
+      window.alert(uiLang === "es" ? "No pude identificar al paciente para enviar la alerta." : "I could not identify the patient for this alert.");
+      return;
+    }
+
+    setAlertSending(true);
+    setAlertFeedback("");
+    const createdAt = new Date().toISOString();
+    const { error } = await supabase.from("patient_alerts").insert({
+      patient_id: patientId,
+      chat_id: id,
+      status: "pending",
+      escalation_level: 1,
+      created_at: createdAt,
+    });
+
+    if (error) {
+      setAlertSending(false);
+      setAlertFeedback(uiLang === "es" ? "No se pudo enviar la alerta." : "The alert could not be sent.");
+      return;
+    }
+
+    const { data: members } = await supabase
+      .from("room_members")
+      .select("user_id")
+      .eq("room_id", id);
+    const staffIds = Array.from(new Set((members || []).map((member: any) => member.user_id).filter(Boolean)));
+    const patientName = roomPatient()?.full_name || (uiLang === "es" ? "Paciente" : "Patient");
+    const notificationMessage = uiLang === "es"
+      ? `🚨 ${patientName} necesita ayuda`
+      : `🚨 ${patientName} needs help`;
+    const rows = staffIds.map((staffId) => ({
+      type: "alert",
+      media_type: "alert",
+      chat_id: id,
+      room_id: id,
+      patient_id: patientId,
+      staff_id: staffId,
+      recipient_id: staffId,
+      message: notificationMessage,
+      seen: false,
+      status: "unread",
+      created_at: createdAt,
+    }));
+
+    if (rows.length) {
+      const insert = await supabase.from("media_notifications").insert(rows);
+      if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
+        const compatibleRows = rows.map(({ type: _type, chat_id: _chatId, ...row }) => row);
+        await supabase.from("media_notifications").insert(compatibleRows);
+      }
+    }
+
+    setAlertFeedback(uiLang === "es" ? "Alerta enviada al equipo." : "Alert sent to the team.");
+    window.setTimeout(() => setAlertFeedback(""), 3200);
+    setAlertSending(false);
   };
 
   const sendText = async () => {
@@ -942,6 +1011,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           {menuOpen ? "×" : "+"}
           {newPrescriptionCount > 0 && <span style={{position:"absolute",right:0,top:0,width:12,height:12,borderRadius:"50%",background:"#DC2626",border:"2px solid #ededed"}} />}
         </button>
+
+        {viewerType === "patient" && (
+          <button
+            onClick={triggerHelpAlert}
+            disabled={alertSending}
+            aria-label="Necesito ayuda"
+            title={alertFeedback || "Necesito ayuda"}
+            style={{ minHeight: 42, height: 42, borderRadius: 999, border: "none", background: "#DC2626", color: "#fff", padding: "0 12px", fontSize: 13, fontWeight: 900, fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0, opacity: alertSending ? 0.72 : 1 }}
+          >
+            {alertSending ? "Enviando..." : "🚨 Necesito ayuda"}
+          </button>
+        )}
 
         <div
           ref={setComposerNode}
