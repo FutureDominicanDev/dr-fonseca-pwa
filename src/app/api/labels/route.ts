@@ -10,6 +10,11 @@ const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "mis
 
 const configured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY);
 
+function isSchemaColumnError(error: unknown) {
+  const value = error as { message?: string; details?: string; hint?: string };
+  return `${value?.message || ""} ${value?.details || ""} ${value?.hint || ""}`.toLowerCase().includes("column");
+}
+
 async function getViewer(request: NextRequest) {
   const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!token) return null;
@@ -64,14 +69,21 @@ export async function GET(request: NextRequest) {
     const viewer = await getViewer(request);
     if (!viewer) return NextResponse.json({ error: "Invalid session." }, { status: 401 });
 
-    const { data, error } = await adminClient
+    let query = await adminClient
       .from("labels")
       .select("*")
       .eq("user_id", viewer.id)
       .order("created_at", { ascending: true });
+    if (query.error && isSchemaColumnError(query.error)) {
+      query = await adminClient
+        .from("labels")
+        .select("*")
+        .eq("created_by", viewer.id)
+        .order("created_at", { ascending: true });
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ labels: data || [] });
+    if (query.error) return NextResponse.json({ error: query.error.message }, { status: 500 });
+    return NextResponse.json({ labels: query.data || [] });
   } catch {
     return NextResponse.json({ error: "Unexpected labels error." }, { status: 500 });
   }
@@ -88,30 +100,48 @@ export async function POST(request: NextRequest) {
     const color = `${body?.color || "#2563EB"}`.trim() || "#2563EB";
     if (!name) return NextResponse.json({ error: "Label name is required." }, { status: 400 });
 
-    const { count } = await adminClient
+    let countQuery = await adminClient
       .from("labels")
       .select("id", { count: "exact", head: true })
       .eq("user_id", viewer.id);
+    if (countQuery.error && isSchemaColumnError(countQuery.error)) {
+      countQuery = await adminClient
+        .from("labels")
+        .select("id", { count: "exact", head: true })
+        .eq("created_by", viewer.id);
+    }
+    const count = countQuery.count;
     if ((count || 0) >= 20) return NextResponse.json({ error: "Label limit reached." }, { status: 400 });
 
-    const { data, error } = await adminClient
+    const now = new Date().toISOString();
+    const fullPayload = {
+      user_id: viewer.id,
+      name,
+      name_es: `${body?.name_es || name}`.trim(),
+      name_en: `${body?.name_en || name}`.trim(),
+      color,
+      scope: "patient",
+      created_by: viewer.id,
+      created_at: now,
+      updated_at: now,
+    };
+    let insert = await adminClient
       .from("labels")
-      .insert({
-        user_id: viewer.id,
-        name,
-        name_es: `${body?.name_es || name}`.trim(),
-        name_en: `${body?.name_en || name}`.trim(),
-        color,
-        scope: "patient",
-        created_by: viewer.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .insert(fullPayload)
       .select("*")
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ label: data });
+    if (insert.error && isSchemaColumnError(insert.error)) {
+      const { name_es: _nameEs, name_en: _nameEn, ...compatiblePayload } = fullPayload;
+      insert = await adminClient.from("labels").insert(compatiblePayload).select("*").single();
+    }
+    if (insert.error && isSchemaColumnError(insert.error)) {
+      const { user_id: _userId, name_es: _nameEs, name_en: _nameEn, ...legacyPayload } = fullPayload;
+      insert = await adminClient.from("labels").insert(legacyPayload).select("*").single();
+    }
+
+    if (insert.error) return NextResponse.json({ error: insert.error.message }, { status: 500 });
+    return NextResponse.json({ label: insert.data });
   } catch {
     return NextResponse.json({ error: "Unexpected label create error." }, { status: 500 });
   }
@@ -131,11 +161,20 @@ export async function PATCH(request: NextRequest) {
     const allowed = await canAccessPatient(viewer, patientId, roomId || undefined);
     if (!allowed) return NextResponse.json({ error: "Not allowed for this patient." }, { status: 403 });
 
-    const { data: ownedLabels, error: labelError } = await adminClient
+    let labelQuery = await adminClient
       .from("labels")
       .select("id")
       .eq("user_id", viewer.id)
       .in("id", labelIds.length ? labelIds : ["00000000-0000-0000-0000-000000000000"]);
+    if (labelQuery.error && isSchemaColumnError(labelQuery.error)) {
+      labelQuery = await adminClient
+        .from("labels")
+        .select("id")
+        .eq("created_by", viewer.id)
+        .in("id", labelIds.length ? labelIds : ["00000000-0000-0000-0000-000000000000"]);
+    }
+    const ownedLabels = labelQuery.data;
+    const labelError = labelQuery.error;
     if (labelError) return NextResponse.json({ error: labelError.message }, { status: 500 });
 
     const allowedLabelIds = new Set((ownedLabels || []).map((label: any) => label.id));
