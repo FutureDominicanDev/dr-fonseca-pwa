@@ -10,7 +10,6 @@ import {
   type AdminAuditEvent,
   type StaffProfile,
 } from "@/lib/adminPortal";
-import { isOwnerEmail } from "@/lib/securityConfig";
 
 type AuditFilter = "all" | "patient" | "staff" | "system";
 
@@ -27,7 +26,8 @@ export default function AdminAuditPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<AuditFilter>("all");
 
-  const hasAdminAccess = isOwnerEmail(viewerEmail);
+  const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
+  const hasAdminAccess = ["owner", "super_admin"].includes(viewerAdminLevel);
 
   const goTo = (path: string) => {
     setMobileMenuOpen(false);
@@ -111,7 +111,8 @@ export default function AdminAuditPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    const computedAccess = isOwnerEmail(email);
+    const computedAdminLevel = normalizeAdminLevel((profile as StaffProfile | null)?.admin_level, email);
+    const computedAccess = ["owner", "super_admin"].includes(computedAdminLevel);
 
     if (!computedAccess) {
       setSessionChecked(true);

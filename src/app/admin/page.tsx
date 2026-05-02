@@ -93,8 +93,8 @@ export default function AdminPage() {
   const [exportMenu, setExportMenu] = useState<{ type: "patient" | "staff"; id: string; title: string; body: string } | null>(null);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
-  const hasAdminAccess = isOwnerEmail(viewerEmail);
-  const canManageAdmins = isOwnerEmail(viewerEmail);
+  const hasAdminAccess = ["owner", "super_admin"].includes(viewerAdminLevel);
+  const canManageAdmins = ["owner", "super_admin"].includes(viewerAdminLevel);
   const canManageOwner = isOwnerEmail(viewerEmail);
 
   const officeText = (office: Office) => {
@@ -320,7 +320,8 @@ export default function AdminPage() {
       }
     }
 
-    const computedAccess = isOwnerEmail(email);
+    const computedAdminLevel = normalizeAdminLevel((profile as StaffProfile | null)?.admin_level, email);
+    const computedAccess = ["owner", "super_admin"].includes(computedAdminLevel);
     if (!computedAccess) {
       setSessionChecked(true);
       setLoading(false);
@@ -1395,9 +1396,9 @@ export default function AdminPage() {
                     const memberEmail = member.id === viewerId ? viewerEmail : member.email || "";
                     const contactLine = [member.phone, memberEmail].filter(Boolean).join(" · ");
                     const level = normalizeAdminLevel(member.admin_level, memberEmail);
-                    const canEditThisMember = canManageAdmins && !(level === "owner" && !canManageOwner);
+                    const canEditThisMember = canManageAdmins && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const isSelf = member.id === viewerId;
-                    const canDeleteThisMember = canManageAdmins && !isSelf && level !== "owner";
+                    const canDeleteThisMember = canManageAdmins && !isSelf && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const accessKey = `${member.id}-admin_level`;
                     const nameKey = `${member.id}-full_name-display_name`;
                     const phoneKey = `${member.id}-phone`;
@@ -1492,7 +1493,7 @@ export default function AdminPage() {
                                         color: level === option ? adminColor(option) : "#374151",
                                         opacity: !canEditThisMember || savingKey === accessKey ? 0.55 : 1,
                                       }}
-                                      disabled={!canEditThisMember || savingKey === accessKey}
+                                      disabled={!canEditThisMember || savingKey === accessKey || (option === "super_admin" && !canManageOwner)}
                                       onClick={() => updateStaffField(member, { admin_level: option }, isSpanish ? `Acceso de ${member.full_name || "staff"} actualizado a ${adminLabel(option)}.` : `Access for ${member.full_name || "staff"} updated to ${adminText(option)}.`)}
                                     >
                                       {adminText(option)}

@@ -8,13 +8,13 @@ import {
   initials,
   isMissingColumnError,
   logAdminEvent,
+  normalizeAdminLevel,
   normalizeRecordStatus,
   type PatientRecord,
   type PatientRecordStatus,
   type ProcedureRecord,
   type StaffProfile,
 } from "@/lib/adminPortal";
-import { isOwnerEmail } from "@/lib/securityConfig";
 
 type TrashView = "archived" | "trash";
 
@@ -33,7 +33,8 @@ export default function AdminTrashPage() {
   const [view, setView] = useState<TrashView>("archived");
   const [savingId, setSavingId] = useState("");
 
-  const hasAdminAccess = isOwnerEmail(viewerEmail);
+  const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
+  const hasAdminAccess = ["owner", "super_admin"].includes(viewerAdminLevel);
 
   const goTo = (path: string) => {
     setMobileMenuOpen(false);
@@ -77,7 +78,8 @@ export default function AdminTrashPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    const computedAccess = isOwnerEmail(email);
+    const computedAdminLevel = normalizeAdminLevel((profile as StaffProfile | null)?.admin_level, email);
+    const computedAccess = ["owner", "super_admin"].includes(computedAdminLevel);
 
     if (!computedAccess) {
       setSessionChecked(true);

@@ -35,7 +35,6 @@ import {
   type RoomRecord,
   type StaffProfile,
 } from "@/lib/adminPortal";
-import { isOwnerEmail } from "@/lib/securityConfig";
 
 type PatientDraft = {
   full_name: string;
@@ -96,7 +95,7 @@ export default function AdminPatientRecordPage() {
   const timelineSectionRef = useRef<HTMLElement | null>(null);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
-  const hasAdminAccess = isOwnerEmail(viewerEmail);
+  const hasAdminAccess = ["owner", "super_admin"].includes(viewerAdminLevel);
   const canChangeProcedureStatus = viewerProfile?.role === "doctor" || ["owner", "super_admin"].includes(viewerAdminLevel);
   const staffById = useMemo(() => new Map(staffProfiles.map((member) => [member.id, member])), [staffProfiles]);
   const patientStatus = normalizeRecordStatus(patient?.record_status);
@@ -409,7 +408,8 @@ export default function AdminPatientRecordPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    const computedAccess = isOwnerEmail(email);
+    const computedAdminLevel = normalizeAdminLevel((profile as StaffProfile | null)?.admin_level, email);
+    const computedAccess = ["owner", "super_admin"].includes(computedAdminLevel);
     if (!computedAccess) {
       setSessionChecked(true);
       setLoading(false);
