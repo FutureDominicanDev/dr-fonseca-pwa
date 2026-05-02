@@ -457,11 +457,16 @@ type StaffRoomPayload = {
   text: string;
   messageId: string;
   createdBy?: string | null;
+  actorId?: string | null;
+  event?: "invite" | "message" | "accept" | "decline" | "leave";
 };
 type StaffRoomConversation = {
   roomId: string;
   roomName: string;
   memberIds: string[];
+  activeMemberIds: string[];
+  createdBy?: string | null;
+  currentUserStatus: "accepted" | "pending" | "declined" | "left";
   messages: StaffPrivateMessage[];
   latestAt: string;
   latestText: string;
@@ -491,6 +496,8 @@ const parseStaffRoomPayload = (content?: string | null): StaffRoomPayload | null
       text: `${parsed.text || ""}`,
       messageId: `${parsed.messageId || makeStaffRoomMessageId()}`,
       createdBy: parsed.createdBy || null,
+      actorId: parsed.actorId || null,
+      event: ["invite", "message", "accept", "decline", "leave"].includes(parsed.event) ? parsed.event : "message",
     };
   } catch {
     return null;
@@ -892,6 +899,25 @@ export default function InboxPage() {
     const map = new Map<string, CareTeamMember>();
     staffDirectory.forEach((member) => member?.id && map.set(member.id, member));
     selectedRoomTeam.forEach((member) => member?.id && !map.has(member.id) && map.set(member.id, member));
+    staffPrivateMessages.forEach((message) => {
+      const candidates = [
+        { id: message.sender_id || "", name: message.sender_name || "" },
+        { id: message.recipient_id || "", name: message.recipient_name || "" },
+      ];
+      candidates.forEach((candidate) => {
+        if (!candidate.id || map.has(candidate.id)) return;
+        map.set(candidate.id, {
+          id: candidate.id,
+          full_name: candidate.name || (lang === "es" ? "Personal" : "Staff"),
+          display_name: candidate.name || null,
+          role: "staff",
+          office_location: null,
+          avatar_url: null,
+          phone: null,
+          email: null,
+        });
+      });
+    });
     if (currentUserId) {
       map.set(currentUserId, {
         id: currentUserId,
@@ -907,7 +933,7 @@ export default function InboxPage() {
     return Array.from(map.values()).sort((a, b) =>
       `${a.full_name || a.display_name || ""}`.localeCompare(`${b.full_name || b.display_name || ""}`, lang === "es" ? "es" : "en")
     );
-  }, [currentUserEmail, currentUserId, lang, selectedRoomTeam, staffDirectory, userProfile]);
+  }, [currentUserEmail, currentUserId, lang, selectedRoomTeam, staffDirectory, staffPrivateMessages, userProfile]);
   const staffMemberById = useMemo(() => {
     const map = new Map<string, CareTeamMember>();
     allStaffMembersForChat.forEach((member) => member.id && map.set(member.id, member));
@@ -919,7 +945,12 @@ export default function InboxPage() {
     roomId: string,
     roomName: string,
     memberIds: string[],
-    content: string
+    content: string,
+    options: {
+      event?: StaffRoomPayload["event"];
+      createdBy?: string | null;
+      actorId?: string | null;
+    } = {}
   ) => {
     const cleanContent = content.trim();
     if (!currentUserId || !cleanContent || savingStaffPrivateMessage) return false;
@@ -938,7 +969,9 @@ export default function InboxPage() {
       memberIds: uniqueMemberIds,
       text: cleanContent,
       messageId: makeStaffRoomMessageId(),
-      createdBy: currentUserId,
+      createdBy: options.createdBy || currentUserId,
+      actorId: options.actorId || currentUserId,
+      event: options.event || "message",
     });
     const rows = recipientIds.map((recipientId) => {
       const recipient = staffMemberById.get(recipientId);
@@ -966,7 +999,7 @@ export default function InboxPage() {
     const memberIds = Array.from(new Set([currentUserId, ...newStaffRoomMemberIds].filter(Boolean)));
     const roomId = makeStaffRoomId();
     const intro = newStaffRoomInitialMessage.trim() || (lang === "es" ? "Chat staff creado." : "Staff chat created.");
-    const sent = await sendStaffRoomMessage(roomId, roomName, memberIds, intro);
+    const sent = await sendStaffRoomMessage(roomId, roomName, memberIds, intro, { event: "invite", createdBy: currentUserId });
     if (!sent) return;
     setShowCreateStaffRoom(false);
     setNewStaffRoomName("");
@@ -1137,6 +1170,7 @@ export default function InboxPage() {
     const grouped = new Map<string, {
       roomName: string;
       memberIds: Set<string>;
+      createdBy?: string | null;
       messages: Map<string, StaffPrivateMessage>;
       unread: Set<string>;
     }>();
@@ -1150,10 +1184,15 @@ export default function InboxPage() {
       const existing = grouped.get(payload.roomId) || {
         roomName: payload.roomName || (lang === "es" ? "Chat staff" : "Staff chat"),
         memberIds: new Set<string>(),
+        createdBy: payload.createdBy || null,
         messages: new Map<string, StaffPrivateMessage>(),
         unread: new Set<string>(),
       };
       memberIds.forEach((id) => existing.memberIds.add(id));
+      if (payload.createdBy) {
+        existing.createdBy = payload.createdBy;
+        existing.memberIds.add(payload.createdBy);
+      }
       const messageKey = payload.messageId || message.id || `${message.created_at}-${message.content}`;
       if (!existing.messages.has(messageKey)) existing.messages.set(messageKey, message);
       if (message.recipient_id === currentUserId && !message.read_at) existing.unread.add(messageKey);
@@ -1164,16 +1203,42 @@ export default function InboxPage() {
         const messages = Array.from(room.messages.values()).sort((a, b) => `${a.created_at || ""}`.localeCompare(`${b.created_at || ""}`));
         const latest = messages[messages.length - 1];
         const latestPayload = parseStaffRoomPayload(latest?.content);
+        const memberIds = Array.from(room.memberIds);
+        const hasInviteEvent = messages.some((message) => parseStaffRoomPayload(message.content)?.event === "invite");
+        const memberStatuses = new Map<string, "accepted" | "pending" | "declined" | "left">();
+        memberIds.forEach((id) => memberStatuses.set(id, hasInviteEvent ? "pending" : "accepted"));
+        if (room.createdBy) memberStatuses.set(room.createdBy, "accepted");
+        messages.forEach((message) => {
+          const payload = parseStaffRoomPayload(message.content);
+          if (!payload) return;
+          payload.memberIds.forEach((id) => {
+            if (!memberStatuses.has(id)) memberStatuses.set(id, hasInviteEvent ? "pending" : "accepted");
+          });
+          const actorId = payload.actorId || message.sender_id || "";
+          if (!actorId) return;
+          if (payload.event === "accept") memberStatuses.set(actorId, "accepted");
+          if (payload.event === "decline") memberStatuses.set(actorId, "declined");
+          if (payload.event === "leave") memberStatuses.set(actorId, "left");
+          if (payload.event === "invite" && actorId === room.createdBy) memberStatuses.set(actorId, "accepted");
+        });
+        const currentUserStatus = memberStatuses.get(currentUserId) || "accepted";
+        const activeMemberIds = Array.from(memberStatuses.entries())
+          .filter(([, status]) => status === "accepted" || status === "pending")
+          .map(([id]) => id);
         return {
           roomId,
           roomName: room.roomName,
-          memberIds: Array.from(room.memberIds),
+          memberIds,
+          activeMemberIds,
+          createdBy: room.createdBy,
+          currentUserStatus,
           messages,
           latestAt: latest?.created_at || "",
           latestText: latestPayload?.text || "",
           unreadCount: room.unread.size,
         };
       })
+      .filter((conversation) => !["declined", "left"].includes(conversation.currentUserStatus))
       .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
   }, [currentUserId, lang, staffPrivateMessages]);
 
@@ -1239,10 +1304,52 @@ export default function InboxPage() {
     const sent = await sendStaffRoomMessage(
       activeStaffRoomConversation.roomId,
       activeStaffRoomConversation.roomName,
-      activeStaffRoomConversation.memberIds,
-      staffRoomReply
+      activeStaffRoomConversation.activeMemberIds,
+      staffRoomReply,
+      { event: "message", createdBy: activeStaffRoomConversation.createdBy || currentUserId }
     );
     if (sent) setStaffRoomReply("");
+  };
+
+  const respondToStaffRoomInvite = async (conversation: StaffRoomConversation, response: "accept" | "decline") => {
+    if (!currentUserId) return;
+    const actorName = userProfile?.full_name || userProfile?.display_name || (lang === "es" ? "Personal" : "Staff");
+    const text = response === "accept"
+      ? (lang === "es" ? `${actorName} aceptó la invitación.` : `${actorName} accepted the invite.`)
+      : (lang === "es" ? `${actorName} rechazó la invitación.` : `${actorName} declined the invite.`);
+    const sent = await sendStaffRoomMessage(
+      conversation.roomId,
+      conversation.roomName,
+      conversation.memberIds,
+      text,
+      { event: response, createdBy: conversation.createdBy || currentUserId, actorId: currentUserId }
+    );
+    if (!sent) return;
+    if (response === "decline") {
+      setActiveStaffRoomId(null);
+      setStaffRoomReply("");
+    }
+  };
+
+  const leaveActiveStaffRoom = async () => {
+    if (!activeStaffRoomConversation || !currentUserId) return;
+    const confirmed = window.confirm(
+      lang === "es"
+        ? "¿Quieres salir de este chat interno? Si sales, tendrás que ser invitado nuevamente por la persona que creó el chat."
+        : "Leave this internal chat? If you leave, you must be invited again by the person who created the chat."
+    );
+    if (!confirmed) return;
+    const actorName = userProfile?.full_name || userProfile?.display_name || (lang === "es" ? "Personal" : "Staff");
+    const sent = await sendStaffRoomMessage(
+      activeStaffRoomConversation.roomId,
+      activeStaffRoomConversation.roomName,
+      activeStaffRoomConversation.memberIds,
+      lang === "es" ? `${actorName} salió del chat.` : `${actorName} left the chat.`,
+      { event: "leave", createdBy: activeStaffRoomConversation.createdBy || currentUserId, actorId: currentUserId }
+    );
+    if (!sent) return;
+    setActiveStaffRoomId(null);
+    setStaffRoomReply("");
   };
 
   const openStaffChatsHome = () => {
@@ -1283,7 +1390,7 @@ export default function InboxPage() {
       <button
         className="admin-inline-btn"
         onClick={openStaffChatsHome}
-        title={lang==="es" ? "Chat staff a staff" : "Staff to Staff Chat"}
+        title={lang==="es" ? "Comunicación interna del equipo" : "Internal team communication"}
         style={{position:"relative"}}
       >
         {compact ? "Staff" : (lang==="es" ? "Staff" : "Staff")}
@@ -3306,7 +3413,7 @@ export default function InboxPage() {
         <div className="modal-scroll" onClick={e=>e.stopPropagation()} style={{maxWidth:720}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14}}>
             <div style={{minWidth:0}}>
-              <p className="modal-title" style={{margin:0}}>{lang==="es"?"Chat staff a staff":"Staff to Staff Chat"}</p>
+              <p className="modal-title" style={{margin:0}}>{lang==="es"?"Comunicación interna del equipo":"Internal Team Communication"}</p>
               <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45,marginTop:4}}>
                 {activeRoom
                   ? activeRoom.roomName
@@ -3323,7 +3430,7 @@ export default function InboxPage() {
           {!activeStaffPrivateConversation && !activeRoom ? (
             <div style={{display:"grid",gap:10}}>
               <button className="pbtn" onClick={()=>setShowCreateStaffRoom((value)=>!value)}>
-                {showCreateStaffRoom ? (lang==="es"?"Cerrar creación":"Close creator") : (lang==="es"?"+ Crear chat staff":"+ Create staff chat")}
+                {showCreateStaffRoom ? (lang==="es"?"Cerrar creación":"Close creator") : (lang==="es"?"+ Crear chat interno":"+ Create internal chat")}
               </button>
               {showCreateStaffRoom && (
                 <div style={{display:"grid",gap:12,padding:14,borderRadius:18,background:cardBg,border:`1px solid ${borderColor}`}}>
@@ -3350,24 +3457,44 @@ export default function InboxPage() {
               )}
               {staffRoomConversations.length > 0 && (
                 <>
-                  <p style={{fontSize:uiSmallSize,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginTop:4}}>{lang==="es"?"Salas staff":"Staff rooms"}</p>
-                  {staffRoomConversations.map((conversation) => (
-                    <button
-                      key={conversation.roomId}
-                      onClick={()=>openStaffRoomConversation(conversation.roomId)}
-                      style={{display:"flex",alignItems:"center",gap:12,width:"100%",border:`1px solid ${conversation.unreadCount ? "#93C5FD" : borderColor}`,background:conversation.unreadCount ? (darkMode?"rgba(37,99,235,0.18)":"#EFF6FF") : cardBg,borderRadius:18,padding:14,textAlign:"left",fontFamily:"inherit",cursor:"pointer"}}
-                    >
-                      <div style={{width:46,height:46,borderRadius:"50%",background:"linear-gradient(135deg,#0F766E,#2563EB)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,flexShrink:0}}>👥</div>
-                      <div style={{minWidth:0,flex:1}}>
-                        <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"space-between"}}>
-                          <p style={{fontSize:uiBaseSize,fontWeight:900,color:textColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{conversation.roomName}</p>
-                          <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:750,whiteSpace:"nowrap"}}>{fmtTime(conversation.latestAt)}</span>
-                        </div>
-                        <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{conversation.latestText || (lang==="es"?"Chat staff":"Staff chat")}</p>
+                  <p style={{fontSize:uiSmallSize,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginTop:4}}>{lang==="es"?"Chats internos":"Internal chats"}</p>
+                  {staffRoomConversations.map((conversation) => {
+                    const participantNames = conversation.memberIds
+                      .map((id) => staffMemberById.get(id))
+                      .filter(Boolean)
+                      .map((member) => member!.full_name || member!.display_name || (lang==="es"?"Personal":"Staff"));
+                    const label = participantNames.length > 0 ? participantNames.join(" + ") : conversation.roomName;
+                    const isPending = conversation.currentUserStatus === "pending";
+                    return (
+                      <div
+                        key={conversation.roomId}
+                        style={{display:"grid",gap:10,width:"100%",border:`1px solid ${conversation.unreadCount || isPending ? "#93C5FD" : borderColor}`,background:conversation.unreadCount || isPending ? (darkMode?"rgba(37,99,235,0.18)":"#EFF6FF") : cardBg,borderRadius:18,padding:14,fontFamily:"inherit"}}
+                      >
+                        <button
+                          onClick={()=>openStaffRoomConversation(conversation.roomId)}
+                          style={{display:"flex",alignItems:"center",gap:12,width:"100%",border:"none",background:"transparent",padding:0,textAlign:"left",fontFamily:"inherit",cursor:"pointer",minWidth:0}}
+                        >
+                          <div style={{width:46,height:46,borderRadius:"50%",background:"linear-gradient(135deg,#0F766E,#2563EB)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,flexShrink:0}}>👥</div>
+                          <div style={{minWidth:0,flex:1}}>
+                            <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"space-between",minWidth:0}}>
+                              <p style={{fontSize:uiBaseSize,fontWeight:900,color:textColor,overflowWrap:"anywhere",lineHeight:1.25}}>{label}</p>
+                              <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:750,whiteSpace:"nowrap",flexShrink:0}}>{fmtTime(conversation.latestAt)}</span>
+                            </div>
+                            <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:750,lineHeight:1.35,overflowWrap:"anywhere"}}>
+                              {isPending ? (lang==="es"?"Invitación pendiente":"Pending invite") : `${conversation.memberIds.length} ${lang==="es"?"participantes":"participants"}`}
+                            </p>
+                          </div>
+                          {conversation.unreadCount > 0 && <span style={{minWidth:24,height:24,borderRadius:99,background:"#2563EB",color:"white",fontSize:13,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{conversation.unreadCount}</span>}
+                        </button>
+                        {isPending && (
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                            <button className="pbtn" onClick={()=>respondToStaffRoomInvite(conversation, "accept")} disabled={savingStaffPrivateMessage} style={{minHeight:42}}>{lang==="es"?"Aceptar":"Accept"}</button>
+                            <button className="sbtn" onClick={()=>respondToStaffRoomInvite(conversation, "decline")} disabled={savingStaffPrivateMessage} style={{minHeight:42}}>{lang==="es"?"Rechazar":"Refuse"}</button>
+                          </div>
+                        )}
                       </div>
-                      {conversation.unreadCount > 0 && <span style={{minWidth:24,height:24,borderRadius:99,background:"#2563EB",color:"white",fontSize:13,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}}>{conversation.unreadCount}</span>}
-                    </button>
-                  ))}
+                    );
+                  })}
                 </>
               )}
               <p style={{fontSize:uiSmallSize,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginTop:4}}>{lang==="es"?"Mensajes directos":"Direct messages"}</p>
@@ -3385,11 +3512,13 @@ export default function InboxPage() {
                     {conversation.peer.avatar_url ? <img src={conversation.peer.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}} /> : ini(conversation.peer.full_name || conversation.peer.display_name || "S")}
                   </div>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"space-between"}}>
-                      <p style={{fontSize:uiBaseSize,fontWeight:900,color:textColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{conversation.peer.full_name || conversation.peer.display_name || (lang==="es"?"Personal":"Staff")}</p>
-                      <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:750,whiteSpace:"nowrap"}}>{fmtTime(conversation.latestAt)}</span>
+                    <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"space-between",minWidth:0}}>
+                      <p style={{fontSize:uiBaseSize,fontWeight:900,color:textColor,overflowWrap:"anywhere",lineHeight:1.25}}>{conversation.peer.full_name || conversation.peer.display_name || (lang==="es"?"Personal":"Staff")}</p>
+                      <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:750,whiteSpace:"nowrap",flexShrink:0}}>{fmtTime(conversation.latestAt)}</span>
                     </div>
-                    <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{conversation.latestText || (lang==="es"?"Mensaje privado":"Private message")}</p>
+                    <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:750,lineHeight:1.35,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden",overflowWrap:"anywhere"}}>
+                      {conversation.latestText || (lang==="es"?"Mensaje privado":"Private message")}
+                    </p>
                   </div>
                   {conversation.unreadCount > 0 && <span style={{minWidth:24,height:24,borderRadius:99,background:"#2563EB",color:"white",fontSize:13,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}}>{conversation.unreadCount}</span>}
                 </button>
@@ -3400,11 +3529,39 @@ export default function InboxPage() {
               <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
                 <button className="sbtn" onClick={()=>{setActiveStaffRoomId(null);setStaffRoomReply("");}} style={{width:"auto",padding:"0 14px"}}>{lang==="es"?"Volver":"Back"}</button>
                 <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{activeRoomMembers.length} {lang==="es"?"participantes":"participants"}</span>
+                {activeRoom.currentUserStatus === "accepted" && (
+                  <button className="sbtn" onClick={leaveActiveStaffRoom} style={{width:"auto",padding:"0 14px",marginLeft:"auto",color:"#B91C1C"}}>
+                    {lang==="es"?"Salir del chat":"Leave chat"}
+                  </button>
+                )}
               </div>
+              {activeRoom.currentUserStatus === "pending" && (
+                <div style={{display:"grid",gap:10,padding:14,borderRadius:18,background:darkMode?"rgba(37,99,235,0.18)":"#EFF6FF",border:"1px solid #93C5FD"}}>
+                  <p style={{fontSize:uiBaseSize,fontWeight:850,color:textColor,lineHeight:1.45,margin:0}}>
+                    {lang==="es"?"Te invitaron a este chat interno. Acepta para participar o rechaza si no deseas entrar.":"You were invited to this internal chat. Accept to participate or refuse if you do not want to join."}
+                  </p>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <button className="pbtn" onClick={()=>respondToStaffRoomInvite(activeRoom, "accept")} disabled={savingStaffPrivateMessage}>{lang==="es"?"Aceptar chat":"Accept chat"}</button>
+                    <button className="sbtn" onClick={()=>respondToStaffRoomInvite(activeRoom, "decline")} disabled={savingStaffPrivateMessage}>{lang==="es"?"Rechazar":"Refuse"}</button>
+                  </div>
+                </div>
+              )}
               <div style={{display:"grid",gap:8,maxHeight:"45dvh",overflowY:"auto",padding:"12px",borderRadius:18,background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
                 {activeRoom.messages.map((message) => {
                   const mine = message.sender_id === currentUserId;
                   const payload = parseStaffRoomPayload(message.content);
+                  const eventLabel = payload?.event && payload.event !== "message"
+                    ? payload.text
+                    : "";
+                  if (eventLabel) {
+                    return (
+                      <div key={payload?.messageId || message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:"center"}}>
+                        <div style={{maxWidth:"90%",borderRadius:999,background:darkMode?"#253244":"#E5E7EB",color:subTextColor,padding:"7px 12px",fontSize:uiSmallSize,fontWeight:800,lineHeight:1.35,textAlign:"center",overflowWrap:"anywhere"}}>
+                          {eventLabel}
+                        </div>
+                      </div>
+                    );
+                  }
                   return (
                     <div key={payload?.messageId || message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
                       <div style={{maxWidth:"86%",borderRadius:mine?"16px 16px 4px 16px":"16px 16px 16px 4px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"10px 12px",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}>
@@ -3423,8 +3580,9 @@ export default function InboxPage() {
                 onChange={(event)=>setStaffRoomReply(event.target.value)}
                 placeholder={lang==="es"?"Mensaje para la sala staff":"Message the staff room"}
                 style={{resize:"vertical",minHeight:96}}
+                disabled={activeRoom.currentUserStatus !== "accepted"}
               />
-              <button className="pbtn" disabled={!staffRoomReply.trim() || savingStaffPrivateMessage} onClick={sendActiveStaffRoomReply}>
+              <button className="pbtn" disabled={activeRoom.currentUserStatus !== "accepted" || !staffRoomReply.trim() || savingStaffPrivateMessage} onClick={sendActiveStaffRoomReply}>
                 {savingStaffPrivateMessage ? (lang==="es"?"Enviando...":"Sending...") : (lang==="es"?"Enviar al chat staff":"Send to staff chat")}
               </button>
             </div>

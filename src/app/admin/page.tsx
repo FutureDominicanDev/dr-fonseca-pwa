@@ -212,12 +212,11 @@ export default function AdminPage() {
         });
         const sortedMessages = [...conversationMessages].sort((a, b) => `${b.created_at || ""}`.localeCompare(`${a.created_at || ""}`));
         const latestMessage = sortedMessages[0];
-        const latestText = privateMessageText(latestMessage).trim();
         return {
           key,
           participantIds,
-          title: participantNames.join(" ↔ "),
-          subtitle: `${conversationMessages.length} ${isSpanish ? "mensaje(s) privados" : "private message(s)"}${latestText ? ` · ${latestText.slice(0, 90)}` : ""}`,
+          title: participantNames.join(" + "),
+          subtitle: `${participantNames.length} ${isSpanish ? "participantes" : "participants"} · ${conversationMessages.length} ${isSpanish ? "mensaje(s) internos" : "internal message(s)"}`,
           messages: sortedMessages,
           latestAt: latestMessage?.created_at || "",
         };
@@ -1140,7 +1139,7 @@ export default function AdminPage() {
             </button>
             <button type="button" className="stat-card" onClick={() => scrollToAdminSection("staff-to-staff")}>
               <div className="stat-icon">💬</div>
-              <p className="stat-label">{isSpanish ? "Chat staff a staff" : "Staff to Staff Chat"}</p>
+              <p className="stat-label">{isSpanish ? "Comunicación interna" : "Internal chat"}</p>
               <p className="stat-value">{staffPrivateConversations.length}</p>
               <p className="stat-help">{isSpanish ? "Conversaciones privadas del equipo" : "Private staff conversations"}</p>
             </button>
@@ -1163,7 +1162,7 @@ export default function AdminPage() {
               <section className="card" id="staff-to-staff">
                 <div className="header-row">
                   <div>
-	                    <p className="card-title">{isSpanish ? "Chat staff a staff" : "Staff to Staff Chat"}</p>
+	                    <p className="card-title">{isSpanish ? "Comunicación interna del equipo" : "Internal Team Communication"}</p>
 	                    <p className="muted">
 	                      {isSpanish
 	                        ? "Lista administrativa para revisar y exportar conversaciones privadas entre miembros del equipo."
