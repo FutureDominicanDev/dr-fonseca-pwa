@@ -3121,6 +3121,7 @@ export default function InboxPage() {
       if (!insertError) {
         await fetchSelectedRoomTeam(selectedRoom.id);
         setSavingTeam(false);
+        setShowPatientInfo(false);
         alert(t.teamSaved);
         return;
       }
@@ -5245,7 +5246,6 @@ export default function InboxPage() {
                 </div>
               )}
             </div>
-            <StaffGlobalActions compact />
           </div>
         </div>
 

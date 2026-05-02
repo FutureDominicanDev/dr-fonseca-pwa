@@ -935,6 +935,17 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             Salir
           </a>
         )}
+        {viewerType === "patient" && (
+          <button
+            onClick={triggerHelpAlert}
+            disabled={alertSending}
+            aria-label="Necesito ayuda"
+            title={alertFeedback || "Necesito ayuda"}
+            style={{ position: "absolute", left: "max(10px, env(safe-area-inset-left))", bottom: 10, minHeight: 38, height: 38, borderRadius: 999, border: "1px solid rgba(255,255,255,0.28)", background: "#DC2626", color: "#fff", padding: "0 11px", fontSize: 12, fontWeight: 900, fontFamily: "inherit", whiteSpace: "nowrap", boxShadow: "0 8px 22px rgba(220,38,38,0.26)", opacity: alertSending ? 0.72 : 1 }}
+          >
+            {alertSending ? "Enviando..." : "🚨 Ayuda"}
+          </button>
+        )}
       </header>
 
       <section style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
@@ -1011,18 +1022,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           {menuOpen ? "×" : "+"}
           {newPrescriptionCount > 0 && <span style={{position:"absolute",right:0,top:0,width:12,height:12,borderRadius:"50%",background:"#DC2626",border:"2px solid #ededed"}} />}
         </button>
-
-        {viewerType === "patient" && (
-          <button
-            onClick={triggerHelpAlert}
-            disabled={alertSending}
-            aria-label="Necesito ayuda"
-            title={alertFeedback || "Necesito ayuda"}
-            style={{ minHeight: 42, height: 42, borderRadius: 999, border: "none", background: "#DC2626", color: "#fff", padding: "0 12px", fontSize: 13, fontWeight: 900, fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0, opacity: alertSending ? 0.72 : 1 }}
-          >
-            {alertSending ? "Enviando..." : "🚨 Necesito ayuda"}
-          </button>
-        )}
 
         <div
           ref={setComposerNode}
