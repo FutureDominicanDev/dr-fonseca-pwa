@@ -484,6 +484,15 @@ type StaffRoomConversation = {
   latestText: string;
   unreadCount: number;
 };
+type MediaNotification = {
+  id?: string;
+  patient_id?: string | null;
+  room_id?: string | null;
+  staff_id?: string | null;
+  message?: string | null;
+  seen?: boolean | null;
+  created_at?: string | null;
+};
 
 const STAFF_ROOM_PREFIX = "__DRF_STAFF_ROOM__:";
 const makeStaffRoomId = () =>
@@ -1538,7 +1547,6 @@ export default function InboxPage() {
   }, [patients, t.patientLabel]);
   const translationKey = useCallback((messageId: string | number, targetLang: "es" | "en") => `incoming_translate_${String(messageId)}_${targetLang}`, []);
   const alertMessageStorageKey = useCallback((roomId: string) => `last_alert_message_${roomId}`, []);
-  const mediaUnreadStorageKey = useCallback((roomId: string) => `media_unread_${roomId}`, []);
   const incomingMessageKey = useCallback((message: any) => {
     if (!message) return "";
     return `${message.room_id || ""}:${message.id || "no-id"}:${message.created_at || ""}:${message.sender_type || ""}:${message.message_type || ""}`;
@@ -1575,23 +1583,56 @@ export default function InboxPage() {
     }
   }, []);
 
-  const registerIncomingStaffMedia = useCallback((message: any) => {
-    if (!message?.room_id || !isMediaMessage(message) || message.sender_id === currentUserId) return;
-    const roomId = message.room_id;
-    const staffName = message.sender_name || (lang === "es" ? "el equipo" : "the team");
-    const patientName = roomPatientName(roomId);
-    const body = lang === "es"
-      ? `Nuevo archivo agregado por ${staffName} para ${patientName}`
-      : `New file added by ${staffName} for ${patientName}`;
+  const patientIdForRoom = useCallback((roomId: string) => {
+    const patient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === roomId));
+    return patient?.id || "";
+  }, [patients]);
 
-    setMediaUnreadCounts((current) => {
-      const nextCount = (current[roomId] || Number(localStorage.getItem(mediaUnreadStorageKey(roomId)) || 0)) + 1;
-      localStorage.setItem(mediaUnreadStorageKey(roomId), String(nextCount));
-      return { ...current, [roomId]: nextCount };
-    });
-    showToastAlert(roomId, patientName, body);
+  const registerIncomingMediaNotification = useCallback((notification: MediaNotification) => {
+    const patientId = notification.patient_id || (notification.room_id ? patientIdForRoom(notification.room_id) : "");
+    const roomId = notification.room_id || patients.find((patient) => patient.id === patientId)?.rooms?.[0]?.id || "";
+    if (!patientId) return;
+    const patientName = roomId ? roomPatientName(roomId) : patients.find((patient) => patient.id === patientId)?.full_name || t.patientLabel;
+    const body = notification.message || (lang === "es" ? "Nuevo archivo agregado" : "New file added");
+    const toastBody = body.replace(/\s+para\s+.+$/i, "");
+
+    setMediaUnreadCounts((current) => ({ ...current, [patientId]: (current[patientId] || 0) + 1 }));
+    if (roomId) showToastAlert(roomId, patientName, toastBody);
+    playIncomingTone();
     pushNotif(patientName, body);
-  }, [currentUserId, isMediaMessage, lang, mediaUnreadStorageKey, pushNotif, roomPatientName, showToastAlert]);
+  }, [lang, patientIdForRoom, patients, playIncomingTone, pushNotif, roomPatientName, showToastAlert, t.patientLabel]);
+
+  const fetchMediaNotificationCounts = useCallback(async () => {
+    if (!currentUserId) return;
+    const { data, error } = await supabase
+      .from("media_notifications")
+      .select("patient_id, room_id")
+      .eq("staff_id", currentUserId)
+      .eq("seen", false);
+    if (error) return;
+    const next: Record<string, number> = {};
+    (data || []).forEach((entry: any) => {
+      const patientId = entry.patient_id || (entry.room_id ? patientIdForRoom(entry.room_id) : "");
+      if (patientId) next[patientId] = (next[patientId] || 0) + 1;
+    });
+    setMediaUnreadCounts(next);
+  }, [currentUserId, patientIdForRoom]);
+
+  const markMediaNotificationsSeen = useCallback(async (patientId?: string | null) => {
+    if (!currentUserId || !patientId) return;
+    setMediaUnreadCounts((current) => {
+      if (!current[patientId]) return current;
+      const next = { ...current };
+      delete next[patientId];
+      return next;
+    });
+    await supabase
+      .from("media_notifications")
+      .update({ seen: true, status: "read", read_at: new Date().toISOString() })
+      .eq("staff_id", currentUserId)
+      .eq("patient_id", patientId)
+      .eq("seen", false);
+  }, [currentUserId]);
 
   const openToastRoom = useCallback((mode: "chat" | "read-note" | "add-note" = "chat") => {
     if (!toastAlert) return;
@@ -2138,6 +2179,24 @@ export default function InboxPage() {
   }, [currentUserId, fetchStaffPrivateMessages, lang, markStaffPrivateConversationRead, playIncomingTone, pushNotif, upsertStaffPrivateMessage]);
 
   useEffect(() => {
+    if (!currentUserId) return;
+    fetchMediaNotificationCounts();
+
+    const channel = supabase
+      .channel(`media-notifications:${currentUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "media_notifications", filter: `staff_id=eq.${currentUserId}` },
+        ({ new: notification }) => registerIncomingMediaNotification(notification as MediaNotification)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, fetchMediaNotificationCounts, registerIncomingMediaNotification]);
+
+  useEffect(() => {
     if (showNewRoom && currentUserId) {
       setSelectedCareTeamIds((current) => current.includes(currentUserId) ? current : [currentUserId, ...current]);
     }
@@ -2164,9 +2223,6 @@ export default function InboxPage() {
         if (m.sender_type === "staff" && m.is_internal && m.sender_id && m.sender_id !== currentUserId) {
           registerIncomingInternalNote(m);
         }
-        if (m.sender_type === "staff" && !m.is_internal && m.sender_id && m.sender_id !== currentUserId && isMediaMessage(m)) {
-          registerIncomingStaffMedia(m);
-        }
         if (selectedRoomRef.current?.id===m.room_id) {
           setMessages(prev=>{
             const ti=prev.findIndex(x=>typeof x.id==="string"&&x.id.startsWith("temp-")&&x.content===m.content&&x.sender_type===m.sender_type);
@@ -2179,7 +2235,7 @@ export default function InboxPage() {
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},({new:m})=>{ if (selectedRoomRef.current?.id===m.room_id) setMessages(p=>p.map(x=>x.id===m.id?m:x)); })
       .subscribe();
     return ()=>{ supabase.removeChannel(ch); };
-  },[currentUserId, isMediaMessage, registerIncomingInternalNote, registerIncomingPatientMessage, registerIncomingStaffMedia]);
+  },[currentUserId, registerIncomingInternalNote, registerIncomingPatientMessage]);
 
   useEffect(() => {
     const activeRoomId = selectedRoomRef.current?.id;
@@ -2203,15 +2259,8 @@ export default function InboxPage() {
   },[]);
 
   useEffect(() => {
-    const next: Record<string, number> = {};
-    patients.forEach((patient) => {
-      (patient.rooms || []).forEach((room: any) => {
-        const count = Number(localStorage.getItem(mediaUnreadStorageKey(room.id)) || 0);
-        if (count > 0) next[room.id] = count;
-      });
-    });
-    setMediaUnreadCounts(next);
-  }, [mediaUnreadStorageKey, patients]);
+    fetchMediaNotificationCounts();
+  }, [fetchMediaNotificationCounts]);
 
   useEffect(()=>{
     if (selectedRoom) {
@@ -2222,15 +2271,15 @@ export default function InboxPage() {
       fetchSelectedRoomTeam(selectedRoom.id);
       setMobileView("chat");
       markRoomAsRead(selectedRoom.id);
-      localStorage.removeItem(mediaUnreadStorageKey(selectedRoom.id));
-      setMediaUnreadCounts((current) => {
-        if (!current[selectedRoom.id]) return current;
-        const next = { ...current };
-        delete next[selectedRoom.id];
-        return next;
-      });
+      markMediaNotificationsSeen(selectedRoom.procedures?.patients?.id);
     }
-  },[markRoomAsRead, mediaUnreadStorageKey, selectedRoom]);
+  },[markMediaNotificationsSeen, markRoomAsRead, selectedRoom]);
+
+  useEffect(() => {
+    if (showPatientInfo && selectedRoom) {
+      markMediaNotificationsSeen(selectedRoom.procedures?.patients?.id);
+    }
+  }, [markMediaNotificationsSeen, selectedRoom, showPatientInfo]);
 
   // Fallback: refresh sidebar/messages frequently in case realtime drops events on mobile or background tabs
   useEffect(()=>{
@@ -2634,6 +2683,7 @@ export default function InboxPage() {
       const sRole=userProfile?.role||"staff";
       const sOffice=userProfile?.office_location||selectedRoom?.procedures?.office_location||null;
       const patientId = selectedRoom?.procedures?.patients?.id || selectedRoom.id;
+      const notificationPatientId = selectedRoom?.procedures?.patients?.id || null;
       const mediaFolder =
         cat === "before_photo"
           ? "pre-op-photos"
@@ -2668,6 +2718,37 @@ export default function InboxPage() {
           url: ud.publicUrl,
           created_at: new Date().toISOString(),
         }).then(() => undefined);
+      }
+      if (nm && isMediaMessage(nm)) {
+        const patientRoomIds = notificationPatientId
+          ? patients.find((patient) => patient.id === notificationPatientId)?.rooms?.map((room: any) => room.id).filter(Boolean) || [selectedRoom.id]
+          : [selectedRoom.id];
+        const { data: members } = await supabase
+          .from("room_members")
+          .select("user_id")
+          .in("room_id", patientRoomIds);
+        const patientName = selectedRoom.procedures?.patients?.full_name || t.patientLabel;
+        const notificationMessage = `Nuevo archivo agregado por ${sName} para ${patientName}`;
+        const createdAt = new Date().toISOString();
+        const rows = Array.from(new Set((members || []).map((member: any) => member.user_id).filter(Boolean)))
+          .filter((staffId) => staffId !== currentUserId)
+          .map((staffId) => ({
+            patient_id: notificationPatientId,
+            room_id: selectedRoom.id,
+            message_id: nm.id,
+            staff_id: staffId,
+            recipient_id: staffId,
+            sender_id: currentUserId || null,
+            media_type: mt,
+            message: notificationMessage,
+            seen: false,
+            status: "unread",
+            created_at: createdAt,
+          }));
+        if (rows.length) {
+          const { error: notificationError } = await supabase.from("media_notifications").insert(rows);
+          if (notificationError) console.error("media_notifications insert failed", notificationError);
+        }
       }
       if (cat === "medication") {
         setMediaLibraryTab("docs");
@@ -4021,6 +4102,7 @@ export default function InboxPage() {
         .patient-row.active { background: ${darkMode?"#203744":"#EAF5FF"}; border-color: ${darkMode?"rgba(125,211,252,0.30)":"#B9D8F2"}; }
         .av { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; position: relative; box-shadow: 0 5px 16px rgba(16,52,83,0.18); }
         .av-badge { position: absolute; top: 0; right: 0; width: 14px; height: 14px; background: #25D366; border-radius: 50%; border: 2px solid ${darkMode ? "#15232B" : "#FFFFFF"}; }
+        .av-badge.media { background: #EF4444; }
         .patient-info { flex: 1; min-width: 0; }
         .patient-main-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
         .patient-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
@@ -4927,6 +5009,7 @@ export default function InboxPage() {
               ):filtPts.map(pt=>{
                 const ptUnreadCount=pt.rooms.reduce((sum:number,r:any)=>sum+(unreadCounts[r.id]||0),0);
                 const ptUnread=ptUnreadCount>0;
+                const ptMediaUnread=(mediaUnreadCounts[pt.id]||0)>0;
                 const firstRoom=pt.rooms[0];
                 const proc=firstRoom?.procedures;
                 const surgDate=proc?.surgery_date?new Date(proc.surgery_date).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}):"";
@@ -4937,7 +5020,7 @@ export default function InboxPage() {
                   <div key={pt.id} className={`patient-row${isActive?" active":""}`} onClick={()=>{setSelectedRoom(firstRoom);setMobileView("chat");}}>
                     <div className="av">
                       {pt.profile_picture_url?<img src={pt.profile_picture_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:ini(pt.full_name)}
-                      {ptUnread&&<div className="av-badge"/>}
+                      {(ptUnread||ptMediaUnread)&&<div className={`av-badge${ptMediaUnread?" media":""}`}/>}
                     </div>
                     <div className="patient-info">
                       <div className="patient-main-line">

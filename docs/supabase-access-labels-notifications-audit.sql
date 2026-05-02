@@ -102,15 +102,22 @@ alter table public.labels
 
 create table if not exists public.media_notifications (
   id uuid primary key default gen_random_uuid(),
+  patient_id uuid references public.patients(id) on delete cascade,
   room_id uuid references public.rooms(id) on delete cascade,
   message_id uuid references public.messages(id) on delete cascade,
   media_type text not null,
+  staff_id uuid references public.profiles(id) on delete cascade,
   recipient_id uuid references public.profiles(id) on delete cascade,
   sender_id uuid references public.profiles(id) on delete set null,
+  message text,
+  seen boolean not null default false,
   status text not null default 'unread',
   read_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+alter table public.media_notifications
+  add column if not exists patient_id uuid references public.patients(id) on delete cascade;
 
 alter table public.media_notifications
   add column if not exists room_id uuid references public.rooms(id) on delete cascade;
@@ -122,10 +129,19 @@ alter table public.media_notifications
   add column if not exists media_type text;
 
 alter table public.media_notifications
+  add column if not exists staff_id uuid references public.profiles(id) on delete cascade;
+
+alter table public.media_notifications
   add column if not exists recipient_id uuid references public.profiles(id) on delete cascade;
 
 alter table public.media_notifications
   add column if not exists sender_id uuid references public.profiles(id) on delete set null;
+
+alter table public.media_notifications
+  add column if not exists message text;
+
+alter table public.media_notifications
+  add column if not exists seen boolean not null default false;
 
 alter table public.media_notifications
   add column if not exists status text not null default 'unread';
@@ -237,6 +253,12 @@ create index if not exists labels_room_id_idx
 
 create index if not exists media_notifications_recipient_id_idx
   on public.media_notifications(recipient_id);
+
+create index if not exists media_notifications_staff_id_seen_idx
+  on public.media_notifications(staff_id, seen);
+
+create index if not exists media_notifications_patient_id_idx
+  on public.media_notifications(patient_id);
 
 create index if not exists media_notifications_room_id_idx
   on public.media_notifications(room_id);

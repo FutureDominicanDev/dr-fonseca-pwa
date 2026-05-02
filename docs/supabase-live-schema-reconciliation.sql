@@ -73,4 +73,22 @@ create index if not exists media_uploads_message_id_idx
 create index if not exists media_uploads_uploaded_by_idx
   on public.media_uploads(uploaded_by);
 
+alter table public.media_notifications
+  add column if not exists patient_id uuid references public.patients(id) on delete cascade;
+
+alter table public.media_notifications
+  add column if not exists staff_id uuid references public.profiles(id) on delete cascade;
+
+alter table public.media_notifications
+  add column if not exists message text;
+
+alter table public.media_notifications
+  add column if not exists seen boolean not null default false;
+
+create index if not exists media_notifications_staff_id_seen_idx
+  on public.media_notifications(staff_id, seen);
+
+create index if not exists media_notifications_patient_id_idx
+  on public.media_notifications(patient_id);
+
 notify pgrst, 'reload schema';
