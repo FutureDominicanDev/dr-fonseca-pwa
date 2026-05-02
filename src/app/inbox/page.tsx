@@ -5,6 +5,7 @@ import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/date
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { isOwnerEmail } from "@/lib/securityConfig";
+import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
@@ -2532,6 +2533,7 @@ export default function InboxPage() {
       : "";
     const contentToRender = translated || msg.content;
     const effectiveType=msg.message_type==="text"&&isImageUrl(msg.content)?"image":msg.message_type;
+    const formPayload = parseFormMessage(msg.content);
 
     if (isSystem) return (
       <div key={msg.id} style={{display:"flex",justifyContent:"center",margin:"8px 0"}}>
@@ -2626,6 +2628,10 @@ export default function InboxPage() {
             </a>
             {patientDeletedNotice}
             {bubbleTime(false,{marginTop:6})}
+          </div>
+        ):formPayload ? (
+          <div style={{...bubbleStyle,padding:0,background:"transparent",border:"none",boxShadow:"none"}}>
+            <FormMessage payload={formPayload} lang={lang} />
           </div>
         ):callRequestToken ? (
           <div style={{ ...bubbleStyle, padding: 12, minWidth: 250 }}>
