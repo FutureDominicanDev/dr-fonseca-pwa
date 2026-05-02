@@ -12,6 +12,7 @@ type FileCategory = "general" | "medication" | "before_photo";
 type PhoneCountryOption = { code: string; label: string };
 type MediaTab = "media" | "audio" | "prescriptions" | "docs";
 type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
+type InternalNoteVisibility = "team" | "private";
 
 const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
 
@@ -137,11 +138,16 @@ const T = {
     callEndedNote: "Videollamada finalizada",
     patientLocalTime: "Hora Local del Paciente",
     internalNotes: "Notas internas del equipo",
-    internalNotesHint: "Solo el equipo asignado puede ver estas notas.",
+    internalNotesHint: "Puedes guardar notas para todo el equipo asignado o privadas solo para ti.",
     addInternalNote: "Agregar nota interna",
     internalNotePH: "Escribe una nota clínica o administrativa para el equipo...",
     noInternalNotes: "Todavía no hay notas internas para este caso.",
     noteSaved: "Nota interna guardada.",
+    noteVisibleTeam: "Visible para equipo",
+    notePrivate: "Solo para mí",
+    privateNoteBadge: "Privada",
+    teamNoteBadge: "Equipo",
+    uploadedBy: "Subido por",
     noTeamSelected: "Si no seleccionas a nadie, se asignará solo la persona que crea el chat.",
     noPatientInfo: "Todavía no hay datos extendidos para este paciente.",
     openFullRecord: "Abrir expediente",
@@ -269,11 +275,16 @@ const T = {
     callEndedNote: "Video call ended",
     patientLocalTime: "Patient Local Time",
     internalNotes: "Internal team notes",
-    internalNotesHint: "Only the assigned care team can see these notes.",
+    internalNotesHint: "Save notes for the assigned care team or privately for your eyes only.",
     addInternalNote: "Add internal note",
     internalNotePH: "Write a clinical or administrative note for the team...",
     noInternalNotes: "There are no internal notes for this case yet.",
     noteSaved: "Internal note saved.",
+    noteVisibleTeam: "Visible to team",
+    notePrivate: "Only me",
+    privateNoteBadge: "Private",
+    teamNoteBadge: "Team",
+    uploadedBy: "Uploaded by",
     noTeamSelected: "If you do not choose anyone, only the room creator will be assigned.",
     noPatientInfo: "There is no extended patient data yet.",
     openFullRecord: "Open record",
@@ -315,6 +326,7 @@ const T = {
 
 const VIDEO_CALL_PREFIX = "__VIDEO_CALL__::";
 const CALL_REQUEST_PREFIX = "__CALL_REQUEST__::";
+const INTERNAL_NOTE_PREFIX = "__DRF_INTERNAL_NOTE__:";
 
 const normalizeCallRoomId = (roomId: string) =>
   String(roomId || "")
@@ -339,6 +351,31 @@ const parseCallRequestMessage = (content: string | null | undefined) => {
   if (!text.startsWith(CALL_REQUEST_PREFIX)) return null;
   return text.slice(CALL_REQUEST_PREFIX.length).trim() || "request";
 };
+
+const serializeInternalNote = (body: string, visibility: InternalNoteVisibility) =>
+  `${INTERNAL_NOTE_PREFIX}${JSON.stringify({ body, visibility })}`;
+
+const parseInternalNote = (content?: string | null): { body: string; visibility: InternalNoteVisibility } => {
+  const text = `${content || ""}`;
+  if (!text.startsWith(INTERNAL_NOTE_PREFIX)) return { body: text, visibility: "team" };
+  try {
+    const parsed = JSON.parse(text.slice(INTERNAL_NOTE_PREFIX.length));
+    return {
+      body: `${parsed?.body || ""}`,
+      visibility: parsed?.visibility === "private" ? "private" : "team",
+    };
+  } catch {
+    return { body: text, visibility: "team" };
+  }
+};
+
+const safeStorageSegment = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "staff";
 
 interface QuickReply { shortcut: string; message: string; }
 interface RoomMessageSummary {
@@ -506,6 +543,7 @@ export default function InboxPage() {
   const [managedTeamIds, setManagedTeamIds] = useState<string[]>([]);
   const [savingTeam, setSavingTeam] = useState(false);
   const [internalNoteDraft, setInternalNoteDraft] = useState("");
+  const [internalNoteVisibility, setInternalNoteVisibility] = useState<InternalNoteVisibility>("team");
   const [savingInternalNote, setSavingInternalNote] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [newRoomError, setNewRoomError] = useState("");
@@ -825,6 +863,19 @@ export default function InboxPage() {
   const isSuperAdmin = isOwnerEmail(currentUserEmail) || ["owner","super_admin"].includes((userProfile?.admin_level || "").toLowerCase());
   const canOpenAdmin = isSuperAdmin;
   const canManageCareTeam = isSuperAdmin;
+  const canViewInternalNote = (entry: any) => {
+    const note = parseInternalNote(entry?.content);
+    if (note.visibility !== "private") return true;
+    return isSuperAdmin || (!!currentUserId && entry?.sender_id === currentUserId);
+  };
+  const internalNoteText = (entry: any) => parseInternalNote(entry?.content).body;
+  const internalNoteVisibilityFor = (entry: any) => parseInternalNote(entry?.content).visibility;
+  const mediaUploaderName = (entry: any) =>
+    entry?.sender_name && entry.sender_name !== "Sistema"
+      ? entry.sender_name
+      : lang === "es"
+        ? "Equipo"
+        : "Care team";
   const canCreatePatientRooms =
     isOwnerEmail(currentUserEmail) ||
     ["owner", "super_admin", "admin"].includes((userProfile?.admin_level || "").toLowerCase());
@@ -1105,6 +1156,8 @@ export default function InboxPage() {
     const roomId = message.room_id;
     const roomIsAssigned = selectedRoomRef.current?.id === roomId || patients.some((patient: any) => (patient.rooms || []).some((room: any) => room.id === roomId));
     if (!roomIsAssigned) return;
+    const parsedNote = parseInternalNote(message.content);
+    if (parsedNote.visibility === "private" && message.sender_id !== currentUserId && !isSuperAdmin) return;
     const messageKey = incomingMessageKey(message);
     if (typeof window !== "undefined" && messageKey) {
       const lastAlertedMessage = window.localStorage.getItem(alertMessageStorageKey(roomId)) || "";
@@ -1116,7 +1169,7 @@ export default function InboxPage() {
     const patientName = roomPatientName(roomId);
     const author = message.sender_name || roleName(message.sender_role);
     const title = lang === "es" ? `Nota interna · ${patientName}` : `Internal note · ${patientName}`;
-    const rawBody = `${message.content || ""}`.trim();
+    const rawBody = parsedNote.body.trim();
     const body = rawBody
       ? `${author}: ${rawBody}`.slice(0, 120)
       : (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up.");
@@ -2016,7 +2069,19 @@ export default function InboxPage() {
   const uploadFile = async (file: File, cat: FileCategory="general", folderLabel = "") => {
     if (!selectedRoom) return; setSending(true);
     try {
-      const fn=`patients/${selectedRoom.id}/${Date.now()}-${file.name}`;
+      const sName=userProfile?.full_name||userProfile?.display_name||"Staff";
+      const sRole=userProfile?.role||"staff";
+      const sOffice=userProfile?.office_location||selectedRoom?.procedures?.office_location||null;
+      const patientId = selectedRoom?.procedures?.patients?.id || selectedRoom.id;
+      const mediaFolder =
+        cat === "before_photo"
+          ? "pre-op-photos"
+          : cat === "medication"
+            ? "prescriptions"
+            : file.type.startsWith("image/")
+              ? "patient-photos"
+              : "chat-files";
+      const fn=`patients/${patientId}/${mediaFolder}/uploaded-by-${safeStorageSegment(sName)}/${Date.now()}-${safeStorageSegment(file.name)}`;
       const { error: ue } = await supabase.storage.from("chat-files").upload(fn,file);
       if (ue){setSending(false);return;}
       const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn);
@@ -2026,9 +2091,6 @@ export default function InboxPage() {
       else if (file.type.startsWith("audio/")) mt="audio";
       const prefix=cat==="medication"?"[MED] ":cat==="before_photo"?"[BEFORE] ":"";
       const displayFileName = cat==="medication" ? `${prefix}${folderLabel.trim() || file.name}` : `${prefix}${file.name}`;
-      const sName=userProfile?.full_name||userProfile?.display_name||"Staff";
-      const sRole=userProfile?.role||"staff";
-      const sOffice=userProfile?.office_location||selectedRoom?.procedures?.office_location||null;
       const tempId="temp-file-"+Date.now();
       setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
       const { data: nm } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
@@ -2048,11 +2110,13 @@ export default function InboxPage() {
     const sName = userProfile?.full_name || userProfile?.display_name || "Staff";
     const sRole = userProfile?.role || "staff";
     const sOffice = userProfile?.office_location || selectedRoom?.procedures?.office_location || null;
+    const noteBody = internalNoteDraft.trim();
+    const noteContent = serializeInternalNote(noteBody, internalNoteVisibility);
     const tempId = "temp-note-" + Date.now();
     const tempMessage = {
       id: tempId,
       room_id: selectedRoom.id,
-      content: internalNoteDraft.trim(),
+      content: noteContent,
       message_type: "text",
       sender_type: "staff",
       sender_id: currentUserId || null,
@@ -2067,7 +2131,7 @@ export default function InboxPage() {
       .from("messages")
       .insert({
         room_id: selectedRoom.id,
-        content: internalNoteDraft.trim(),
+        content: noteContent,
         message_type: "text",
         sender_type: "staff",
         sender_id: currentUserId || null,
@@ -2085,11 +2149,11 @@ export default function InboxPage() {
     } else if (data) {
       setMessages((prev) => prev.map((entry) => entry.id === tempId ? data : entry));
       setInternalNoteDraft("");
-      sendPushNotification({
+      if (internalNoteVisibility === "team") sendPushNotification({
           roomId:selectedRoom.id,
           userType:"staff",
           title: lang === "es" ? `Nota interna · ${roomPatientName(selectedRoom.id)}` : `Internal note · ${roomPatientName(selectedRoom.id)}`,
-          body: `${data.content || ""}`.trim().slice(0, 120) || (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up."),
+          body: noteBody.slice(0, 120) || (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up."),
           url: window.location.href,
           tag: `internal-note-${selectedRoom.id}`,
       });
@@ -2226,6 +2290,7 @@ export default function InboxPage() {
     try {
       const creatorId=currentUserId||userProfile?.id||null;
       const creatorRole=userProfile?.role||"staff";
+      const creatorName=userProfile?.full_name||userProfile?.display_name||"Staff";
       const patientPayload = {
         full_name:patientFullName,
         phone:combinedPatientPhone||null,
@@ -2302,7 +2367,7 @@ export default function InboxPage() {
       });
       for (let i = 0; i < beforePhotosFiles.length; i++) {
         const f = beforePhotosFiles[i];
-        const fn2 = `patients/${rm.id}/${Date.now()}-${i}-${f.name}`;
+        const fn2 = `patients/${pt.id}/pre-op-photos/uploaded-by-${safeStorageSegment(creatorName)}/${Date.now()}-${i}-${safeStorageSegment(f.name)}`;
         const { error: ue2 } = await supabase.storage.from("chat-files").upload(fn2, f);
         if (!ue2) {
           const { data: ud2 } = supabase.storage.from("chat-files").getPublicUrl(fn2);
@@ -2313,7 +2378,7 @@ export default function InboxPage() {
             file_name: `[BEFORE] Foto Pre-Op ${i + 1}`,
             sender_type: "staff",
             sender_id: creatorId,
-            sender_name: "Sistema",
+            sender_name: creatorName,
             sender_role: creatorRole,
             sender_office: newLocation,
             is_internal: true,
@@ -2839,7 +2904,7 @@ export default function InboxPage() {
       );
     };
     const internalNotes = messages
-      .filter((entry) => entry.is_internal && !isOldBrokenNote(entry))
+      .filter((entry) => entry.is_internal && !isOldBrokenNote(entry) && canViewInternalNote(entry))
       .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
     const locale = lang === "es" ? "es-MX" : "en-US";
     const localTime = currentTimeInZone(patient?.timezone, locale);
@@ -3004,6 +3069,9 @@ export default function InboxPage() {
                       <div style={{aspectRatio:"1 / 1",borderRadius:14,overflow:"hidden",background:"#E5E7EB"}}>
                         <img src={entry.content} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                       </div>
+                      <div style={{fontSize:Math.max(uiSmallSize - 1, 12),color:subTextColor,fontWeight:800,lineHeight:1.25,marginTop:6,textAlign:"left",overflowWrap:"anywhere"}}>
+                        {t.uploadedBy}: {mediaUploaderName(entry)}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -3020,14 +3088,31 @@ export default function InboxPage() {
                   {internalNotes.map((note)=>(
                     <div key={note.id} style={{padding:"12px 14px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
                       <div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:6}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0}}>
 	                        <strong style={{color:textColor,fontSize:uiSmallSize,lineHeight:1.35,overflowWrap:"anywhere"}}>{note.sender_name && note.sender_name !== "Sistema" ? note.sender_name : roleName(note.sender_role)}</strong>
-	                        <span style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.35}}>{fmtTime(note.created_at)} · {new Date(note.created_at).toLocaleDateString(locale)}</span>
+                          <span style={{padding:"4px 8px",borderRadius:999,background:internalNoteVisibilityFor(note)==="private"?"#FEF3C7":"#DBEAFE",color:internalNoteVisibilityFor(note)==="private"?"#92400E":"#1D4ED8",fontSize:Math.max(uiSmallSize - 2, 11),fontWeight:900,lineHeight:1}}>
+                            {internalNoteVisibilityFor(note)==="private" ? t.privateNoteBadge : t.teamNoteBadge}
+                          </span>
+                        </div>
+                        <span style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.35,whiteSpace:"nowrap"}}>{fmtTime(note.created_at)} · {new Date(note.created_at).toLocaleDateString(locale)}</span>
                       </div>
-	                      <div style={{fontSize:uiBaseSize,color:textColor,lineHeight:1.55,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{note.content}</div>
+	                      <div style={{fontSize:uiBaseSize,color:textColor,lineHeight:1.55,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{internalNoteText(note)}</div>
                     </div>
                   ))}
                 </div>
               )}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                {(["team","private"] as InternalNoteVisibility[]).map((option)=>(
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={()=>setInternalNoteVisibility(option)}
+                    style={{minHeight:44,border:`1px solid ${internalNoteVisibility===option?"#2563EB":borderColor}`,borderRadius:14,background:internalNoteVisibility===option?"#DBEAFE":(darkMode?"#0F172A":"white"),color:internalNoteVisibility===option?"#1D4ED8":textColor,fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer"}}
+                  >
+                    {option === "team" ? t.noteVisibleTeam : t.notePrivate}
+                  </button>
+                ))}
+              </div>
               <textarea ref={internalNoteInputRef} value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:16,resize:"vertical",marginBottom:10,lineHeight:1.5}} />
               <button onClick={saveInternalNote} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{width:"100%",padding:12,minHeight:48,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingInternalNote || !internalNoteDraft.trim()?0.5:1}}>
                 {savingInternalNote ? (lang==="es" ? "Guardando..." : "Saving...") : t.addInternalNote}
@@ -3656,7 +3741,10 @@ export default function InboxPage() {
                     ) : (
                       <video src={entry.content} style={{width:"100%",height:120,objectFit:"cover",display:"block"}} />
                     )}
-                    <div style={{padding:"8px 10px",fontSize:12,color:subTextColor}}>{fmtDateLabel(entry.created_at)}</div>
+                    <div style={{padding:"8px 10px",display:"grid",gap:3}}>
+                      <div style={{fontSize:12,color:subTextColor}}>{fmtDateLabel(entry.created_at)}</div>
+                      <div style={{fontSize:12,color:textColor,fontWeight:850,overflowWrap:"anywhere"}}>{t.uploadedBy}: {mediaUploaderName(entry)}</div>
+                    </div>
                   </a>
                 ))}
               </div>
@@ -3667,6 +3755,7 @@ export default function InboxPage() {
                 {roomAudioEntries.map((entry:any)=>(
                   <div key={entry.id} style={{padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`}}>
                     <audio src={entry.content} controls style={{width:"100%"}} />
+                    <div style={{fontSize:12,color:subTextColor,fontWeight:800,marginTop:6,overflowWrap:"anywhere"}}>{t.uploadedBy}: {mediaUploaderName(entry)}</div>
                   </div>
                 ))}
               </div>
@@ -3685,6 +3774,7 @@ export default function InboxPage() {
                         <div style={{display:"grid",gap:3}}>
                           <div style={{fontWeight:800,fontSize:14}}>{title || t.prescriptions}</div>
                           {instructions.join("\n").trim() && <div style={{fontWeight:600,fontSize:12,color:subTextColor,lineHeight:1.35,whiteSpace:"pre-wrap"}}>{instructions.join("\n").trim()}</div>}
+                          <div style={{fontWeight:800,fontSize:12,color:subTextColor}}>{t.uploadedBy}: {mediaUploaderName(entry)}</div>
                         </div>
                       );
                     })()}
@@ -3699,7 +3789,10 @@ export default function InboxPage() {
                 {roomFileEntries.map((entry:any)=>(
                   <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
                     <span style={{fontSize:22}}>📄</span>
-                    <div style={{fontWeight:700,fontSize:14}}>{entry.file_name || (lang==="es"?"Archivo":"File")}</div>
+                    <div style={{display:"grid",gap:3,minWidth:0}}>
+                      <div style={{fontWeight:700,fontSize:14,overflowWrap:"anywhere"}}>{entry.file_name || (lang==="es"?"Archivo":"File")}</div>
+                      <div style={{fontWeight:800,fontSize:12,color:subTextColor,overflowWrap:"anywhere"}}>{t.uploadedBy}: {mediaUploaderName(entry)}</div>
+                    </div>
                   </a>
                 ))}
               </div>
