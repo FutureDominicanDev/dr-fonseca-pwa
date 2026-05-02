@@ -449,6 +449,53 @@ type StaffPrivateConversation = {
   latestText: string;
   unreadCount: number;
 };
+type StaffRoomPayload = {
+  kind: "staff_room";
+  roomId: string;
+  roomName: string;
+  memberIds: string[];
+  text: string;
+  messageId: string;
+  createdBy?: string | null;
+};
+type StaffRoomConversation = {
+  roomId: string;
+  roomName: string;
+  memberIds: string[];
+  messages: StaffPrivateMessage[];
+  latestAt: string;
+  latestText: string;
+  unreadCount: number;
+};
+
+const STAFF_ROOM_PREFIX = "__DRF_STAFF_ROOM__:";
+const makeStaffRoomId = () =>
+  `staff-room-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+const makeStaffRoomMessageId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `staff-msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+const serializeStaffRoomPayload = (payload: StaffRoomPayload) =>
+  `${STAFF_ROOM_PREFIX}${JSON.stringify(payload)}`;
+const parseStaffRoomPayload = (content?: string | null): StaffRoomPayload | null => {
+  const value = `${content || ""}`;
+  if (!value.startsWith(STAFF_ROOM_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(value.slice(STAFF_ROOM_PREFIX.length));
+    if (parsed?.kind !== "staff_room" || !parsed.roomId) return null;
+    return {
+      kind: "staff_room",
+      roomId: `${parsed.roomId}`,
+      roomName: `${parsed.roomName || "Staff"}`,
+      memberIds: Array.isArray(parsed.memberIds) ? parsed.memberIds.map((id: any) => `${id}`).filter(Boolean) : [],
+      text: `${parsed.text || ""}`,
+      messageId: `${parsed.messageId || makeStaffRoomMessageId()}`,
+      createdBy: parsed.createdBy || null,
+    };
+  } catch {
+    return null;
+  }
+};
 
 const CARE_TEAM_ROLE_ORDER = ["doctor", "enfermeria", "coordinacion", "post_quirofano", "staff"] as const;
 
@@ -547,7 +594,13 @@ export default function InboxPage() {
   const [staffPrivateMessages, setStaffPrivateMessages] = useState<StaffPrivateMessage[]>([]);
   const [showStaffChats, setShowStaffChats] = useState(false);
   const [activeStaffChatPeerId, setActiveStaffChatPeerId] = useState<string | null>(null);
+  const [activeStaffRoomId, setActiveStaffRoomId] = useState<string | null>(null);
   const [staffPrivateReply, setStaffPrivateReply] = useState("");
+  const [staffRoomReply, setStaffRoomReply] = useState("");
+  const [showCreateStaffRoom, setShowCreateStaffRoom] = useState(false);
+  const [newStaffRoomName, setNewStaffRoomName] = useState("");
+  const [newStaffRoomInitialMessage, setNewStaffRoomInitialMessage] = useState("");
+  const [newStaffRoomMemberIds, setNewStaffRoomMemberIds] = useState<string[]>([]);
   const [privateToast, setPrivateToast] = useState<StaffPrivateMessage | null>(null);
   const [unreadRooms, setUnreadRooms] = useState<Set<string>>(new Set());
   const [totalUnread, setTotalUnread] = useState(0);
@@ -678,6 +731,7 @@ export default function InboxPage() {
   const messagePressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showStaffChatsRef = useRef(false);
   const activeStaffChatPeerIdRef = useRef<string | null>(null);
+  const activeStaffRoomIdRef = useRef<string | null>(null);
   const privateToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
@@ -834,6 +888,105 @@ export default function InboxPage() {
     alert(lang === "es" ? "Mensaje privado enviado." : "Private message sent.");
     closeStaffContact();
   };
+  const allStaffMembersForChat = useMemo<CareTeamMember[]>(() => {
+    const map = new Map<string, CareTeamMember>();
+    staffDirectory.forEach((member) => member?.id && map.set(member.id, member));
+    selectedRoomTeam.forEach((member) => member?.id && !map.has(member.id) && map.set(member.id, member));
+    if (currentUserId) {
+      map.set(currentUserId, {
+        id: currentUserId,
+        full_name: userProfile?.full_name || userProfile?.display_name || (lang === "es" ? "Tú" : "You"),
+        display_name: userProfile?.display_name || null,
+        role: userProfile?.role || "staff",
+        office_location: userProfile?.office_location || null,
+        avatar_url: userProfile?.avatar_url || null,
+        phone: userProfile?.phone || null,
+        email: userProfile?.email || currentUserEmail || null,
+      });
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      `${a.full_name || a.display_name || ""}`.localeCompare(`${b.full_name || b.display_name || ""}`, lang === "es" ? "es" : "en")
+    );
+  }, [currentUserEmail, currentUserId, lang, selectedRoomTeam, staffDirectory, userProfile]);
+  const staffMemberById = useMemo(() => {
+    const map = new Map<string, CareTeamMember>();
+    allStaffMembersForChat.forEach((member) => member.id && map.set(member.id, member));
+    return map;
+  }, [allStaffMembersForChat]);
+  const staffRoomMemberOptions = allStaffMembersForChat.filter((member) => member.id !== currentUserId);
+
+  const sendStaffRoomMessage = async (
+    roomId: string,
+    roomName: string,
+    memberIds: string[],
+    content: string
+  ) => {
+    const cleanContent = content.trim();
+    if (!currentUserId || !cleanContent || savingStaffPrivateMessage) return false;
+    const uniqueMemberIds = Array.from(new Set([currentUserId, ...memberIds].filter(Boolean)));
+    const recipientIds = uniqueMemberIds.filter((id) => id !== currentUserId);
+    if (recipientIds.length === 0) {
+      alert(lang === "es" ? "Selecciona al menos un miembro del equipo." : "Select at least one staff member.");
+      return false;
+    }
+    setSavingStaffPrivateMessage(true);
+    const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
+    const payload = serializeStaffRoomPayload({
+      kind: "staff_room",
+      roomId,
+      roomName,
+      memberIds: uniqueMemberIds,
+      text: cleanContent,
+      messageId: makeStaffRoomMessageId(),
+      createdBy: currentUserId,
+    });
+    const rows = recipientIds.map((recipientId) => {
+      const recipient = staffMemberById.get(recipientId);
+      return {
+        sender_id: currentUserId,
+        recipient_id: recipientId,
+        sender_name: senderName,
+        recipient_name: recipient?.full_name || recipient?.display_name || null,
+        content: payload,
+        created_at: new Date().toISOString(),
+      };
+    });
+    const { data, error } = await supabase.from("staff_private_messages").insert(rows as any).select("*");
+    setSavingStaffPrivateMessage(false);
+    if (error) {
+      alert(lang === "es" ? "No pude guardar el chat staff. Revisa la tabla staff_private_messages." : "I could not save the staff chat. Please check the staff_private_messages table.");
+      return false;
+    }
+    (data || []).forEach((entry) => upsertStaffPrivateMessage(entry as StaffPrivateMessage));
+    return true;
+  };
+
+  const createStaffRoom = async () => {
+    const roomName = newStaffRoomName.trim() || (lang === "es" ? "Chat del equipo" : "Team chat");
+    const memberIds = Array.from(new Set([currentUserId, ...newStaffRoomMemberIds].filter(Boolean)));
+    const roomId = makeStaffRoomId();
+    const intro = newStaffRoomInitialMessage.trim() || (lang === "es" ? "Chat staff creado." : "Staff chat created.");
+    const sent = await sendStaffRoomMessage(roomId, roomName, memberIds, intro);
+    if (!sent) return;
+    setShowCreateStaffRoom(false);
+    setNewStaffRoomName("");
+    setNewStaffRoomInitialMessage("");
+    setNewStaffRoomMemberIds([]);
+    setActiveStaffChatPeerId(null);
+    setActiveStaffRoomId(roomId);
+    setShowStaffChats(true);
+  };
+
+  const toggleNewStaffRoomMember = (memberId: string) => {
+    setNewStaffRoomMemberIds((current) =>
+      current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId]
+    );
+  };
+
+  const selectAllStaffForRoom = () => {
+    setNewStaffRoomMemberIds(staffRoomMemberOptions.map((member) => member.id));
+  };
+
   const closeMessageActions = () => {
     setPressedMsgId(null);
     setActiveMessageAction(null);
@@ -938,26 +1091,9 @@ export default function InboxPage() {
   const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id));
   const staffPrivateConversations = useMemo<StaffPrivateConversation[]>(() => {
     if (!currentUserId) return [];
-    const memberById = new Map<string, CareTeamMember>();
-    staffDirectory.forEach((member) => memberById.set(member.id, member));
-    selectedRoomTeam.forEach((member) => {
-      if (!memberById.has(member.id)) memberById.set(member.id, member);
-    });
-    if (userProfile?.id) {
-      memberById.set(userProfile.id, {
-        id: userProfile.id,
-        full_name: userProfile.full_name || userProfile.display_name || "Staff",
-        display_name: userProfile.display_name || null,
-        role: userProfile.role || "staff",
-        office_location: userProfile.office_location || null,
-        avatar_url: userProfile.avatar_url || null,
-        phone: userProfile.phone || null,
-        email: userProfile.email || null,
-      });
-    }
-
     const grouped = new Map<string, StaffPrivateMessage[]>();
     staffPrivateMessages.forEach((message) => {
+      if (parseStaffRoomPayload(message.content)) return;
       const senderId = message.sender_id || "";
       const recipientId = message.recipient_id || "";
       if (!senderId || !recipientId) return;
@@ -974,7 +1110,7 @@ export default function InboxPage() {
           latest.sender_id === peerId
             ? latest.sender_name
             : latest.recipient_name;
-        const peer = memberById.get(peerId) || {
+        const peer = staffMemberById.get(peerId) || {
           id: peerId,
           full_name: fallbackName || (lang === "es" ? "Personal" : "Staff"),
           display_name: fallbackName || null,
@@ -994,9 +1130,58 @@ export default function InboxPage() {
         };
       })
       .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
-  }, [currentUserId, lang, selectedRoomTeam, staffDirectory, staffPrivateMessages, userProfile]);
+  }, [currentUserId, lang, staffMemberById, staffPrivateMessages]);
+
+  const staffRoomConversations = useMemo<StaffRoomConversation[]>(() => {
+    if (!currentUserId) return [];
+    const grouped = new Map<string, {
+      roomName: string;
+      memberIds: Set<string>;
+      messages: Map<string, StaffPrivateMessage>;
+      unread: Set<string>;
+    }>();
+    staffPrivateMessages.forEach((message) => {
+      const payload = parseStaffRoomPayload(message.content);
+      if (!payload) return;
+      const senderId = message.sender_id || "";
+      const recipientId = message.recipient_id || "";
+      const memberIds = new Set<string>([...payload.memberIds, senderId, recipientId].filter(Boolean));
+      if (!memberIds.has(currentUserId)) return;
+      const existing = grouped.get(payload.roomId) || {
+        roomName: payload.roomName || (lang === "es" ? "Chat staff" : "Staff chat"),
+        memberIds: new Set<string>(),
+        messages: new Map<string, StaffPrivateMessage>(),
+        unread: new Set<string>(),
+      };
+      memberIds.forEach((id) => existing.memberIds.add(id));
+      const messageKey = payload.messageId || message.id || `${message.created_at}-${message.content}`;
+      if (!existing.messages.has(messageKey)) existing.messages.set(messageKey, message);
+      if (message.recipient_id === currentUserId && !message.read_at) existing.unread.add(messageKey);
+      grouped.set(payload.roomId, existing);
+    });
+    return Array.from(grouped.entries())
+      .map(([roomId, room]) => {
+        const messages = Array.from(room.messages.values()).sort((a, b) => `${a.created_at || ""}`.localeCompare(`${b.created_at || ""}`));
+        const latest = messages[messages.length - 1];
+        const latestPayload = parseStaffRoomPayload(latest?.content);
+        return {
+          roomId,
+          roomName: room.roomName,
+          memberIds: Array.from(room.memberIds),
+          messages,
+          latestAt: latest?.created_at || "",
+          latestText: latestPayload?.text || "",
+          unreadCount: room.unread.size,
+        };
+      })
+      .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
+  }, [currentUserId, lang, staffPrivateMessages]);
+
   const staffPrivateUnread = staffPrivateConversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0);
+  const staffRoomUnread = staffRoomConversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0);
+  const totalStaffChatUnread = staffPrivateUnread + staffRoomUnread;
   const activeStaffPrivateConversation = staffPrivateConversations.find((conversation) => conversation.peerId === activeStaffChatPeerId) || null;
+  const activeStaffRoomConversation = staffRoomConversations.find((conversation) => conversation.roomId === activeStaffRoomId) || null;
 
   const markStaffPrivateConversationRead = useCallback(async (peerId: string) => {
     if (!currentUserId || !peerId) return;
@@ -1018,15 +1203,111 @@ export default function InboxPage() {
     if (!peerId) return;
     setShowStaffChats(true);
     setActiveStaffChatPeerId(peerId);
+    setActiveStaffRoomId(null);
     setPrivateToast(null);
     markStaffPrivateConversationRead(peerId);
   }, [markStaffPrivateConversationRead]);
+
+  const markStaffRoomRead = useCallback(async (roomId: string) => {
+    if (!currentUserId || !roomId) return;
+    const readAt = new Date().toISOString();
+    const ids = staffPrivateMessages
+      .filter((message) => parseStaffRoomPayload(message.content)?.roomId === roomId && message.recipient_id === currentUserId && !message.read_at && message.id)
+      .map((message) => message.id as string);
+    if (ids.length === 0) return;
+    setStaffPrivateMessages((previous) => previous.map((message) => ids.includes(message.id || "") ? { ...message, read_at: readAt } : message));
+    await supabase.from("staff_private_messages").update({ read_at: readAt }).in("id", ids);
+  }, [currentUserId, staffPrivateMessages]);
+
+  const openStaffRoomConversation = useCallback((roomId: string) => {
+    if (!roomId) return;
+    setShowStaffChats(true);
+    setActiveStaffChatPeerId(null);
+    setActiveStaffRoomId(roomId);
+    setPrivateToast(null);
+    markStaffRoomRead(roomId);
+  }, [markStaffRoomRead]);
 
   const sendStaffPrivateReply = async () => {
     if (!activeStaffPrivateConversation || !staffPrivateReply.trim()) return;
     const sent = await sendStaffPrivateToMember(activeStaffPrivateConversation.peer, staffPrivateReply);
     if (sent) setStaffPrivateReply("");
   };
+
+  const sendActiveStaffRoomReply = async () => {
+    if (!activeStaffRoomConversation || !staffRoomReply.trim()) return;
+    const sent = await sendStaffRoomMessage(
+      activeStaffRoomConversation.roomId,
+      activeStaffRoomConversation.roomName,
+      activeStaffRoomConversation.memberIds,
+      staffRoomReply
+    );
+    if (sent) setStaffRoomReply("");
+  };
+
+  const openStaffChatsHome = () => {
+    setShowStaffChats(true);
+    setActiveStaffChatPeerId(null);
+    setActiveStaffRoomId(null);
+    setStaffPrivateReply("");
+    setStaffRoomReply("");
+    fetchStaffPrivateMessages();
+  };
+
+  const leaveCurrentChatView = () => {
+    setMobileView("list");
+    setSelectedRoom(null);
+    setShowQREditor(false);
+    setShowMediaMenu(false);
+    setShowEmojiMenu(false);
+    setShowSlashMenu(false);
+    closeMessageActions();
+  };
+
+  const requestNewPatientRoom = () => {
+    if (!canCreatePatientRooms) {
+      setNotificationFeedback({
+        tone: "error",
+        text:
+          lang === "es"
+            ? "No tienes permiso para crear pacientes. Solo el personal habilitado por Admin puede hacerlo."
+            : "You do not have permission to create patients. Only admin-enabled staff can do this.",
+      });
+      return;
+    }
+    setShowNewRoom(true);
+  };
+
+  const StaffGlobalActions = ({ compact = false }: { compact?: boolean }) => (
+    <div className="staff-global-actions">
+      <button
+        className="admin-inline-btn"
+        onClick={openStaffChatsHome}
+        title={lang==="es" ? "Chat staff a staff" : "Staff to Staff Chat"}
+        style={{position:"relative"}}
+      >
+        {compact ? "Staff" : (lang==="es" ? "Staff" : "Staff")}
+        {totalStaffChatUnread > 0 && (
+          <span style={{position:"absolute",top:-6,right:-6,minWidth:20,height:20,padding:"0 5px",borderRadius:99,background:"#EF4444",color:"white",fontSize:12,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(239,68,68,0.35)"}}>
+            {totalStaffChatUnread}
+          </span>
+        )}
+      </button>
+      {canCreatePatientRooms && (
+        <button
+          className="staff-plus-btn"
+          onClick={requestNewPatientRoom}
+          title={lang === "es" ? "Crear paciente" : "Create patient"}
+          aria-label={lang === "es" ? "Crear paciente" : "Create patient"}
+        >
+          +
+        </button>
+      )}
+      <button className="chat-exit-btn" type="button" onClick={leaveCurrentChatView}>
+        {lang==="es" ? "Salir" : "Exit"}
+      </button>
+    </div>
+  );
   const careTeamOfficeGroups = [
     {
       key: "guadalajara",
@@ -1577,6 +1858,7 @@ export default function InboxPage() {
   useEffect(()=>{ selectedRoomRef.current=selectedRoom; },[selectedRoom]);
   useEffect(()=>{ showStaffChatsRef.current=showStaffChats; },[showStaffChats]);
   useEffect(()=>{ activeStaffChatPeerIdRef.current=activeStaffChatPeerId; },[activeStaffChatPeerId]);
+  useEffect(()=>{ activeStaffRoomIdRef.current=activeStaffRoomId; },[activeStaffRoomId]);
   useEffect(() => {
     if (!privateToast) return;
     if (privateToastTimeoutRef.current) clearTimeout(privateToastTimeoutRef.current);
@@ -1648,19 +1930,27 @@ export default function InboxPage() {
     const handlePrivateMessage = (message: StaffPrivateMessage) => {
       if (!message?.id) return;
       upsertStaffPrivateMessage(message);
+      const roomPayload = parseStaffRoomPayload(message.content);
       const peerId = message.sender_id === currentUserId ? message.recipient_id || "" : message.sender_id || "";
       const incoming = message.recipient_id === currentUserId && message.sender_id !== currentUserId;
 
       if (incoming) {
-        const isOpenConversation = showStaffChatsRef.current && activeStaffChatPeerIdRef.current === peerId;
+        const isOpenRoom = !!roomPayload && showStaffChatsRef.current && activeStaffRoomIdRef.current === roomPayload.roomId;
+        const isOpenConversation = !roomPayload && showStaffChatsRef.current && activeStaffChatPeerIdRef.current === peerId;
         if (isOpenConversation) {
           markStaffPrivateConversationRead(peerId);
+        } else if (isOpenRoom) {
+          const readAt = new Date().toISOString();
+          setStaffPrivateMessages((previous) => previous.map((entry) => entry.id === message.id ? { ...entry, read_at: readAt } : entry));
+          supabase.from("staff_private_messages").update({ read_at: readAt }).eq("id", message.id).then(() => {});
         } else {
           playIncomingTone();
           setPrivateToast(message);
           pushNotif(
-            lang === "es" ? "Mensaje privado del equipo" : "Private staff message",
-            `${message.sender_name || (lang === "es" ? "Personal" : "Staff")}: ${`${message.content || ""}`.slice(0, 120)}`
+            roomPayload ? (lang === "es" ? "Chat staff" : "Staff chat") : (lang === "es" ? "Mensaje privado del equipo" : "Private staff message"),
+            roomPayload
+              ? `${roomPayload.roomName}: ${roomPayload.text.slice(0, 120)}`
+              : `${message.sender_name || (lang === "es" ? "Personal" : "Staff")}: ${`${message.content || ""}`.slice(0, 120)}`
           );
         }
       }
@@ -2999,25 +3289,88 @@ export default function InboxPage() {
 
   const StaffChatsPanel = () => {
     const activePeer = activeStaffPrivateConversation?.peer || null;
+    const activeRoom = activeStaffRoomConversation;
+    const activeRoomMembers = activeRoom?.memberIds
+      .map((id) => staffMemberById.get(id))
+      .filter(Boolean) as CareTeamMember[];
+    const closePanel = () => {
+      setShowStaffChats(false);
+      setActiveStaffChatPeerId(null);
+      setActiveStaffRoomId(null);
+      setStaffPrivateReply("");
+      setStaffRoomReply("");
+      setShowCreateStaffRoom(false);
+    };
     return (
-      <div className="modal-overlay" onClick={()=>{setShowStaffChats(false);setActiveStaffChatPeerId(null);setStaffPrivateReply("");}}>
+      <div className="modal-overlay" onClick={closePanel}>
         <div className="modal-scroll" onClick={e=>e.stopPropagation()} style={{maxWidth:720}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14}}>
             <div style={{minWidth:0}}>
               <p className="modal-title" style={{margin:0}}>{lang==="es"?"Chat staff a staff":"Staff to Staff Chat"}</p>
               <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45,marginTop:4}}>
-                {activePeer
+                {activeRoom
+                  ? activeRoom.roomName
+                  : activePeer
                   ? (activePeer.full_name || activePeer.display_name || (lang==="es"?"Personal":"Staff"))
-                  : (lang==="es"?"Mensajes privados entre miembros del equipo.":"Private messages between team members.")}
+                  : (lang==="es"?"Mensajes privados y salas internas del equipo.":"Private messages and internal team rooms.")}
               </p>
             </div>
-            <button onClick={()=>{setShowStaffChats(false);setActiveStaffChatPeerId(null);setStaffPrivateReply("");}} style={{background:cardBg,border:`1px solid ${borderColor}`,borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:800,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>
+            <button onClick={closePanel} style={{background:cardBg,border:`1px solid ${borderColor}`,borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:800,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>
               {lang==="es" ? "Salir" : "Exit"}
             </button>
           </div>
 
-          {!activeStaffPrivateConversation ? (
+          {!activeStaffPrivateConversation && !activeRoom ? (
             <div style={{display:"grid",gap:10}}>
+              <button className="pbtn" onClick={()=>setShowCreateStaffRoom((value)=>!value)}>
+                {showCreateStaffRoom ? (lang==="es"?"Cerrar creación":"Close creator") : (lang==="es"?"+ Crear chat staff":"+ Create staff chat")}
+              </button>
+              {showCreateStaffRoom && (
+                <div style={{display:"grid",gap:12,padding:14,borderRadius:18,background:cardBg,border:`1px solid ${borderColor}`}}>
+                  <input className="finput" value={newStaffRoomName} onChange={(event)=>setNewStaffRoomName(event.target.value)} placeholder={lang==="es"?"Nombre del chat, ej. Todo el staff":"Chat name, ex. All staff"} />
+                  <textarea className="finput" rows={3} value={newStaffRoomInitialMessage} onChange={(event)=>setNewStaffRoomInitialMessage(event.target.value)} placeholder={lang==="es"?"Primer mensaje":"First message"} style={{resize:"vertical",minHeight:92}} />
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                    <p style={{fontSize:uiSmallSize,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4}}>{lang==="es"?"Participantes":"Participants"}</p>
+                    <button className="sbtn" onClick={selectAllStaffForRoom} style={{width:"auto",padding:"0 12px"}}>{lang==="es"?"Todo el staff":"All staff"}</button>
+                  </div>
+                  <div style={{display:"grid",gap:8,maxHeight:220,overflowY:"auto",paddingRight:2}}>
+                    {staffRoomMemberOptions.length === 0 ? (
+                      <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{lang==="es"?"No hay otros miembros disponibles.":"No other staff members available."}</p>
+                    ) : staffRoomMemberOptions.map((member) => (
+                      <label key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:10,borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#253244":"white",cursor:"pointer"}}>
+                        <input type="checkbox" checked={newStaffRoomMemberIds.includes(member.id)} onChange={()=>toggleNewStaffRoomMember(member.id)} style={{width:18,height:18,accentColor:"#2563EB"}} />
+                        <span style={{fontSize:uiBaseSize,fontWeight:850,color:textColor,overflowWrap:"anywhere"}}>{member.full_name || member.display_name || (lang==="es"?"Personal":"Staff")}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <button className="pbtn" disabled={savingStaffPrivateMessage || newStaffRoomMemberIds.length === 0} onClick={createStaffRoom}>
+                    {savingStaffPrivateMessage ? (lang==="es"?"Creando...":"Creating...") : (lang==="es"?"Crear chat":"Create chat")}
+                  </button>
+                </div>
+              )}
+              {staffRoomConversations.length > 0 && (
+                <>
+                  <p style={{fontSize:uiSmallSize,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginTop:4}}>{lang==="es"?"Salas staff":"Staff rooms"}</p>
+                  {staffRoomConversations.map((conversation) => (
+                    <button
+                      key={conversation.roomId}
+                      onClick={()=>openStaffRoomConversation(conversation.roomId)}
+                      style={{display:"flex",alignItems:"center",gap:12,width:"100%",border:`1px solid ${conversation.unreadCount ? "#93C5FD" : borderColor}`,background:conversation.unreadCount ? (darkMode?"rgba(37,99,235,0.18)":"#EFF6FF") : cardBg,borderRadius:18,padding:14,textAlign:"left",fontFamily:"inherit",cursor:"pointer"}}
+                    >
+                      <div style={{width:46,height:46,borderRadius:"50%",background:"linear-gradient(135deg,#0F766E,#2563EB)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,flexShrink:0}}>👥</div>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"space-between"}}>
+                          <p style={{fontSize:uiBaseSize,fontWeight:900,color:textColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{conversation.roomName}</p>
+                          <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:750,whiteSpace:"nowrap"}}>{fmtTime(conversation.latestAt)}</span>
+                        </div>
+                        <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{conversation.latestText || (lang==="es"?"Chat staff":"Staff chat")}</p>
+                      </div>
+                      {conversation.unreadCount > 0 && <span style={{minWidth:24,height:24,borderRadius:99,background:"#2563EB",color:"white",fontSize:13,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}}>{conversation.unreadCount}</span>}
+                    </button>
+                  ))}
+                </>
+              )}
+              <p style={{fontSize:uiSmallSize,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginTop:4}}>{lang==="es"?"Mensajes directos":"Direct messages"}</p>
               {staffPrivateConversations.length === 0 ? (
                 <div style={{padding:22,borderRadius:18,background:cardBg,border:`1px solid ${borderColor}`,color:subTextColor,fontSize:uiBaseSize,fontWeight:700,lineHeight:1.5}}>
                   {lang==="es"?"Todavía no hay mensajes privados staff a staff.":"No private staff-to-staff messages yet."}
@@ -3042,6 +3395,39 @@ export default function InboxPage() {
                 </button>
               ))}
             </div>
+          ) : activeRoom ? (
+            <div style={{display:"grid",gap:12}}>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                <button className="sbtn" onClick={()=>{setActiveStaffRoomId(null);setStaffRoomReply("");}} style={{width:"auto",padding:"0 14px"}}>{lang==="es"?"Volver":"Back"}</button>
+                <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{activeRoomMembers.length} {lang==="es"?"participantes":"participants"}</span>
+              </div>
+              <div style={{display:"grid",gap:8,maxHeight:"45dvh",overflowY:"auto",padding:"12px",borderRadius:18,background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
+                {activeRoom.messages.map((message) => {
+                  const mine = message.sender_id === currentUserId;
+                  const payload = parseStaffRoomPayload(message.content);
+                  return (
+                    <div key={payload?.messageId || message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
+                      <div style={{maxWidth:"86%",borderRadius:mine?"16px 16px 4px 16px":"16px 16px 16px 4px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"10px 12px",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}>
+                        {!mine && <p style={{fontSize:Math.max(uiSmallSize - 1, 12),fontWeight:900,opacity:0.82,marginBottom:4}}>{message.sender_name || (lang==="es"?"Personal":"Staff")}</p>}
+                        <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{payload?.text || ""}</p>
+                        <p style={{fontSize:Math.max(uiSmallSize - 1, 12),opacity:0.78,textAlign:"right",marginTop:5,fontWeight:700}}>{fmtTime(message.created_at || "")}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <textarea
+                className="finput"
+                rows={3}
+                value={staffRoomReply}
+                onChange={(event)=>setStaffRoomReply(event.target.value)}
+                placeholder={lang==="es"?"Mensaje para la sala staff":"Message the staff room"}
+                style={{resize:"vertical",minHeight:96}}
+              />
+              <button className="pbtn" disabled={!staffRoomReply.trim() || savingStaffPrivateMessage} onClick={sendActiveStaffRoomReply}>
+                {savingStaffPrivateMessage ? (lang==="es"?"Enviando...":"Sending...") : (lang==="es"?"Enviar al chat staff":"Send to staff chat")}
+              </button>
+            </div>
           ) : (
             <div style={{display:"grid",gap:12}}>
               <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -3057,7 +3443,7 @@ export default function InboxPage() {
                 {!activePeer?.phone && <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{lang==="es"?"Sin teléfono registrado. Puede agregarlo en Ajustes.":"No phone listed. They can add it in Settings."}</span>}
               </div>
               <div style={{display:"grid",gap:8,maxHeight:"45dvh",overflowY:"auto",padding:"12px",borderRadius:18,background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
-                {activeStaffPrivateConversation.messages.map((message) => {
+                {activeStaffPrivateConversation!.messages.map((message) => {
                   const mine = message.sender_id === currentUserId;
                   return (
                     <div key={message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
@@ -3370,6 +3756,8 @@ export default function InboxPage() {
         .topbar-logo { grid-column: 2; justify-self: center; align-self: center; height: 96px; width: min(760px, 96vw); object-fit: contain; object-position: center; display: block; }
         .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
 	        .admin-inline-btn { padding: 0 12px; min-height: 44px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: var(--app-ui-small-size); font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
+        .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; max-width: 100%; }
+        .staff-plus-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: #007AFF; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,122,255,0.3); font-size: 26px; line-height: 1; font-weight: 850; font-family: inherit; flex-shrink: 0; }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 16px 16px 12px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
@@ -3493,9 +3881,11 @@ export default function InboxPage() {
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
 	        @media (max-width: 700px) {
-          .topbar { height: calc(112px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
-          .topbar-logo { grid-column: 1; justify-self: center; align-self: center; height: 104px; width: min(640px, 92vw); }
-          .topbar-actions { right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 56px); }
+          .topbar { height: calc(146px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+          .topbar-logo { grid-column: 1; justify-self: center; align-self: start; height: 92px; width: min(620px, 92vw); }
+          .topbar-actions { right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); top: auto; bottom: 8px; transform: none; justify-content: flex-end; }
+          .topbar-actions .admin-inline-btn, .topbar-actions .chat-exit-btn { min-height: 40px; padding: 0 10px; font-size: 14px; }
+          .topbar-actions .staff-plus-btn { width: 40px; height: 40px; min-height: 40px; }
           .sidebar-head { padding: 15px 14px 12px; }
           .patient-list { padding-left: 10px; padding-right: 10px; }
           .chat-head { min-height: 62px; }
@@ -4189,6 +4579,7 @@ export default function InboxPage() {
           <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
           <div className="topbar-actions">
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
+            <StaffGlobalActions compact />
           </div>
         </div>
 
@@ -4226,16 +4617,24 @@ export default function InboxPage() {
           <div
             role="button"
             tabIndex={0}
-            onClick={()=>openStaffPrivateConversation(privateToast.sender_id || "")}
-            onKeyDown={(event)=>{ if (event.key === "Enter" || event.key === " ") openStaffPrivateConversation(privateToast.sender_id || ""); }}
+            onClick={()=>{
+              const payload = parseStaffRoomPayload(privateToast.content);
+              if (payload?.roomId) openStaffRoomConversation(payload.roomId);
+              else openStaffPrivateConversation(privateToast.sender_id || "");
+            }}
+            onKeyDown={(event)=>{ if (event.key === "Enter" || event.key === " ") {
+              const payload = parseStaffRoomPayload(privateToast.content);
+              if (payload?.roomId) openStaffRoomConversation(payload.roomId);
+              else openStaffPrivateConversation(privateToast.sender_id || "");
+            } }}
             style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:245,width:"min(360px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.98)":"rgba(255,255,255,0.99)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 45px rgba(15,23,42,0.24)",padding:14,cursor:"pointer"}}
           >
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
-              <p style={{fontSize:uiSmallSize,fontWeight:900,color:"#2563EB",textTransform:"uppercase",letterSpacing:0.4}}>{lang==="es"?"Mensaje privado":"Private message"}</p>
+              <p style={{fontSize:uiSmallSize,fontWeight:900,color:"#2563EB",textTransform:"uppercase",letterSpacing:0.4}}>{parseStaffRoomPayload(privateToast.content) ? (lang==="es"?"Chat staff":"Staff chat") : (lang==="es"?"Mensaje privado":"Private message")}</p>
               <button onClick={(event)=>{event.stopPropagation();setPrivateToast(null);}} style={{border:"none",background:cardBg,borderRadius:999,width:34,height:34,minHeight:34,color:textColor,fontWeight:900,cursor:"pointer"}}>×</button>
             </div>
-            <p style={{fontSize:uiBaseSize,fontWeight:900,marginBottom:4,overflowWrap:"anywhere"}}>{privateToast.sender_name || (lang==="es"?"Personal":"Staff")}</p>
-            <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45,overflowWrap:"anywhere"}}>{`${privateToast.content || ""}`.slice(0, 160)}</p>
+            <p style={{fontSize:uiBaseSize,fontWeight:900,marginBottom:4,overflowWrap:"anywhere"}}>{parseStaffRoomPayload(privateToast.content)?.roomName || privateToast.sender_name || (lang==="es"?"Personal":"Staff")}</p>
+            <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45,overflowWrap:"anywhere"}}>{`${parseStaffRoomPayload(privateToast.content)?.text || privateToast.content || ""}`.slice(0, 160)}</p>
           </div>
         )}
 
@@ -4247,40 +4646,9 @@ export default function InboxPage() {
                   <span style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patients}</span>
                   {totalUnread>0&&<span style={{background:"#25D366",color:"white",fontSize:12,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{totalUnread}</span>}
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <button
-                    className="admin-inline-btn"
-                    onClick={()=>{setShowStaffChats(true);setActiveStaffChatPeerId(null);fetchStaffPrivateMessages();}}
-                    title={lang==="es" ? "Chat staff a staff" : "Staff to Staff Chat"}
-                    style={{position:"relative"}}
-                  >
-                    {lang==="es" ? "Staff" : "Staff"}
-                    {staffPrivateUnread > 0 && (
-                      <span style={{position:"absolute",top:-6,right:-6,minWidth:20,height:20,padding:"0 5px",borderRadius:99,background:"#EF4444",color:"white",fontSize:12,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(239,68,68,0.35)"}}>
-                        {staffPrivateUnread}
-                      </span>
-                    )}
-                  </button>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
                   {canOpenAdmin&&<button className="admin-inline-btn" onClick={()=>window.location.href="/admin"}>Admin</button>}
-                  <button
-                    onClick={() => {
-                      if (!canCreatePatientRooms) {
-                        setNotificationFeedback({
-                          tone: "error",
-                          text:
-                            lang === "es"
-                              ? "No tienes permiso para crear pacientes. Solo el personal habilitado por Admin puede hacerlo."
-                              : "You do not have permission to create patients. Only admin-enabled staff can do this.",
-                        });
-                        return;
-                      }
-                      setShowNewRoom(true);
-                    }}
-                    style={{width:38,height:38,borderRadius:"50%",background:"#007AFF",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 2px 8px rgba(0,122,255,0.3)"}}
-                    title={canCreatePatientRooms ? (lang === "es" ? "Crear paciente" : "Create patient") : (lang === "es" ? "Permiso requerido" : "Permission required")}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  </button>
+                  <StaffGlobalActions compact />
                 </div>
               </div>
               <div className="search-bar">
@@ -4367,13 +4735,7 @@ export default function InboxPage() {
                       </div>
                     )}
                   </div>
-                  <button
-                    className="chat-exit-btn"
-                    type="button"
-                    onClick={()=>{setMobileView("list");setSelectedRoom(null);setShowQREditor(false);setShowMediaMenu(false);setShowEmojiMenu(false);setShowSlashMenu(false);closeMessageActions();}}
-                  >
-                    {lang==="es" ? "Salir" : "Exit"}
-                  </button>
+                  <StaffGlobalActions compact />
                 </div>
 
                 <div
