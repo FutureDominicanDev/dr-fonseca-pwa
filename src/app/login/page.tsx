@@ -6,7 +6,7 @@ import { normalizeStaffPhone, phoneAliasEmail } from "@/lib/authIdentity";
 import { COUNTRY_OPTIONS } from "@/lib/countryDialing";
 
 type Lang = "es" | "en";
-type View = "login" | "forgot" | "sent";
+type View = "login" | "forgot" | "phoneReset" | "sent";
 type LoginMethod = "phone" | "email";
 
 const COPY = {
@@ -32,15 +32,22 @@ const COPY = {
     firstTime: "¿Primera vez aquí?",
     register: "Crear acceso",
     forgotTitle: "Recuperar contraseña",
-    forgotCopy: "Escribe el correo asociado a tu cuenta. Si entras con celular, pide ayuda al administrador.",
+    forgotCopy: "Elige si tu cuenta usa correo o celular. Si usas celular, recibirás un código por SMS para cambiar tu contraseña.",
     emailLabel: "Correo electrónico",
     emailPlaceholder: "correo@ejemplo.com",
     sendReset: "Enviar enlace de recuperación",
+    sendCode: "Enviar código SMS",
+    verificationCode: "Código SMS",
+    verificationCodePH: "123456",
+    newPassword: "Nueva contraseña",
+    newPasswordPH: "Mínimo 6 caracteres",
+    updatePassword: "Cambiar contraseña",
+    passwordUpdated: "Contraseña actualizada",
     sending: "Enviando...",
     back: "Volver al login",
-    sentTitle: "Revisa tu correo",
-    sentCopy: "Enviamos un enlace para cambiar tu contraseña.",
-    sentHelp: "Si no lo ves, revisa spam o pide ayuda al administrador.",
+    sentTitle: "Revisa tus instrucciones",
+    sentCopy: "Enviamos la recuperación a la cuenta indicada.",
+    sentHelp: "Si no llega, revisa que el correo o celular estén bien escritos o pide ayuda al administrador.",
     privacy: "Privacidad",
     support: "Soporte",
     deletion: "Eliminar cuenta",
@@ -58,7 +65,12 @@ const COPY = {
       invalidEmail: "Por favor ingresa un correo electrónico válido.",
       badLogin: "Correo, celular o contraseña incorrectos.",
       resetRequired: "Por favor ingresa tu correo electrónico.",
+      phoneRequired: "Por favor ingresa tu celular.",
+      codeRequired: "Ingresa el código SMS y tu nueva contraseña.",
+      passwordTooShort: "La contraseña debe tener mínimo 6 caracteres.",
       resetFailed: "No pude enviar el correo. Verifica el correo ingresado.",
+      phoneResetFailed: "No pude enviar o validar el código SMS. Verifica el celular o la configuración SMS de Supabase.",
+      updatePasswordFailed: "No pude cambiar la contraseña. Intenta de nuevo.",
     },
   },
   en: {
@@ -83,15 +95,22 @@ const COPY = {
     firstTime: "First time here?",
     register: "Create access",
     forgotTitle: "Recover password",
-    forgotCopy: "Enter the email connected to your account. If you sign in by phone, ask an administrator for help.",
+    forgotCopy: "Choose whether your account uses email or phone. If you use phone, you will receive an SMS code to change your password.",
     emailLabel: "Email address",
     emailPlaceholder: "email@example.com",
     sendReset: "Send recovery link",
+    sendCode: "Send SMS code",
+    verificationCode: "SMS code",
+    verificationCodePH: "123456",
+    newPassword: "New password",
+    newPasswordPH: "Minimum 6 characters",
+    updatePassword: "Change password",
+    passwordUpdated: "Password updated",
     sending: "Sending...",
     back: "Back to login",
-    sentTitle: "Check your email",
-    sentCopy: "We sent a link to change your password.",
-    sentHelp: "If you do not see it, check spam or ask an administrator for help.",
+    sentTitle: "Check your instructions",
+    sentCopy: "We sent recovery instructions to the account provided.",
+    sentHelp: "If it does not arrive, confirm the email or phone is correct or ask an administrator for help.",
     privacy: "Privacy",
     support: "Support",
     deletion: "Delete account",
@@ -109,7 +128,12 @@ const COPY = {
       invalidEmail: "Please enter a valid email address.",
       badLogin: "Email, phone, or password is incorrect.",
       resetRequired: "Please enter your email address.",
+      phoneRequired: "Please enter your phone number.",
+      codeRequired: "Enter the SMS code and your new password.",
+      passwordTooShort: "Password must be at least 6 characters.",
       resetFailed: "I could not send the email. Check the address entered.",
+      phoneResetFailed: "I could not send or validate the SMS code. Check the phone number or Supabase SMS configuration.",
+      updatePasswordFailed: "I could not change the password. Try again.",
     },
   },
 } as const;
@@ -131,10 +155,15 @@ export default function LoginPage() {
   const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://portal.drfonsecacirujanoplastico.com").replace(/\/+$/, "");
   const [lang, setLang] = useState<Lang>("es");
   const [view, setView] = useState<View>("login");
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>("phone");
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
+  const [resetMethod, setResetMethod] = useState<LoginMethod>("email");
   const [identifier, setIdentifier] = useState("");
   const [phoneCountryCode, setPhoneCountryCode] = useState("+52");
   const [resetEmail, setResetEmail] = useState("");
+  const [resetPhone, setResetPhone] = useState("");
+  const [resetPhoneCountryCode, setResetPhoneCountryCode] = useState("+52");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -190,6 +219,24 @@ export default function LoginPage() {
   };
 
   const handleReset = async () => {
+    if (resetMethod === "phone") {
+      const phone = normalizeStaffPhone(resetPhone, resetPhoneCountryCode);
+      if (!phone) {
+        setError(t.errors.phoneRequired);
+        return;
+      }
+      setLoading(true);
+      setError("");
+      const { error: err } = await supabase.auth.signInWithOtp({ phone });
+      setLoading(false);
+      if (err) {
+        setError(t.errors.phoneResetFailed);
+        return;
+      }
+      setView("phoneReset");
+      return;
+    }
+
     if (!resetEmail.trim()) {
       setError(t.errors.resetRequired);
       return;
@@ -209,10 +256,46 @@ export default function LoginPage() {
     setView("sent");
   };
 
+  const handlePhonePasswordUpdate = async () => {
+    const phone = normalizeStaffPhone(resetPhone, resetPhoneCountryCode);
+    if (!phone || !resetCode.trim() || !newPassword.trim()) {
+      setError(t.errors.codeRequired);
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError(t.errors.passwordTooShort);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      phone,
+      token: resetCode.trim(),
+      type: "sms",
+    });
+    if (verifyError) {
+      setError(t.errors.phoneResetFailed);
+      setLoading(false);
+      return;
+    }
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    if (updateError) {
+      setError(t.errors.updatePasswordFailed);
+      setLoading(false);
+      return;
+    }
+    await supabase.auth.signOut();
+    setLoading(false);
+    setResetCode("");
+    setNewPassword("");
+    setView("sent");
+  };
+
   const switchTo = (nextView: View) => {
     setView(nextView);
     setError("");
     setLoading(false);
+    if (nextView === "forgot") setResetMethod(loginMethod);
   };
 
   return (
@@ -514,19 +597,67 @@ export default function LoginPage() {
                   <p className="panel-copy">{t.forgotCopy}</p>
                   {error && <div className="error">Error: {error}</div>}
                   <div className="field">
-                    <label className="field-label">{t.emailLabel}</label>
-                    <input
-                      className="input"
-                      type="email"
-                      placeholder={t.emailPlaceholder}
-                      value={resetEmail}
-                      onChange={(event) => setResetEmail(event.target.value)}
-                      onKeyDown={(event) => { if (event.key === "Enter") handleReset(); }}
-                      autoComplete="email"
-                    />
+                    <label className="field-label">{t.loginWith}</label>
+                    <div className="login-method" role="radiogroup" aria-label={t.loginWith}>
+                      <button type="button" className={`method-btn${resetMethod==="email" ? " active" : ""}`} onClick={()=>{setResetMethod("email");setError("");}}>{t.loginEmail}</button>
+                      <button type="button" className={`method-btn${resetMethod==="phone" ? " active" : ""}`} onClick={()=>{setResetMethod("phone");setError("");}}>{t.loginPhone}</button>
+                    </div>
                   </div>
+                  {resetMethod === "phone" ? (
+                    <div className="field phone-row">
+                      <div>
+                        <label className="field-label" htmlFor="reset-country">{t.country}</label>
+                        <select id="reset-country" className="input select" value={resetPhoneCountryCode} onChange={(event)=>setResetPhoneCountryCode(event.target.value)}>
+                          {COUNTRY_OPTIONS.map((country) => (
+                            <option key={`reset-${country.code}-${country.en}`} value={country.code}>
+                              {lang === "es" ? country.es : country.en} {country.code}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="field-label" htmlFor="reset-phone">{t.identifier}</label>
+                        <input id="reset-phone" className="input" type="tel" placeholder={t.identifierPlaceholder} value={resetPhone} onChange={(event)=>setResetPhone(event.target.value)} onKeyDown={(event)=>{ if (event.key === "Enter") handleReset(); }} autoComplete="tel" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="field">
+                      <label className="field-label">{t.emailLabel}</label>
+                      <input
+                        className="input"
+                        type="email"
+                        placeholder={t.emailPlaceholder}
+                        value={resetEmail}
+                        onChange={(event) => setResetEmail(event.target.value)}
+                        onKeyDown={(event) => { if (event.key === "Enter") handleReset(); }}
+                        autoComplete="email"
+                      />
+                    </div>
+                  )}
                   <button className="primary-btn" onClick={handleReset} disabled={loading}>
-                    {loading ? t.sending : t.sendReset}
+                    {loading ? t.sending : resetMethod === "phone" ? t.sendCode : t.sendReset}
+                  </button>
+                  <button className="secondary-btn" onClick={() => switchTo("login")} type="button">
+                    {t.back}
+                  </button>
+                </>
+              )}
+
+              {view === "phoneReset" && (
+                <>
+                  <h2 className="panel-title">{t.forgotTitle}</h2>
+                  <p className="panel-copy">{lang === "es" ? "Ingresa el código recibido por SMS y crea una nueva contraseña." : "Enter the SMS code and create a new password."}</p>
+                  {error && <div className="error">Error: {error}</div>}
+                  <div className="field">
+                    <label className="field-label">{t.verificationCode}</label>
+                    <input className="input" inputMode="numeric" placeholder={t.verificationCodePH} value={resetCode} onChange={(event)=>setResetCode(event.target.value)} autoComplete="one-time-code" />
+                  </div>
+                  <div className="field">
+                    <label className="field-label">{t.newPassword}</label>
+                    <input className="input" type="password" placeholder={t.newPasswordPH} value={newPassword} onChange={(event)=>setNewPassword(event.target.value)} onKeyDown={(event)=>{ if (event.key === "Enter") handlePhonePasswordUpdate(); }} autoComplete="new-password" />
+                  </div>
+                  <button className="primary-btn" onClick={handlePhonePasswordUpdate} disabled={loading}>
+                    {loading ? t.sending : t.updatePassword}
                   </button>
                   <button className="secondary-btn" onClick={() => switchTo("login")} type="button">
                     {t.back}
@@ -538,7 +669,7 @@ export default function LoginPage() {
                 <>
                   <h2 className="panel-title">{t.sentTitle}</h2>
                   <p className="panel-copy">{t.sentCopy}</p>
-                  <p className="panel-copy" style={{ marginTop: -10 }}>{resetEmail}</p>
+                  <p className="panel-copy" style={{ marginTop: -10 }}>{resetMethod === "phone" ? normalizeStaffPhone(resetPhone, resetPhoneCountryCode) : resetEmail}</p>
                   <p className="panel-copy">{t.sentHelp}</p>
                   <button className="primary-btn" onClick={() => { setResetEmail(""); switchTo("login"); }} type="button">
                     {t.back}

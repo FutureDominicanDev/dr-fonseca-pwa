@@ -110,6 +110,16 @@ const T = {
     teamSaved: "Equipo actualizado.",
     patientInfo: "Ficha del Paciente",
     patientInfoHint: "Datos clínicos y operativos del caso",
+    patientAccessLink: "Enlace del paciente",
+    patientAccessLinkHint: "Este es el enlace seguro para reenviar el acceso del paciente a su chat.",
+    patientCopyLink: "Copiar enlace",
+    patientShareLink: "Compartir enlace",
+    patientMessageLink: "Enviar por mensaje",
+    patientLinkCopied: "Enlace copiado.",
+    addCareStaff: "Agregar personal al cuidado",
+    addCareStaffHint: "Selecciona personal de cualquier sede para agregarlo a este paciente.",
+    inviteStaff: "Agregar al chat",
+    staffAdded: "Personal agregado al expediente.",
     callPatient: "Llamar paciente",
     videoCall: "Videollamada",
     mediaLibrary: "Archivos",
@@ -255,6 +265,16 @@ const T = {
     teamSaved: "Team updated.",
     patientInfo: "Patient Info",
     patientInfoHint: "Clinical and operational case details",
+    patientAccessLink: "Patient link",
+    patientAccessLinkHint: "This is the secure link to resend patient access to their chat.",
+    patientCopyLink: "Copy link",
+    patientShareLink: "Share link",
+    patientMessageLink: "Send by message",
+    patientLinkCopied: "Link copied.",
+    addCareStaff: "Add care staff",
+    addCareStaffHint: "Select staff from any office to add them to this patient.",
+    inviteStaff: "Add to chat",
+    staffAdded: "Staff added to the record.",
     callPatient: "Call patient",
     videoCall: "Video call",
     mediaLibrary: "Files",
@@ -594,6 +614,8 @@ export default function InboxPage() {
   const [showEmojiMenu, setShowEmojiMenu] = useState(false);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [mediaLibraryTab, setMediaLibraryTab] = useState<MediaTab>("media");
+  const [showCareStaffInvite, setShowCareStaffInvite] = useState(false);
+  const [careStaffInviteIds, setCareStaffInviteIds] = useState<string[]>([]);
   const [displayNameEdit, setDisplayNameEdit] = useState("");
   const [phoneEdit, setPhoneEdit] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -719,11 +741,20 @@ export default function InboxPage() {
     if (message.sender_type === "patient") return message.sender_name || t.patientLabel;
     return message.sender_name || (isOutgoing ? roleName(message.sender_role) : "Staff");
   };
+  const normalizedName = (value?: string | null) => `${value || ""}`.trim().toLowerCase().replace(/\s+/g, " ");
+  const staffPhoneFor = (member: CareTeamMember | null | undefined) => {
+    const raw = `${member?.phone || ""}`.trim();
+    if (!raw) return "";
+    return raw.startsWith("+") ? raw : raw.replace(/[^\d+]/g, "");
+  };
   const findStaffMemberForMessage = (message: any): CareTeamMember | null => {
     if (!message?.sender_id || message.sender_type !== "staff") return null;
+    const senderName = normalizedName(message.sender_name);
     return (
       staffDirectory.find((member) => member.id === message.sender_id) ||
       selectedRoomTeam.find((member) => member.id === message.sender_id) ||
+      staffDirectory.find((member) => senderName && (normalizedName(member.full_name) === senderName || normalizedName(member.display_name) === senderName)) ||
+      selectedRoomTeam.find((member) => senderName && (normalizedName(member.full_name) === senderName || normalizedName(member.display_name) === senderName)) ||
       {
         id: message.sender_id,
         full_name: message.sender_name || roleName(message.sender_role),
@@ -1813,6 +1844,43 @@ export default function InboxPage() {
     setLoading(false);
   };
 
+  const patientRoomLink = (room: any) => {
+    if (!room?.id || typeof window === "undefined") return "";
+    const token = `${room.patient_access_token || ""}`.trim();
+    return `${window.location.origin}/patient/${room.id}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  };
+  const ensurePatientRoomLink = async () => {
+    if (!selectedRoom) return "";
+    if (`${selectedRoom.patient_access_token || ""}`.trim()) return patientRoomLink(selectedRoom);
+    const nextToken = createPatientAccessToken();
+    const { error } = await supabase.from("rooms").update({ patient_access_token: nextToken }).eq("id", selectedRoom.id);
+    if (error) return patientRoomLink(selectedRoom);
+    const nextRoom = { ...selectedRoom, patient_access_token: nextToken };
+    setSelectedRoom(nextRoom);
+    setPatients((current:any[]) => current.map((patient:any) => ({
+      ...patient,
+      rooms: (patient.rooms || []).map((room:any) => room.id === selectedRoom.id ? nextRoom : room),
+    })));
+    return patientRoomLink(nextRoom);
+  };
+  const copyPatientRoomLink = async () => {
+    const link = await ensurePatientRoomLink();
+    if (!link) return;
+    await navigator.clipboard?.writeText(link);
+    alert(t.patientLinkCopied);
+  };
+  const sharePatientRoomLink = async () => {
+    const link = await ensurePatientRoomLink();
+    if (!link) return;
+    if (navigator.share) await navigator.share({ title: t.patientAccessLink, text: t.patientAccessLinkHint, url: link });
+    else await copyPatientRoomLink();
+  };
+  const messagePatientRoomLink = async () => {
+    const link = await ensurePatientRoomLink();
+    if (!link) return;
+    window.location.href = `sms:?&body=${encodeURIComponent(link)}`;
+  };
+
   const fetchMessages = async (roomId: string) => { const { data } = await supabase.from("messages").select("*").eq("room_id",roomId).order("created_at",{ascending:true}); setMessages(data||[]); };
 
   const sendMessage = async (content?: string) => {
@@ -2284,6 +2352,39 @@ export default function InboxPage() {
     alert(lang === "es" ? "No pude actualizar el equipo." : "I could not update the team.");
   };
 
+  const addCareStaffToSelectedRoom = async () => {
+    if (!selectedRoom || careStaffInviteIds.length === 0 || savingTeam) return;
+    setSavingTeam(true);
+    const existingIds = new Set(selectedRoomTeam.map((member) => member.id));
+    const nextIds = careStaffInviteIds.filter((id) => !existingIds.has(id));
+    const rows = nextIds.map((memberId) => {
+      const profile = staffDirectory.find((entry) => entry.id === memberId);
+      return {
+        room_id: selectedRoom.id,
+        user_id: memberId,
+        role: profile?.role || "staff",
+      };
+    });
+    const { error } = rows.length ? await supabase.from("room_members").insert(rows) : { error: null };
+    setSavingTeam(false);
+    if (error) {
+      alert(lang === "es" ? "No pude agregar personal al paciente." : "I could not add staff to the patient.");
+      return;
+    }
+    await fetchSelectedRoomTeam(selectedRoom.id);
+    setCareStaffInviteIds([]);
+    setShowCareStaffInvite(false);
+    sendPushNotification({
+      roomId: selectedRoom.id,
+      userType: "staff",
+      title: lang === "es" ? "Nuevo paciente asignado" : "New assigned patient",
+      body: `${selectedRoom.procedures?.patients?.full_name || t.patientLabel}`,
+      url: window.location.href,
+      tag: `care-team-${selectedRoom.id}`,
+    });
+    alert(t.staffAdded);
+  };
+
   const createRoom = async () => {
     if (creatingRoom) return;
     if (!canCreatePatientRooms) {
@@ -2369,8 +2470,8 @@ export default function InboxPage() {
       }
       const patientFirstName = patientFullName.trim().split(/\s+/)[0] || patientFullName.trim();
       const welcomeMessage = newPatientLanguage === "en"
-        ? `Hello ${patientFirstName}, welcome. This will be your direct communication channel with our team throughout your care.\n\nIf you need immediate assistance, press the call button to connect with the clinic. We are here to help you.`
-        : `Hola ${patientFirstName}, bienvenido(a). Este será tu canal de comunicación directo con nuestro equipo durante todo tu proceso de cuidado.\n\nSi necesitas asistencia inmediata, presiona el botón de llamada para comunicarte con la clínica. Estamos aquí para ayudarte.`;
+        ? `Hello ${patientFirstName}, welcome. This will be your direct communication channel with our team throughout your care.\n\nPlease tap the + button and open Medical history form to complete your information. Once you save it, our team will be able to review it from your Form folder.\n\nIf you need immediate assistance, press the call button to connect with the clinic. We are here to help you.`
+        : `Hola ${patientFirstName}, bienvenido(a). Este será tu canal de comunicación directo con nuestro equipo durante todo tu proceso de cuidado.\n\nPor favor presiona el botón + y abre Historia clínica para completar tu información. Al guardarla, nuestro equipo podrá revisarla desde tu carpeta Formulario.\n\nSi necesitas asistencia inmediata, presiona el botón de llamada para comunicarte con la clínica. Estamos aquí para ayudarte.`;
       await supabase.from("messages").insert({
         room_id: rm.id,
         content: welcomeMessage,
@@ -3025,6 +3126,19 @@ export default function InboxPage() {
             <button onClick={()=>setShowPatientInfo(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
           </div>
           <div style={{padding:"0 20px",display:"grid",gap:14}}>
+            <div style={{background:darkMode?"#102033":"#EFF6FF",border:`1px solid ${darkMode?"rgba(147,197,253,0.22)":"#BFDBFE"}`,borderRadius:18,padding:16}}>
+              <p style={{fontSize:uiLabelSize,fontWeight:900,color:darkMode?"#BFDBFE":"#1D4ED8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,lineHeight:1.35}}>{t.patientAccessLink}</p>
+              <p style={{fontSize:uiSmallSize,color:subTextColor,marginBottom:12,lineHeight:1.45}}>{t.patientAccessLinkHint}</p>
+              <div style={{padding:"10px 12px",borderRadius:14,background:darkMode?"#0F172A":"white",border:`1px solid ${borderColor}`,fontSize:uiSmallSize,fontWeight:800,color:textColor,overflowWrap:"anywhere",marginBottom:10}}>
+                {patientRoomLink(selectedRoom)}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8}}>
+                <button type="button" onClick={()=>void copyPatientRoomLink()} style={{minHeight:44,border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer"}}>{t.patientCopyLink}</button>
+                <button type="button" onClick={()=>void sharePatientRoomLink()} style={{minHeight:44,border:"none",borderRadius:12,background:"#DCFCE7",color:"#166534",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer"}}>{t.patientShareLink}</button>
+                <button type="button" onClick={()=>void messagePatientRoomLink()} style={{minHeight:44,border:"none",borderRadius:12,background:"#FEF3C7",color:"#92400E",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer"}}>{t.patientMessageLink}</button>
+              </div>
+            </div>
+
             <div style={{background:cardBg,borderRadius:18,padding:16,display:"grid",gridTemplateColumns:"88px 1fr",gap:14,alignItems:"center"}}>
               <div style={{width:88,height:88,borderRadius:20,overflow:"hidden",background:"linear-gradient(135deg,#0F172A,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:28,fontWeight:800}}>
                 {patient?.profile_picture_url ? <img src={patient.profile_picture_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(patient?.full_name || "P")}
@@ -3926,6 +4040,41 @@ export default function InboxPage() {
         </div>
       )}
 
+      {showCareStaffInvite && selectedRoom && (
+        <div className="modal-overlay" onClick={()=>setShowCareStaffInvite(false)}>
+          <div className="modal-scroll" onClick={e=>e.stopPropagation()} style={{maxWidth:560}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div>
+                <p className="modal-title" style={{margin:0}}>{t.addCareStaff}</p>
+                <p style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.45,marginTop:4}}>{t.addCareStaffHint}</p>
+              </div>
+              <button onClick={()=>setShowCareStaffInvite(false)} style={{background:cardBg,border:"none",borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>✕</button>
+            </div>
+            <div style={{display:"grid",gap:8,maxHeight:"50dvh",overflowY:"auto",paddingRight:2}}>
+              {staffDirectory.filter((member)=>member.id !== currentUserId).map((member)=> {
+                const alreadyAssigned = selectedRoomTeam.some((entry)=>entry.id === member.id);
+                const checked = alreadyAssigned || careStaffInviteIds.includes(member.id);
+                return (
+                  <label key={member.id} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",borderRadius:14,border:`1px solid ${checked?"#93C5FD":borderColor}`,background:checked?"#EBF5FF":cardBg,cursor:alreadyAssigned?"default":"pointer",opacity:alreadyAssigned?0.72:1}}>
+                    <input type="checkbox" checked={checked} disabled={alreadyAssigned} onChange={()=>setCareStaffInviteIds((current)=>current.includes(member.id)?current.filter((id)=>id!==member.id):[...current,member.id])} style={{width:18,height:18,accentColor:"#2563EB"}} />
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:uiBaseSize,fontWeight:900,color:textColor,overflowWrap:"anywhere"}}>{member.full_name || member.display_name || (lang==="es"?"Personal":"Staff")}</div>
+                      <div style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:750,overflowWrap:"anywhere"}}>
+                        {roleName(member.role)}{member.office_location ? ` · ${member.office_location}` : ""}{member.phone ? ` · ${member.phone}` : ""}
+                      </div>
+                    </div>
+                    {alreadyAssigned && <span style={{fontSize:12,fontWeight:900,color:"#166534"}}>{lang==="es"?"Asignado":"Added"}</span>}
+                  </label>
+                );
+              })}
+            </div>
+            <button className="pbtn" disabled={savingTeam || careStaffInviteIds.length===0} onClick={addCareStaffToSelectedRoom} style={{marginTop:14}}>
+              {savingTeam ? (lang==="es"?"Guardando...":"Saving...") : t.inviteStaff}
+            </button>
+          </div>
+        </div>
+      )}
+
       {showSettings && SettingsPanel()}
       {showStaffChats && StaffChatsPanel()}
       {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
@@ -3983,13 +4132,13 @@ export default function InboxPage() {
             </div>
             <button
               className="pbtn"
-              disabled={!staffContactMember.phone}
-              onClick={()=>{ if (staffContactMember.phone) window.location.href = `tel:${staffContactMember.phone}`; }}
-              style={{opacity:staffContactMember.phone ? 1 : 0.55,cursor:staffContactMember.phone ? "pointer" : "not-allowed"}}
+              disabled={!staffPhoneFor(staffContactMember)}
+              onClick={()=>{ const phone = staffPhoneFor(staffContactMember); if (phone) window.location.href = `tel:${phone}`; }}
+              style={{opacity:staffPhoneFor(staffContactMember) ? 1 : 0.55,cursor:staffPhoneFor(staffContactMember) ? "pointer" : "not-allowed"}}
             >
-              {staffContactMember.phone ? (lang==="es" ? "Llamar" : "Call") : (lang==="es" ? "Sin teléfono registrado" : "No phone listed")}
+              {staffPhoneFor(staffContactMember) ? (lang==="es" ? `Llamar ${staffPhoneFor(staffContactMember)}` : `Call ${staffPhoneFor(staffContactMember)}`) : (lang==="es" ? "Sin teléfono registrado" : "No phone listed")}
             </button>
-            {!staffContactMember.phone && (
+            {!staffPhoneFor(staffContactMember) && (
               <div style={{fontSize:uiSmallSize,color:subTextColor,marginTop:8,marginBottom:12,lineHeight:1.45}}>
                 {lang==="es"
                   ? "Para llamar, este miembro debe agregar su teléfono en Ajustes o un admin puede guardarlo en Equipo y permisos."
@@ -4289,6 +4438,7 @@ export default function InboxPage() {
                         }}>{lang==="es" ? "Video" : "Video"}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}}>{lang==="es" ? "Recetas" : "Prescriptions"}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowMediaLibrary(true);}}>{t.mediaLibrary}</button>
+                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setCareStaffInviteIds([]);setShowCareStaffInvite(true);}}>{t.addCareStaff}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowQREditor(true);}}>{t.quickReplies}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowPatientInfo(true);}}>{t.patientInfo}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowSettings(true);}}>{t.settings}</button>
