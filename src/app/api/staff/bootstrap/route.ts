@@ -160,6 +160,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: saveError.message || "Profile bootstrap failed." }, { status: 500 });
     }
 
+    if (phone) {
+      await supabase.auth.admin.updateUserById(userId, {
+        phone,
+        phone_confirm: true,
+        user_metadata: {
+          full_name: fullName,
+          role,
+          office_location: officeLocation,
+          phone,
+          login_method: "phone",
+          real_email: email,
+        },
+      } as any);
+    }
+
     let welcomeEmail: { sent: boolean; reason?: string; error?: string } = { sent: false };
     if (email) {
       try {

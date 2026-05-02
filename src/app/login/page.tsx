@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizeStaffPhone, phoneAliasEmail } from "@/lib/authIdentity";
-import { COUNTRY_OPTIONS } from "@/lib/countryDialing";
+import { COUNTRY_OPTIONS, compactCountryDialLabel } from "@/lib/countryDialing";
 
 type Lang = "es" | "en";
 type View = "login" | "forgot" | "phoneReset" | "sent";
@@ -227,7 +227,20 @@ export default function LoginPage() {
       }
       setLoading(true);
       setError("");
-      const { error: err } = await supabase.auth.signInWithOtp({ phone });
+      const prepareRes = await fetch("/api/auth/prepare-phone-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      if (!prepareRes.ok) {
+        setLoading(false);
+        setError(t.errors.phoneResetFailed);
+        return;
+      }
+      const { error: err } = await supabase.auth.signInWithOtp({
+        phone,
+        options: { shouldCreateUser: false },
+      } as any);
       setLoading(false);
       if (err) {
         setError(t.errors.phoneResetFailed);
@@ -373,7 +386,7 @@ export default function LoginPage() {
         .login-method { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 5px; border-radius: 16px; background: #EEF5FB; border: 1px solid #DCE8F3; margin-bottom: 14px; }
         .method-btn { min-height: 44px; border: none; border-radius: 12px; background: transparent; color: #426987; font-size: 15px; font-weight: 850; cursor: pointer; font-family: inherit; }
         .method-btn.active { background: #FFFFFF; color: #165D9C; box-shadow: 0 8px 20px rgba(32,86,132,0.12); }
-        .phone-row { display: grid; grid-template-columns: minmax(136px, 0.72fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+        .phone-row { display: grid; grid-template-columns: minmax(92px, 112px) minmax(0, 1fr); gap: 10px; align-items: end; }
         .password-wrap { position: relative; }
         .password-input { padding-right: 82px; }
         .show-btn {
@@ -457,7 +470,7 @@ export default function LoginPage() {
           .auth-panel { order: 1; }
           .visual-panel { display: none; }
           .panel { padding: 22px; }
-          .phone-row { grid-template-columns: 1fr; gap: 12px; }
+          .phone-row { grid-template-columns: minmax(88px, 108px) minmax(0, 1fr); gap: 8px; }
           .title { font-size: clamp(32px, 9vw, 42px); }
           .subtitle { font-size: 16px; }
         }
@@ -522,7 +535,7 @@ export default function LoginPage() {
                           >
                             {COUNTRY_OPTIONS.map((country) => (
                               <option key={`${country.code}-${country.en}`} value={country.code}>
-                                {lang === "es" ? country.es : country.en} {country.code}
+                                {compactCountryDialLabel(country.code)}
                               </option>
                             ))}
                           </select>
@@ -610,7 +623,7 @@ export default function LoginPage() {
                         <select id="reset-country" className="input select" value={resetPhoneCountryCode} onChange={(event)=>setResetPhoneCountryCode(event.target.value)}>
                           {COUNTRY_OPTIONS.map((country) => (
                             <option key={`reset-${country.code}-${country.en}`} value={country.code}>
-                              {lang === "es" ? country.es : country.en} {country.code}
+                              {compactCountryDialLabel(country.code)}
                             </option>
                           ))}
                         </select>

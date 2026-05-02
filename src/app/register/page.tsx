@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizeStaffPhone, phoneAliasEmail } from "@/lib/authIdentity";
-import { COUNTRY_OPTIONS } from "@/lib/countryDialing";
+import { COUNTRY_OPTIONS, compactCountryDialLabel } from "@/lib/countryDialing";
 
 type Lang = "es" | "en";
 type OfficeLocation = "Guadalajara" | "Tijuana" | "Both" | null;
@@ -490,7 +490,7 @@ export default function RegisterPage() {
           background-repeat: no-repeat;
           padding-right: 34px;
         }
-        .phone-row { display: grid; grid-template-columns: minmax(136px, 0.72fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+        .phone-row { display: grid; grid-template-columns: minmax(92px, 112px) minmax(0, 1fr); gap: 10px; align-items: end; }
         .code-input { text-align: center; color: #123A5E; font-size: 20px; font-weight: 850; }
         .input:focus { background: #fff; border-color: #2B78B7; box-shadow: 0 0 0 4px rgba(43,120,183,0.12); }
         .input::placeholder { color: #9AAFC3; font-weight: 600; }
@@ -614,7 +614,7 @@ export default function RegisterPage() {
           .panel { padding: 22px; }
           .top-actions { min-height: 34px; }
           .brand { margin-top: 0; }
-          .phone-row { grid-template-columns: 1fr; gap: 12px; }
+          .phone-row { grid-template-columns: minmax(88px, 108px) minmax(0, 1fr); gap: 8px; }
           .existing-actions { grid-template-columns: 1fr; }
         }
       `}</style>
@@ -714,7 +714,7 @@ export default function RegisterPage() {
                     >
                       {COUNTRY_OPTIONS.map((country) => (
                         <option key={`${country.code}-${country.en}`} value={country.code}>
-                          {lang === "es" ? country.es : country.en} {country.code}
+                          {compactCountryDialLabel(country.code)}
                         </option>
                       ))}
                     </select>
