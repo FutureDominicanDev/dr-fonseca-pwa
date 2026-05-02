@@ -57,6 +57,8 @@ const deviceUiLang = (): "es" | "en" => {
   return options.map((entry) => normalizeUiLang(entry)).find(Boolean) || "es";
 };
 
+const CLINICAL_HISTORY_TEMPLATE_URL = "/forms/historia-clinica.pdf";
+
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const searchParams = useSearchParams();
@@ -68,6 +70,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
   const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
   const [clinicalFormOpen, setClinicalFormOpen] = useState(false);
+  const [clinicalFormMode, setClinicalFormMode] = useState<"view" | "edit">("edit");
   const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
   const [selectedPrescription, setSelectedPrescription] = useState<Message | null>(null);
   const [lastPrescriptionSeenAt, setLastPrescriptionSeenAt] = useState("");
@@ -423,28 +426,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const saveClinicalForm = async (payload: FormMessagePayload) => {
     if (accessDenied || !accessReady) return;
     const content = serializeFormMessage(payload);
-    const existing = latestClinicalFormMessage;
-
-    if (existing?.id) {
-      const { data, error } = await supabase
-        .from("messages")
-        .update({ content })
-        .eq("id", existing.id)
-        .eq("room_id", id)
-        .select("*")
-        .single();
-      if (!error && data) {
-        setMessages((current) => current.map((message) => (message.id === existing.id ? (data as Message) : message)));
-      }
-      return;
-    }
-
     const createdAt = new Date().toISOString();
     const { data } = await supabase
       .from("messages")
       .insert({
         room_id: id,
         content,
+        file_name: "[FORM] Historia clínica",
         sender_id: currentUserId,
         sender_type: "patient",
         message_type: "text",
@@ -684,7 +672,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <FormMessage
           payload={formPayload}
           lang={uiLang}
-          editable={viewerType === "patient" && message.sender_type === "patient"}
+          templateUrl={CLINICAL_HISTORY_TEMPLATE_URL}
+          editable={false}
           onSubmit={saveClinicalForm}
         />
       );
@@ -740,6 +729,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       video: "Video",
       documents: "Prescriptions",
       clinicalForm: "Medical history form",
+      formsFolder: "Forms",
       noPrescriptions: "No prescriptions yet.",
       prescriptionInstructions: "Instructions",
       close: "Close",
@@ -768,6 +758,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       video: "Video",
       documents: "Recetas",
       clinicalForm: "Historia clínica",
+      formsFolder: "Formularios",
       noPrescriptions: "Todavía no hay recetas.",
       prescriptionInstructions: "Indicaciones",
       close: "Cerrar",
@@ -954,7 +945,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           return visibleChatMessages.map((message) => {
           const mine = message.sender_type !== "staff";
           const deletedByPatient = !!message.deleted_by_patient;
-          const canDeletePatientMessage = viewerType === "patient" && mine && !deletedByPatient && !message.deleted_by_staff;
+          const isClinicalFormMessage = !!parseFormMessage(message.content);
+          const canDeletePatientMessage = viewerType === "patient" && mine && !isClinicalFormMessage && !deletedByPatient && !message.deleted_by_staff;
           const softBlue = "#d9ecf7";
           const bubbleBg =
             viewerType === "staff"
@@ -1012,7 +1004,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {labels.documents}
               {newPrescriptionCount > 0 && <span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",minWidth:22,height:22,borderRadius:999,background:"#DC2626",color:"white",display:"grid",placeItems:"center",fontSize:12,fontWeight:900}}>{newPrescriptionCount}</span>}
             </button>
-            <button onClick={() => { setClinicalFormOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.clinicalForm}</button>
+            <button onClick={() => { setClinicalFormMode(latestClinicalFormMessage ? "view" : "edit"); setClinicalFormOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.formsFolder}</button>
             <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
             <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
           </div>
@@ -1088,10 +1080,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             <FormMessage
               payload={parseFormMessage(latestClinicalFormMessage?.content) || createClinicalHistoryPayload()}
               lang={uiLang}
-              editable
+              templateUrl={CLINICAL_HISTORY_TEMPLATE_URL}
+              editable={viewerType === "patient" && clinicalFormMode === "edit"}
+              startEditing={viewerType === "patient" && clinicalFormMode === "edit"}
+              onRequestCorrection={() => setClinicalFormMode("edit")}
               onSubmit={async (payload) => {
                 await saveClinicalForm(payload);
                 setClinicalFormOpen(false);
+                setClinicalFormMode("view");
               }}
             />
           </div>

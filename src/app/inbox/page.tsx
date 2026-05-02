@@ -130,8 +130,8 @@ const T = {
     videoCall: "Videollamada",
     mediaLibrary: "Archivos",
     prescriptions: "Recetas",
-    forms: "Formulario",
-    formFolderTitle: "Formulario del paciente",
+    forms: "Formularios",
+    formFolderTitle: "Formularios del paciente",
     noForms: "Todavía no hay formularios enviados.",
     exportForm: "Exportar",
     shareForm: "Compartir",
@@ -291,8 +291,8 @@ const T = {
     videoCall: "Video call",
     mediaLibrary: "Files",
     prescriptions: "Prescriptions",
-    forms: "Form",
-    formFolderTitle: "Patient form",
+    forms: "Forms",
+    formFolderTitle: "Patient forms",
     noForms: "No submitted forms yet.",
     exportForm: "Export",
     shareForm: "Share",
@@ -3243,8 +3243,8 @@ export default function InboxPage() {
       }
       const patientFirstName = patientFullName.trim().split(/\s+/)[0] || patientFullName.trim();
       const welcomeMessage = newPatientLanguage === "en"
-        ? `Hello ${patientFirstName}, welcome. This will be your direct communication channel with our team throughout your care.\n\nPlease tap the + button and open Medical history form to complete your information. Once you save it, our team will be able to review it from your Form folder.\n\nIf you need immediate assistance, press the call button to connect with the clinic. We are here to help you.`
-        : `Hola ${patientFirstName}, bienvenido(a). Este será tu canal de comunicación directo con nuestro equipo durante todo tu proceso de cuidado.\n\nPor favor presiona el botón + y abre Historia clínica para completar tu información. Al guardarla, nuestro equipo podrá revisarla desde tu carpeta Formulario.\n\nSi necesitas asistencia inmediata, presiona el botón de llamada para comunicarte con la clínica. Estamos aquí para ayudarte.`;
+        ? `Hello ${patientFirstName}, welcome. This will be your direct communication channel with our team throughout your care.\n\nPlease tap the + button and open Forms to complete your Medical history. Once you save it, our team will be able to review it from the Forms folder.\n\nIf you need immediate assistance, press the call button to connect with the clinic. We are here to help you.`
+        : `Hola ${patientFirstName}, bienvenido(a). Este será tu canal de comunicación directo con nuestro equipo durante todo tu proceso de cuidado.\n\nPor favor presiona el botón + y abre Formularios para completar tu Historia clínica. Al guardarla, nuestro equipo podrá revisarla desde la carpeta Formularios.\n\nSi necesitas asistencia inmediata, presiona el botón de llamada para comunicarte con la clínica. Estamos aquí para ayudarte.`;
       await supabase.from("messages").insert({
         room_id: rm.id,
         content: welcomeMessage,
@@ -3667,7 +3667,7 @@ export default function InboxPage() {
           </div>
         ):formPayload ? (
           <div style={{...bubbleStyle,padding:0,background:"transparent",border:"none",boxShadow:"none"}}>
-            <FormMessage payload={formPayload} lang={lang} />
+            <FormMessage payload={formPayload} lang={lang} templateUrl="/forms/historia-clinica.pdf" />
           </div>
         ):callRequestToken ? (
           <div style={{ ...bubbleStyle, padding: 12, minWidth: 250 }}>
@@ -4957,7 +4957,7 @@ export default function InboxPage() {
                         </div>
                         <div style={{fontSize:12,fontWeight:900,color:"#1D4ED8",background:"#DBEAFE",borderRadius:999,padding:"6px 10px"}}>{t.forms}</div>
                       </div>
-                      <FormMessage payload={payload} lang={lang} />
+                      <FormMessage payload={payload} lang={lang} templateUrl="/forms/historia-clinica.pdf" />
                       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(118px,1fr))",gap:8}}>
                         <button type="button" onClick={()=>void shareFormEntry(entry)} style={{minHeight:44,border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",fontFamily:"inherit",fontSize:14,fontWeight:900,cursor:"pointer"}}>{t.shareForm}</button>
                         <button type="button" onClick={()=>emailFormEntry(entry)} style={{minHeight:44,border:"none",borderRadius:12,background:"#FEF3C7",color:"#92400E",fontFamily:"inherit",fontSize:14,fontWeight:900,cursor:"pointer"}}>{t.emailForm}</button>
