@@ -11,6 +11,7 @@ import {
   serializeFormMessage,
   type FormMessagePayload,
 } from "@/components/FormMessage";
+import { buildClinicalHistoryPdf } from "@/lib/clinicalHistoryPdf";
 
 type Message = {
   id: string;
@@ -65,6 +66,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const token = searchParams.get("token") || "";
   const viewerType = searchParams.get("view") === "staff" ? "staff" : "patient";
   const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
   const [text, setText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
@@ -102,6 +104,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clinicalFormAutoOpenedRef = useRef(false);
   const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior, block: "end" }));
   };
@@ -158,6 +161,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const validateRoom = async () => {
       setAccessReady(false);
       setAccessDenied(false);
+      setMessagesLoaded(false);
 
       let roomQuery = await supabase
         .from("rooms")
@@ -224,7 +228,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         .eq("room_id", id)
         .order("created_at", { ascending: true });
 
-      if (mounted) setMessages((data || []) as Message[]);
+      if (mounted) {
+        setMessages((data || []) as Message[]);
+        setMessagesLoaded(true);
+      }
     };
 
     validateRoom().then((allowed) => {
@@ -463,6 +470,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     .reverse()
     .find((message) => message.sender_type === "patient" && parseFormMessage(message.content));
 
+  useEffect(() => {
+    if (!accessReady || !messagesLoaded || accessDenied || viewerType !== "patient" || clinicalFormAutoOpenedRef.current) return;
+    if (latestClinicalFormMessage) return;
+    clinicalFormAutoOpenedRef.current = true;
+    setClinicalFormMode("edit");
+    setClinicalFormOpen(true);
+  }, [accessDenied, accessReady, latestClinicalFormMessage, messagesLoaded, viewerType]);
+
   const saveClinicalForm = async (payload: FormMessagePayload) => {
     if (accessDenied || !accessReady) return;
     const content = serializeFormMessage(payload);
@@ -481,6 +496,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       .select("*")
       .single();
     if (data) setMessages((current) => current.some((item) => item.id === data.id) ? current : [...current, data as Message]);
+    try {
+      const pdfFile = await buildClinicalHistoryPdf(payload, { templateUrl: CLINICAL_HISTORY_TEMPLATE_URL, uiLang });
+      await uploadFile(pdfFile, "file");
+    } catch (pdfError) {
+      console.error("clinical history pdf generation failed", pdfError);
+      window.alert(uiLang === "es" ? "Guardé el formulario, pero no pude generar el PDF." : "I saved the form, but could not generate the PDF.");
+    }
   };
 
   const deletePatientMessage = async (messageId: string) => {

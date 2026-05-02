@@ -3507,10 +3507,12 @@ export default function InboxPage() {
   };
 
   const isPrescriptionEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[MED]");
+  const isClinicalFormPdfEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[FORM PDF]");
   const isPatientFolderEntry = (entry: any) => {
     const fileName = `${entry?.file_name || ""}`;
     return (
       fileName.startsWith("[MED]") ||
+      fileName.startsWith("[FORM PDF]") ||
       fileName.startsWith("[BEFORE]") ||
       fileName.startsWith("[PROFILE]") ||
       fileName.startsWith("profile.") ||
@@ -3525,7 +3527,7 @@ export default function InboxPage() {
   const roomImageVideoEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && (entry.message_type === "image" || entry.message_type === "video"));
   const roomAudioEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && entry.message_type === "audio");
   const roomPrescriptionEntries = roomMediaEntries.filter((entry) => isPrescriptionEntry(entry));
-  const roomFormEntries = roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content));
+  const roomFormEntries = roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content) || isClinicalFormPdfEntry(entry));
   const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry));
   const prescriptionInfo = (entry: any) => {
     const clean = `${entry?.file_name || t.prescriptions}`.replace(/^\[MED\]\s*/, "").trim();
@@ -5125,6 +5127,17 @@ export default function InboxPage() {
                 {roomFormEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{t.noForms}</div>}
                 {roomFormEntries.map((entry:any)=> {
                   const payload = parseFormMessage(entry.content);
+                  if (!payload && isClinicalFormPdfEntry(entry)) {
+                    return (
+                      <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:16,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
+                        <span style={{fontSize:24}}>📄</span>
+                        <div style={{display:"grid",gap:3,minWidth:0}}>
+                          <div style={{fontSize:15,fontWeight:900,overflowWrap:"anywhere"}}>{`${entry.file_name || ""}`.replace(/^\[FORM PDF\]\s*/, "") || (lang==="es" ? "Historia clínica PDF" : "Clinical history PDF")}</div>
+                          <div style={{fontSize:12,fontWeight:800,color:subTextColor}}>{fmtDateLabel(entry.created_at || "")}</div>
+                        </div>
+                      </a>
+                    );
+                  }
                   if (!payload) return null;
                   return (
                     <div key={entry.id} style={{display:"grid",gap:10,padding:12,borderRadius:16,background:cardBg,border:`1px solid ${borderColor}`}}>
