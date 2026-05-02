@@ -17,10 +17,34 @@ create table if not exists public.staff_access_requests (
 );
 
 alter table public.staff_access_requests
+  add column if not exists room_id uuid references public.rooms(id) on delete cascade;
+
+alter table public.staff_access_requests
   add column if not exists patient_id uuid references public.patients(id) on delete cascade;
 
 alter table public.staff_access_requests
   add column if not exists target_staff_id uuid references public.profiles(id) on delete cascade;
+
+alter table public.staff_access_requests
+  add column if not exists requested_by uuid references public.profiles(id) on delete set null;
+
+alter table public.staff_access_requests
+  add column if not exists status text not null default 'pending';
+
+alter table public.staff_access_requests
+  add column if not exists reason text;
+
+alter table public.staff_access_requests
+  add column if not exists reviewed_by uuid references public.profiles(id) on delete set null;
+
+alter table public.staff_access_requests
+  add column if not exists reviewed_at timestamptz;
+
+alter table public.staff_access_requests
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.staff_access_requests
+  add column if not exists updated_at timestamptz not null default now();
 
 do $$
 begin
@@ -49,6 +73,33 @@ create table if not exists public.labels (
   updated_at timestamptz not null default now()
 );
 
+alter table public.labels
+  add column if not exists name text;
+
+alter table public.labels
+  add column if not exists color text;
+
+alter table public.labels
+  add column if not exists description text;
+
+alter table public.labels
+  add column if not exists scope text not null default 'patient';
+
+alter table public.labels
+  add column if not exists patient_id uuid references public.patients(id) on delete cascade;
+
+alter table public.labels
+  add column if not exists room_id uuid references public.rooms(id) on delete cascade;
+
+alter table public.labels
+  add column if not exists created_by uuid references public.profiles(id) on delete set null;
+
+alter table public.labels
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.labels
+  add column if not exists updated_at timestamptz not null default now();
+
 create table if not exists public.media_notifications (
   id uuid primary key default gen_random_uuid(),
   room_id uuid references public.rooms(id) on delete cascade,
@@ -60,6 +111,30 @@ create table if not exists public.media_notifications (
   read_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+alter table public.media_notifications
+  add column if not exists room_id uuid references public.rooms(id) on delete cascade;
+
+alter table public.media_notifications
+  add column if not exists message_id uuid references public.messages(id) on delete cascade;
+
+alter table public.media_notifications
+  add column if not exists media_type text;
+
+alter table public.media_notifications
+  add column if not exists recipient_id uuid references public.profiles(id) on delete cascade;
+
+alter table public.media_notifications
+  add column if not exists sender_id uuid references public.profiles(id) on delete set null;
+
+alter table public.media_notifications
+  add column if not exists status text not null default 'unread';
+
+alter table public.media_notifications
+  add column if not exists read_at timestamptz;
+
+alter table public.media_notifications
+  add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.audit_logs (
   id uuid primary key default gen_random_uuid(),
@@ -74,6 +149,36 @@ create table if not exists public.audit_logs (
   metadata jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table public.audit_logs
+  add column if not exists action text;
+
+alter table public.audit_logs
+  add column if not exists entity_type text;
+
+alter table public.audit_logs
+  add column if not exists entity_id text;
+
+alter table public.audit_logs
+  add column if not exists actor_id uuid references public.profiles(id) on delete set null;
+
+alter table public.audit_logs
+  add column if not exists actor_name text;
+
+alter table public.audit_logs
+  add column if not exists actor_email text;
+
+alter table public.audit_logs
+  add column if not exists patient_id uuid references public.patients(id) on delete set null;
+
+alter table public.audit_logs
+  add column if not exists room_id uuid references public.rooms(id) on delete set null;
+
+alter table public.audit_logs
+  add column if not exists metadata jsonb;
+
+alter table public.audit_logs
+  add column if not exists created_at timestamptz not null default now();
 
 do $$
 begin
