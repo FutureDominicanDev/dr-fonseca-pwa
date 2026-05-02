@@ -2053,18 +2053,25 @@ export default function InboxPage() {
 
   const fetchUserLabels = useCallback(async () => {
     if (!currentUserId) return;
-    let query = await supabase
-      .from("labels")
-      .select("*")
-      .eq("user_id", currentUserId)
-      .order("created_at", { ascending: true });
-    if (query.error && isMissingColumnError(query.error)) {
-      query = await supabase
-        .from("labels")
-        .select("*")
-        .eq("created_by", currentUserId)
-        .order("created_at", { ascending: true });
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    if (token) {
+      try {
+        const response = await fetch("/api/labels", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && Array.isArray(payload?.labels)) {
+          setUserLabels(payload.labels as PatientLabel[]);
+          return;
+        }
+      } catch {
+        // Fall back to direct reads below for older local environments.
+      }
     }
+
+    let query = await supabase.from("labels").select("*").eq("user_id", currentUserId).order("created_at", { ascending: true });
+    if (query.error && isMissingColumnError(query.error)) query = await supabase.from("labels").select("*").eq("created_by", currentUserId).order("created_at", { ascending: true });
     if (!query.error) setUserLabels((query.data || []) as PatientLabel[]);
   }, [currentUserId]);
 
@@ -2072,35 +2079,31 @@ export default function InboxPage() {
     const name = newLabelName.trim();
     if (!currentUserId || !name || savingLabel) return;
     setSavingLabel(true);
-    let insert = await supabase
-      .from("labels")
-      .insert({
-        user_id: currentUserId,
-        name_es: name,
-        name_en: name,
-        name,
-        color: newLabelColor,
-        scope: "patient",
-        created_by: currentUserId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select("*")
-      .single();
-    if (insert.error && isMissingColumnError(insert.error)) {
-      insert = await supabase
-        .from("labels")
-        .insert({
-          name,
-          color: newLabelColor,
-          scope: "patient",
-          created_by: currentUserId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select("*")
-        .single();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    if (token) {
+      try {
+        const response = await fetch("/api/labels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ name, name_es: name, name_en: name, color: newLabelColor }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        setSavingLabel(false);
+        if (!response.ok || !payload?.label) {
+          alert(payload?.error || (lang === "es" ? "No pude crear la etiqueta." : "I could not create the label."));
+          return;
+        }
+        setUserLabels((current) => [...current, payload.label as PatientLabel]);
+        setNewLabelName("");
+        return;
+      } catch {
+        // Fall back to direct insert below for older local environments.
+      }
     }
+
+    let insert = await supabase.from("labels").insert({ user_id: currentUserId, name_es: name, name_en: name, name, color: newLabelColor, scope: "patient", created_by: currentUserId, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).select("*").single();
+    if (insert.error && isMissingColumnError(insert.error)) insert = await supabase.from("labels").insert({ name, color: newLabelColor, scope: "patient", created_by: currentUserId, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }).select("*").single();
     setSavingLabel(false);
     if (insert.error) {
       alert(insert.error.message || (lang === "es" ? "No pude crear la etiqueta." : "I could not create the label."));
@@ -2117,7 +2120,27 @@ export default function InboxPage() {
       currentValue && typeof currentValue === "object" && !Array.isArray(currentValue)
         ? { ...currentValue, [currentUserId]: nextLabelIds }
         : { [currentUserId]: nextLabelIds };
-    const { error } = await supabase.from("patients").update({ labels: nextLabels }).eq("id", selectedPatient.id);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    let error: { message?: string } | null = null;
+    let savedLabels = nextLabels;
+    if (token) {
+      try {
+        const response = await fetch("/api/labels", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ patientId: selectedPatient.id, roomId: selectedRoom?.id, labelIds: nextLabelIds }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) error = { message: payload?.error };
+        else if (payload?.labels) savedLabels = payload.labels;
+      } catch (requestError) {
+        error = { message: requestError instanceof Error ? requestError.message : "" };
+      }
+    } else {
+      const result = await supabase.from("patients").update({ labels: nextLabels }).eq("id", selectedPatient.id);
+      error = result.error;
+    }
     if (error) {
       if (isMissingColumnError(error)) {
         alert(lang === "es" ? "La etiqueta fue creada, pero falta ejecutar el SQL de labels para asignarla al paciente." : "The label was created, but the labels SQL still needs to be run before assigning it to a patient.");
@@ -2126,14 +2149,14 @@ export default function InboxPage() {
       }
       return;
     }
-    setPatients((current) => current.map((patient) => patient.id === selectedPatient.id ? { ...patient, labels: nextLabels } : patient));
+    setPatients((current) => current.map((patient) => patient.id === selectedPatient.id ? { ...patient, labels: savedLabels } : patient));
     setSelectedRoom((room: any) => room ? {
       ...room,
       procedures: {
         ...room.procedures,
         patients: {
           ...room.procedures?.patients,
-          labels: nextLabels,
+          labels: savedLabels,
         },
       },
     } : room);
