@@ -4647,12 +4647,13 @@ export default function InboxPage() {
         .search-input::placeholder { color: ${darkMode?"#94A3B8":"#7C8797"}; opacity: 1; font-weight: 650; }
         .label-filter-row { display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px 0; scrollbar-width: none; }
         .label-filter-row::-webkit-scrollbar { display: none; }
-        .label-chip { min-height: 32px; max-width: 170px; border: none; border-radius: 999px; padding: 6px 10px; color: #FFFFFF; font-size: 13px; font-weight: 900; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .label-chip { min-height: 30px; max-width: 118px; border: none; border-radius: 999px; padding: 5px 8px; color: #FFFFFF; font-size: 12px; font-weight: 900; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
         .label-chip.all { color: ${textColor}; background: ${darkMode?"#253244":"#EAF2FB"}; border: 1px solid ${borderColor}; }
         .label-chip.active { box-shadow: 0 0 0 2px ${darkMode?"#E5E7EB":"#0F172A"} inset; }
-        .label-chip-count { min-width: 18px; height: 18px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; background: rgba(255,255,255,0.28); color: inherit; font-size: 11px; line-height: 1; flex-shrink: 0; }
+        .label-chip-name { min-width: 0; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .label-chip-count { min-width: 17px; height: 17px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; background: rgba(255,255,255,0.28); color: inherit; font-size: 10px; line-height: 1; flex-shrink: 0; }
         .patient-label-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
-        .patient-label-chip { max-width: 120px; border-radius: 999px; padding: 4px 8px; color: #FFFFFF; font-size: 11px; line-height: 1.2; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .patient-label-chip { max-width: 86px; border-radius: 999px; padding: 3px 7px; color: #FFFFFF; font-size: 10px; line-height: 1.2; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .label-option-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 9px 10px; border: 1px solid ${borderColor}; border-radius: 14px; background: ${cardBg}; cursor: pointer; }
         .label-option-row input { width: 20px; height: 20px; min-height: 20px; flex-shrink: 0; }
         .label-option-main { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; cursor: pointer; }
@@ -5773,7 +5774,7 @@ export default function InboxPage() {
                         }}
                         title={`${labelName(label)} · ${count} ${lang === "es" ? "paciente(s)" : "patient(s)"}`}
                       >
-                        <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{labelName(label)}</span>
+                        <span className="label-chip-name">{labelName(label)}</span>
                         <span className="label-chip-count">{count}</span>
                       </button>
                     );
