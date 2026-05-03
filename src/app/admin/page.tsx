@@ -1056,6 +1056,8 @@ export default function AdminPage() {
         .hero-link:disabled { opacity: 0.5; cursor: not-allowed; }
         .hero-note { padding: 14px 16px; border-radius: 18px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.12); }
         .search-panel { display: grid; gap: 16px; }
+        .admin-search-section { order: -3; }
+        .active-patients-section { order: -2; }
         .search-toolbar { display: grid; gap: 12px; }
         .search-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
         .line-input.search-main { height: 52px; font-size: 16px; font-weight: 700; }
@@ -1154,6 +1156,8 @@ export default function AdminPage() {
           .quick-links .hero-link:last-child { grid-column: 1 / -1; }
           .hero-link { width: 100%; text-align: center; padding: 10px 12px; font-size: 13px; }
           .search-input-row { grid-template-columns: 1fr; }
+          .line-input.search-main { height: 46px; font-size: 14px; }
+          .search-status { padding: 10px 12px; border-radius: 14px; font-size: 12px; }
           .hero-pill-row,
           .filter-row,
           .hero-actions { display: grid; grid-template-columns: 1fr 1fr; }
@@ -1336,7 +1340,7 @@ export default function AdminPage() {
                 </section>
               )}
 
-              <section className="card" id="pacientes-activos">
+              <section className="card active-patients-section" id="pacientes-activos">
                 <div className="header-row">
                   <div>
                     <p className="card-title">{isSpanish ? "Pacientes activos" : "Active patients"}</p>
@@ -1365,7 +1369,7 @@ export default function AdminPage() {
                 </div>
               </section>
 
-              <section className="card search-panel">
+              <section className="card search-panel admin-search-section">
                 <div className="header-row" style={{ marginBottom: 0 }}>
                   <div>
                     <p className="card-title">{isSpanish ? "Buscar paciente" : "Find patient"}</p>
