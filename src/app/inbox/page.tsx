@@ -744,6 +744,10 @@ export default function InboxPage() {
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#EF4444");
   const [savingLabel, setSavingLabel] = useState(false);
+  const [editingLabelId, setEditingLabelId] = useState("");
+  const [editingLabelName, setEditingLabelName] = useState("");
+  const [editingLabelColor, setEditingLabelColor] = useState("#EF4444");
+  const [savingLabelAction, setSavingLabelAction] = useState("");
   const [showTopMenu, setShowTopMenu] = useState(false);
   const [displayNameEdit, setDisplayNameEdit] = useState("");
   const [phoneCountryEdit, setPhoneCountryEdit] = useState("+52");
@@ -2180,6 +2184,135 @@ export default function InboxPage() {
     }
     if (insert.data) setUserLabels((current) => [...current, insert.data as PatientLabel]);
     setNewLabelName("");
+  };
+
+  const startEditingPatientLabel = (label: PatientLabel) => {
+    setEditingLabelId(label.id);
+    setEditingLabelName(labelName(label));
+    setEditingLabelColor(label.color || "#EF4444");
+  };
+
+  const cancelEditingPatientLabel = () => {
+    setEditingLabelId("");
+    setEditingLabelName("");
+    setEditingLabelColor("#EF4444");
+  };
+
+  const updatePatientLabel = async (labelId: string) => {
+    const name = editingLabelName.trim();
+    if (!currentUserId || !labelId || !name || savingLabelAction) return;
+    setSavingLabelAction(`edit-${labelId}`);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    let updatedLabel: PatientLabel | null = null;
+    let errorMessage = "";
+
+    if (token) {
+      try {
+        const response = await fetch("/api/labels", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ labelId, name, name_es: name, name_en: name, color: editingLabelColor }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && payload?.label) updatedLabel = payload.label as PatientLabel;
+        else errorMessage = payload?.error || "";
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message : "";
+      }
+    } else {
+      let update = await supabase
+        .from("labels")
+        .update({ name, name_es: name, name_en: name, color: editingLabelColor, updated_at: new Date().toISOString() })
+        .eq("id", labelId)
+        .eq("user_id", currentUserId)
+        .select("*")
+        .single();
+      if (update.error && isMissingColumnError(update.error)) {
+        update = await supabase
+          .from("labels")
+          .update({ name, color: editingLabelColor })
+          .eq("id", labelId)
+          .eq("created_by", currentUserId)
+          .select("*")
+          .single();
+      }
+      if (update.error) errorMessage = update.error.message || "";
+      else updatedLabel = update.data as PatientLabel;
+    }
+
+    setSavingLabelAction("");
+    if (!updatedLabel) {
+      alert(errorMessage || (lang === "es" ? "No pude editar la etiqueta." : "I could not edit the label."));
+      return;
+    }
+    setUserLabels((current) => current.map((label) => (label.id === labelId ? { ...label, ...updatedLabel } : label)));
+    if (activeLabelFilter === labelId) setActiveLabelFilter(labelId);
+    cancelEditingPatientLabel();
+  };
+
+  const deletePatientLabel = async (label: PatientLabel) => {
+    if (!currentUserId || savingLabelAction) return;
+    const confirmed = window.confirm(
+      lang === "es"
+        ? `¿Eliminar la etiqueta "${labelName(label)}"? Se quitará de los pacientes donde esté asignada.`
+        : `Delete "${labelName(label)}"? It will be removed from assigned patients.`
+    );
+    if (!confirmed) return;
+
+    setSavingLabelAction(`delete-${label.id}`);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    let errorMessage = "";
+
+    if (token) {
+      try {
+        const response = await fetch(`/api/labels?labelId=${encodeURIComponent(label.id)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) errorMessage = payload?.error || "";
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message : "";
+      }
+    } else {
+      let removed = await supabase.from("labels").delete().eq("id", label.id).eq("user_id", currentUserId);
+      if (removed.error && isMissingColumnError(removed.error)) removed = await supabase.from("labels").delete().eq("id", label.id).eq("created_by", currentUserId);
+      if (removed.error) errorMessage = removed.error.message || "";
+    }
+
+    setSavingLabelAction("");
+    if (errorMessage) {
+      alert(errorMessage || (lang === "es" ? "No pude borrar la etiqueta." : "I could not delete the label."));
+      return;
+    }
+
+    setUserLabels((current) => current.filter((entry) => entry.id !== label.id));
+    if (activeLabelFilter === label.id) setActiveLabelFilter("");
+    if (editingLabelId === label.id) cancelEditingPatientLabel();
+    setPatients((current) => current.map((patient) => {
+      const value = patient.labels;
+      if (!value || typeof value !== "object" || Array.isArray(value)) return patient;
+      const nextForUser = Array.isArray(value[currentUserId]) ? value[currentUserId].filter((id: string) => id !== label.id) : [];
+      return { ...patient, labels: { ...value, [currentUserId]: nextForUser } };
+    }));
+    setSelectedRoom((room: any) => {
+      const patient = room?.procedures?.patients;
+      const value = patient?.labels;
+      if (!room || !value || typeof value !== "object" || Array.isArray(value)) return room;
+      const nextForUser = Array.isArray(value[currentUserId]) ? value[currentUserId].filter((id: string) => id !== label.id) : [];
+      return {
+        ...room,
+        procedures: {
+          ...room.procedures,
+          patients: {
+            ...patient,
+            labels: { ...value, [currentUserId]: nextForUser },
+          },
+        },
+      };
+    });
   };
 
   const updateSelectedPatientLabels = async (nextLabelIds: string[]) => {
@@ -4499,6 +4632,11 @@ export default function InboxPage() {
         .patient-label-chip { max-width: 120px; border-radius: 999px; padding: 4px 8px; color: #FFFFFF; font-size: 11px; line-height: 1.2; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .label-option-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 9px 10px; border: 1px solid ${borderColor}; border-radius: 14px; background: ${cardBg}; cursor: pointer; }
         .label-option-row input { width: 20px; height: 20px; min-height: 20px; flex-shrink: 0; }
+        .label-option-main { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+        .label-manage-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .label-mini-btn { min-width: 38px; min-height: 38px; border: 1px solid ${borderColor}; border-radius: 12px; background: ${darkMode?"#253244":"#F8FAFC"}; color: ${textColor}; cursor: pointer; font-size: 13px; font-weight: 900; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; padding: 0 9px; }
+        .label-mini-btn.danger { background: ${darkMode?"#3B1D24":"#FEE2E2"}; color: ${darkMode?"#FCA5A5":"#991B1B"}; border-color: ${darkMode?"#7F1D1D":"#FECACA"}; }
+        .label-edit-box { display: grid; gap: 10px; padding: 12px; border: 1px solid ${borderColor}; border-radius: 14px; background: ${darkMode?"#111827":"#F8FAFC"}; }
         .label-color-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0 10px; }
         .label-color-btn { width: 34px; height: 34px; min-height: 34px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; flex-shrink: 0; }
         .label-color-btn.active { border-color: ${textColor}; box-shadow: 0 0 0 2px ${cardBg}; }
@@ -5381,16 +5519,56 @@ export default function InboxPage() {
                   {lang === "es" ? "Todavía no tienes etiquetas." : "You do not have labels yet."}
                 </p>
               ) : userLabels.map((label)=>(
-                <label key={label.id} className="label-option-row">
-                  <input
-                    type="checkbox"
-                    checked={selectedPatientLabelSet.has(label.id)}
-                    onChange={()=>toggleSelectedPatientLabel(label.id)}
-                  />
-                  <span className="label-chip" style={{background: label.color || "#64748B"}}>
-                    {labelName(label)}
-                  </span>
-                </label>
+                editingLabelId === label.id ? (
+                  <div key={label.id} className="label-edit-box">
+                    <input
+                      className="finput"
+                      value={editingLabelName}
+                      onChange={(event)=>setEditingLabelName(event.target.value)}
+                      placeholder={lang === "es" ? "Nombre de etiqueta" : "Label name"}
+                    />
+                    <div className="label-color-row">
+                      {labelColors.map((color)=>(
+                        <button
+                          key={color}
+                          className={`label-color-btn${editingLabelColor === color ? " active" : ""}`}
+                          style={{background: color}}
+                          onClick={()=>setEditingLabelColor(color)}
+                          aria-label={color}
+                        />
+                      ))}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      <button className="ghost-btn" onClick={cancelEditingPatientLabel} disabled={!!savingLabelAction}>
+                        {lang === "es" ? "Cancelar" : "Cancel"}
+                      </button>
+                      <button className="pbtn" onClick={()=>updatePatientLabel(label.id)} disabled={!editingLabelName.trim() || !!savingLabelAction}>
+                        {savingLabelAction === `edit-${label.id}` ? (lang === "es" ? "Guardando..." : "Saving...") : (lang === "es" ? "Guardar" : "Save")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div key={label.id} className="label-option-row">
+                    <label className="label-option-main">
+                      <input
+                        type="checkbox"
+                        checked={selectedPatientLabelSet.has(label.id)}
+                        onChange={()=>toggleSelectedPatientLabel(label.id)}
+                      />
+                      <span className="label-chip" style={{background: label.color || "#64748B"}}>
+                        {labelName(label)}
+                      </span>
+                    </label>
+                    <div className="label-manage-actions">
+                      <button className="label-mini-btn" type="button" onClick={()=>startEditingPatientLabel(label)} disabled={!!savingLabelAction}>
+                        {lang === "es" ? "Editar" : "Edit"}
+                      </button>
+                      <button className="label-mini-btn danger" type="button" onClick={()=>deletePatientLabel(label)} disabled={!!savingLabelAction}>
+                        {savingLabelAction === `delete-${label.id}` ? "..." : (lang === "es" ? "Borrar" : "Delete")}
+                      </button>
+                    </div>
+                  </div>
+                )
               ))}
             </div>
             <div style={{borderTop:`1px solid ${borderColor}`,paddingTop:16}}>

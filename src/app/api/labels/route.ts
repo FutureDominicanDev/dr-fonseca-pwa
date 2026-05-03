@@ -309,3 +309,110 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Unexpected label assignment error." }, { status: 500 });
   }
 }
+
+export async function PUT(request: NextRequest) {
+  try {
+    if (!configured) return NextResponse.json({ error: "Labels are not configured." }, { status: 503 });
+    const viewer = await getViewer(request);
+    if (!viewer) return NextResponse.json({ error: "Invalid session." }, { status: 401 });
+
+    const body = await request.json();
+    const labelId = `${body?.labelId || ""}`.trim();
+    const name = `${body?.name || ""}`.trim();
+    const color = `${body?.color || "#2563EB"}`.trim() || "#2563EB";
+    if (!labelId) return NextResponse.json({ error: "Label is required." }, { status: 400 });
+    if (!name) return NextResponse.json({ error: "Label name is required." }, { status: 400 });
+
+    const now = new Date().toISOString();
+    const fullPayload = {
+      name,
+      name_es: `${body?.name_es || name}`.trim(),
+      name_en: `${body?.name_en || name}`.trim(),
+      color,
+      updated_at: now,
+    };
+
+    let update = await adminClient
+      .from("labels")
+      .update(fullPayload)
+      .eq("id", labelId)
+      .eq("user_id", viewer.id)
+      .select("*")
+      .maybeSingle();
+
+    if (update.error && isSchemaColumnError(update.error)) {
+      const { name_es: _nameEs, name_en: _nameEn, ...compatiblePayload } = fullPayload;
+      update = await adminClient
+        .from("labels")
+        .update(compatiblePayload)
+        .eq("id", labelId)
+        .eq("user_id", viewer.id)
+        .select("*")
+        .maybeSingle();
+    }
+
+    if ((update.error && isSchemaColumnError(update.error)) || (!update.error && !update.data)) {
+      update = await adminClient
+        .from("labels")
+        .update(fullPayload)
+        .eq("id", labelId)
+        .eq("created_by", viewer.id)
+        .select("*")
+        .maybeSingle();
+    }
+
+    if (update.error && isSchemaColumnError(update.error)) {
+      const { name_es: _nameEs, name_en: _nameEn, updated_at: _updatedAt, ...legacyPayload } = fullPayload;
+      update = await adminClient
+        .from("labels")
+        .update(legacyPayload)
+        .eq("id", labelId)
+        .eq("created_by", viewer.id)
+        .select("*")
+        .maybeSingle();
+    }
+
+    if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
+    if (!update.data) return NextResponse.json({ error: "Label not found." }, { status: 404 });
+
+    return NextResponse.json({ label: withAssignmentMetadata(update.data) });
+  } catch {
+    return NextResponse.json({ error: "Unexpected label update error." }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    if (!configured) return NextResponse.json({ error: "Labels are not configured." }, { status: 503 });
+    const viewer = await getViewer(request);
+    if (!viewer) return NextResponse.json({ error: "Invalid session." }, { status: 401 });
+
+    const labelId = `${request.nextUrl.searchParams.get("labelId") || ""}`.trim();
+    if (!labelId) return NextResponse.json({ error: "Label is required." }, { status: 400 });
+
+    let removed = await adminClient
+      .from("labels")
+      .delete()
+      .eq("id", labelId)
+      .eq("user_id", viewer.id)
+      .select("id")
+      .maybeSingle();
+
+    if ((removed.error && isSchemaColumnError(removed.error)) || (!removed.error && !removed.data)) {
+      removed = await adminClient
+        .from("labels")
+        .delete()
+        .eq("id", labelId)
+        .eq("created_by", viewer.id)
+        .select("id")
+        .maybeSingle();
+    }
+
+    if (removed.error) return NextResponse.json({ error: removed.error.message }, { status: 500 });
+    if (!removed.data) return NextResponse.json({ error: "Label not found." }, { status: 404 });
+
+    return NextResponse.json({ deleted: true, labelId });
+  } catch {
+    return NextResponse.json({ error: "Unexpected label delete error." }, { status: 500 });
+  }
+}
