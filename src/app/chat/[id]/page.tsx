@@ -680,7 +680,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           payload={formPayload}
           lang={uiLang}
           templateUrl={CLINICAL_HISTORY_TEMPLATE_URL}
-          editable={false}
+          editable={viewerType === "patient" && message.sender_type === "patient"}
           onSubmit={saveClinicalForm}
         />
       );
