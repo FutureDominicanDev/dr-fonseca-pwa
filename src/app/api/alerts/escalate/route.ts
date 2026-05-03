@@ -24,6 +24,12 @@ const isSchemaMissingError = (error: unknown) => {
   return text.includes("schema cache") || text.includes("could not find") || text.includes("function") || text.includes("relation");
 };
 
+const isColumnError = (error: unknown) => {
+  const value = error as { message?: string; details?: string; hint?: string };
+  const text = `${value?.message || ""} ${value?.details || ""} ${value?.hint || ""}`.toLowerCase();
+  return text.includes("column") || text.includes("schema cache");
+};
+
 async function authorize(request: NextRequest) {
   if (!authClient || !adminClient) return { ok: false, status: 503, error: "Alerts are not configured." };
 
@@ -140,6 +146,66 @@ async function insertEscalationNotifications(alerts: EscalatedAlert[]) {
   return { inserted };
 }
 
+async function escalatePendingAlertsFallback() {
+  if (!adminClient) return { alerts: [] as EscalatedAlert[], error: null as any };
+
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const { data: candidates, error: selectError } = await adminClient
+    .from("patient_alerts")
+    .select("id, chat_id, patient_id, escalation_level")
+    .eq("status", "pending")
+    .is("acknowledged_at", null)
+    .lt("created_at", cutoff)
+    .lt("escalation_level", 3)
+    .limit(100);
+
+  if (selectError) return { alerts: [] as EscalatedAlert[], error: selectError };
+
+  const alerts: EscalatedAlert[] = [];
+  for (const candidate of candidates || []) {
+    const previous = Math.max(1, Math.min(Number((candidate as any).escalation_level) || 1, 3));
+    const next = Math.min(previous + 1, 3);
+    if (next <= previous) continue;
+
+    const updatePayload = {
+      escalation_level: next,
+      updated_at: new Date().toISOString(),
+    };
+    let update = await adminClient
+      .from("patient_alerts")
+      .update(updatePayload)
+      .eq("id", (candidate as any).id)
+      .eq("status", "pending")
+      .is("acknowledged_at", null)
+      .select("id, chat_id, patient_id, escalation_level")
+      .maybeSingle();
+
+    if (update.error && isColumnError(update.error)) {
+      update = await adminClient
+        .from("patient_alerts")
+        .update({ escalation_level: next })
+        .eq("id", (candidate as any).id)
+        .eq("status", "pending")
+        .is("acknowledged_at", null)
+        .select("id, chat_id, patient_id, escalation_level")
+        .maybeSingle();
+    }
+
+    if (update.error) return { alerts, error: update.error };
+    if (!update.data) continue;
+
+    alerts.push({
+      id: `${update.data.id}`,
+      chat_id: `${update.data.chat_id}`,
+      patient_id: `${update.data.patient_id}`,
+      previous_escalation_level: previous,
+      escalation_level: Math.max(1, Math.min(Number(update.data.escalation_level) || next, 3)),
+    });
+  }
+
+  return { alerts, error: null };
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!configured || !adminClient) {
@@ -150,13 +216,21 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const { data, error } = await adminClient.rpc("escalate_pending_alerts");
-    if (error) {
+    let alerts = Array.isArray(data) ? data as EscalatedAlert[] : [];
+    if (error && isSchemaMissingError(error)) {
+      console.warn("Alert escalation RPC unavailable; using server fallback", error.message);
+      const fallback = await escalatePendingAlertsFallback();
+      if (fallback.error) {
+        console.error("Alert escalation fallback failed", fallback.error.message);
+        const status = isSchemaMissingError(fallback.error) ? 503 : 500;
+        return NextResponse.json({ ok: false, escalated: 0, notifications: 0, error: fallback.error.message }, { status });
+      }
+      alerts = fallback.alerts;
+    } else if (error) {
       console.error("Alert escalation RPC failed", error.message);
-      const status = isSchemaMissingError(error) ? 503 : 500;
-      return NextResponse.json({ ok: false, escalated: 0, notifications: 0, error: error.message }, { status });
+      return NextResponse.json({ ok: false, escalated: 0, notifications: 0, error: error.message }, { status: 500 });
     }
 
-    const alerts = Array.isArray(data) ? data as EscalatedAlert[] : [];
     const changedAlerts = alerts.filter((alert) => Number(alert.escalation_level) > Number(alert.previous_escalation_level));
     const notificationResult = await insertEscalationNotifications(changedAlerts);
 
