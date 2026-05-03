@@ -1000,6 +1000,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             {alertSending ? "Enviando..." : "🚨 Ayuda"}
           </button>
         )}
+        {viewerType === "patient" && alertFeedback && (
+          <div style={{ position: "absolute", left: "max(10px, env(safe-area-inset-left))", bottom: 52, zIndex: 3, maxWidth: "calc(100vw - 20px)", borderRadius: 999, background: alertFeedback.includes("No se pudo") || alertFeedback.includes("could not") ? "#FEE2E2" : "#DCFCE7", color: alertFeedback.includes("No se pudo") || alertFeedback.includes("could not") ? "#991B1B" : "#166534", padding: "7px 11px", fontSize: 12, fontWeight: 850, boxShadow: "0 8px 20px rgba(15,23,42,0.16)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {alertFeedback}
+          </div>
+        )}
       </header>
 
       <section style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
@@ -1067,7 +1072,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {labels.documents}
               {newPrescriptionCount > 0 && <span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",minWidth:22,height:22,borderRadius:999,background:"#DC2626",color:"white",display:"grid",placeItems:"center",fontSize:12,fontWeight:900}}>{newPrescriptionCount}</span>}
             </button>
-            <button onClick={() => { setClinicalFormMode(latestClinicalFormMessage ? "view" : "edit"); setClinicalFormOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.formsFolder}</button>
+            <button onClick={() => { setClinicalFormMode(viewerType === "patient" ? "edit" : latestClinicalFormMessage ? "view" : "edit"); setClinicalFormOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.formsFolder}</button>
             <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
             <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
           </div>
@@ -1104,7 +1109,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
 
         <button onClick={() => { window.location.href = "tel:+523332314480"; }} aria-label="Call" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
-          <Image src="/Call_icon.png" alt="" width={36} height={36} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} />
+          ☎
         </button>
 
         <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
@@ -1144,7 +1149,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               payload={parseFormMessage(latestClinicalFormMessage?.content) || createClinicalHistoryPayload()}
               lang={uiLang}
               templateUrl={CLINICAL_HISTORY_TEMPLATE_URL}
-              editable={viewerType === "patient" && clinicalFormMode === "edit"}
+              editable={viewerType === "patient"}
               startEditing={viewerType === "patient" && clinicalFormMode === "edit"}
               onRequestCorrection={() => setClinicalFormMode("edit")}
               onSubmit={async (payload) => {

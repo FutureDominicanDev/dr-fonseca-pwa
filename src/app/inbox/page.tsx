@@ -910,6 +910,9 @@ export default function InboxPage() {
   const selectedPatient = selectedRoom?.procedures?.patients || null;
   const selectedPatientLabelIds = patientLabelIdsFor(selectedPatient);
   const selectedPatientLabelSet = new Set(selectedPatientLabelIds);
+  const patientCountForLabel = useCallback((labelId: string) => (
+    patients.filter((patient) => patientLabelIdsFor(patient).includes(labelId)).length
+  ), [patientLabelIdsFor, patients]);
   const labelColors = ["#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6", "#EC4899"];
   const findStaffMemberForMessage = (message: any): CareTeamMember | null => {
     if (!message?.sender_id || message.sender_type !== "staff") return null;
@@ -1610,6 +1613,8 @@ export default function InboxPage() {
 
   const describeIncomingMessage = useCallback((message: RoomMessageSummary) => {
     if (parseCallRequestMessage(message.content)) return t.incomingCallRequest;
+    if (parseFormMessage(message.content)) return lang==="es" ? "Formulario enviado" : "Form submitted";
+    if (isClinicalFormPdfEntry(message)) return lang==="es" ? "PDF de historia clínica" : "Clinical history PDF";
     if (message.message_type === "audio") return lang==="es" ? "Nuevo audio" : "New audio";
     if (message.message_type === "video") return lang==="es" ? "Nuevo video" : "New video";
     if (message.message_type === "image") return lang==="es" ? "Nueva imagen" : "New image";
@@ -4144,9 +4149,9 @@ export default function InboxPage() {
                   onClick={()=>{ if (activePeer?.phone) window.location.href = `tel:${activePeer.phone}`; }}
                   title={lang==="es"?"Llamar":"Call"}
                   aria-label={lang==="es"?"Llamar":"Call"}
-                  style={{width:58,minWidth:58,height:58,minHeight:58,padding:5,borderRadius:999,opacity:activePeer?.phone?1:0.5,display:"grid",placeItems:"center",flexShrink:0}}
+                  style={{width:"auto",minWidth:94,height:48,minHeight:48,padding:"0 16px",borderRadius:999,opacity:activePeer?.phone?1:0.5,display:"grid",placeItems:"center",flexShrink:0}}
                 >
-                  <img src="/Call_icon.png" alt="" style={{width:48,height:48,borderRadius:"50%",objectFit:"cover",display:"block"}} />
+                  {lang==="es"?"Llamar":"Call"}
                 </button>
                 {!activePeer?.phone && <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{lang==="es"?"Sin teléfono registrado. Puede agregarlo en Ajustes.":"No phone listed. They can add it in Settings."}</span>}
               </div>
@@ -4479,16 +4484,17 @@ export default function InboxPage() {
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 16px 16px 12px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
         .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-        .search-bar { display: flex; align-items: center; gap: 10px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#D5E4F2"}; border-radius: 16px; padding: 12px 15px; box-shadow: ${darkMode?"none":"0 8px 22px rgba(28,66,104,0.08)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+        .search-bar { display: flex; align-items: center; gap: 9px; min-height: 50px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#D5E4F2"}; border-radius: 14px; padding: 9px 12px; box-shadow: ${darkMode?"none":"0 8px 22px rgba(28,66,104,0.08)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
         .search-bar:focus-within { border-color: #2563EB; box-shadow: ${darkMode?"0 0 0 3px rgba(37,99,235,0.22)":"0 0 0 3px rgba(37,99,235,0.12), 0 4px 14px rgba(15,23,42,0.08)"}; }
         .search-bar svg { stroke: ${darkMode?"#CBD5E1":"#64748B"}; }
-        .search-input { flex: 1; border: none; background: transparent; font-size: 17px; outline: none; color: ${textColor}; font-family: inherit; font-weight: 650; min-width: 0; }
+        .search-input { flex: 1; border: none; background: transparent; font-size: 15px; outline: none; color: ${textColor}; font-family: inherit; font-weight: 650; min-width: 0; }
         .search-input::placeholder { color: ${darkMode?"#94A3B8":"#7C8797"}; opacity: 1; font-weight: 650; }
         .label-filter-row { display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px 0; scrollbar-width: none; }
         .label-filter-row::-webkit-scrollbar { display: none; }
-        .label-chip { min-height: 32px; max-width: 150px; border: none; border-radius: 999px; padding: 6px 10px; color: #FFFFFF; font-size: 13px; font-weight: 900; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; cursor: pointer; }
+        .label-chip { min-height: 32px; max-width: 170px; border: none; border-radius: 999px; padding: 6px 10px; color: #FFFFFF; font-size: 13px; font-weight: 900; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .label-chip.all { color: ${textColor}; background: ${darkMode?"#253244":"#EAF2FB"}; border: 1px solid ${borderColor}; }
         .label-chip.active { box-shadow: 0 0 0 2px ${darkMode?"#E5E7EB":"#0F172A"} inset; }
+        .label-chip-count { min-width: 18px; height: 18px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; background: rgba(255,255,255,0.28); color: inherit; font-size: 11px; line-height: 1; flex-shrink: 0; }
         .patient-label-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
         .patient-label-chip { max-width: 120px; border-radius: 999px; padding: 4px 8px; color: #FFFFFF; font-size: 11px; line-height: 1.2; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .label-option-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 9px 10px; border: 1px solid ${borderColor}; border-radius: 14px; background: ${cardBg}; cursor: pointer; }
@@ -5457,8 +5463,9 @@ export default function InboxPage() {
                     <span>☰</span>
                     <span>{t.settings}</span>
                   </button>
-                  <button className="top-menu-item" onClick={()=>{closeTopMenu();leaveCurrentChatView();}} title={lang==="es" ? "Salir" : "Exit"} aria-label={lang==="es" ? "Salir" : "Exit"}>
+                  <button className="top-menu-item" onClick={()=>{closeTopMenu();supabase.auth.signOut().finally(()=>{window.location.href="/login";});}} title={lang==="es" ? "Salir" : "Exit"} aria-label={lang==="es" ? "Salir" : "Exit"}>
                     <img src="/Exit_icon.png" alt="" style={{width:24,height:24,objectFit:"contain",display:"block"}} />
+                    <span>{lang==="es" ? "Salir" : "Exit"}</span>
                   </button>
                 </div>
               )}
@@ -5539,16 +5546,21 @@ export default function InboxPage() {
                   <button className={`label-chip all${!activeLabelFilter ? " active" : ""}`} onClick={()=>setActiveLabelFilter("")}>
                     {lang === "es" ? "Todos" : "All"}
                   </button>
-                  {userLabels.map((label)=>(
-                    <button
-                      key={label.id}
-                      className={`label-chip${activeLabelFilter === label.id ? " active" : ""}`}
-                      style={{background: label.color || "#64748B"}}
-                      onClick={()=>setActiveLabelFilter(label.id)}
-                    >
-                      {labelName(label)}
-                    </button>
-                  ))}
+                  {userLabels.map((label)=>{
+                    const count = patientCountForLabel(label.id);
+                    return (
+                      <button
+                        key={label.id}
+                        className={`label-chip${activeLabelFilter === label.id ? " active" : ""}`}
+                        style={{background: label.color || "#64748B"}}
+                        onClick={()=>setActiveLabelFilter(activeLabelFilter === label.id ? "" : label.id)}
+                        title={`${labelName(label)} · ${count} ${lang === "es" ? "paciente(s)" : "patient(s)"}`}
+                      >
+                        <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{labelName(label)}</span>
+                        <span className="label-chip-count">{count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {notificationFeedback && (
@@ -5563,8 +5575,16 @@ export default function InboxPage() {
               ):filtPts.length===0?(
                 <div style={{padding:"60px 20px",textAlign:"center"}}>
                   <div style={{fontSize:48,marginBottom:12}}>🏥</div>
-                  <p style={{fontSize:17,fontWeight:600,color:textColor}}>{t.noPatients}</p>
-                  <p style={{fontSize:14,color:subTextColor,marginTop:6}}>{t.noPatientsHint}</p>
+                  <p style={{fontSize:17,fontWeight:600,color:textColor}}>
+                    {activeLabelFilter
+                      ? (lang === "es" ? "No hay pacientes con esta etiqueta" : "No patients with this label")
+                      : t.noPatients}
+                  </p>
+                  <p style={{fontSize:14,color:subTextColor,marginTop:6}}>
+                    {activeLabelFilter
+                      ? (lang === "es" ? "Toca Todos para ver la lista completa." : "Tap All to see the full list.")
+                      : t.noPatientsHint}
+                  </p>
                 </div>
               ):filtPts.map(pt=>{
                 const ptUnreadCount=pt.rooms.reduce((sum:number,r:any)=>sum+(unreadCounts[r.id]||0),0);
