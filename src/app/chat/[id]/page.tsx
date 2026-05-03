@@ -348,80 +348,25 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (error) console.warn("audit log failed", error.message);
   };
 
-  const roomPatient = () => {
-    const patient = room?.procedures?.patients;
-    return Array.isArray(patient) ? patient[0] : patient;
-  };
-
-  const isMissingSchemaObjectError = (error: { message?: string; details?: string; hint?: string } | null | undefined) => {
-    const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
-    return message.includes("schema cache") || message.includes("could not find the table") || message.includes("column") || message.includes("relation");
-  };
-
   const triggerHelpAlert = async () => {
     if (viewerType !== "patient" || accessDenied || !accessReady || alertSending) return;
-    const patientId = roomPatient()?.id;
-    if (!patientId) {
-      window.alert(uiLang === "es" ? "No pude identificar al paciente para enviar la alerta." : "I could not identify the patient for this alert.");
-      return;
-    }
-
     setAlertSending(true);
     setAlertFeedback("");
-    const createdAt = new Date().toISOString();
-    const { error } = await supabase.from("patient_alerts").insert({
-      patient_id: patientId,
-      chat_id: id,
-      status: "pending",
-      escalation_level: 1,
-      created_at: createdAt,
-    });
-
-    const alertFallbackOnly = Boolean(error && isMissingSchemaObjectError(error));
-    if (error && !alertFallbackOnly) {
-      setAlertSending(false);
-      setAlertFeedback(uiLang === "es" ? "No se pudo enviar la alerta." : "The alert could not be sent.");
-      return;
-    }
-
-    const { data: members } = await supabase
-      .from("room_members")
-      .select("user_id")
-      .eq("room_id", id);
-    const staffIds = Array.from(new Set((members || []).map((member: any) => member.user_id).filter(Boolean)));
-    const patientName = roomPatient()?.full_name || (uiLang === "es" ? "Paciente" : "Patient");
-    const notificationMessage = uiLang === "es"
-      ? `🚨 ${patientName} necesita ayuda`
-      : `🚨 ${patientName} needs help`;
-    const rows = staffIds.map((staffId) => ({
-      type: "alert",
-      media_type: "alert",
-      chat_id: id,
-      room_id: id,
-      patient_id: patientId,
-      staff_id: staffId,
-      recipient_id: staffId,
-      message: notificationMessage,
-      seen: false,
-      status: "unread",
-      created_at: createdAt,
-    }));
-
-    let notificationSaved = rows.length === 0;
-    if (rows.length) {
-      const insert = await supabase.from("media_notifications").insert(rows);
-      if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
-        const compatibleRows = rows.map(({ type: _type, chat_id: _chatId, ...row }) => row);
-        const compatibleInsert = await supabase.from("media_notifications").insert(compatibleRows);
-        notificationSaved = !compatibleInsert.error;
-      } else {
-        notificationSaved = !insert.error;
+    try {
+      const response = await fetch("/api/alerts/help", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId: id, token }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.ok) {
+        setAlertFeedback(payload?.error || (uiLang === "es" ? "No se pudo enviar la alerta." : "The alert could not be sent."));
+        setAlertSending(false);
+        return;
       }
-    }
-
-    if (alertFallbackOnly && !notificationSaved) {
-      setAlertSending(false);
+    } catch {
       setAlertFeedback(uiLang === "es" ? "No se pudo enviar la alerta." : "The alert could not be sent.");
+      setAlertSending(false);
       return;
     }
 

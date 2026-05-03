@@ -1496,6 +1496,12 @@ export default function InboxPage() {
     closeMessageActions();
   };
 
+  const signOutToLogin = () => {
+    supabase.auth.signOut().finally(() => {
+      window.location.href = "/login";
+    });
+  };
+
   const requestNewPatientRoom = () => {
     if (!canCreatePatientRooms) {
       setNotificationFeedback({
@@ -1538,7 +1544,7 @@ export default function InboxPage() {
       <button
         className="chat-exit-btn"
         type="button"
-        onClick={leaveCurrentChatView}
+        onClick={signOutToLogin}
         title={lang==="es" ? "Salir" : "Exit"}
         aria-label={lang==="es" ? "Salir" : "Exit"}
       >
@@ -5641,7 +5647,7 @@ export default function InboxPage() {
                     <span>☰</span>
                     <span>{t.settings}</span>
                   </button>
-                  <button className="top-menu-item" onClick={()=>{closeTopMenu();supabase.auth.signOut().finally(()=>{window.location.href="/login";});}} title={lang==="es" ? "Salir" : "Exit"} aria-label={lang==="es" ? "Salir" : "Exit"}>
+                  <button className="top-menu-item" onClick={()=>{closeTopMenu();signOutToLogin();}} title={lang==="es" ? "Salir" : "Exit"} aria-label={lang==="es" ? "Salir" : "Exit"}>
                     <img src="/Exit_icon.png" alt="" style={{width:24,height:24,objectFit:"contain",display:"block"}} />
                     <span>{lang==="es" ? "Salir" : "Exit"}</span>
                   </button>
