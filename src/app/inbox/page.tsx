@@ -4630,13 +4630,6 @@ export default function InboxPage() {
         .top-menu-item { width: 100%; min-height: 48px; border: none; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; background: transparent; color: ${textColor}; padding: 13px 16px; text-align: left; cursor: pointer; font-family: inherit; font-size: 15px; font-weight: 850; display: flex; align-items: center; gap: 10px; }
         .top-menu-item:last-child { border-bottom: none; }
         .top-menu-item:hover { background: ${darkMode?"#263846":"#F1F7FF"}; }
-        .top-menu-labels { display: grid; gap: 4px; padding: 8px 10px 10px 38px; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; background: ${darkMode?"rgba(15,23,42,0.22)":"#F8FBFF"}; }
-        .top-menu-label { width: 100%; min-height: 36px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: ${textColor}; padding: 6px 8px; text-align: left; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 850; display: flex; align-items: center; gap: 8px; min-width: 0; }
-        .top-menu-label:hover, .top-menu-label.active { background: ${darkMode?"#263846":"#EAF3FF"}; border-color: ${darkMode?"rgba(147,197,253,0.18)":"#D5E4F2"}; }
-        .top-menu-label span:nth-child(2) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .top-menu-label-dot { width: 18px; height: 12px; border-radius: 3px 7px 7px 3px; flex-shrink: 0; box-shadow: inset -3px 0 rgba(255,255,255,0.28); }
-        .top-menu-label-dot.neutral { border-radius: 999px; background: ${darkMode?"#475569":"#CBD5E1"}; box-shadow: none; }
-        .top-menu-label-count { min-width: 18px; height: 18px; border-radius: 999px; padding: 0 5px; background: ${darkMode?"#334155":"#E2E8F0"}; color: ${subTextColor}; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 950; flex-shrink: 0; }
 	        .admin-inline-btn { padding: 0 12px; min-height: 44px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: var(--app-ui-small-size); font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
         .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; max-width: 100%; }
         .staff-plus-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: #007AFF; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,122,255,0.3); font-size: 26px; line-height: 1; font-weight: 850; font-family: inherit; flex-shrink: 0; }
@@ -4663,7 +4656,6 @@ export default function InboxPage() {
         .label-option-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 9px 10px; border: 1px solid ${borderColor}; border-radius: 14px; background: ${cardBg}; cursor: pointer; }
         .label-option-row input { width: 20px; height: 20px; min-height: 20px; flex-shrink: 0; }
         .label-option-main { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; cursor: pointer; }
-        .label-option-main .label-chip { min-width: 0; }
         .label-manage-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
         .label-mini-btn { min-width: 38px; min-height: 38px; border: 1px solid ${borderColor}; border-radius: 12px; background: ${darkMode?"#253244":"#F8FAFC"}; color: ${textColor}; cursor: pointer; font-size: 13px; font-weight: 900; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; padding: 0 9px; }
         .label-mini-btn.danger { background: ${darkMode?"#3B1D24":"#FEE2E2"}; color: ${darkMode?"#FCA5A5":"#991B1B"}; border-color: ${darkMode?"#7F1D1D":"#FECACA"}; }
@@ -5539,17 +5531,13 @@ export default function InboxPage() {
         subTextColor={subTextColor}
       />
 
-      {showLabelSelector && (
+      {showLabelSelector && selectedPatient && (
         <div className="modal-overlay" onClick={()=>setShowLabelSelector(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:16}}>
               <div>
                 <p className="modal-title" style={{marginBottom:4}}>{lang === "es" ? "Etiquetas" : "Labels"}</p>
-                <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>
-                  {selectedPatient
-                    ? selectedPatient.full_name
-                    : (lang === "es" ? "Crea, edita y organiza tus etiquetas." : "Create, edit, and organize your labels.")}
-                </p>
+                <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{selectedPatient.full_name}</p>
               </div>
               <button onClick={()=>setShowLabelSelector(false)} style={{width:40,height:40,minHeight:40,border:"none",borderRadius:999,background:cardBg,color:textColor,fontSize:20,fontWeight:900,cursor:"pointer"}}>×</button>
             </div>
@@ -5589,41 +5577,16 @@ export default function InboxPage() {
                   </div>
                 ) : (
                   <div key={label.id} className="label-option-row">
-                    <div
-                      className="label-option-main"
-                      role={selectedPatient ? undefined : "button"}
-                      tabIndex={selectedPatient ? undefined : 0}
-                      onClick={()=>{
-                        if (selectedPatient) {
-                          toggleSelectedPatientLabel(label.id);
-                          return;
-                        }
-                        setActiveLabelFilter(label.id);
-                        setLabelAssignModeId(label.id);
-                        setShowLabelSelector(false);
-                      }}
-                      onKeyDown={(event)=>{
-                        if (selectedPatient || (event.key !== "Enter" && event.key !== " ")) return;
-                        event.preventDefault();
-                        setActiveLabelFilter(label.id);
-                        setLabelAssignModeId(label.id);
-                        setShowLabelSelector(false);
-                      }}
-                    >
-                      {selectedPatient && (
-                        <input
-                          type="checkbox"
-                          checked={selectedPatientLabelSet.has(label.id)}
-                          readOnly
-                        />
-                      )}
+                    <label className="label-option-main">
+                      <input
+                        type="checkbox"
+                        checked={selectedPatientLabelSet.has(label.id)}
+                        onChange={()=>toggleSelectedPatientLabel(label.id)}
+                      />
                       <span className="label-chip" style={{background: label.color || "#64748B"}}>
                         {labelName(label)}
                       </span>
-                      <span className="label-chip-count" style={{background:darkMode?"#334155":"#E2E8F0",color:textColor}}>
-                        {patientCountForLabel(label.id)}
-                      </span>
-                    </div>
+                    </label>
                     <div className="label-manage-actions">
                       <button className="label-mini-btn" type="button" onClick={()=>startEditingPatientLabel(label)} disabled={!!savingLabelAction}>
                         {lang === "es" ? "Editar" : "Edit"}
@@ -5696,27 +5659,12 @@ export default function InboxPage() {
                       <span>{lang==="es" ? "Crear paciente" : "Create patient"}</span>
                     </button>
                   )}
-                  <button className="top-menu-item" onClick={()=>{closeTopMenu();setShowLabelSelector(true);}}>
-                    <span>🏷</span>
-                    <span>{lang==="es" ? "Etiquetas" : "Labels"}</span>
-                  </button>
-                  <div className="top-menu-labels">
-                    <button className={`top-menu-label${!activeLabelFilter ? " active" : ""}`} onClick={()=>{setActiveLabelFilter("");setLabelAssignModeId("");closeTopMenu();}}>
-                      <span className="top-menu-label-dot neutral" />
-                      <span>{lang === "es" ? "Todos" : "All"}</span>
+                  {selectedPatient && (
+                    <button className="top-menu-item" onClick={()=>{closeTopMenu();setShowLabelSelector(true);}}>
+                      <span>🏷</span>
+                      <span>{lang==="es" ? "Etiquetas" : "Labels"}</span>
                     </button>
-                    {userLabels.map((label)=>(
-                      <button
-                        key={label.id}
-                        className={`top-menu-label${activeLabelFilter === label.id ? " active" : ""}`}
-                        onClick={()=>{setActiveLabelFilter(label.id);setLabelAssignModeId(label.id);closeTopMenu();}}
-                      >
-                        <span className="top-menu-label-dot" style={{background: label.color || "#64748B"}} />
-                        <span>{labelName(label)}</span>
-                        <span className="top-menu-label-count">{patientCountForLabel(label.id)}</span>
-                      </button>
-                    ))}
-                  </div>
+                  )}
                   <button className="top-menu-item" onClick={()=>{closeTopMenu();setShowSettings(true);}}>
                     <span>☰</span>
                     <span>{t.settings}</span>
@@ -5799,11 +5747,44 @@ export default function InboxPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input className="search-input" placeholder={t.search} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
               </div>
+              {userLabels.length > 0 && (
+                <div className="label-filter-row">
+                  <button className={`label-chip all${!activeLabelFilter ? " active" : ""}`} onClick={()=>{setActiveLabelFilter("");setLabelAssignModeId("");}}>
+                    {lang === "es" ? "Todos" : "All"}
+                  </button>
+                  {userLabels.map((label)=>{
+                    const count = patientCountForLabel(label.id);
+                    return (
+                      <button
+                        key={label.id}
+                        className={`label-chip${activeLabelFilter === label.id ? " active" : ""}`}
+                        style={{background: label.color || "#64748B"}}
+                        onClick={()=>{
+                          if (activeLabelFilter === label.id) {
+                            if (labelAssignModeId === label.id) {
+                              setLabelAssignModeId("");
+                            } else {
+                              setLabelAssignModeId(label.id);
+                            }
+                            return;
+                          }
+                          setActiveLabelFilter(label.id);
+                          setLabelAssignModeId(label.id);
+                        }}
+                        title={`${labelName(label)} · ${count} ${lang === "es" ? "paciente(s)" : "patient(s)"}`}
+                      >
+                        <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{labelName(label)}</span>
+                        <span className="label-chip-count">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               {activeLabel && (
                 <div className="label-assign-bar">
                   <span>
                     {labelAssignMode
-                      ? (lang === "es" ? `Etiquetando "${labelName(activeLabel)}". Toca pacientes y luego Listo.` : `Labeling "${labelName(activeLabel)}". Tap patients, then Done.`)
+                      ? (lang === "es" ? `Toca pacientes para aplicar o quitar "${labelName(activeLabel)}".` : `Tap patients to apply or remove "${labelName(activeLabel)}".`)
                       : (lang === "es" ? `Viendo pacientes con "${labelName(activeLabel)}".` : `Viewing patients with "${labelName(activeLabel)}".`)}
                   </span>
                   <button
