@@ -740,6 +740,7 @@ export default function InboxPage() {
   const [pendingAlertLevels, setPendingAlertLevels] = useState<Record<string, number>>({});
   const [userLabels, setUserLabels] = useState<PatientLabel[]>([]);
   const [activeLabelFilter, setActiveLabelFilter] = useState("");
+  const [labelAssignModeId, setLabelAssignModeId] = useState("");
   const [showLabelSelector, setShowLabelSelector] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#EF4444");
@@ -917,6 +918,8 @@ export default function InboxPage() {
   const patientCountForLabel = useCallback((labelId: string) => (
     patients.filter((patient) => patientLabelIdsFor(patient).includes(labelId)).length
   ), [patientLabelIdsFor, patients]);
+  const activeLabel = activeLabelFilter ? userLabels.find((label) => label.id === activeLabelFilter) || null : null;
+  const labelAssignMode = Boolean(activeLabel && labelAssignModeId === activeLabelFilter);
   const labelColors = ["#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6", "#EC4899"];
   const findStaffMemberForMessage = (message: any): CareTeamMember | null => {
     if (!message?.sender_id || message.sender_type !== "staff") return null;
@@ -2321,9 +2324,9 @@ export default function InboxPage() {
     });
   };
 
-  const updateSelectedPatientLabels = async (nextLabelIds: string[]) => {
-    if (!selectedPatient?.id || !currentUserId) return;
-    const currentValue = selectedPatient.labels;
+  const updatePatientLabels = async (patientToUpdate: any, roomId: string | undefined, nextLabelIds: string[]) => {
+    if (!patientToUpdate?.id || !currentUserId) return false;
+    const currentValue = patientToUpdate.labels;
     const nextLabels =
       currentValue && typeof currentValue === "object" && !Array.isArray(currentValue)
         ? { ...currentValue, [currentUserId]: nextLabelIds }
@@ -2338,7 +2341,7 @@ export default function InboxPage() {
         const response = await fetch("/api/labels", {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ patientId: selectedPatient.id, roomId: selectedRoom?.id, labelIds: nextLabelIds }),
+          body: JSON.stringify({ patientId: patientToUpdate.id, roomId, labelIds: nextLabelIds }),
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) error = { message: payload?.error };
@@ -2348,33 +2351,38 @@ export default function InboxPage() {
         error = { message: requestError instanceof Error ? requestError.message : "" };
       }
     } else {
-      const result = await supabase.from("patients").update({ labels: nextLabels }).eq("id", selectedPatient.id);
+      const result = await supabase.from("patients").update({ labels: nextLabels }).eq("id", patientToUpdate.id);
       error = result.error;
     }
     if (error) {
       alert(error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
-      return;
+      return false;
     }
     setUserLabels((current) => current.map((label) => {
       const assignedIds = new Set((label.assigned_patient_ids || []).map(String).filter(Boolean));
-      if (nextLabelIds.includes(label.id)) assignedIds.add(selectedPatient.id);
-      else assignedIds.delete(selectedPatient.id);
+      if (nextLabelIds.includes(label.id)) assignedIds.add(patientToUpdate.id);
+      else assignedIds.delete(patientToUpdate.id);
       return { ...label, assigned_patient_ids: Array.from(assignedIds) };
     }));
     setPatients((current) => current.map((patient) => {
-      if (patient.id !== selectedPatient.id) return patient;
+      if (patient.id !== patientToUpdate.id) return patient;
       return savedViaLabelRows ? patient : { ...patient, labels: savedLabels };
     }));
     setSelectedRoom((room: any) => room ? {
       ...room,
       procedures: {
         ...room.procedures,
-        patients: savedViaLabelRows ? room.procedures?.patients : {
+        patients: room.procedures?.patients?.id !== patientToUpdate.id || savedViaLabelRows ? room.procedures?.patients : {
           ...room.procedures?.patients,
           labels: savedLabels,
         },
       },
     } : room);
+    return true;
+  };
+
+  const updateSelectedPatientLabels = async (nextLabelIds: string[]) => {
+    await updatePatientLabels(selectedPatient, selectedRoom?.id, nextLabelIds);
   };
 
   const toggleSelectedPatientLabel = (labelId: string) => {
@@ -2382,6 +2390,15 @@ export default function InboxPage() {
       ? selectedPatientLabelIds.filter((id) => id !== labelId)
       : [...selectedPatientLabelIds, labelId];
     updateSelectedPatientLabels(next);
+  };
+
+  const toggleLabelForPatient = async (patient: any, labelId: string) => {
+    const currentIds = patientLabelIdsFor(patient);
+    const next = currentIds.includes(labelId)
+      ? currentIds.filter((id) => id !== labelId)
+      : [...currentIds, labelId];
+    const roomId = patient?.rooms?.[0]?.id || "";
+    await updatePatientLabels(patient, roomId, next);
   };
 
   const fetchAssignableStaff = async () => {
@@ -3803,7 +3820,7 @@ export default function InboxPage() {
   const filtPts = patients
     .filter(p=>{
       const q=searchQuery.toLowerCase();
-      if (activeLabelFilter && !patientLabelIdsFor(p).includes(activeLabelFilter)) return false;
+      if (activeLabelFilter && !labelAssignMode && !patientLabelIdsFor(p).includes(activeLabelFilter)) return false;
       return (
         p.full_name?.toLowerCase().includes(q) ||
         String(p.phone || "").toLowerCase().includes(q) ||
@@ -4651,6 +4668,11 @@ export default function InboxPage() {
         .patient-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 86px; padding: 13px 13px; cursor: pointer; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(102,132,163,0.16)"}; border-radius: 18px; background: ${darkMode?"#15232B":"rgba(255,255,255,0.96)"}; margin-bottom: 9px; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.07)"}; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease; }
         .patient-row:hover { background: ${darkMode?"#1B2D36":"#FFFFFF"}; transform: translateY(-1px); }
         .patient-row.active { background: ${darkMode?"#203744":"#EAF5FF"}; border-color: ${darkMode?"rgba(125,211,252,0.30)":"#B9D8F2"}; }
+        .patient-row.label-assign-selected { border-color: #7C3AED; box-shadow: ${darkMode?"0 0 0 2px rgba(167,139,250,0.24) inset":"0 0 0 2px rgba(124,58,237,0.22) inset, 0 8px 24px rgba(28,66,104,0.07)"}; }
+        .label-assign-check { width: 34px; height: 34px; min-height: 34px; border-radius: 999px; border: 2px solid #7C3AED; background: #FFFFFF; color: #7C3AED; display: grid; place-items: center; font-size: 18px; font-weight: 950; flex-shrink: 0; }
+        .label-assign-check.selected { background: #7C3AED; color: #FFFFFF; }
+        .label-assign-bar { margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: ${darkMode?"rgba(124,58,237,0.20)":"#F3E8FF"}; color: ${darkMode?"#DDD6FE":"#5B21B6"}; border: 1px solid ${darkMode?"rgba(196,181,253,0.28)":"#DDD6FE"}; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 850; line-height: 1.35; }
+        .label-assign-done { min-height: 34px; border: none; border-radius: 999px; padding: 0 12px; background: #7C3AED; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 950; cursor: pointer; white-space: nowrap; }
         .patient-alert-badge { position: absolute; top: 8px; right: 10px; z-index: 3; min-width: 18px; min-height: 18px; border-radius: 999px; background: #DC2626; color: #FFFFFF; padding: 2px 6px; font-size: 12px; line-height: 1.1; font-weight: 950; display: grid; place-items: center; box-shadow: 0 8px 20px rgba(220,38,38,0.32); border: 2px solid ${darkMode ? "#15232B" : "#FFFFFF"}; }
         .patient-alert-badge.level-2 { animation: alertPulse 1.6s ease-in-out infinite; }
         .patient-alert-badge.level-3 { min-height: 24px; padding: 4px 9px; font-size: 11px; letter-spacing: 0.04em; }
@@ -5727,7 +5749,7 @@ export default function InboxPage() {
               </div>
               {userLabels.length > 0 && (
                 <div className="label-filter-row">
-                  <button className={`label-chip all${!activeLabelFilter ? " active" : ""}`} onClick={()=>setActiveLabelFilter("")}>
+                  <button className={`label-chip all${!activeLabelFilter ? " active" : ""}`} onClick={()=>{setActiveLabelFilter("");setLabelAssignModeId("");}}>
                     {lang === "es" ? "Todos" : "All"}
                   </button>
                   {userLabels.map((label)=>{
@@ -5737,7 +5759,18 @@ export default function InboxPage() {
                         key={label.id}
                         className={`label-chip${activeLabelFilter === label.id ? " active" : ""}`}
                         style={{background: label.color || "#64748B"}}
-                        onClick={()=>setActiveLabelFilter(activeLabelFilter === label.id ? "" : label.id)}
+                        onClick={()=>{
+                          if (activeLabelFilter === label.id) {
+                            if (labelAssignModeId === label.id) {
+                              setLabelAssignModeId("");
+                            } else {
+                              setLabelAssignModeId(label.id);
+                            }
+                            return;
+                          }
+                          setActiveLabelFilter(label.id);
+                          setLabelAssignModeId(label.id);
+                        }}
                         title={`${labelName(label)} · ${count} ${lang === "es" ? "paciente(s)" : "patient(s)"}`}
                       >
                         <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{labelName(label)}</span>
@@ -5745,6 +5778,22 @@ export default function InboxPage() {
                       </button>
                     );
                   })}
+                </div>
+              )}
+              {activeLabel && (
+                <div className="label-assign-bar">
+                  <span>
+                    {labelAssignMode
+                      ? (lang === "es" ? `Toca pacientes para aplicar o quitar "${labelName(activeLabel)}".` : `Tap patients to apply or remove "${labelName(activeLabel)}".`)
+                      : (lang === "es" ? `Viendo pacientes con "${labelName(activeLabel)}".` : `Viewing patients with "${labelName(activeLabel)}".`)}
+                  </span>
+                  <button
+                    className="label-assign-done"
+                    type="button"
+                    onClick={()=>setLabelAssignModeId(labelAssignMode ? "" : activeLabel.id)}
+                  >
+                    {labelAssignMode ? (lang === "es" ? "Listo" : "Done") : (lang === "es" ? "Asignar" : "Assign")}
+                  </button>
                 </div>
               )}
               {notificationFeedback && (
@@ -5782,10 +5831,22 @@ export default function InboxPage() {
                 const latestPreview=roomPreview(firstRoom);
                 const latestTime=roomPreviewTime(firstRoom);
                 const ptLabels=patientLabelsFor(pt);
+                const labelAssignSelected=activeLabelFilter?patientLabelIdsFor(pt).includes(activeLabelFilter):false;
                 const ptHasAlert=!!alertRoom;
                 const alertLevel=alertRoom ? Math.min(3, Math.max(1, pendingAlertLevels[alertRoom.id] || 1)) : 0;
                 return (
-                  <div key={pt.id} className={`patient-row${isActive?" active":""}`} onClick={()=>{setSelectedRoom(firstRoom);setMobileView("chat");}}>
+                  <div key={pt.id} className={`patient-row${isActive&&!labelAssignMode?" active":""}${labelAssignMode&&labelAssignSelected?" label-assign-selected":""}`} onClick={()=>{
+                    if (labelAssignMode && activeLabelFilter) {
+                      toggleLabelForPatient(pt, activeLabelFilter);
+                      return;
+                    }
+                    setSelectedRoom(firstRoom);setMobileView("chat");
+                  }}>
+                    {labelAssignMode&&(
+                      <div className={`label-assign-check${labelAssignSelected?" selected":""}`} aria-hidden="true">
+                        {labelAssignSelected ? "✓" : "+"}
+                      </div>
+                    )}
                     {ptHasAlert&&<div className={`patient-alert-badge level-${alertLevel}`}>{alertLevel>=3?"URGENTE":"●"}</div>}
                     <div className="av">
                       {pt.profile_picture_url?<img src={pt.profile_picture_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:ini(pt.full_name)}
