@@ -590,29 +590,34 @@ const parseStaffRoomPayload = (content?: string | null): StaffRoomPayload | null
 };
 
 function TopbarActionIcon({ kind }: { kind: "staff" | "labels" | "admin" }) {
-  const commonProps = { width: 19, height: 19, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.4, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  const commonProps = { width: 24, height: 24, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.25, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   if (kind === "labels") {
     return (
       <svg {...commonProps}>
-        <path d="M20.6 13.1 13.1 20.6a2 2 0 0 1-2.8 0l-7-7A2 2 0 0 1 2.7 12V5.4a2 2 0 0 1 2-2H11a2 2 0 0 1 1.4.6l8.2 8.2a2 2 0 0 1 0 2.9Z" />
-        <circle cx="7.7" cy="8" r="1.4" />
+        <path d="M20.5 13.2 13.2 20.5a2.1 2.1 0 0 1-3 0l-6.8-6.8A2.1 2.1 0 0 1 2.8 12V5.6a2.1 2.1 0 0 1 2.1-2.1h6.4a2.1 2.1 0 0 1 1.5.6l7.7 7.7a2.1 2.1 0 0 1 0 3Z" />
+        <circle cx="7.7" cy="8" r="1.25" fill="currentColor" stroke="none" />
       </svg>
     );
   }
   if (kind === "admin") {
     return (
       <svg {...commonProps}>
-        <path d="M12 3.4 19 6v5.1c0 4.4-2.9 7.8-7 9.5-4.1-1.7-7-5.1-7-9.5V6l7-2.6Z" />
-        <path d="M9.6 12.1 11.3 14l3.4-4" />
+        <rect x="3.6" y="3.8" width="6.2" height="6.2" rx="1.4" />
+        <rect x="14.2" y="3.8" width="6.2" height="6.2" rx="1.4" />
+        <rect x="3.6" y="14" width="6.2" height="6.2" rx="1.4" />
+        <rect x="14.2" y="14" width="6.2" height="6.2" rx="1.4" />
+        <rect x="16.6" y="16.4" width="1.4" height="1.4" rx="0.3" fill="currentColor" stroke="none" />
       </svg>
     );
   }
   return (
     <svg {...commonProps}>
-      <path d="M16 20v-1.8a3.2 3.2 0 0 0-3.2-3.2H7.2A3.2 3.2 0 0 0 4 18.2V20" />
-      <circle cx="10" cy="7.2" r="3.2" />
-      <path d="M20 20v-1.8a3.2 3.2 0 0 0-2.4-3.1" />
-      <path d="M15.6 4.2a3.2 3.2 0 0 1 0 6.1" />
+      <path d="M4.3 17.7 3.5 21l3.5-.9a8.1 8.1 0 1 0-2.7-2.4Z" />
+      <path d="M8.2 11.7h.01" />
+      <path d="M12 11.7h.01" />
+      <path d="M15.8 11.7h.01" />
+      <circle cx="18.3" cy="17.6" r="1.8" fill="currentColor" stroke="none" />
+      <path d="M14.9 21.1a3.6 3.6 0 0 1 6.8 0" />
     </svg>
   );
 }
@@ -1576,45 +1581,44 @@ export default function InboxPage() {
   };
 
   const StaffGlobalActions = ({ compact = false }: { compact?: boolean }) => (
-    <div className="staff-global-actions">
-      <button
-        type="button"
-        className="admin-inline-btn"
-        onClick={openStaffChatsHome}
-        title={lang==="es" ? "Comunicación interna del equipo" : "Internal team communication"}
-        aria-label={lang==="es" ? "Comunicación interna del equipo" : "Internal team communication"}
-        style={{position:"relative"}}
-      >
-        <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="staff" /></span>
-        <span className="admin-action-text">{compact ? "Staff" : (lang==="es" ? "Staff" : "Staff")}</span>
-        {totalStaffChatUnread > 0 && (
-          <span style={{position:"absolute",top:-6,right:-6,minWidth:20,height:20,padding:"0 5px",borderRadius:99,background:"#EF4444",color:"white",fontSize:12,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(239,68,68,0.35)"}}>
-            {totalStaffChatUnread}
-          </span>
-        )}
-      </button>
-      <button
-        type="button"
-        className="admin-inline-btn"
-        onClick={()=>setShowLabelManager(true)}
-        title={lang === "es" ? "Etiquetas" : "Labels"}
-        aria-label={lang === "es" ? "Etiquetas" : "Labels"}
-      >
-        <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="labels" /></span>
-        <span className="admin-action-text">{lang === "es" ? "Etiquetas" : "Labels"}</span>
-      </button>
-      {canOpenAdmin && (
+    <div className={`staff-global-actions${compact ? " compact" : ""}`}>
+      <div className="staff-action-cluster">
         <button
           type="button"
           className="admin-inline-btn"
-          onClick={()=>window.location.href="/admin"}
-          title="Admin"
-          aria-label={lang === "es" ? "Abrir Admin" : "Open Admin"}
+          onClick={openStaffChatsHome}
+          title={lang==="es" ? "Comunicación interna del equipo" : "Internal team communication"}
+          aria-label={lang==="es" ? "Comunicación interna del equipo" : "Internal team communication"}
+          style={{position:"relative"}}
         >
-          <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="admin" /></span>
-          <span className="admin-action-text">Admin</span>
+          <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="staff" /></span>
+          {totalStaffChatUnread > 0 && (
+            <span style={{position:"absolute",top:-6,right:-6,minWidth:20,height:20,padding:"0 5px",borderRadius:99,background:"#EF4444",color:"white",fontSize:12,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(239,68,68,0.35)"}}>
+              {totalStaffChatUnread}
+            </span>
+          )}
         </button>
-      )}
+        <button
+          type="button"
+          className="admin-inline-btn"
+          onClick={()=>setShowLabelManager(true)}
+          title={lang === "es" ? "Etiquetas" : "Labels"}
+          aria-label={lang === "es" ? "Etiquetas" : "Labels"}
+        >
+          <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="labels" /></span>
+        </button>
+        {canOpenAdmin && (
+          <button
+            type="button"
+            className="admin-inline-btn"
+            onClick={()=>window.location.href="/admin"}
+            title="Admin"
+            aria-label={lang === "es" ? "Abrir Admin" : "Open Admin"}
+          >
+            <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="admin" /></span>
+          </button>
+        )}
+      </div>
       {canCreatePatientRooms && (
         <button
           type="button"
@@ -4667,13 +4671,15 @@ export default function InboxPage() {
         .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(52px, 1fr) minmax(280px, 760px) minmax(52px, 1fr); align-items: center; padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)); z-index: 100; height: calc(98px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 8px 24px rgba(7,51,77,0.18); }
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.18); box-shadow: 0 1px 0 rgba(0,0,0,0.14); }
         .topbar-logo { grid-column: 2; justify-self: center; align-self: center; height: 96px; width: min(760px, 96vw); object-fit: contain; object-position: center; display: block; }
-        .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
-	        .admin-inline-btn { padding: 0 12px; min-height: 44px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: var(--app-ui-small-size); font-weight: 850; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); white-space: nowrap; }
-        .admin-action-icon { width: 19px; height: 19px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .admin-action-icon svg { width: 19px; height: 19px; display: block; }
-        .admin-action-text { display: inline-block; line-height: 1; }
-        .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; max-width: 100%; }
-        .staff-plus-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: #007AFF; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,122,255,0.3); font-size: 26px; line-height: 1; font-weight: 850; font-family: inherit; flex-shrink: 0; }
+        .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 10px; }
+	        .admin-inline-btn { width: 48px; min-width: 48px; height: 48px; min-height: 48px; padding: 0; border-radius: 16px; background: rgba(11, 56, 84, 0.58); border: 1px solid rgba(190, 224, 255, 0.36); color: #F8FBFF; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 18px rgba(2,14,28,0.18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease; }
+        .admin-inline-btn:hover { background: rgba(16, 72, 108, 0.68); border-color: rgba(213, 235, 255, 0.50); transform: translateY(-1px); }
+        .admin-inline-btn:active { transform: translateY(0); }
+        .admin-action-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .admin-action-icon svg { width: 24px; height: 24px; display: block; }
+        .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-shrink: 0; max-width: 100%; }
+        .staff-action-cluster { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 24px; background: rgba(6, 42, 64, 0.46); border: 1px solid rgba(189, 224, 255, 0.28); box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), 0 12px 26px rgba(2,14,28,0.20); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        .staff-plus-btn { width: 52px; height: 52px; min-height: 52px; border-radius: 50%; background: linear-gradient(135deg,#0B8CFF 0%,#006DFF 100%); border: 1px solid rgba(191,219,254,0.70); color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.32), 0 10px 22px rgba(0,107,255,0.34); font-size: 34px; line-height: 1; font-weight: 400; font-family: inherit; flex-shrink: 0; }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 12px 14px 10px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
@@ -4819,14 +4825,14 @@ export default function InboxPage() {
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
 	        @media (max-width: 700px) {
-          .topbar { height: calc(146px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+          .topbar { height: calc(164px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
           .topbar-logo { grid-column: 1; justify-self: center; align-self: start; height: 92px; width: min(620px, 92vw); }
-          .topbar-actions { right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); top: auto; bottom: 8px; transform: none; justify-content: flex-end; gap: 6px; }
-          .topbar-actions .admin-inline-btn { width: 40px; min-width: 40px; min-height: 40px; padding: 0; border-radius: 50%; font-size: 14px; }
-          .topbar-actions .admin-action-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+          .topbar-actions { right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); top: auto; bottom: 10px; transform: none; justify-content: flex-end; gap: 10px; }
+          .topbar-actions .admin-inline-btn { width: 56px; min-width: 56px; height: 56px; min-height: 56px; border-radius: 18px; }
           .topbar-actions .admin-action-icon,
-          .topbar-actions .admin-action-icon svg { width: 18px; height: 18px; }
-          .topbar-actions .staff-plus-btn { width: 40px; height: 40px; min-height: 40px; }
+          .topbar-actions .admin-action-icon svg { width: 25px; height: 25px; }
+          .topbar-actions .staff-action-cluster { gap: 5px; padding: 5px; border-radius: 25px; }
+          .topbar-actions .staff-plus-btn { width: 58px; height: 58px; min-height: 58px; font-size: 40px; }
           .sidebar-head { padding: 12px 12px 10px; }
           .search-bar { width: calc(100% - 10px); }
           .patient-list { padding-left: 10px; padding-right: 10px; }
