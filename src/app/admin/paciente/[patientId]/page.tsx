@@ -181,8 +181,11 @@ export default function AdminPatientRecordPage() {
     statusPermissionError: isSpanish ? "Solo doctor o super admin puede cambiar el estatus del procedimiento." : "Only doctor or super admin can change procedure status.",
     noProcedures: isSpanish ? "No hay procedimientos registrados para este paciente." : "There are no procedures registered for this patient.",
     roomsRelated: isSpanish ? "Salas relacionadas" : "Related rooms",
+    documentsTitle: isSpanish ? "Documento" : "Documents",
+    documentsCopy: isSpanish ? "Historia Clinica y formularios enviados por el paciente viven separados de fotos, videos y mensajes." : "Historia Clinica and patient-submitted forms stay separate from photos, videos, and messages.",
+    noDocuments: isSpanish ? "No hay documentos en el historial." : "There are no documents in the history.",
     mediaTitle: isSpanish ? "Media y archivos" : "Media and files",
-    mediaCopy: isSpanish ? "Aquí está todo el material enviado y recibido dentro del chat del paciente." : "This is all the material sent and received inside the patient chat.",
+    mediaCopy: isSpanish ? "Fotos, videos, audios y archivos generales enviados o recibidos dentro del chat del paciente." : "Photos, videos, audio files, and general files sent or received inside the patient chat.",
     images: isSpanish ? "Imágenes" : "Images",
     videos: isSpanish ? "Videos" : "Videos",
     audios: isSpanish ? "Audios" : "Audio files",
@@ -362,6 +365,11 @@ export default function AdminPatientRecordPage() {
   const patientLocalTime = currentTimeInZone(patient?.timezone, lang === "es" ? "es-MX" : "en-US");
   const scrollTimelineTop = () => {
     timelineSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const scrollToRecordSection = (id: string) => {
+    setMobileMenuOpen(false);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   useEffect(() => {
@@ -1023,6 +1031,9 @@ export default function AdminPatientRecordPage() {
         .patient-photo { width: 124px; height: 124px; border-radius: 22px; object-fit: cover; background: #E5E7EB; box-shadow: 0 10px 24px rgba(15,23,42,0.12); }
         .photo-fallback { width: 124px; height: 124px; border-radius: 22px; background: linear-gradient(135deg,#111827,#1D4ED8); display: flex; align-items: center; justify-content: center; color: white; font-size: 34px; font-weight: 900; }
         .photo-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+        .record-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px; }
+        .record-nav-btn { min-height: 54px; border-radius: 15px; border: 1px solid #D7E7FA; background: #FFFFFF; color: #0E2D4A; font-size: 14px; font-weight: 900; font-family: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(28,66,104,0.05); }
+        .record-nav-btn:hover, .record-nav-btn:focus-visible { border-color: #93C5FD; background: #F8FBFF; outline: none; }
         @media (max-width: 980px) {
           .hero-grid, .grid-2, .grid-4 { grid-template-columns: 1fr; }
           .form-grid { grid-template-columns: 1fr; }
@@ -1036,6 +1047,7 @@ export default function AdminPatientRecordPage() {
           .menu-panel .topbar-btn { width: 100%; }
           .topbar-btn { text-align: center; padding: 12px 12px; font-size: 13px; }
           .toast-stack { right: 12px; left: 12px; width: auto; }
+          .record-nav { grid-template-columns: 1fr 1fr; }
           .timeline-top, .section-head, .media-item { flex-direction: column; }
           .timeline-date-grid { grid-template-columns: 1fr; }
         }
@@ -1172,8 +1184,16 @@ export default function AdminPatientRecordPage() {
                 </div>
               </section>
 
+              <section className="record-nav" aria-label={isSpanish ? "Navegación del expediente" : "Record navigation"}>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("datos-paciente")}>{isSpanish ? "Datos" : "Details"}</button>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("procedimientos")}>{isSpanish ? "Procedimientos" : "Procedures"}</button>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("documentos")}>{isSpanish ? "Documento" : "Documents"}</button>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("media")}>Media</button>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("historial")}>{isSpanish ? "Historial" : "History"}</button>
+              </section>
+
               <div className="grid-2">
-                <section className="card">
+                <section className="card" id="datos-paciente">
                   <div className="section-head">
                     <div>
                       <p className="section-kicker">{t.basicInfo}</p>
@@ -1293,7 +1313,7 @@ export default function AdminPatientRecordPage() {
                 </section>
               </div>
 
-              <section className="card" style={{ marginTop: 16 }}>
+              <section className="card" id="procedimientos" style={{ marginTop: 16 }}>
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">{t.proceduresTitle}</p>
@@ -1414,7 +1434,17 @@ export default function AdminPatientRecordPage() {
                 </div>
               </section>
 
-              <section className="card" style={{ marginTop: 16 }}>
+              <section className="card" id="documentos" style={{ marginTop: 16 }}>
+                <div className="section-head">
+                  <div>
+                    <p className="section-kicker">{t.documentsTitle}</p>
+                    <p className="section-sub">{t.documentsCopy}</p>
+                  </div>
+                </div>
+                {renderMediaGroup("Historia Clinica", clinicalHistoryEntries, t.noDocuments)}
+              </section>
+
+              <section className="card" id="media" style={{ marginTop: 16 }}>
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">{t.mediaTitle}</p>
@@ -1425,12 +1455,11 @@ export default function AdminPatientRecordPage() {
                   {renderMediaGroup(t.images, media.images, t.noImages)}
                   {renderMediaGroup(t.videos, media.videos, t.noVideos)}
                   {renderMediaGroup(t.audios, media.audios, t.noAudios)}
-                  {renderMediaGroup(isSpanish ? "Documento" : "Documents", clinicalHistoryEntries, isSpanish ? "No hay documentos en el historial." : "There are no documents in the history.")}
                   {renderMediaGroup(t.files, regularFileEntries, t.noFiles)}
                 </div>
               </section>
 
-              <section className="card" style={{ marginTop: 16 }} ref={timelineSectionRef}>
+              <section className="card" id="historial" style={{ marginTop: 16 }} ref={timelineSectionRef}>
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">{t.timelineTitle}</p>

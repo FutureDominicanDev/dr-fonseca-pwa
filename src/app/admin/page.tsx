@@ -1052,6 +1052,21 @@ export default function AdminPage() {
         .summary-label { font-size: 15px; font-weight: 900; color: #64748B; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; line-height: 1.35; }
         .summary-value { font-size: 28px; font-weight: 900; color: #111827; line-height: 1; }
         .summary-copy { color: #6B7280; font-size: 15px; line-height: 1.55; margin-top: 6px; overflow-wrap: anywhere; }
+        .command-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; }
+        .command-btn { min-height: 58px; padding: 12px 14px; border-radius: 16px; border: 1px solid #D7E7FA; background: #FFFFFF; color: #0E2D4A; text-align: left; font-family: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(28,66,104,0.05); }
+        .command-btn strong { display: block; font-size: 15px; font-weight: 950; line-height: 1.25; }
+        .command-btn span { display: block; margin-top: 4px; color: #64748B; font-size: 13px; font-weight: 750; line-height: 1.35; }
+        .command-btn:hover, .command-btn:focus-visible { border-color: #93C5FD; background: #F8FBFF; outline: none; }
+        .admin-section-search { order: 1; }
+        .admin-section-results { order: 2; }
+        .admin-section-active { order: 3; }
+        .admin-section-requests { order: 4; }
+        .admin-section-internal { order: 5; }
+        .admin-side-team { order: 1; }
+        .admin-side-invite { order: 2; }
+        .admin-side-phones { order: 3; }
+        .admin-side-tools { order: 4; }
+        .admin-side-blocks { order: 5; }
         .hero-pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
         .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .hero-secondary-btn { min-height: 46px; padding: 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; }
@@ -1131,6 +1146,8 @@ export default function AdminPage() {
           .quick-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
           .quick-links .hero-link:last-child { grid-column: 1 / -1; }
           .hero-link { width: 100%; text-align: center; padding: 10px 12px; font-size: 13px; }
+          .command-strip { grid-template-columns: 1fr 1fr; }
+          .command-btn { min-height: 64px; padding: 11px 12px; }
           .search-input-row { grid-template-columns: 1fr; }
           .hero-pill-row,
           .filter-row,
@@ -1160,7 +1177,6 @@ export default function AdminPage() {
             <div className="topbar-actions">
               <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
               <button className="topbar-btn" onClick={() => goTo("/inbox")}>Portal</button>
-              <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Exit"}</button>
             </div>
           </div>
           <button
@@ -1183,7 +1199,6 @@ export default function AdminPage() {
             </select>
             <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
             <button className="topbar-btn" onClick={() => goTo("/inbox")}>Portal</button>
-            <button className="topbar-btn" onClick={() => supabase.auth.signOut().then(() => goTo("/login"))}>{isSpanish ? "Salir" : "Exit"}</button>
           </div>
         )}
 
@@ -1236,9 +1251,28 @@ export default function AdminPage() {
             </button>
           </section>
 
+          <section className="command-strip" aria-label={isSpanish ? "Navegación del centro administrativo" : "Admin center navigation"}>
+            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("buscar-paciente")}>
+              <strong>{isSpanish ? "Buscar paciente" : "Find patient"}</strong>
+              <span>{isSpanish ? "Abrir expediente correcto" : "Open the correct record"}</span>
+            </button>
+            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("pacientes-activos")}>
+              <strong>{isSpanish ? "Pacientes activos" : "Active patients"}</strong>
+              <span>{activePatientCount} {isSpanish ? "en seguimiento" : "in follow-up"}</span>
+            </button>
+            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("equipo")}>
+              <strong>{isSpanish ? "Equipo y permisos" : "Team and access"}</strong>
+              <span>{adminAccessCount} {isSpanish ? "con admin" : "with admin"}</span>
+            </button>
+            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("herramientas-expediente")}>
+              <strong>{isSpanish ? "Herramientas" : "Tools"}</strong>
+              <span>{isSpanish ? "Auditoría, archivo y papelera" : "Audit, archive, and trash"}</span>
+            </button>
+          </section>
+
           <div className="workspace-grid">
             <div className="stack">
-              <section className="card" id="staff-to-staff">
+              <section className="card admin-section-internal" id="staff-to-staff">
                 <div className="header-row">
                   <div>
 	                    <p className="card-title">{isSpanish ? "Comunicación interna del equipo" : "Internal Team Communication"}</p>
@@ -1272,7 +1306,7 @@ export default function AdminPage() {
               </section>
 
               {canReviewAccessRequests && (
-                <section className="card" id="solicitudes-pendientes">
+                <section className="card admin-section-requests" id="solicitudes-pendientes">
                   <div className="header-row">
                     <div>
                       <p className="card-title">Solicitudes pendientes</p>
@@ -1310,11 +1344,11 @@ export default function AdminPage() {
                 </section>
               )}
 
-              <section className="card" id="pacientes-activos">
+              <section className="card admin-section-active" id="pacientes-activos">
                 <div className="header-row">
                   <div>
                     <p className="card-title">{isSpanish ? "Pacientes activos" : "Active patients"}</p>
-                    <p className="muted">{isSpanish ? "Lista completa de pacientes activos. Toca un paciente para opciones de exportación." : "Complete active patient list. Tap a patient for export options."}</p>
+                    <p className="muted">{isSpanish ? "Lista completa de pacientes activos. Toca un paciente para abrir su expediente." : "Complete active patient list. Tap a patient to open the record."}</p>
                   </div>
                 </div>
                 <div style={{ display: "grid", gap: 10 }}>
@@ -1326,7 +1360,7 @@ export default function AdminPage() {
                         key={`active-${card.patient.id}`}
                         type="button"
                         className="list-action-row"
-                        onClick={() => openPatientExportMenu(card)}
+                        onClick={() => goTo(`/admin/paciente/${card.patient.id}`)}
                       >
                         <span className="avatar small-avatar">{initials(card.patient.full_name)}</span>
                         <span style={{ minWidth: 0, flex: 1 }}>
@@ -1339,7 +1373,7 @@ export default function AdminPage() {
                 </div>
               </section>
 
-              <section className="card search-panel">
+              <section className="card search-panel admin-section-search" id="buscar-paciente">
                 <div className="header-row" style={{ marginBottom: 0 }}>
                   <div>
                     <p className="card-title">{isSpanish ? "Buscar paciente" : "Find patient"}</p>
@@ -1395,7 +1429,7 @@ export default function AdminPage() {
                 </div>
               </section>
 
-              <section className="card" id="expedientes">
+              <section className="card admin-section-results" id="expedientes">
               <div className="header-row">
                 <div>
                   <p className="card-title">{isSpanish ? "Resultados de búsqueda" : "Search results"}</p>
@@ -1490,7 +1524,7 @@ export default function AdminPage() {
             </div>
 
             <div className="stack">
-              <section className="card team-card" id="equipo">
+              <section className="card team-card admin-side-team" id="equipo">
                 <div className="header-row">
                   <div>
                     <p className="card-title">{isSpanish ? "Equipo y permisos" : "Team and permissions"}</p>
@@ -1660,7 +1694,7 @@ export default function AdminPage() {
                 )}
               </section>
 
-              <section className="card">
+              <section className="card admin-side-tools" id="herramientas-expediente">
                 <div className="header-row">
                   <div>
                     <p className="card-title">{isSpanish ? "Herramientas del expediente" : "Record tools"}</p>
@@ -1677,7 +1711,7 @@ export default function AdminPage() {
                 </div>
               </section>
 
-              <section className="card" id="bloqueos">
+              <section className="card admin-side-blocks" id="bloqueos">
                 <div className="header-row">
                   <div>
                     <p className="card-title">{isSpanish ? "Accesos bloqueados" : "Blocked access"}</p>
@@ -1734,7 +1768,7 @@ export default function AdminPage() {
                 </div>
               </section>
 
-              <section className="card">
+              <section className="card admin-side-invite" id="invitar-personal">
                 <div className="header-row">
                   <div>
                     <p className="card-title">{isSpanish ? "Invitar personal" : "Invite team member"}</p>
@@ -1783,7 +1817,7 @@ export default function AdminPage() {
                 </div>
               </section>
 
-              <section className="card">
+              <section className="card admin-side-phones" id="telefonos-sede">
                 <div className="header-row">
                   <div>
                     <p className="card-title">{isSpanish ? "Teléfonos de sede" : "Office phone numbers"}</p>
