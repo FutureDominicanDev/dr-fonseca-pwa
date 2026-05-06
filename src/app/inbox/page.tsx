@@ -546,6 +546,34 @@ const parseStaffRoomPayload = (content?: string | null): StaffRoomPayload | null
   }
 };
 
+function TopbarActionIcon({ kind }: { kind: "staff" | "labels" | "admin" }) {
+  const commonProps = { width: 19, height: 19, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.4, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (kind === "labels") {
+    return (
+      <svg {...commonProps}>
+        <path d="M20.6 13.1 13.1 20.6a2 2 0 0 1-2.8 0l-7-7A2 2 0 0 1 2.7 12V5.4a2 2 0 0 1 2-2H11a2 2 0 0 1 1.4.6l8.2 8.2a2 2 0 0 1 0 2.9Z" />
+        <circle cx="7.7" cy="8" r="1.4" />
+      </svg>
+    );
+  }
+  if (kind === "admin") {
+    return (
+      <svg {...commonProps}>
+        <path d="M12 3.4 19 6v5.1c0 4.4-2.9 7.8-7 9.5-4.1-1.7-7-5.1-7-9.5V6l7-2.6Z" />
+        <path d="M9.6 12.1 11.3 14l3.4-4" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...commonProps}>
+      <path d="M16 20v-1.8a3.2 3.2 0 0 0-3.2-3.2H7.2A3.2 3.2 0 0 0 4 18.2V20" />
+      <circle cx="10" cy="7.2" r="3.2" />
+      <path d="M20 20v-1.8a3.2 3.2 0 0 0-2.4-3.1" />
+      <path d="M15.6 4.2a3.2 3.2 0 0 1 0 6.1" />
+    </svg>
+  );
+}
+
 const CARE_TEAM_ROLE_ORDER = ["doctor", "enfermeria", "coordinacion", "post_quirofano", "staff"] as const;
 
 interface QREditorProps {
@@ -1490,20 +1518,46 @@ export default function InboxPage() {
   const StaffGlobalActions = ({ compact = false }: { compact?: boolean }) => (
     <div className="staff-global-actions">
       <button
+        type="button"
         className="admin-inline-btn"
         onClick={openStaffChatsHome}
         title={lang==="es" ? "Comunicación interna del equipo" : "Internal team communication"}
+        aria-label={lang==="es" ? "Comunicación interna del equipo" : "Internal team communication"}
         style={{position:"relative"}}
       >
-        {compact ? "Staff" : (lang==="es" ? "Staff" : "Staff")}
+        <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="staff" /></span>
+        <span className="admin-action-text">{compact ? "Staff" : (lang==="es" ? "Staff" : "Staff")}</span>
         {totalStaffChatUnread > 0 && (
           <span style={{position:"absolute",top:-6,right:-6,minWidth:20,height:20,padding:"0 5px",borderRadius:99,background:"#EF4444",color:"white",fontSize:12,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(239,68,68,0.35)"}}>
             {totalStaffChatUnread}
           </span>
         )}
       </button>
+      <button
+        type="button"
+        className="admin-inline-btn"
+        onClick={()=>setShowLabelManager(true)}
+        title={lang === "es" ? "Etiquetas" : "Labels"}
+        aria-label={lang === "es" ? "Etiquetas" : "Labels"}
+      >
+        <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="labels" /></span>
+        <span className="admin-action-text">{lang === "es" ? "Etiquetas" : "Labels"}</span>
+      </button>
+      {canOpenAdmin && (
+        <button
+          type="button"
+          className="admin-inline-btn"
+          onClick={()=>window.location.href="/admin"}
+          title="Admin"
+          aria-label={lang === "es" ? "Abrir Admin" : "Open Admin"}
+        >
+          <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="admin" /></span>
+          <span className="admin-action-text">Admin</span>
+        </button>
+      )}
       {canCreatePatientRooms && (
         <button
+          type="button"
           className="staff-plus-btn"
           onClick={requestNewPatientRoom}
           title={lang === "es" ? "Crear paciente" : "Create patient"}
@@ -4396,14 +4450,17 @@ export default function InboxPage() {
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.18); box-shadow: 0 1px 0 rgba(0,0,0,0.14); }
         .topbar-logo { grid-column: 2; justify-self: center; align-self: center; height: 96px; width: min(760px, 96vw); object-fit: contain; object-position: center; display: block; }
         .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
-	        .admin-inline-btn { padding: 0 12px; min-height: 44px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: var(--app-ui-small-size); font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
+	        .admin-inline-btn { padding: 0 12px; min-height: 44px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: var(--app-ui-small-size); font-weight: 850; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); white-space: nowrap; }
+        .admin-action-icon { width: 19px; height: 19px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .admin-action-icon svg { width: 19px; height: 19px; display: block; }
+        .admin-action-text { display: inline-block; line-height: 1; }
         .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; max-width: 100%; }
         .staff-plus-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: #007AFF; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,122,255,0.3); font-size: 26px; line-height: 1; font-weight: 850; font-family: inherit; flex-shrink: 0; }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
-        .sidebar-head { padding: 13px 14px 10px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
-        .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-        .search-bar { display: flex; align-items: center; gap: 9px; min-height: 48px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#D5E4F2"}; border-radius: 15px; padding: 10px 14px; box-shadow: ${darkMode?"none":"0 5px 16px rgba(28,66,104,0.06)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+        .sidebar-head { padding: 12px 14px 10px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
+        .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .search-bar { width: min(100%, 540px); margin: 0 auto; display: flex; align-items: center; gap: 9px; min-height: 44px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#D5E4F2"}; border-radius: 14px; padding: 8px 12px; box-shadow: ${darkMode?"none":"0 5px 16px rgba(28,66,104,0.06)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
         .search-bar:focus-within { border-color: #2563EB; box-shadow: ${darkMode?"0 0 0 3px rgba(37,99,235,0.22)":"0 0 0 3px rgba(37,99,235,0.12), 0 4px 14px rgba(15,23,42,0.08)"}; }
         .search-bar svg { stroke: ${darkMode?"#CBD5E1":"#64748B"}; }
         .search-input { flex: 1; border: none; background: transparent; font-size: var(--app-ui-font-size); outline: none; color: ${textColor}; font-family: inherit; font-weight: 650; min-width: 0; min-height: 26px !important; }
@@ -4545,10 +4602,14 @@ export default function InboxPage() {
 	        @media (max-width: 700px) {
           .topbar { height: calc(146px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
           .topbar-logo { grid-column: 1; justify-self: center; align-self: start; height: 92px; width: min(620px, 92vw); }
-          .topbar-actions { right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); top: auto; bottom: 8px; transform: none; justify-content: flex-end; }
-          .topbar-actions .admin-inline-btn { min-height: 40px; padding: 0 10px; font-size: 14px; }
+          .topbar-actions { right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); top: auto; bottom: 8px; transform: none; justify-content: flex-end; gap: 6px; }
+          .topbar-actions .admin-inline-btn { width: 40px; min-width: 40px; min-height: 40px; padding: 0; border-radius: 50%; font-size: 14px; }
+          .topbar-actions .admin-action-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+          .topbar-actions .admin-action-icon,
+          .topbar-actions .admin-action-icon svg { width: 18px; height: 18px; }
           .topbar-actions .staff-plus-btn { width: 40px; height: 40px; min-height: 40px; }
-          .sidebar-head { padding: 15px 14px 12px; }
+          .sidebar-head { padding: 12px 12px 10px; }
+          .search-bar { width: calc(100% - 10px); }
           .patient-list { padding-left: 10px; padding-right: 10px; }
           .chat-head { min-height: 62px; }
           .input-area { gap: 8px; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
@@ -5478,10 +5539,6 @@ export default function InboxPage() {
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontSize:22,fontWeight:700,color:textColor}}>{t.patients}</span>
                   {totalUnread>0&&<span style={{background:"#25D366",color:"white",fontSize:12,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{totalUnread}</span>}
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                  <button className="admin-inline-btn" onClick={()=>setShowLabelManager(true)}>{lang === "es" ? "Etiquetas" : "Labels"}</button>
-                  {canOpenAdmin&&<button className="admin-inline-btn" onClick={()=>window.location.href="/admin"}>Admin</button>}
                 </div>
               </div>
               <div className="search-bar">
