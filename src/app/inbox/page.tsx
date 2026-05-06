@@ -4672,13 +4672,13 @@ export default function InboxPage() {
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.18); box-shadow: 0 1px 0 rgba(0,0,0,0.14); }
         .topbar-logo { grid-column: 2; justify-self: center; align-self: center; height: 96px; width: min(760px, 96vw); object-fit: contain; object-position: center; display: block; }
         .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; gap: 10px; }
-	        .admin-inline-btn { width: 48px; min-width: 48px; height: 48px; min-height: 48px; padding: 0; border-radius: 16px; background: rgba(11, 56, 84, 0.58); border: 1px solid rgba(190, 224, 255, 0.36); color: #F8FBFF; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 18px rgba(2,14,28,0.18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease; }
-        .admin-inline-btn:hover { background: rgba(16, 72, 108, 0.68); border-color: rgba(213, 235, 255, 0.50); transform: translateY(-1px); }
+	        .admin-inline-btn { width: 48px; min-width: 48px; height: 48px; min-height: 48px; padding: 0; border-radius: 16px; background: rgba(8, 50, 76, 0.82); border: 1px solid rgba(210, 235, 255, 0.54); color: #F8FBFF; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 10px 24px rgba(2,14,28,0.28), 0 0 0 1px rgba(125,211,252,0.10); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease; }
+        .admin-inline-btn:hover { background: rgba(14, 70, 105, 0.90); border-color: rgba(226, 242, 255, 0.70); transform: translateY(-1px); }
         .admin-inline-btn:active { transform: translateY(0); }
         .admin-action-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .admin-action-icon svg { width: 24px; height: 24px; display: block; }
         .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-shrink: 0; max-width: 100%; }
-        .staff-action-cluster { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 24px; background: rgba(6, 42, 64, 0.46); border: 1px solid rgba(189, 224, 255, 0.28); box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), 0 12px 26px rgba(2,14,28,0.20); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        .staff-action-cluster { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 24px; background: rgba(4, 34, 53, 0.72); border: 1px solid rgba(210, 235, 255, 0.44); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 14px 30px rgba(2,14,28,0.30), 0 0 0 1px rgba(125,211,252,0.08); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
         .staff-plus-btn { width: 52px; height: 52px; min-height: 52px; border-radius: 50%; background: linear-gradient(135deg,#0B8CFF 0%,#006DFF 100%); border: 1px solid rgba(191,219,254,0.70); color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.32), 0 10px 22px rgba(0,107,255,0.34); font-size: 34px; line-height: 1; font-weight: 400; font-family: inherit; flex-shrink: 0; }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
@@ -4825,9 +4825,9 @@ export default function InboxPage() {
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
         @keyframes spin { to { transform: rotate(360deg); } }
 	        @media (max-width: 700px) {
-          .topbar { height: calc(164px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+          .topbar { height: calc(190px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
           .topbar-logo { grid-column: 1; justify-self: center; align-self: start; height: 92px; width: min(620px, 92vw); }
-          .topbar-actions { right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); top: auto; bottom: 10px; transform: none; justify-content: flex-end; gap: 10px; }
+          .topbar-actions { right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); top: auto; bottom: 14px; transform: none; justify-content: flex-end; gap: 10px; }
           .topbar-actions .admin-inline-btn { width: 56px; min-width: 56px; height: 56px; min-height: 56px; border-radius: 18px; }
           .topbar-actions .admin-action-icon,
           .topbar-actions .admin-action-icon svg { width: 25px; height: 25px; }
