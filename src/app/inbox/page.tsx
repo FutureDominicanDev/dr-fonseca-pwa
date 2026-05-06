@@ -4059,6 +4059,8 @@ export default function InboxPage() {
     );
   };
 
+  const legalHref = (path: string) => `${path}?lang=${lang}`;
+
   const SettingsPanel = () => (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))",paddingLeft:"max(0px, env(safe-area-inset-left))",paddingRight:"max(0px, env(safe-area-inset-right))",overflow:"hidden"}} onClick={()=>setShowSettings(false)}>
       <div className="settings-sheet" style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",overflowX:"hidden",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`,WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}} onClick={e=>e.stopPropagation()}>
@@ -4124,6 +4126,25 @@ export default function InboxPage() {
             >
               {staffRecordAlertsMuted ? t.staffRecordAlertsOff : t.staffRecordAlertsOn}
             </button>
+          </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{t.privacySupport}</p>
+            <div style={{display:"grid",gap:8}}>
+              {[
+                { href: legalHref("/privacy"), label: t.privacyPolicy },
+                { href: legalHref("/support"), label: t.support },
+                { href: legalHref("/account-deletion"), label: t.accountDeletion },
+              ].map((item)=>(
+                <a
+                  key={item.href}
+                  href={item.href}
+                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:46,padding:"0 12px",borderRadius:12,background:darkMode?"#253244":"white",border:`1px solid ${borderColor}`,color:textColor,textDecoration:"none",fontSize:uiBaseSize,fontWeight:800,lineHeight:1.25}}
+                >
+                  <span>{item.label}</span>
+                  <span aria-hidden="true" style={{color:subTextColor,fontWeight:900}}>›</span>
+                </a>
+              ))}
+            </div>
           </div>
         </div>
       </div>
