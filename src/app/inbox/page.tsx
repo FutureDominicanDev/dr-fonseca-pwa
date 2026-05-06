@@ -2819,13 +2819,16 @@ export default function InboxPage() {
     const tempId="temp-"+Date.now();
     setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:msg,message_type:"text",sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
     const { data: nm, error } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:msg,message_type:"text",sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
-    if (error) setMessages(p=>p.filter(m=>m.id!==tempId));
-    else if (nm) setMessages(p=>p.map(m=>m.id===tempId?nm:m));
-    // Push notification to patient — works even if their PWA is closed
+    if (error) {
+      setMessages(p=>p.filter(m=>m.id!==tempId));
+      isSending.current=false; setSending(false);
+      return;
+    } else if (nm) setMessages(p=>p.map(m=>m.id===tempId?nm:m));
+    const patientUrl = await ensurePatientRoomLink();
     sendPushNotification({
       roomId:selectedRoom.id, userType:"patient",
       title: sName, body: msg.length>80?msg.slice(0,80)+"…":msg,
-      url: window.location.href, tag: selectedRoom.id,
+      url: patientUrl || `/patient/${selectedRoom.id}`, tag: selectedRoom.id,
     });
     isSending.current=false; setSending(false);
   };
@@ -3032,12 +3035,13 @@ export default function InboxPage() {
       setMessages((prev) => prev.map((entry) => (entry.id === tempId ? inserted : entry)));
     }
 
+    const patientUrl = await ensurePatientRoomLink();
     sendPushNotification({
         roomId: selectedRoom.id,
         userType: "patient",
         title: sName,
         body: t.videoCallInvite,
-        url: window.location.href,
+        url: patientUrl || `/patient/${selectedRoom.id}`,
         tag: selectedRoom.id,
     });
     await joinVideoCall(providerRoomName);
@@ -3146,6 +3150,21 @@ export default function InboxPage() {
           const { error: notificationError } = await supabase.from("media_notifications").insert(rows);
           if (notificationError) console.error("media_notifications insert failed", notificationError);
         }
+      }
+      if (nm && cat !== "before_photo") {
+        const patientUrl = await ensurePatientRoomLink();
+        const patientFileName = displayFileName.replace(/^\[[^\]]+\]\s*/, "").trim();
+        const patientBody = cat === "medication"
+          ? (lang === "es" ? "Nueva receta o documento disponible." : "New prescription or document available.")
+          : patientFileName || (lang === "es" ? "Nuevo archivo disponible." : "New file available.");
+        sendPushNotification({
+          roomId: selectedRoom.id,
+          userType: "patient",
+          title: sName,
+          body: patientBody.length > 80 ? `${patientBody.slice(0, 80)}…` : patientBody,
+          url: patientUrl || `/patient/${selectedRoom.id}`,
+          tag: selectedRoom.id,
+        });
       }
       if (cat === "medication") {
         setMediaLibraryTab("docs");
