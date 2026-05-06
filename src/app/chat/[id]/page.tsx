@@ -288,6 +288,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [clinicalPdfLanguage, setClinicalPdfLanguage] = useState<"es" | "en">(() => deviceUiLang());
   const [clinicalPdfValues, setClinicalPdfValues] = useState<Record<ClinicalPdfFieldKey, string>>(() => createEmptyClinicalPdfValues());
   const [clinicalPdfSaving, setClinicalPdfSaving] = useState(false);
+  const [clinicalPdfViewerOpen, setClinicalPdfViewerOpen] = useState(false);
   const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
   const [selectedPrescription, setSelectedPrescription] = useState<Message | null>(null);
   const [lastPrescriptionSeenAt, setLastPrescriptionSeenAt] = useState("");
@@ -1271,6 +1272,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const selectedPrescriptionInfo = selectedPrescription ? parsePrescriptionText(selectedPrescription.file_name) : null;
   const selectedPrescriptionUrl = prescriptionUrl(selectedPrescription);
   const latestClinicalPdfUrl = latestClinicalPdfMessage?.file_url || latestClinicalPdfMessage?.content || "";
+  const clinicalPdfShareText = latestClinicalPdfUrl ? `${labels.clinicalHistoryFile}\n${latestClinicalPdfUrl}` : "";
   const selectedPrescriptionIsImage = /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(selectedPrescriptionUrl) || `${selectedPrescription?.file_type || ""}`.startsWith("image/");
   const selectedPrescriptionShareText = selectedPrescriptionInfo
     ? `${selectedPrescriptionInfo.title}${selectedPrescriptionInfo.instructions ? `\n${labels.prescriptionInstructions}: ${selectedPrescriptionInfo.instructions}` : ""}\n${selectedPrescriptionUrl}`
@@ -1308,6 +1310,53 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const messagePrescription = () => {
     const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
     window.location.href = `sms:${separator}body=${encodeURIComponent(selectedPrescriptionShareText)}`;
+  };
+  const openClinicalPdfViewer = () => {
+    if (!latestClinicalPdfUrl) return;
+    setClinicalPdfViewerOpen(true);
+  };
+  const closeClinicalPdfViewer = () => {
+    setClinicalPdfViewerOpen(false);
+    setDocumentFolderOpen(false);
+  };
+  const shareClinicalPdf = async () => {
+    if (!latestClinicalPdfUrl) return;
+    if (navigator.share) {
+      try {
+        const response = await fetch(latestClinicalPdfUrl);
+        const blob = await response.blob();
+        const file = new File([blob], "Historia Clinica.pdf", { type: blob.type || "application/pdf" });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ title: labels.clinicalHistoryFile, text: labels.clinicalHistoryFile, files: [file] });
+          return;
+        }
+      } catch {}
+      try {
+        await navigator.share({ title: labels.clinicalHistoryFile, text: labels.clinicalHistoryFile, url: latestClinicalPdfUrl });
+        return;
+      } catch {}
+    }
+    await navigator.clipboard?.writeText(clinicalPdfShareText).catch(() => {});
+    alert(uiLang === "es" ? "Enlace del formulario copiado." : "Form link copied.");
+  };
+  const emailClinicalPdf = () => {
+    if (!latestClinicalPdfUrl) return;
+    window.location.href = `mailto:?subject=${encodeURIComponent(labels.clinicalHistoryFile)}&body=${encodeURIComponent(clinicalPdfShareText)}`;
+  };
+  const messageClinicalPdf = () => {
+    if (!latestClinicalPdfUrl) return;
+    const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
+    window.location.href = `sms:${separator}body=${encodeURIComponent(clinicalPdfShareText)}`;
+  };
+  const printClinicalPdf = () => {
+    if (!latestClinicalPdfUrl) return;
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!printWindow) {
+      window.open(latestClinicalPdfUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    printWindow.document.write(`<!doctype html><html><head><title>${labels.clinicalHistoryFile}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#f8fafc}@media print{body{background:#fff}}</style></head><body><iframe src="${latestClinicalPdfUrl}" title="${labels.clinicalHistoryFile}" style="width:100%;height:100vh;border:0;background:#fff;"></iframe><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));</script></body></html>`);
+    printWindow.document.close();
   };
   const visibleChatMessages = messages.filter((message) => {
     const fileName = `${message.file_name || ""}`;
@@ -1583,12 +1632,32 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                   </button>
                 </div>
                 {latestClinicalPdfUrl && (
-                  <a href={latestClinicalPdfUrl} download="Historia Clinica.pdf" style={{ minHeight: 46, borderRadius: 12, background: darkMode ? "#1F2937" : "#F1F5F9", color: textPrimary, display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextBase, fontWeight: 900 }}>
+                  <button type="button" onClick={openClinicalPdfViewer} style={{ minHeight: 46, border: "none", borderRadius: 12, background: darkMode ? "#1F2937" : "#F1F5F9", color: textPrimary, display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit" }}>
                     {labels.downloadClinicalHistory}
-                  </a>
+                  </button>
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {clinicalPdfViewerOpen && latestClinicalPdfUrl && (
+        <div style={{ position: "fixed", inset: 0, background: darkMode ? "#0f172a" : "#f8fafc", color: textPrimary, zIndex: 32, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ flexShrink: 0, padding: "calc(14px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 12px max(14px, env(safe-area-inset-left))", background: panelBg, borderBottom: "1px solid rgba(148,163,184,0.25)", boxShadow: "0 6px 18px rgba(15,23,42,0.08)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+              <div style={{ minWidth: 0, fontSize: patientTextBase, fontWeight: 900, lineHeight: 1.35, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{labels.clinicalHistoryFile}</div>
+              <button type="button" onClick={closeClinicalPdfViewer} style={{ border: "none", borderRadius: 999, background: inputPanelBg, color: textPrimary, minWidth: 86, height: 44, padding: "0 14px", fontSize: patientTextSmall, fontWeight: 850, fontFamily: "inherit" }}>{labels.close}</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+              <button type="button" onClick={() => void shareClinicalPdf()} style={{ border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.share}</button>
+              <button type="button" onClick={messageClinicalPdf} style={{ border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.messages}</button>
+              <button type="button" onClick={emailClinicalPdf} style={{ border: "none", borderRadius: 12, background: "#FDE68A", color: "#854D0E", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.email}</button>
+              <button type="button" onClick={printClinicalPdf} style={{ border: "none", borderRadius: 12, background: "#E0E7FF", color: "#3730A3", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.print}</button>
+            </div>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>
+            <iframe src={latestClinicalPdfUrl} title={labels.clinicalHistoryFile} style={{ width: "100%", height: "100%", minHeight: "70dvh", border: "none", borderRadius: 14, background: "#fff", boxShadow: "0 8px 28px rgba(15,23,42,0.14)" }} />
           </div>
         </div>
       )}

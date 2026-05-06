@@ -741,6 +741,7 @@ export default function InboxPage() {
   const [activeCallRoomName, setActiveCallRoomName] = useState<string | null>(null);
   const [callInviteFeedback, setCallInviteFeedback] = useState("");
   const [preOpViewerIndex, setPreOpViewerIndex] = useState<number | null>(null);
+  const [selectedClinicalHistoryEntry, setSelectedClinicalHistoryEntry] = useState<any | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -3440,6 +3441,55 @@ export default function InboxPage() {
     printWindow.document.write(`<!doctype html><html><head><title>${escapeHtml(title)}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;margin:24px;color:#111;line-height:1.55}h1{font-size:24px;margin:0 0 16px}pre{white-space:pre-wrap;font:16px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif}@media print{body{margin:12mm}}</style></head><body><h1>${escapeHtml(title)}</h1><pre>${escapeHtml(text)}</pre><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),350));</script></body></html>`);
     printWindow.document.close();
   };
+  const clinicalHistoryEntryUrl = (entry?: any | null) => entry?.file_url || entry?.content || "";
+  const clinicalHistoryPdfTitle = "Historia Clinica";
+  const selectedClinicalHistoryUrl = clinicalHistoryEntryUrl(selectedClinicalHistoryEntry);
+  const selectedClinicalHistoryShareText = selectedClinicalHistoryUrl ? `${clinicalHistoryPdfTitle}\n${selectedClinicalHistoryUrl}` : "";
+  const closeClinicalHistoryViewer = () => {
+    setSelectedClinicalHistoryEntry(null);
+    setShowMediaLibrary(false);
+  };
+  const shareClinicalHistoryEntry = async (entry?: any | null) => {
+    const url = clinicalHistoryEntryUrl(entry || selectedClinicalHistoryEntry);
+    if (!url) return;
+    const shareText = `${clinicalHistoryPdfTitle}\n${url}`;
+    if (navigator.share) {
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const file = new File([blob], "Historia Clinica.pdf", { type: blob.type || "application/pdf" });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ title: clinicalHistoryPdfTitle, text: clinicalHistoryPdfTitle, files: [file] });
+          return;
+        }
+      } catch {}
+      try {
+        await navigator.share({ title: clinicalHistoryPdfTitle, text: clinicalHistoryPdfTitle, url });
+        return;
+      } catch {}
+    }
+    await navigator.clipboard?.writeText(shareText).catch(() => {});
+    alert(lang === "es" ? "Enlace del formulario copiado." : "Form link copied.");
+  };
+  const emailClinicalHistoryEntry = () => {
+    if (!selectedClinicalHistoryUrl) return;
+    window.location.href = `mailto:?subject=${encodeURIComponent(clinicalHistoryPdfTitle)}&body=${encodeURIComponent(selectedClinicalHistoryShareText)}`;
+  };
+  const messageClinicalHistoryEntry = () => {
+    if (!selectedClinicalHistoryUrl) return;
+    const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
+    window.location.href = `sms:${separator}body=${encodeURIComponent(selectedClinicalHistoryShareText)}`;
+  };
+  const printClinicalHistoryEntry = () => {
+    if (!selectedClinicalHistoryUrl) return;
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!printWindow) {
+      window.open(selectedClinicalHistoryUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    printWindow.document.write(`<!doctype html><html><head><title>${clinicalHistoryPdfTitle}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#f8fafc}@media print{body{background:#fff}}</style></head><body><iframe src="${selectedClinicalHistoryUrl}" title="${clinicalHistoryPdfTitle}" style="width:100%;height:100vh;border:0;background:#fff;"></iframe><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));</script></body></html>`);
+    printWindow.document.close();
+  };
   const appendEmojiToDraft = (emoji: string) => {
     const next = `${newMessage}${emoji}`;
     setComposerText(next);
@@ -3490,7 +3540,7 @@ export default function InboxPage() {
     const groups: {date:string;msgs:any[]}[]=[];
     let currentDate="";
     messages.forEach(m=>{
-      if (m.deleted_by_staff || m.is_internal || isPatientFolderEntry(m)) return;
+      if (m.deleted_by_staff || m.is_internal || isPatientFolderEntry(m) || isClinicalHistoryFileEntry(m) || parseFormMessage(m.content)) return;
       const d=new Date(m.created_at).toDateString();
       if (d!==currentDate){currentDate=d;groups.push({date:m.created_at,msgs:[]});}
       groups[groups.length-1].msgs.push(m);
@@ -4906,7 +4956,7 @@ export default function InboxPage() {
                   const payload = parseFormMessage(entry.content);
                   if (!payload && isClinicalHistoryFileEntry(entry)) {
                     return (
-                      <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
+                      <button key={entry.id} type="button" onClick={()=>setSelectedClinicalHistoryEntry(entry)} style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor,textAlign:"left",fontFamily:"inherit",cursor:"pointer"}}>
                         <span style={{fontSize:22}}>📄</span>
                         <div style={{display:"grid",gap:3,minWidth:0}}>
                           <div style={{fontWeight:900,fontSize:15,overflowWrap:"anywhere"}}>Historia Clinica</div>
@@ -4914,7 +4964,7 @@ export default function InboxPage() {
                             {lang==="es" ? "Enviado por paciente" : "Submitted by patient"} · {fmtDateLabel(entry.created_at || "")}
                           </div>
                         </div>
-                      </a>
+                      </button>
                     );
                   }
                   if (!payload) return null;
@@ -4954,6 +5004,28 @@ export default function InboxPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {selectedClinicalHistoryEntry && selectedClinicalHistoryUrl && (
+        <div style={{position:"fixed",inset:0,background:darkMode?"#0B141A":"#F8FAFC",color:textColor,zIndex:260,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+          <div style={{flexShrink:0,padding:"calc(14px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 12px max(14px, env(safe-area-inset-left))",background:darkMode?"#111B21":"#FFFFFF",borderBottom:`1px solid ${borderColor}`,boxShadow:darkMode?"none":"0 6px 18px rgba(15,23,42,0.08)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12}}>
+              <div style={{minWidth:0,fontSize:uiBaseSize,fontWeight:900,lineHeight:1.35,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{clinicalHistoryPdfTitle}</div>
+              <button type="button" onClick={closeClinicalHistoryViewer} style={{border:"none",borderRadius:999,background:cardBg,color:textColor,minWidth:86,height:44,padding:"0 14px",fontSize:uiSmallSize,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>
+                {lang==="es" ? "Cerrar" : "Close"}
+              </button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+              <button type="button" onClick={()=>void shareClinicalHistoryEntry()} style={{border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",minHeight:46,fontSize:uiBaseSize,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{t.shareForm}</button>
+              <button type="button" onClick={messageClinicalHistoryEntry} style={{border:"none",borderRadius:12,background:"#DCFCE7",color:"#166534",minHeight:46,fontSize:uiBaseSize,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{t.messageForm}</button>
+              <button type="button" onClick={emailClinicalHistoryEntry} style={{border:"none",borderRadius:12,background:"#FDE68A",color:"#854D0E",minHeight:46,fontSize:uiBaseSize,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{t.emailForm}</button>
+              <button type="button" onClick={printClinicalHistoryEntry} style={{border:"none",borderRadius:12,background:"#E0E7FF",color:"#3730A3",minHeight:46,fontSize:uiBaseSize,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{t.printForm}</button>
+            </div>
+          </div>
+          <div style={{flex:1,minHeight:0,overflow:"auto",padding:12}}>
+            <iframe src={selectedClinicalHistoryUrl} title={clinicalHistoryPdfTitle} style={{width:"100%",height:"100%",minHeight:"70dvh",border:"none",borderRadius:14,background:"#fff",boxShadow:darkMode?"none":"0 8px 28px rgba(15,23,42,0.14)"}} />
           </div>
         </div>
       )}
