@@ -495,7 +495,10 @@ type MediaNotification = {
 };
 type PatientLabel = {
   id: string;
-  user_id?: string | null;
+  created_by?: string | null;
+  patient_id?: string | null;
+  room_id?: string | null;
+  scope?: string | null;
   name_es?: string | null;
   name_en?: string | null;
   name?: string | null;
@@ -708,11 +711,13 @@ export default function InboxPage() {
   const [careStaffSearch, setCareStaffSearch] = useState("");
   const [mediaUnreadCounts, setMediaUnreadCounts] = useState<Record<string, number>>({});
   const [userLabels, setUserLabels] = useState<PatientLabel[]>([]);
+  const [patientLabelAssignments, setPatientLabelAssignments] = useState<PatientLabel[]>([]);
   const [activeLabelFilter, setActiveLabelFilter] = useState("");
   const [showLabelSelector, setShowLabelSelector] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#EF4444");
   const [savingLabel, setSavingLabel] = useState(false);
+  const [savingPatientLabels, setSavingPatientLabels] = useState(false);
   const [displayNameEdit, setDisplayNameEdit] = useState("");
   const [phoneEdit, setPhoneEdit] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -850,15 +855,14 @@ export default function InboxPage() {
     const fallback = lang === "es" ? label.name_en : label.name_es;
     return primary || fallback || label.name || (lang === "es" ? "Etiqueta" : "Label");
   };
+  const labelKey = (label: PatientLabel) => `${labelName(label).trim().toLowerCase()}|${label.color || "#64748B"}`;
   const patientLabelIdsFor = useCallback((patient: any) => {
-    const value = patient?.labels;
-    if (Array.isArray(value)) return value.filter(Boolean);
-    if (value && typeof value === "object") {
-      const ownLabels = value[currentUserId] || value[String(currentUserId || "")];
-      return Array.isArray(ownLabels) ? ownLabels.filter(Boolean) : [];
-    }
-    return [] as string[];
-  }, [currentUserId]);
+    if (!patient?.id) return [] as string[];
+    const patientAssignments = patientLabelAssignments.filter((label) => label.patient_id === patient.id);
+    return patientAssignments
+      .map((assignment) => userLabels.find((label) => labelKey(label) === labelKey(assignment))?.id || assignment.id)
+      .filter(Boolean);
+  }, [patientLabelAssignments, userLabels, lang]);
   const patientLabelsFor = (patient: any) => {
     const ids = new Set(patientLabelIdsFor(patient));
     return userLabels.filter((label) => ids.has(label.id));
@@ -2001,9 +2005,24 @@ export default function InboxPage() {
     const { data, error } = await supabase
       .from("labels")
       .select("*")
-      .eq("user_id", currentUserId)
+      .eq("created_by", currentUserId)
+      .eq("scope", "patient")
       .order("created_at", { ascending: true });
-    if (!error) setUserLabels((data || []) as PatientLabel[]);
+    if (!error) {
+      const rows = (data || []) as PatientLabel[];
+      const assignments = rows.filter((label) => !!label.patient_id);
+      const definitions = rows.filter((label) => !label.patient_id);
+      const knownKeys = new Set(definitions.map((label) => labelKey(label)));
+      assignments.forEach((assignment) => {
+        const key = labelKey(assignment);
+        if (!knownKeys.has(key)) {
+          knownKeys.add(key);
+          definitions.push({ ...assignment, patient_id: null });
+        }
+      });
+      setUserLabels(definitions);
+      setPatientLabelAssignments(assignments);
+    }
   }, [currentUserId]);
 
   const createPatientLabel = async () => {
@@ -2013,9 +2032,6 @@ export default function InboxPage() {
     const { data, error } = await supabase
       .from("labels")
       .insert({
-        user_id: currentUserId,
-        name_es: name,
-        name_en: name,
         name,
         color: newLabelColor,
         scope: "patient",
@@ -2035,28 +2051,52 @@ export default function InboxPage() {
   };
 
   const updateSelectedPatientLabels = async (nextLabelIds: string[]) => {
-    if (!selectedPatient?.id || !currentUserId) return;
-    const currentValue = selectedPatient.labels;
-    const nextLabels =
-      currentValue && typeof currentValue === "object" && !Array.isArray(currentValue)
-        ? { ...currentValue, [currentUserId]: nextLabelIds }
-        : { [currentUserId]: nextLabelIds };
-    const { error } = await supabase.from("patients").update({ labels: nextLabels }).eq("id", selectedPatient.id);
-    if (error) {
-      alert(error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
+    if (!selectedPatient?.id || !currentUserId || savingPatientLabels) return;
+    setSavingPatientLabels(true);
+    const currentIds = selectedPatientLabelIds;
+    const addedIds = nextLabelIds.filter((id) => !currentIds.includes(id));
+    const removedIds = currentIds.filter((id) => !nextLabelIds.includes(id));
+    const now = new Date().toISOString();
+
+    const addedRows = addedIds
+      .map((id) => userLabels.find((label) => label.id === id))
+      .filter(Boolean)
+      .map((label) => ({
+        name: labelName(label as PatientLabel),
+        color: (label as PatientLabel).color || "#64748B",
+        scope: "patient",
+        patient_id: selectedPatient.id,
+        created_by: currentUserId,
+        created_at: now,
+        updated_at: now,
+      }));
+
+    const assignmentIdsToRemove = patientLabelAssignments
+      .filter((assignment) => assignment.patient_id === selectedPatient.id)
+      .filter((assignment) => removedIds.some((id) => {
+        const label = userLabels.find((item) => item.id === id);
+        return label && labelKey(label) === labelKey(assignment);
+      }))
+      .map((assignment) => assignment.id);
+
+    const insertResult = addedRows.length
+      ? await supabase.from("labels").insert(addedRows)
+      : { error: null };
+    if (insertResult.error) {
+      setSavingPatientLabels(false);
+      alert(insertResult.error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
       return;
     }
-    setPatients((current) => current.map((patient) => patient.id === selectedPatient.id ? { ...patient, labels: nextLabels } : patient));
-    setSelectedRoom((room: any) => room ? {
-      ...room,
-      procedures: {
-        ...room.procedures,
-        patients: {
-          ...room.procedures?.patients,
-          labels: nextLabels,
-        },
-      },
-    } : room);
+
+    const deleteResult = assignmentIdsToRemove.length
+      ? await supabase.from("labels").delete().in("id", assignmentIdsToRemove)
+      : { error: null };
+    setSavingPatientLabels(false);
+    if (deleteResult.error) {
+      alert(deleteResult.error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
+      return;
+    }
+    fetchUserLabels();
   };
 
   const toggleSelectedPatientLabel = (labelId: string) => {
@@ -2464,7 +2504,7 @@ export default function InboxPage() {
   }, [callOverlayOpen]);
 
   const fetchRooms = async () => {
-    const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications, labels))";
+    const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications))";
     const fallbackSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, profile_picture_url, birthdate))";
     const query = await supabase.from("rooms").select(extendedSelect).order("created_at",{ascending:false});
     let data = query.data;
@@ -5054,6 +5094,7 @@ export default function InboxPage() {
                   <input
                     type="checkbox"
                     checked={selectedPatientLabelSet.has(label.id)}
+                    disabled={savingPatientLabels}
                     onChange={()=>toggleSelectedPatientLabel(label.id)}
                   />
                   <span className="label-chip" style={{background: label.color || "#64748B"}}>
@@ -5084,6 +5125,11 @@ export default function InboxPage() {
               <button className="pbtn" disabled={!newLabelName.trim() || savingLabel} onClick={createPatientLabel}>
                 {savingLabel ? (lang === "es" ? "Creando..." : "Creating...") : "+ Crear etiqueta"}
               </button>
+              {savingPatientLabels && (
+                <p style={{marginTop:10,fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>
+                  {lang === "es" ? "Guardando etiquetas..." : "Saving labels..."}
+                </p>
+              )}
             </div>
           </div>
         </div>
