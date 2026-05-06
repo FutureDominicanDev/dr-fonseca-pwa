@@ -45,6 +45,15 @@ type RoomAccess = {
   } | null;
 };
 
+type PatientTextSize = "normal" | "large";
+
+const PATIENT_TEXT_SIZE_STORAGE_KEY = "drf_patient_text_size";
+
+const readPatientTextSize = (): PatientTextSize => {
+  if (typeof window === "undefined") return "large";
+  return window.localStorage.getItem(PATIENT_TEXT_SIZE_STORAGE_KEY) === "normal" ? "normal" : "large";
+};
+
 const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
   const normalized = `${value || ""}`.toLowerCase();
   if (normalized.startsWith("es")) return "es";
@@ -297,7 +306,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [replyDraft, setReplyDraft] = useState("");
   const [editingReplyIndex, setEditingReplyIndex] = useState<number | null>(null);
   const [darkMode, setDarkMode] = useState(false);
-  const [textSize, setTextSize] = useState<"normal" | "large">("normal");
+  const [textSize, setTextSize] = useState<PatientTextSize>(() => readPatientTextSize());
   const [recording, setRecording] = useState(false);
   const [uiLang, setUiLang] = useState<"es" | "en">(() => deviceUiLang());
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
@@ -431,6 +440,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => {
     setUiLang(deviceUiLang());
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(PATIENT_TEXT_SIZE_STORAGE_KEY, textSize);
+  }, [textSize]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

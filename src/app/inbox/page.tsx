@@ -13,10 +13,18 @@ type PhoneCountryOption = { code: string; label: string };
 type MediaTab = "media" | "audio" | "prescriptions" | "forms" | "docs";
 type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
 type InternalNoteVisibility = "team" | "private";
+type StaffFontSizeLevel = "small" | "medium" | "large";
 
 const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
 const MAX_PATIENT_LABELS = 20;
 const LABEL_COLORS = ["#EF4444", "#F97316", "#F59E0B", "#10B981", "#14B8A6", "#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", "#64748B"];
+const STAFF_FONT_SIZE_STORAGE_KEY = "drf_staff_font_size_level";
+
+const readStaffFontSizeLevel = (): StaffFontSizeLevel => {
+  if (typeof window === "undefined") return "large";
+  const stored = window.localStorage.getItem(STAFF_FONT_SIZE_STORAGE_KEY);
+  return stored === "small" || stored === "medium" || stored === "large" ? stored : "large";
+};
 
 const PHONE_COUNTRY_OPTIONS: PhoneCountryOption[] = [
   { code: "+52", label: "🇲🇽 +52 México" },
@@ -601,11 +609,11 @@ export default function InboxPage() {
   const [lang, setLang] = useState<Lang>("es");
   const t = T[lang];
   const [darkMode, setDarkMode] = useState(false);
-  const [fontSizeLevel, setFontSizeLevel] = useState<"small"|"medium"|"large">("medium");
-  const fontSize = fontSizeLevel === "small" ? 17 : fontSizeLevel === "large" ? 22 : 19;
-  const uiBaseSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 18 : 17;
-  const uiLabelSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 17 : 16;
-  const uiSmallSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 16 : 15;
+  const [fontSizeLevel, setFontSizeLevel] = useState<StaffFontSizeLevel>(() => readStaffFontSizeLevel());
+  const fontSize = fontSizeLevel === "small" ? 17 : fontSizeLevel === "large" ? 22 : 20;
+  const uiBaseSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 19 : 18;
+  const uiLabelSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 18 : 17;
+  const uiSmallSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 17 : 16;
 
   const headerBg = "#07334D";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
@@ -1858,6 +1866,11 @@ export default function InboxPage() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("inbox_auto_translate_incoming", autoTranslateIncoming ? "1" : "0");
   }, [autoTranslateIncoming]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STAFF_FONT_SIZE_STORAGE_KEY, fontSizeLevel);
+  }, [fontSizeLevel]);
 
   useEffect(() => {
     setTranslatedIncoming({});
@@ -4416,14 +4429,14 @@ export default function InboxPage() {
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 13px 14px 10px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
         .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-        .search-bar { display: flex; align-items: center; gap: 8px; min-height: 42px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#D5E4F2"}; border-radius: 13px; padding: 8px 12px; box-shadow: ${darkMode?"none":"0 5px 16px rgba(28,66,104,0.06)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+        .search-bar { display: flex; align-items: center; gap: 9px; min-height: 48px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#D5E4F2"}; border-radius: 15px; padding: 10px 14px; box-shadow: ${darkMode?"none":"0 5px 16px rgba(28,66,104,0.06)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
         .search-bar:focus-within { border-color: #2563EB; box-shadow: ${darkMode?"0 0 0 3px rgba(37,99,235,0.22)":"0 0 0 3px rgba(37,99,235,0.12), 0 4px 14px rgba(15,23,42,0.08)"}; }
         .search-bar svg { stroke: ${darkMode?"#CBD5E1":"#64748B"}; }
-        .search-input { flex: 1; border: none; background: transparent; font-size: 15px; outline: none; color: ${textColor}; font-family: inherit; font-weight: 650; min-width: 0; min-height: 24px !important; }
+        .search-input { flex: 1; border: none; background: transparent; font-size: var(--app-ui-font-size); outline: none; color: ${textColor}; font-family: inherit; font-weight: 650; min-width: 0; min-height: 26px !important; }
         .search-input::placeholder { color: ${darkMode?"#94A3B8":"#7C8797"}; opacity: 1; font-weight: 650; }
         .label-filter-row { display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px 0; scrollbar-width: none; }
         .label-filter-row::-webkit-scrollbar { display: none; }
-        .label-chip { min-height: 32px; max-width: 150px; border: none; border-radius: 999px; padding: 6px 10px; color: #FFFFFF; font-size: 13px; font-weight: 900; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; cursor: pointer; }
+        .label-chip { min-height: 36px; max-width: 150px; border: none; border-radius: 999px; padding: 7px 12px; color: #FFFFFF; font-size: var(--app-ui-small-size); font-weight: 900; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; cursor: pointer; }
         .label-chip.all { color: ${textColor}; background: ${darkMode?"#253244":"#EAF2FB"}; border: 1px solid ${borderColor}; }
         .label-chip.active { box-shadow: 0 0 0 2px ${darkMode?"#E5E7EB":"#0F172A"} inset; }
         .patient-label-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
@@ -4444,19 +4457,19 @@ export default function InboxPage() {
         .patient-swipe-action { position: absolute; top: 0; right: 0; bottom: 0; width: 104px; border: none; border-radius: 0 18px 18px 0; background: #0EA5E9; color: #FFFFFF; font-size: var(--app-ui-small-size); font-weight: 900; font-family: inherit; cursor: pointer; z-index: 1; }
         .patient-list { flex: 1; overflow-y: auto; padding: 10px 12px calc(18px + env(safe-area-inset-bottom)); }
         .patient-list::-webkit-scrollbar { display: none; }
-        .patient-row { display: flex; align-items: center; gap: 12px; min-height: 86px; padding: 13px 13px; cursor: pointer; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(102,132,163,0.16)"}; border-radius: 18px; background: ${darkMode?"#15232B":"rgba(255,255,255,0.96)"}; margin-bottom: 9px; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.07)"}; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease; }
+        .patient-row { display: flex; align-items: center; gap: 13px; min-height: 96px; padding: 16px 14px; cursor: pointer; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(102,132,163,0.16)"}; border-radius: 18px; background: ${darkMode?"#15232B":"rgba(255,255,255,0.96)"}; margin-bottom: 9px; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.07)"}; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease; }
         .patient-row:hover { background: ${darkMode?"#1B2D36":"#FFFFFF"}; transform: translateY(-1px); }
         .patient-row.swiped:hover { transform: translateX(-112px); }
         .patient-row.active { background: ${darkMode?"#203744":"#EAF5FF"}; border-color: ${darkMode?"rgba(125,211,252,0.30)":"#B9D8F2"}; }
-        .av { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; position: relative; box-shadow: 0 5px 16px rgba(16,52,83,0.18); }
+        .av { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; position: relative; box-shadow: 0 5px 16px rgba(16,52,83,0.18); }
         .av-badge { position: absolute; top: 0; right: 0; width: 14px; height: 14px; background: #25D366; border-radius: 50%; border: 2px solid ${darkMode ? "#15232B" : "#FFFFFF"}; }
         .av-badge.media { background: #EF4444; }
         .patient-info { flex: 1; min-width: 0; }
         .patient-main-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
-        .patient-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
-	        .patient-time { flex-shrink: 0; font-size: var(--app-ui-small-size); color: ${subTextColor}; font-weight: 750; }
-	        .patient-meta { font-size: var(--app-ui-small-size); color: ${subTextColor}; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
-	        .patient-preview { font-size: var(--app-ui-small-size); color: ${darkMode?"#B6C6D5":"#52677D"}; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
+        .patient-name { font-size: calc(var(--app-ui-font-size) + 2px); font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
+	        .patient-time { flex-shrink: 0; font-size: var(--app-ui-font-size); color: ${subTextColor}; font-weight: 750; }
+	        .patient-meta { font-size: var(--app-ui-small-size); color: ${subTextColor}; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+	        .patient-preview { font-size: var(--app-ui-font-size); color: ${darkMode?"#B6C6D5":"#52677D"}; margin-top: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
         .unread-count { min-width: 24px; height: 24px; padding: 0 8px; background: #25D366; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 850; box-shadow: 0 4px 12px rgba(37,211,102,0.28); }
         .unread-dot { width: 13px; height: 13px; background: #25D366; border-radius: 50%; flex-shrink: 0; }
         .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; transition: transform 0.25s ease; z-index: 20; }
@@ -4470,7 +4483,7 @@ export default function InboxPage() {
         .back-btn { width: 38px; height: 38px; border-radius: 50%; background: ${darkMode?"#1F2C34":"#EAF3FF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: ${darkMode?"#DBEAFE":"#075EA8"}; font-size: 21px; font-weight: 850; transition: background 0.15s; }
         .back-btn:hover { background: ${darkMode?"#263846":"#DCEEFF"}; }
         .chat-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; box-shadow: 0 4px 14px rgba(16,52,83,0.18); }
-        .chat-head-name { font-size: 17px; font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-head-name { font-size: calc(var(--app-ui-font-size) + 2px); font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	        .chat-head-sub { font-size: var(--app-ui-small-size); color: ${subTextColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-weight: 650; }
         .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
