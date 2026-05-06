@@ -50,6 +50,9 @@ const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
   return null;
 };
 
+const HISTORIA_CLINICA_TEMPLATE_URL = "/documents/historia-clinica.pdf";
+const HISTORIA_CLINICA_FILE_NAME = "[FORM] Historia Clinica.pdf";
+
 const deviceUiLang = (): "es" | "en" => {
   if (typeof navigator === "undefined") return "es";
   const options = [navigator.language, ...(navigator.languages || [])];
@@ -67,6 +70,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
   const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
   const [clinicalFormOpen, setClinicalFormOpen] = useState(false);
+  const [documentFolderOpen, setDocumentFolderOpen] = useState(false);
   const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
   const [selectedPrescription, setSelectedPrescription] = useState<Message | null>(null);
   const [lastPrescriptionSeenAt, setLastPrescriptionSeenAt] = useState("");
@@ -90,6 +94,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const clinicalHistoryUploadRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -450,7 +455,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setMenuOpen(false);
   };
 
-  const uploadFile = async (file: File, overrideType?: Message["message_type"]) => {
+  const uploadFile = async (file: File, overrideType?: Message["message_type"], overrideFileName?: string) => {
     if (accessDenied || !accessReady) return null;
 
     const timestamp = new Date().toISOString();
@@ -486,7 +491,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       message_type: messageType,
       content: url,
       file_url: url,
-      file_name: file.name,
+      file_name: overrideFileName || file.name,
       file_type: file.type || "application/octet-stream",
       created_at: timestamp,
       message_hash: messageHash,
@@ -524,6 +529,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (!file) return;
     await uploadFile(file);
     event.target.value = "";
+  };
+
+  const handleClinicalHistoryUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    await uploadFile(file, "file", HISTORIA_CLINICA_FILE_NAME);
+    setDocumentFolderOpen(false);
   };
 
   const handleVideoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -670,6 +683,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       photos: "Photos",
       video: "Video",
       documents: "Prescriptions",
+      documentFolder: "Documento",
+      clinicalHistoryFile: "Historia Clinica",
+      openClinicalHistory: "Open form",
+      uploadCompletedClinicalHistory: "Upload completed form",
+      clinicalHistoryInstructions: "Open the PDF, fill it in, save it, then upload the completed file here.",
       clinicalForm: "Medical history form",
       noPrescriptions: "No prescriptions yet.",
       prescriptionInstructions: "Instructions",
@@ -698,6 +716,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       photos: "Fotos",
       video: "Video",
       documents: "Recetas",
+      documentFolder: "Documento",
+      clinicalHistoryFile: "Historia Clinica",
+      openClinicalHistory: "Abrir formulario",
+      uploadCompletedClinicalHistory: "Subir formulario completo",
+      clinicalHistoryInstructions: "Abre el PDF, llénalo, guárdalo y después sube aquí el archivo completo.",
       clinicalForm: "Historia clínica",
       noPrescriptions: "Todavía no hay recetas.",
       prescriptionInstructions: "Indicaciones",
@@ -932,7 +955,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {labels.documents}
               {newPrescriptionCount > 0 && <span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",minWidth:22,height:22,borderRadius:999,background:"#DC2626",color:"white",display:"grid",placeItems:"center",fontSize:12,fontWeight:900}}>{newPrescriptionCount}</span>}
             </button>
-            <button onClick={() => { setClinicalFormOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.clinicalForm}</button>
+            <button onClick={() => { setDocumentFolderOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.documentFolder}</button>
             <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
             <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
           </div>
@@ -977,6 +1000,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         </button>
 
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
+        <input ref={clinicalHistoryUploadRef} type="file" accept="application/pdf,.pdf" onChange={handleClinicalHistoryUpload} style={{ display: "none" }} />
         <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
       </footer>
 
@@ -1014,6 +1038,34 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 setClinicalFormOpen(false);
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {documentFolderOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: "max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))", zIndex: 26, overflow: "hidden" }} onClick={() => setDocumentFolderOpen(false)}>
+          <div style={{ width: "100%", maxWidth: 420, maxHeight: "calc(100dvh - 36px)", overflowY: "auto", overflowX: "hidden", background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }} onClick={(event) => event.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <strong style={{ fontSize: patientTextBase, lineHeight: 1.35 }}>{labels.documentFolder}</strong>
+              <button onClick={() => setDocumentFolderOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 14, padding: "14px 15px", display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 25 }}>📄</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: patientTextBase, fontWeight: 900, lineHeight: 1.25 }}>{labels.clinicalHistoryFile}</div>
+                    <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 650, lineHeight: 1.45 }}>{labels.clinicalHistoryInstructions}</div>
+                  </div>
+                </div>
+                <a href={HISTORIA_CLINICA_TEMPLATE_URL} target="_blank" rel="noreferrer" style={{ minHeight: 46, borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextBase, fontWeight: 900 }}>
+                  {labels.openClinicalHistory}
+                </a>
+                <button type="button" onClick={() => clinicalHistoryUploadRef.current?.click()} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit" }}>
+                  {labels.uploadCompletedClinicalHistory}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

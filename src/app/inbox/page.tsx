@@ -1572,6 +1572,9 @@ export default function InboxPage() {
 
   const describeIncomingMessage = useCallback((message: RoomMessageSummary) => {
     if (parseCallRequestMessage(message.content)) return t.incomingCallRequest;
+    if (`${message.file_name || ""}`.startsWith("[FORM]")) {
+      return lang==="es" ? "Historia Clinica enviada" : "Historia Clinica submitted";
+    }
     if (message.message_type === "audio") return lang==="es" ? "Nuevo audio" : "New audio";
     if (message.message_type === "video") return lang==="es" ? "Nuevo video" : "New video";
     if (message.message_type === "image") return lang==="es" ? "Nueva imagen" : "New image";
@@ -3184,8 +3187,8 @@ export default function InboxPage() {
       }
       const patientFirstName = patientFullName.trim().split(/\s+/)[0] || patientFullName.trim();
       const welcomeMessage = newPatientLanguage === "en"
-        ? `Hello ${patientFirstName}, welcome. This will be your direct communication channel with our team throughout your care.\n\nPlease tap the + button and open Medical history form to complete your information. Once you save it, our team will be able to review it from your Form folder.\n\nIf you need immediate assistance, press the call button to connect with the clinic. We are here to help you.`
-        : `Hola ${patientFirstName}, bienvenido(a). Este será tu canal de comunicación directo con nuestro equipo durante todo tu proceso de cuidado.\n\nPor favor presiona el botón + y abre Historia clínica para completar tu información. Al guardarla, nuestro equipo podrá revisarla desde tu carpeta Formulario.\n\nSi necesitas asistencia inmediata, presiona el botón de llamada para comunicarte con la clínica. Estamos aquí para ayudarte.`;
+        ? `Hello ${patientFirstName}, welcome. This will be your direct communication channel with our team throughout your care.\n\nPlease tap the + button, open Documento, and fill out the Historia Clinica PDF. After saving it, upload the completed file from that same Documento folder so our team can review it.\n\nIf you need immediate assistance, press the call button to connect with the clinic. We are here to help you.`
+        : `Hola ${patientFirstName}, bienvenido(a). Este será tu canal de comunicación directo con nuestro equipo durante todo tu proceso de cuidado.\n\nPor favor presiona el botón +, abre Documento y llena el PDF Historia Clinica. Después de guardarlo, sube el archivo completo desde esa misma carpeta Documento para que nuestro equipo pueda revisarlo.\n\nSi necesitas asistencia inmediata, presiona el botón de llamada para comunicarte con la clínica. Estamos aquí para ayudarte.`;
       await supabase.from("messages").insert({
         room_id: rm.id,
         content: welcomeMessage,
@@ -3329,6 +3332,7 @@ export default function InboxPage() {
   };
 
   const isPrescriptionEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[MED]");
+  const isClinicalHistoryFileEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[FORM]");
   const isPatientFolderEntry = (entry: any) => {
     const fileName = `${entry?.file_name || ""}`;
     return (
@@ -3347,8 +3351,8 @@ export default function InboxPage() {
   const roomImageVideoEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && (entry.message_type === "image" || entry.message_type === "video"));
   const roomAudioEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && entry.message_type === "audio");
   const roomPrescriptionEntries = roomMediaEntries.filter((entry) => isPrescriptionEntry(entry));
-  const roomFormEntries = roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content));
-  const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry));
+  const roomFormEntries = roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content) || isClinicalHistoryFileEntry(entry));
+  const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry) && !isClinicalHistoryFileEntry(entry));
   const formExportText = (entry: any) => {
     const payload = parseFormMessage(entry.content);
     if (!payload) return "";
@@ -4880,6 +4884,19 @@ export default function InboxPage() {
                 {roomFormEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{t.noForms}</div>}
                 {roomFormEntries.map((entry:any)=> {
                   const payload = parseFormMessage(entry.content);
+                  if (!payload && isClinicalHistoryFileEntry(entry)) {
+                    return (
+                      <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
+                        <span style={{fontSize:22}}>📄</span>
+                        <div style={{display:"grid",gap:3,minWidth:0}}>
+                          <div style={{fontWeight:900,fontSize:15,overflowWrap:"anywhere"}}>Historia Clinica</div>
+                          <div style={{fontWeight:800,fontSize:12,color:subTextColor,overflowWrap:"anywhere"}}>
+                            {lang==="es" ? "Enviado por paciente" : "Submitted by patient"} · {fmtDateLabel(entry.created_at || "")}
+                          </div>
+                        </div>
+                      </a>
+                    );
+                  }
                   if (!payload) return null;
                   return (
                     <div key={entry.id} style={{display:"grid",gap:10,padding:12,borderRadius:16,background:cardBg,border:`1px solid ${borderColor}`}}>
