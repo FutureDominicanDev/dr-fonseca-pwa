@@ -10,12 +10,13 @@ const content = {
   es: {
     title: "Soporte",
     subtitle: "Ayuda para pacientes y personal que usan el Portal Medico Dr. Fonseca.",
-    updated: "30 de abril de 2026",
+    updated: "6 de mayo de 2026",
     sections: [
       {
         title: "Contacto",
         body: [
-          "Para ayuda con acceso, mensajes, notificaciones, archivos, videollamadas o problemas del portal, escribe a siluetybodyart@gmail.com.",
+          "Para ayuda con acceso, mensajes, notificaciones, archivos, videollamadas o problemas del portal, escribe a support@elbanova.tech.",
+          "El soporte tecnico del portal es atendido por Elbanova LLC para el Portal Medico Dr. Fonseca.",
           "Tambien puedes llamar a la clinica al +52 333 231 4480 para soporte operativo relacionado con tu atencion.",
         ],
       },
@@ -38,12 +39,13 @@ const content = {
   en: {
     title: "Support",
     subtitle: "Help for patients and staff using the Dr. Fonseca Medical Portal.",
-    updated: "April 30, 2026",
+    updated: "May 6, 2026",
     sections: [
       {
         title: "Contact",
         body: [
-          "For help with access, messages, notifications, files, video calls, or portal issues, write to siluetybodyart@gmail.com.",
+          "For help with access, messages, notifications, files, video calls, or portal issues, write to support@elbanova.tech.",
+          "Portal technical support is handled by Elbanova LLC for the Dr. Fonseca Medical Portal.",
           "You may also call the clinic at +52 333 231 4480 for operational support related to your care.",
         ],
       },

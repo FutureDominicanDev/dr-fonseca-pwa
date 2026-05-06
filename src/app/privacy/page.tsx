@@ -10,8 +10,15 @@ const content = {
   es: {
     title: "Politica de privacidad",
     subtitle: "Esta pagina explica como el Portal Medico Dr. Fonseca usa y protege la informacion de pacientes y personal.",
-    updated: "30 de abril de 2026",
+    updated: "6 de mayo de 2026",
     sections: [
+      {
+        title: "Responsable y contacto",
+        body: [
+          "El Portal Medico Dr. Fonseca es desarrollado y mantenido por Elbanova LLC para apoyar la atencion de pacientes del Dr. Miguel Fonseca / Siluety Plastic Surgery.",
+          "Contacto de privacidad y soporte: support@elbanova.tech. Sitio del desarrollador: https://www.elbanova.tech. Sitio del doctor: https://drfonsecacirujanoplastico.com.",
+        ],
+      },
       {
         title: "Informacion que usa el portal",
         body: [
@@ -44,7 +51,7 @@ const content = {
         title: "Derechos y contacto",
         body: [
           "Puedes solicitar acceso, correccion o eliminacion de datos usando la pagina de eliminacion de cuenta o contactando a soporte.",
-          "Contacto de privacidad: siluetybodyart@gmail.com. Portal: portal.drfonsecacirujanoplastico.com.",
+          "Contacto de privacidad: support@elbanova.tech. Portal: portal.drfonsecacirujanoplastico.com.",
         ],
       },
     ],
@@ -52,8 +59,15 @@ const content = {
   en: {
     title: "Privacy policy",
     subtitle: "This page explains how the Dr. Fonseca Medical Portal uses and protects patient and staff information.",
-    updated: "April 30, 2026",
+    updated: "May 6, 2026",
     sections: [
+      {
+        title: "Controller and contact",
+        body: [
+          "The Dr. Fonseca Medical Portal is developed and maintained by Elbanova LLC to support patient care for Dr. Miguel Fonseca / Siluety Plastic Surgery.",
+          "Privacy and support contact: support@elbanova.tech. Developer website: https://www.elbanova.tech. Doctor website: https://drfonsecacirujanoplastico.com.",
+        ],
+      },
       {
         title: "Information the portal uses",
         body: [
@@ -86,7 +100,7 @@ const content = {
         title: "Rights and contact",
         body: [
           "You may request access, correction, or deletion of data using the account deletion page or by contacting support.",
-          "Privacy contact: siluetybodyart@gmail.com. Portal: portal.drfonsecacirujanoplastico.com.",
+          "Privacy contact: support@elbanova.tech. Portal: portal.drfonsecacirujanoplastico.com.",
         ],
       },
     ],

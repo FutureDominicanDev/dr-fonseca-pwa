@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import LegalPage from "../_components/LegalPage";
 
 const deletionMailtoEs =
-  "mailto:siluetybodyart@gmail.com?subject=Solicitud%20de%20eliminacion%20de%20cuenta%20-%20Portal%20Dr.%20Fonseca&body=Nombre%20completo%3A%0ATelefono%20o%20correo%20asociado%3A%0ARol%20%28paciente%20o%20staff%29%3A%0ADescribe%20tu%20solicitud%3A";
+  "mailto:support@elbanova.tech?subject=Solicitud%20de%20eliminacion%20de%20cuenta%20-%20Portal%20Dr.%20Fonseca&body=Nombre%20completo%3A%0ATelefono%20o%20correo%20asociado%3A%0ARol%20%28paciente%20o%20staff%29%3A%0ADescribe%20tu%20solicitud%3A";
 
 const deletionMailtoEn =
-  "mailto:siluetybodyart@gmail.com?subject=Account%20deletion%20request%20-%20Dr.%20Fonseca%20Portal&body=Full%20name%3A%0APhone%20or%20email%20connected%20to%20the%20account%3A%0ARole%20%28patient%20or%20staff%29%3A%0ADescribe%20your%20request%3A";
+  "mailto:support@elbanova.tech?subject=Account%20deletion%20request%20-%20Dr.%20Fonseca%20Portal&body=Full%20name%3A%0APhone%20or%20email%20connected%20to%20the%20account%3A%0ARole%20%28patient%20or%20staff%29%3A%0ADescribe%20your%20request%3A";
 
 export const metadata: Metadata = {
   title: "Delete account / Eliminar cuenta | Dr. Fonseca Portal Medico",
@@ -16,12 +16,13 @@ const content = {
   es: {
     title: "Eliminar cuenta",
     subtitle: "Usa esta pagina para iniciar una solicitud de eliminacion de cuenta o datos asociados al portal.",
-    updated: "30 de abril de 2026",
+    updated: "6 de mayo de 2026",
     sections: [
       {
         title: "Como iniciar la solicitud",
         body: [
           "Para solicitar eliminacion, envia tu nombre completo, correo o telefono asociado, tu rol en el portal y una descripcion breve de la solicitud.",
+          "Las solicitudes se envian a support@elbanova.tech y pueden coordinarse con la clinica cuando existan obligaciones medicas, legales o de seguridad.",
           "El equipo puede pedir verificacion adicional para confirmar tu identidad y proteger datos medicos o administrativos.",
         ],
       },
@@ -44,12 +45,13 @@ const content = {
   en: {
     title: "Delete account",
     subtitle: "Use this page to start a request to delete an account or data connected to the portal.",
-    updated: "April 30, 2026",
+    updated: "May 6, 2026",
     sections: [
       {
         title: "How to start the request",
         body: [
           "To request deletion, send your full name, connected email or phone, your role in the portal, and a brief description of the request.",
+          "Requests are sent to support@elbanova.tech and may be coordinated with the clinic when medical, legal, or security obligations apply.",
           "The team may ask for additional verification to confirm your identity and protect medical or administrative data.",
         ],
       },
