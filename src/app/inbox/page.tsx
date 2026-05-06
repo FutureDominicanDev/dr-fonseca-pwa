@@ -2066,8 +2066,6 @@ export default function InboxPage() {
       .from("labels")
       .insert({
         name,
-        name_es: name,
-        name_en: name,
         color: newLabelColor,
         scope: "patient",
         created_by: currentUserId,
@@ -2118,8 +2116,6 @@ export default function InboxPage() {
       .filter(Boolean)
       .map((label) => ({
         name: labelName(label as PatientLabel),
-        name_es: (label as PatientLabel).name_es || (label as PatientLabel).name || labelName(label as PatientLabel),
-        name_en: (label as PatientLabel).name_en || (label as PatientLabel).name || labelName(label as PatientLabel),
         color: (label as PatientLabel).color || "#64748B",
         scope: "patient",
         patient_id: activeLabelPatient.id,
@@ -2177,7 +2173,7 @@ export default function InboxPage() {
     setSavingLabel(true);
     const previousKey = labelKey(label);
     const now = new Date().toISOString();
-    const updatePayload = { name, name_es: name, name_en: name, color: editingLabelColor, updated_at: now };
+    const updatePayload = { name, color: editingLabelColor, updated_at: now };
     const definitionResult = await supabase.from("labels").update(updatePayload).eq("id", label.id);
     if (definitionResult.error) {
       setSavingLabel(false);
