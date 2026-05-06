@@ -124,6 +124,22 @@ export type TimelineEntry = {
 };
 
 export const OWNER_EMAIL = PRIMARY_OWNER_EMAIL;
+const INTERNAL_NOTE_PREFIX = "__DRF_INTERNAL_NOTE__:";
+const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
+
+export const parseInternalNoteText = (content?: string | null) => {
+  const text = `${content || ""}`;
+  if (!text.startsWith(INTERNAL_NOTE_PREFIX)) return text;
+  try {
+    const parsed = JSON.parse(text.slice(INTERNAL_NOTE_PREFIX.length));
+    return `${parsed?.body || ""}`.trim();
+  } catch {
+    return text;
+  }
+};
+
+export const isStaffRecordPhotoMessage = (message: MessageRecord) =>
+  Boolean(message.is_internal && message.message_type === "image" && `${message.file_name || ""}`.startsWith(STAFF_RECORD_PHOTO_PREFIX));
 
 export const adminLabel = (level: AdminLevel) =>
   (
@@ -275,6 +291,7 @@ export const downloadFile = (filename: string, content: string, type: string) =>
 
 export const messageTypeLabel = (message: MessageRecord) => {
   if (`${message.content || ""}`.startsWith("__DRF_FORM_MESSAGE__:")) return "Formulario";
+  if (isStaffRecordPhotoMessage(message)) return "Foto interna";
   if (message.is_internal) return "Nota interna";
   if (message.message_type === "image") return "Imagen";
   if (message.message_type === "video") return "Video";
@@ -286,6 +303,7 @@ export const messageTypeLabel = (message: MessageRecord) => {
 export const messageReason = (message: MessageRecord, procedure: ProcedureRecord) => {
   const rawName = message.file_name || "";
   if (`${message.content || ""}`.startsWith("__DRF_FORM_MESSAGE__:")) return "Historia Clinica";
+  if (isStaffRecordPhotoMessage(message)) return "Archivo interno del equipo";
   if (message.is_internal) return "Seguimiento interno del equipo";
   if (rawName.startsWith("[MED]")) return "Seguimiento de medicamento";
   if (rawName.startsWith("[BEFORE]")) return "Material preoperatorio";
@@ -301,7 +319,10 @@ export const messageDetailsHtml = (message: MessageRecord) => {
   if (`${message.content || ""}`.startsWith("__DRF_FORM_MESSAGE__:")) {
     return "Historia Clinica enviada";
   }
-  const fileName = escapeHtml((message.file_name || "").replace(/^\[(MED|BEFORE|FORM)\]\s*/i, "")) || "Archivo";
+  if (message.is_internal && message.message_type === "text") {
+    return escapeHtml(parseInternalNoteText(message.content)) || "Nota interna sin contenido";
+  }
+  const fileName = escapeHtml((message.file_name || "").replace(/^\[(MED|BEFORE|FORM|STAFF_RECORD)\]\s*/i, "")) || "Archivo";
   const url = escapeHtml(message.content);
 
   if (message.message_type === "image" || message.message_type === "video" || message.message_type === "audio" || message.message_type === "file") {

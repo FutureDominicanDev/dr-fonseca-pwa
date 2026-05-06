@@ -10,7 +10,7 @@ import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 type Lang = "es" | "en";
 type FileCategory = "general" | "medication" | "before_photo";
 type PhoneCountryOption = { code: string; label: string };
-type MediaTab = "media" | "audio" | "prescriptions" | "forms" | "docs";
+type MediaTab = "internal" | "media" | "audio" | "prescriptions" | "forms" | "docs";
 type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
 type InternalNoteVisibility = "team" | "private";
 type StaffFontSizeLevel = "small" | "medium" | "large";
@@ -19,11 +19,18 @@ const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", 
 const MAX_PATIENT_LABELS = 20;
 const LABEL_COLORS = ["#EF4444", "#F97316", "#F59E0B", "#10B981", "#14B8A6", "#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", "#64748B"];
 const STAFF_FONT_SIZE_STORAGE_KEY = "drf_staff_font_size_level";
+const STAFF_RECORD_ALERTS_MUTED_KEY = "drf_staff_record_alerts_muted";
+const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
 
 const readStaffFontSizeLevel = (): StaffFontSizeLevel => {
   if (typeof window === "undefined") return "large";
   const stored = window.localStorage.getItem(STAFF_FONT_SIZE_STORAGE_KEY);
   return stored === "small" || stored === "medium" || stored === "large" ? stored : "large";
+};
+
+const readStaffRecordAlertsMuted = () => {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(STAFF_RECORD_ALERTS_MUTED_KEY) === "1";
 };
 
 const PHONE_COUNTRY_OPTIONS: PhoneCountryOption[] = [
@@ -183,6 +190,19 @@ const T = {
     notePrivate: "Solo para mí",
     privateNoteBadge: "Privada",
     teamNoteBadge: "Equipo",
+    staffRecord: "Archivo interno",
+    staffRecordHint: "Notas y fotos visibles solo para el equipo asignado. El paciente no puede ver esta sección.",
+    staffRecordOnlyTeam: "Privado del equipo",
+    staffRecordPhotos: "Fotos internas",
+    staffRecordNoPhotos: "Todavía no hay fotos internas para este caso.",
+    staffRecordUploadPhoto: "Subir foto interna",
+    staffRecordUploading: "Subiendo...",
+    staffRecordNewPhoto: "Nueva foto interna",
+    staffRecordNewNote: "Nueva nota interna",
+    staffRecordAlerts: "Alertas de notas y fotos internas",
+    staffRecordAlertsHint: "Muestra avisos cuando alguien del equipo asignado agrega una nota o foto al expediente.",
+    staffRecordAlertsOn: "Alertas activadas",
+    staffRecordAlertsOff: "Alertas pausadas",
     uploadedBy: "Subido por",
     noTeamSelected: "Si no seleccionas a nadie, se asignará solo la persona que crea el chat.",
     noPatientInfo: "Todavía no hay datos extendidos para este paciente.",
@@ -346,6 +366,19 @@ const T = {
     notePrivate: "Only me",
     privateNoteBadge: "Private",
     teamNoteBadge: "Team",
+    staffRecord: "Internal record",
+    staffRecordHint: "Notes and photos visible only to the assigned care team. The patient cannot see this section.",
+    staffRecordOnlyTeam: "Team private",
+    staffRecordPhotos: "Internal photos",
+    staffRecordNoPhotos: "There are no internal photos for this case yet.",
+    staffRecordUploadPhoto: "Upload internal photo",
+    staffRecordUploading: "Uploading...",
+    staffRecordNewPhoto: "New internal photo",
+    staffRecordNewNote: "New internal note",
+    staffRecordAlerts: "Internal note and photo alerts",
+    staffRecordAlertsHint: "Show alerts when someone on the assigned team adds a note or photo to the record.",
+    staffRecordAlertsOn: "Alerts enabled",
+    staffRecordAlertsOff: "Alerts paused",
     uploadedBy: "Uploaded by",
     noTeamSelected: "If you do not choose anyone, only the room creator will be assigned.",
     noPatientInfo: "There is no extended patient data yet.",
@@ -438,6 +471,12 @@ const safeStorageSegment = (value: string) =>
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48) || "staff";
+
+const isStaffRecordPhotoEntry = (entry: any) =>
+  Boolean(entry?.is_internal && entry?.message_type === "image" && `${entry?.file_name || ""}`.startsWith(STAFF_RECORD_PHOTO_PREFIX));
+
+const staffRecordPhotoName = (entry: any, fallback: string) =>
+  `${entry?.file_name || ""}`.replace(STAFF_RECORD_PHOTO_PREFIX, "").trim() || fallback;
 
 interface QuickReply { shortcut: string; message: string; }
 interface RoomMessageSummary {
@@ -574,6 +613,18 @@ function TopbarActionIcon({ kind }: { kind: "staff" | "labels" | "admin" }) {
       <circle cx="10" cy="7.2" r="3.2" />
       <path d="M20 20v-1.8a3.2 3.2 0 0 0-2.4-3.1" />
       <path d="M15.6 4.2a3.2 3.2 0 0 1 0 6.1" />
+    </svg>
+  );
+}
+
+function AttachmentTrayIcon() {
+  return (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7.5h16" />
+      <path d="M6.5 7.5 8 19h8l1.5-11.5" />
+      <path d="M9 7.5V5.8A2.8 2.8 0 0 1 11.8 3h.4A2.8 2.8 0 0 1 15 5.8v1.7" />
+      <path d="M10 11v4" />
+      <path d="M14 11v4" />
     </svg>
   );
 }
@@ -748,6 +799,9 @@ export default function InboxPage() {
   const [showEmojiMenu, setShowEmojiMenu] = useState(false);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [mediaLibraryTab, setMediaLibraryTab] = useState<MediaTab>("media");
+  const [staffRecordAlertsMuted, setStaffRecordAlertsMuted] = useState(() => readStaffRecordAlertsMuted());
+  const [staffRecordUnreadRooms, setStaffRecordUnreadRooms] = useState<Record<string, boolean>>({});
+  const [uploadingStaffRecordPhoto, setUploadingStaffRecordPhoto] = useState(false);
   const [showCareStaffInvite, setShowCareStaffInvite] = useState(false);
   const [careStaffInviteIds, setCareStaffInviteIds] = useState<string[]>([]);
   const [careStaffSearch, setCareStaffSearch] = useState("");
@@ -777,7 +831,7 @@ export default function InboxPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [patientTyping, setPatientTyping] = useState(false);
-  const [toastAlert, setToastAlert] = useState<{ roomId: string; title: string; body: string; kind?: "message" | "note" } | null>(null);
+  const [toastAlert, setToastAlert] = useState<{ roomId: string; title: string; body: string; kind?: "message" | "note" | "record" } | null>(null);
   const [medicationDraft, setMedicationDraft] = useState("");
   const [savingMedication, setSavingMedication] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
@@ -808,6 +862,7 @@ export default function InboxPage() {
   const profilePicRef = useRef<HTMLInputElement>(null);
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
   const beforePhotosRef = useRef<HTMLInputElement>(null);
+  const staffRecordPhotoInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
   const internalNoteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -1224,8 +1279,10 @@ export default function InboxPage() {
     !!currentUserId &&
     (!!selectedRoom?.created_by && selectedRoom.created_by === currentUserId ||
       selectedRoomTeam.some((member) => member.id === currentUserId));
+  const canUseStaffRecord = isSuperAdmin || currentUserAssignedToSelectedRoom;
   const canViewClinicalHistoryForms = isSuperAdmin && (isOwnerEmail(currentUserEmail) || currentUserAssignedToSelectedRoom);
   const canViewInternalNote = (entry: any) => {
+    if (!canUseStaffRecord) return false;
     const note = parseInternalNote(entry?.content);
     if (note.visibility !== "private") return true;
     return isSuperAdmin || (!!currentUserId && entry?.sender_id === currentUserId);
@@ -1687,10 +1744,10 @@ export default function InboxPage() {
     }
   }, []);
 
-  const showToastAlert = useCallback((roomId: string, title: string, body: string, kind: "message" | "note" = "message") => {
+  const showToastAlert = useCallback((roomId: string, title: string, body: string, kind: "message" | "note" | "record" = "message") => {
     setToastAlert({ roomId, title, body, kind });
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    if (kind !== "note") {
+    if (kind !== "note" && kind !== "record") {
       toastTimeoutRef.current = setTimeout(() => setToastAlert(null), 4500);
     }
   }, []);
@@ -1746,19 +1803,32 @@ export default function InboxPage() {
       .eq("seen", false);
   }, [currentUserId]);
 
+  const clearStaffRecordUnreadRoom = useCallback((roomId?: string | null) => {
+    if (!roomId) return;
+    setStaffRecordUnreadRooms((current) => {
+      if (!current[roomId]) return current;
+      const next = { ...current };
+      delete next[roomId];
+      return next;
+    });
+  }, []);
+
   const openToastRoom = useCallback((mode: "chat" | "read-note" | "add-note" = "chat") => {
     if (!toastAlert) return;
     const room = patients.flatMap((patient) => patient.rooms || []).find((entry: any) => entry.id === toastAlert.roomId) || null;
     if (room) setSelectedRoom(room);
     setMobileView("chat");
+    clearStaffRecordUnreadRoom(toastAlert.roomId);
     if (mode !== "chat") {
-      setShowPatientInfo(true);
+      setMediaLibraryTab("internal");
+      setShowMediaLibrary(true);
+      setShowPatientInfo(false);
       if (mode === "add-note") {
         window.setTimeout(() => internalNoteInputRef.current?.focus(), 120);
       }
     }
     setToastAlert(null);
-  }, [patients, toastAlert]);
+  }, [clearStaffRecordUnreadRoom, patients, toastAlert]);
 
   const markRoomAsRead = useCallback((roomId: string) => {
     if (typeof window !== "undefined") {
@@ -1803,8 +1873,10 @@ export default function InboxPage() {
     const roomId = message.room_id;
     const roomIsAssigned = selectedRoomRef.current?.id === roomId || patients.some((patient: any) => (patient.rooms || []).some((room: any) => room.id === roomId));
     if (!roomIsAssigned) return;
+    const isStaffPhoto = isStaffRecordPhotoEntry(message);
+    if (!isStaffPhoto && message.message_type !== "text") return;
     const parsedNote = parseInternalNote(message.content);
-    if (parsedNote.visibility === "private" && message.sender_id !== currentUserId && !isSuperAdmin) return;
+    if (!isStaffPhoto && parsedNote.visibility === "private" && message.sender_id !== currentUserId && !isSuperAdmin) return;
     const messageKey = incomingMessageKey(message);
     if (typeof window !== "undefined" && messageKey) {
       const lastAlertedMessage = window.localStorage.getItem(alertMessageStorageKey(roomId)) || "";
@@ -1815,20 +1887,27 @@ export default function InboxPage() {
 
     const patientName = roomPatientName(roomId);
     const author = message.sender_name || roleName(message.sender_role);
-    const title = lang === "es" ? `Nota interna · ${patientName}` : `Internal note · ${patientName}`;
+    const title = isStaffPhoto
+      ? (lang === "es" ? `Foto interna · ${patientName}` : `Internal photo · ${patientName}`)
+      : (lang === "es" ? `Nota interna · ${patientName}` : `Internal note · ${patientName}`);
     const rawBody = parsedNote.body.trim();
-    const body = rawBody
+    const body = isStaffPhoto
+      ? `${author}: ${lang === "es" ? "Nueva foto interna agregada al expediente." : "New internal photo added to the record."}`.slice(0, 120)
+      : rawBody
       ? `${author}: ${rawBody}`.slice(0, 120)
       : (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up.");
     const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
     const isActiveRoom = selectedRoomRef.current?.id === roomId;
 
+    setStaffRecordUnreadRooms((current) => ({ ...current, [roomId]: true }));
+    if (staffRecordAlertsMuted) return;
+
     playIncomingTone();
-    showToastAlert(roomId, title, body, "note");
+    showToastAlert(roomId, title, body, isStaffPhoto ? "record" : "note");
     if (!isVisible || !isActiveRoom) {
       pushNotif(title, body);
     }
-  }, [alertMessageStorageKey, incomingMessageKey, lang, patients, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
+  }, [alertMessageStorageKey, currentUserId, incomingMessageKey, isSuperAdmin, lang, patients, playIncomingTone, pushNotif, roomPatientName, showToastAlert, staffRecordAlertsMuted]);
 
   const broadcastTypingState = useCallback((isTyping: boolean, roomId: string, name: string) => {
     if (!typingChannelRef.current) return;
@@ -1906,6 +1985,11 @@ export default function InboxPage() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(STAFF_FONT_SIZE_STORAGE_KEY, fontSizeLevel);
   }, [fontSizeLevel]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STAFF_RECORD_ALERTS_MUTED_KEY, staffRecordAlertsMuted ? "1" : "0");
+  }, [staffRecordAlertsMuted]);
 
   useEffect(() => {
     setTranslatedIncoming({});
@@ -3070,14 +3154,19 @@ export default function InboxPage() {
     setSending(false);
   };
 
-  const saveInternalNote = async () => {
+  const saveInternalNote = async (visibilityOverride?: InternalNoteVisibility) => {
     if (!selectedRoom || !internalNoteDraft.trim() || savingInternalNote) return;
+    if (!canUseStaffRecord) {
+      alert(lang === "es" ? "Solo el equipo asignado puede agregar notas a este expediente." : "Only the assigned care team can add notes to this record.");
+      return;
+    }
     setSavingInternalNote(true);
     const sName = userProfile?.full_name || userProfile?.display_name || "Staff";
     const sRole = userProfile?.role || "staff";
     const sOffice = userProfile?.office_location || selectedRoom?.procedures?.office_location || null;
     const noteBody = internalNoteDraft.trim();
-    const noteContent = serializeInternalNote(noteBody, internalNoteVisibility);
+    const effectiveVisibility = visibilityOverride || internalNoteVisibility;
+    const noteContent = serializeInternalNote(noteBody, effectiveVisibility);
     const tempId = "temp-note-" + Date.now();
     const tempMessage = {
       id: tempId,
@@ -3115,7 +3204,8 @@ export default function InboxPage() {
     } else if (data) {
       setMessages((prev) => prev.map((entry) => entry.id === tempId ? data : entry));
       setInternalNoteDraft("");
-      if (internalNoteVisibility === "team") sendPushNotification({
+      setMediaLibraryTab("internal");
+      if (effectiveVisibility === "team") sendPushNotification({
           roomId:selectedRoom.id,
           userType:"staff",
           title: lang === "es" ? `Nota interna · ${roomPatientName(selectedRoom.id)}` : `Internal note · ${roomPatientName(selectedRoom.id)}`,
@@ -3127,6 +3217,89 @@ export default function InboxPage() {
     }
 
     setSavingInternalNote(false);
+  };
+
+  const uploadStaffRecordPhoto = async (file: File) => {
+    if (!selectedRoom || !file || uploadingStaffRecordPhoto) return;
+    if (!canUseStaffRecord) {
+      alert(lang === "es" ? "Solo el equipo asignado puede agregar fotos internas a este expediente." : "Only the assigned care team can add internal photos to this record.");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      alert(lang === "es" ? "Selecciona una imagen para el archivo interno." : "Select an image for the internal record.");
+      return;
+    }
+
+    setUploadingStaffRecordPhoto(true);
+    const sName = userProfile?.full_name || userProfile?.display_name || "Staff";
+    const sRole = userProfile?.role || "staff";
+    const sOffice = userProfile?.office_location || selectedRoom?.procedures?.office_location || null;
+    const patientId = selectedRoom?.procedures?.patients?.id || selectedRoom.id;
+    const path = `patients/${patientId}/staff-record/uploaded-by-${safeStorageSegment(sName)}/${Date.now()}-${safeStorageSegment(file.name)}`;
+
+    const { error: uploadError } = await supabase.storage.from("chat-files").upload(path, file);
+    if (uploadError) {
+      setUploadingStaffRecordPhoto(false);
+      alert(uploadError.message || (lang === "es" ? "No pude subir la foto interna." : "I could not upload the internal photo."));
+      return;
+    }
+
+    const { data: publicUrl } = supabase.storage.from("chat-files").getPublicUrl(path);
+    const displayFileName = `${STAFF_RECORD_PHOTO_PREFIX} ${file.name || (lang === "es" ? "Foto interna" : "Internal photo")}`;
+    const tempId = "temp-staff-record-photo-" + Date.now();
+    const tempMessage = {
+      id: tempId,
+      room_id: selectedRoom.id,
+      content: publicUrl.publicUrl,
+      message_type: "image",
+      file_name: displayFileName,
+      file_size: file.size,
+      sender_type: "staff",
+      sender_id: currentUserId || null,
+      sender_name: sName,
+      sender_role: sRole,
+      sender_office: sOffice,
+      is_internal: true,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMessage]);
+
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        room_id: selectedRoom.id,
+        content: publicUrl.publicUrl,
+        message_type: "image",
+        file_name: displayFileName,
+        file_size: file.size,
+        sender_type: "staff",
+        sender_id: currentUserId || null,
+        sender_name: sName,
+        sender_role: sRole,
+        sender_office: sOffice,
+        is_internal: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
+      alert(error.message || (lang === "es" ? "No pude guardar la foto interna." : "I could not save the internal photo."));
+    } else if (data) {
+      setMessages((prev) => prev.map((entry) => entry.id === tempId ? data : entry));
+      setMediaLibraryTab("internal");
+      setShowMediaLibrary(true);
+      sendPushNotification({
+        roomId: selectedRoom.id,
+        userType: "staff",
+        title: lang === "es" ? `Foto interna · ${roomPatientName(selectedRoom.id)}` : `Internal photo · ${roomPatientName(selectedRoom.id)}`,
+        body: `${sName}: ${lang === "es" ? "Nueva foto interna agregada al expediente." : "New internal photo added to the record."}`,
+        url: window.location.href,
+        tag: `staff-record-${selectedRoom.id}`,
+      });
+    }
+
+    setUploadingStaffRecordPhoto(false);
   };
 
   const updateSelectedPatientMedications = (nextValue: string) => {
@@ -3507,6 +3680,13 @@ export default function InboxPage() {
   const roomMediaEntries = messages
     .filter((entry) => !entry.deleted_by_staff && !entry.deleted_by_patient && !entry.is_internal)
     .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const roomInternalNoteEntries = messages
+    .filter((entry) => entry.is_internal && entry.message_type === "text" && !entry.deleted_by_staff && canViewInternalNote(entry))
+    .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const roomStaffRecordPhotoEntries = messages
+    .filter((entry) => isStaffRecordPhotoEntry(entry) && !entry.deleted_by_staff && canUseStaffRecord)
+    .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const selectedRoomHasStaffRecordUnread = Boolean(selectedRoom?.id && staffRecordUnreadRooms[selectedRoom.id]);
   const roomImageVideoEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && (entry.message_type === "image" || entry.message_type === "video"));
   const roomAudioEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && entry.message_type === "audio");
   const roomPrescriptionEntries = roomMediaEntries.filter((entry) => isPrescriptionEntry(entry));
@@ -3935,6 +4115,17 @@ export default function InboxPage() {
               ))}
             </div>
           </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8,lineHeight:1.35}}>{t.staffRecordAlerts}</p>
+            <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginBottom:12}}>{t.staffRecordAlertsHint}</p>
+            <button
+              type="button"
+              onClick={()=>setStaffRecordAlertsMuted((current)=>!current)}
+              style={{width:"100%",minHeight:48,border:"none",borderRadius:14,background:staffRecordAlertsMuted?"#FEF3C7":"#DCFCE7",color:staffRecordAlertsMuted?"#92400E":"#166534",fontFamily:"inherit",fontSize:uiBaseSize,fontWeight:900,cursor:"pointer"}}
+            >
+              {staffRecordAlertsMuted ? t.staffRecordAlertsOff : t.staffRecordAlertsOn}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -4190,18 +4381,7 @@ export default function InboxPage() {
     const patient = selectedRoom?.procedures?.patients;
     const beforeEntries = messages.filter((entry) => (entry.file_name || "").startsWith("[BEFORE]"));
     const activePreOpEntry = preOpViewerIndex !== null ? beforeEntries[preOpViewerIndex] : null;
-    const isOldBrokenNote = (entry: any) => {
-      const content = `${entry?.content || ""}`.trim();
-      return (
-        !content ||
-        (content.startsWith("http") && (content.includes("/patient-photos/") || content.includes("/patient-profiles/") || isImageUrl(content))) ||
-        `${entry?.file_name || ""}`.startsWith("[BEFORE]") ||
-        `${entry?.file_name || ""}`.startsWith("[PROFILE]")
-      );
-    };
-    const internalNotes = messages
-      .filter((entry) => entry.is_internal && !isOldBrokenNote(entry) && canViewInternalNote(entry))
-      .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+    const internalNotes = roomInternalNoteEntries;
     const locale = lang === "es" ? "es-MX" : "en-US";
     const localTime = currentTimeInZone(patient?.timezone, locale);
     const panelCareTeamDirectory = staffDirectory.filter((member) => !member.office_location || member.office_location === selectedRoom?.procedures?.office_location);
@@ -4423,7 +4603,7 @@ export default function InboxPage() {
                 ))}
               </div>
               <textarea ref={internalNoteInputRef} value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:16,resize:"vertical",marginBottom:10,lineHeight:1.5}} />
-              <button onClick={saveInternalNote} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{width:"100%",padding:12,minHeight:48,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingInternalNote || !internalNoteDraft.trim()?0.5:1}}>
+              <button onClick={()=>void saveInternalNote()} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{width:"100%",padding:12,minHeight:48,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingInternalNote || !internalNoteDraft.trim()?0.5:1}}>
                 {savingInternalNote ? (lang==="es" ? "Guardando..." : "Saving...") : t.addInternalNote}
               </button>
             </div>
@@ -4540,7 +4720,8 @@ export default function InboxPage() {
         .msg-input:empty::before { content: attr(data-placeholder); color: #AEAEB2; pointer-events: none; }
         .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
-        .plus-btn { width: 38px; height: 38px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
+        .plus-btn { position: relative; width: 38px; height: 38px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
+        .staff-record-dot { position: absolute; top: -2px; right: -2px; width: 11px; height: 11px; border-radius: 50%; background: #EF4444; border: 2px solid ${darkMode ? "#111B21" : "#F0F2F5"}; box-shadow: 0 2px 6px rgba(239,68,68,0.35); }
         .staff-menu-popup { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: calc(64px + env(safe-area-inset-bottom)); width: min(310px, calc(100vw - 32px)); background: white; border: 1px solid rgba(15,23,42,0.10); border-radius: 18px; overflow: hidden; box-shadow: 0 18px 45px rgba(15,23,42,0.22); z-index: 40; }
         .staff-menu-item { width: 100%; border: none; border-bottom: 1px solid rgba(15,23,42,0.08); background: white; color: #111827; padding: 18px 24px; text-align: left; cursor: pointer; font-family: inherit; font-size: 20px; font-weight: 900; }
         .staff-menu-item:last-child { border-bottom: none; }
@@ -4654,6 +4835,7 @@ export default function InboxPage() {
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
+      <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>
 
       {(captureMode || preparingCapture) && (
         <div className="modal-overlay" onClick={cancelCapture}>
@@ -5053,17 +5235,81 @@ export default function InboxPage() {
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
               {([
+                { key:"internal", label: t.staffRecord },
                 { key:"media", label: lang==="es" ? "Media" : "Media" },
                 { key:"audio", label: lang==="es" ? "Audios" : "Audio" },
                 { key:"prescriptions", label: lang==="es" ? "Recetas" : "Prescriptions" },
                 ...(canViewClinicalHistoryForms ? [{ key:"forms" as MediaTab, label: t.forms }] : []),
                 { key:"docs", label: lang==="es" ? "Archivos" : "Files" },
               ] as { key: MediaTab; label: string }[]).map((tab)=>(
-                <button key={tab.key} onClick={()=>setMediaLibraryTab(tab.key)} style={{padding:"10px 14px",borderRadius:999,border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:800,background:mediaLibraryTab===tab.key?"#DBEAFE":cardBg,color:mediaLibraryTab===tab.key?"#1D4ED8":textColor}}>
+                <button key={tab.key} onClick={()=>{setMediaLibraryTab(tab.key);if(tab.key==="internal")clearStaffRecordUnreadRoom(selectedRoom?.id);}} style={{padding:"10px 14px",borderRadius:999,border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:800,background:mediaLibraryTab===tab.key?"#DBEAFE":cardBg,color:mediaLibraryTab===tab.key?"#1D4ED8":textColor}}>
                   {tab.label}
                 </button>
               ))}
             </div>
+            {mediaLibraryTab==="internal" && (
+              <div style={{display:"grid",gap:12}}>
+                <div style={{padding:14,borderRadius:16,background:darkMode?"rgba(37,99,235,0.16)":"#EFF6FF",border:`1px solid ${darkMode?"rgba(147,197,253,0.24)":"#BFDBFE"}`}}>
+                  <div style={{fontSize:13,fontWeight:900,color:"#1D4ED8",textTransform:"uppercase",letterSpacing:0.6,marginBottom:5}}>{t.staffRecordOnlyTeam}</div>
+                  <div style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45}}>{t.staffRecordHint}</div>
+                </div>
+                {!canUseStaffRecord ? (
+                  <div style={{fontSize:uiBaseSize,color:subTextColor,fontWeight:800,lineHeight:1.45}}>{lang==="es" ? "Solo el equipo asignado puede abrir este archivo interno." : "Only the assigned care team can open this internal record."}</div>
+                ) : (
+                  <>
+                    <div style={{display:"grid",gap:10,padding:14,borderRadius:16,background:cardBg,border:`1px solid ${borderColor}`}}>
+                      <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{t.internalNotes}</div>
+                      {roomInternalNoteEntries.length===0 ? (
+                        <div style={{fontSize:14,color:subTextColor,fontWeight:700}}>{t.noInternalNotes}</div>
+                      ) : (
+                        <div style={{display:"grid",gap:10}}>
+                          {roomInternalNoteEntries.map((note:any)=>(
+                            <div key={note.id} style={{padding:12,borderRadius:14,background:darkMode?"#111827":"#FFFFFF",border:`1px solid ${borderColor}`}}>
+                              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                                <strong style={{fontSize:14,color:textColor,overflowWrap:"anywhere"}}>{note.sender_name && note.sender_name !== "Sistema" ? note.sender_name : roleName(note.sender_role)}</strong>
+                                <span style={{fontSize:12,color:subTextColor,fontWeight:800}}>{fmtDateLabel(note.created_at || "")} · {fmtTime(note.created_at || "")}</span>
+                              </div>
+                              <div style={{fontSize:15,color:textColor,lineHeight:1.5,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{internalNoteText(note)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <textarea ref={internalNoteInputRef} value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:16,resize:"vertical",lineHeight:1.5}} />
+                      <button type="button" onClick={()=>void saveInternalNote("team")} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{minHeight:46,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontFamily:"inherit",fontSize:uiBaseSize,fontWeight:900,cursor:"pointer",opacity:savingInternalNote || !internalNoteDraft.trim()?0.55:1}}>
+                        {savingInternalNote ? (lang==="es" ? "Guardando..." : "Saving...") : t.addInternalNote}
+                      </button>
+                    </div>
+                    <div style={{display:"grid",gap:10,padding:14,borderRadius:16,background:cardBg,border:`1px solid ${borderColor}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{t.staffRecordPhotos}</div>
+                          <div style={{fontSize:13,color:subTextColor,fontWeight:700,marginTop:3}}>{roomStaffRecordPhotoEntries.length} {lang==="es" ? "foto(s)" : "photo(s)"}</div>
+                        </div>
+                        <button type="button" onClick={()=>staffRecordPhotoInputRef.current?.click()} disabled={uploadingStaffRecordPhoto} style={{minHeight:42,border:"none",borderRadius:12,background:"#DCFCE7",color:"#166534",fontFamily:"inherit",fontSize:14,fontWeight:900,cursor:"pointer",padding:"0 14px",opacity:uploadingStaffRecordPhoto?0.6:1}}>
+                          {uploadingStaffRecordPhoto ? t.staffRecordUploading : t.staffRecordUploadPhoto}
+                        </button>
+                      </div>
+                      {roomStaffRecordPhotoEntries.length===0 ? (
+                        <div style={{fontSize:14,color:subTextColor,fontWeight:700}}>{t.staffRecordNoPhotos}</div>
+                      ) : (
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(138px,1fr))",gap:10}}>
+                          {roomStaffRecordPhotoEntries.map((entry:any)=>(
+                            <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",borderRadius:14,overflow:"hidden",textDecoration:"none",background:darkMode?"#111827":"#FFFFFF",border:`1px solid ${borderColor}`}}>
+                              <img src={entry.content} alt="" style={{width:"100%",height:120,objectFit:"cover",display:"block"}} />
+                              <div style={{padding:"8px 10px",display:"grid",gap:3}}>
+                                <div style={{fontSize:12,color:textColor,fontWeight:900,overflowWrap:"anywhere"}}>{staffRecordPhotoName(entry, t.staffRecordPhotos)}</div>
+                                <div style={{fontSize:12,color:subTextColor,fontWeight:800,overflowWrap:"anywhere"}}>{t.uploadedBy}: {mediaUploaderName(entry)}</div>
+                                <div style={{fontSize:12,color:subTextColor,fontWeight:700}}>{fmtDateLabel(entry.created_at || "")}</div>
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             {mediaLibraryTab==="media" && (
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
                 {roomImageVideoEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{lang==="es"?"Sin imágenes o videos todavía.":"No images or videos yet."}</div>}
@@ -5488,25 +5734,27 @@ export default function InboxPage() {
         </div>
 
         {toastAlert && (
-          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:250,width:"min(380px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.96)":"rgba(255,255,255,0.98)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 46px rgba(15,23,42,0.2)",padding:"14px 16px",cursor:"pointer"}} onClick={()=>openToastRoom(toastAlert.kind==="note"?"read-note":"chat")}>
+          <div style={{position:"fixed",top:"calc(env(safe-area-inset-top) + 78px)",right:16,zIndex:250,width:"min(380px, calc(100vw - 32px))",background:darkMode?"rgba(17,24,39,0.96)":"rgba(255,255,255,0.98)",color:textColor,border:`1px solid ${borderColor}`,borderRadius:18,boxShadow:"0 18px 46px rgba(15,23,42,0.2)",padding:"14px 16px",cursor:"pointer"}} onClick={()=>openToastRoom(toastAlert.kind==="note" || toastAlert.kind==="record"?"read-note":"chat")}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:"#25D366",flexShrink:0}} />
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:13,fontWeight:800,color:toastAlert.kind==="note"?"#2563EB":"#16A34A",marginBottom:2}}>
+                <div style={{fontSize:13,fontWeight:800,color:toastAlert.kind==="note" || toastAlert.kind==="record"?"#2563EB":"#16A34A",marginBottom:2}}>
                   {toastAlert.kind==="note"
-                    ? (lang==="es" ? "Nueva nota interna" : "New internal note")
+                    ? t.staffRecordNewNote
+                    : toastAlert.kind==="record"
+                    ? t.staffRecordNewPhoto
                     : (lang==="es" ? "Nuevo mensaje del paciente" : "New patient message")}
                 </div>
                 <div style={{fontSize:15,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.title}</div>
                 <div style={{fontSize:13,color:subTextColor,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{toastAlert.body}</div>
               </div>
-              <button onClick={(event)=>{event.stopPropagation();setToastAlert(null);}} style={{border:"none",background:"transparent",color:subTextColor,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
+              <button onClick={(event)=>{event.stopPropagation();clearStaffRecordUnreadRoom(toastAlert.roomId);setToastAlert(null);}} style={{border:"none",background:"transparent",color:subTextColor,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
             </div>
-            {toastAlert.kind==="note" && (
+            {(toastAlert.kind==="note" || toastAlert.kind==="record") && (
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12}}>
                 <button onClick={(event)=>{event.stopPropagation();openToastRoom("read-note");}} style={{border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",padding:"10px 8px",fontSize:12,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{lang==="es" ? "Leer" : "Read it"}</button>
                 <button onClick={(event)=>{event.stopPropagation();openToastRoom("add-note");}} style={{border:"none",borderRadius:12,background:"#DCFCE7",color:"#166534",padding:"10px 8px",fontSize:12,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{lang==="es" ? "Agregar" : "Add to it"}</button>
-                <button onClick={(event)=>{event.stopPropagation();setToastAlert(null);}} style={{border:"none",borderRadius:12,background:darkMode?"#253244":"#F1F5F9",color:textColor,padding:"10px 8px",fontSize:12,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{lang==="es" ? "Entendido" : "Acknowledge"}</button>
+                <button onClick={(event)=>{event.stopPropagation();clearStaffRecordUnreadRoom(toastAlert.roomId);setToastAlert(null);}} style={{border:"none",borderRadius:12,background:darkMode?"#253244":"#F1F5F9",color:textColor,padding:"10px 8px",fontSize:12,fontWeight:850,fontFamily:"inherit",cursor:"pointer"}}>{lang==="es" ? "Entendido" : "Acknowledge"}</button>
               </div>
             )}
           </div>
@@ -5771,6 +6019,7 @@ export default function InboxPage() {
                           setShowMediaMenu(false);
                           openCapture("photo");
                         }}>{t.capture}</button>
+                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setMediaLibraryTab("internal");setShowMediaLibrary(true);clearStaffRecordUnreadRoom(selectedRoom?.id);}}>{t.staffRecord}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}}>{lang==="es" ? "Recetas" : "Prescriptions"}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowMediaLibrary(true);}}>{t.mediaLibrary}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setCareStaffInviteIds([]);setShowCareStaffInvite(true);}}>{t.addCareStaff}</button>
@@ -5790,7 +6039,10 @@ export default function InboxPage() {
                         </div>
                       </div>
                     )}
-                    <button className="plus-btn" onClick={()=>{setShowEmojiMenu(false);setShowMediaMenu(v=>!v);}} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>{showMediaMenu ? "×" : "+"}</button>
+                    <button className="plus-btn" onClick={()=>{setShowEmojiMenu(false);setShowMediaMenu(v=>!v);}} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>
+                      {showMediaMenu ? "×" : <AttachmentTrayIcon />}
+                      {staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread && <span className="staff-record-dot" aria-hidden="true" />}
+                    </button>
                     <div
                       ref={setComposerNode}
                       className="msg-input"

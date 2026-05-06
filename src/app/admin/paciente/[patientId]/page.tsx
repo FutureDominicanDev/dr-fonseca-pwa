@@ -15,11 +15,13 @@ import {
   getMediaEntries,
   getTimelineEntries,
   initials,
+  isStaffRecordPhotoMessage,
   isMissingColumnError,
   logAdminEvent,
   normalizeAdminLevel,
   normalizeOffice,
   openPrintPreview,
+  parseInternalNoteText,
   normalizeRecordStatus,
   officeLabel,
   procedureStatusLabel,
@@ -190,6 +192,12 @@ export default function AdminPatientRecordPage() {
     noDocuments: isSpanish ? "No hay documentos en el historial." : "There are no documents in the history.",
     mediaTitle: isSpanish ? "Media y archivos" : "Media and files",
     mediaCopy: isSpanish ? "Fotos, videos, audios y archivos generales enviados o recibidos dentro del chat del paciente." : "Photos, videos, audio files, and general files sent or received inside the patient chat.",
+    staffRecordTitle: isSpanish ? "Archivo interno del equipo" : "Internal team record",
+    staffRecordCopy: isSpanish ? "Notas y fotos internas visibles solo para el equipo autorizado. El paciente no ve esta sección." : "Internal notes and photos visible only to authorized staff. The patient cannot see this section.",
+    internalNotes: isSpanish ? "Notas internas" : "Internal notes",
+    internalPhotos: isSpanish ? "Fotos internas" : "Internal photos",
+    noInternalNotes: isSpanish ? "No hay notas internas." : "There are no internal notes.",
+    noInternalPhotos: isSpanish ? "No hay fotos internas." : "There are no internal photos.",
     images: isSpanish ? "Imágenes" : "Images",
     videos: isSpanish ? "Videos" : "Videos",
     audios: isSpanish ? "Audios" : "Audio files",
@@ -282,6 +290,7 @@ export default function AdminPatientRecordPage() {
         )[status];
 
   const messageTypeText = (message: MessageRecord) => {
+    if (isStaffRecordPhotoMessage(message)) return isSpanish ? "Foto interna" : "Internal photo";
     if (message.is_internal) return isSpanish ? "Nota interna" : "Internal note";
     if (message.message_type === "image") return isSpanish ? "Imagen" : "Image";
     if (message.message_type === "video") return isSpanish ? "Video" : "Video";
@@ -292,6 +301,7 @@ export default function AdminPatientRecordPage() {
 
   const messageReasonText = (message: MessageRecord, procedure: ProcedureRecord) => {
     const rawName = message.file_name || "";
+    if (isStaffRecordPhotoMessage(message)) return isSpanish ? "Archivo interno del equipo" : "Internal team record";
     if (message.is_internal) return isSpanish ? "Seguimiento interno del equipo" : "Internal team follow-up";
     if (rawName.startsWith("[MED]")) return isSpanish ? "Seguimiento de medicamento" : "Medication follow-up";
     if (rawName.startsWith("[BEFORE]")) return isSpanish ? "Material preoperatorio" : "Pre-op material";
@@ -337,6 +347,18 @@ export default function AdminPatientRecordPage() {
   const regularFileEntries = useMemo(
     () => media.files.filter((entry) => !`${entry.message.file_name || ""}`.startsWith("[FORM]")),
     [media.files]
+  );
+  const internalNoteEntries = useMemo(
+    () => timeline.filter((entry) => entry.message.is_internal && entry.message.message_type === "text"),
+    [timeline]
+  );
+  const internalPhotoEntries = useMemo(
+    () => timeline.filter((entry) => isStaffRecordPhotoMessage(entry.message)),
+    [timeline]
+  );
+  const publicImageEntries = useMemo(
+    () => media.images.filter((entry) => !isStaffRecordPhotoMessage(entry.message)),
+    [media.images]
   );
   const filteredTimeline = useMemo(() => {
     const q = timelineQuery.trim().toLowerCase();
@@ -831,11 +853,15 @@ export default function AdminPatientRecordPage() {
 
   const renderTimelineBody = (entry: (typeof timeline)[number]) => {
     const { message } = entry;
-    const cleanFileName = (message.file_name || "").replace(/^\[(MED|BEFORE|FORM)\]\s*/i, "");
+    const cleanFileName = (message.file_name || "").replace(/^\[(MED|BEFORE|FORM|STAFF_RECORD)\]\s*/i, "");
     const isClinicalHistoryFile = `${message.file_name || ""}`.startsWith("[FORM]");
 
     if (message.deleted_by_staff || message.deleted_by_patient) {
       return <p className="body-muted">{t.deletedMessage}</p>;
+    }
+
+    if (message.is_internal && message.message_type === "text") {
+      return <p className="body-copy">{parseInternalNoteText(message.content) || (isSpanish ? "Nota interna sin contenido." : "Internal note has no content.")}</p>;
     }
 
     if (message.message_type === "image" && message.content) {
@@ -1195,9 +1221,13 @@ export default function AdminPatientRecordPage() {
                   <strong>{isSpanish ? "Datos" : "Details"}</strong>
                   <span>{isSpanish ? "Información del paciente" : "Patient information"}</span>
                 </button>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("archivo-interno")}>
+                  <strong>{isSpanish ? "Archivo interno" : "Internal record"}</strong>
+                  <span>{internalNoteEntries.length + internalPhotoEntries.length} {isSpanish ? "elemento(s)" : "item(s)"}</span>
+                </button>
                 <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("media")}>
                   <strong>Media</strong>
-                  <span>{media.images.length + media.videos.length + media.audios.length + regularFileEntries.length} {isSpanish ? "archivo(s)" : "file(s)"}</span>
+                  <span>{publicImageEntries.length + media.videos.length + media.audios.length + regularFileEntries.length} {isSpanish ? "archivo(s)" : "file(s)"}</span>
                 </button>
                 <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("historial")}>
                   <strong>{isSpanish ? "Historial" : "History"}</strong>
@@ -1455,6 +1485,41 @@ export default function AdminPatientRecordPage() {
                 </section>
               </div>
 
+              <section className="card" id="archivo-interno" style={{ marginTop: 16 }}>
+                <div className="section-head">
+                  <div>
+                    <p className="section-kicker">{t.staffRecordTitle}</p>
+                    <p className="section-sub">{t.staffRecordCopy}</p>
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <section className="media-card">
+                    <div className="section-head">
+                      <div>
+                        <p className="section-kicker">{t.internalNotes}</p>
+                        <p className="section-sub">{internalNoteEntries.length} {isSpanish ? "nota(s)" : "note(s)"}</p>
+                      </div>
+                    </div>
+                    {internalNoteEntries.length === 0 ? (
+                      <div className="empty-mini">{t.noInternalNotes}</div>
+                    ) : (
+                      <div style={{ display: "grid", gap: 12 }}>
+                        {internalNoteEntries.map((entry) => (
+                          <div key={entry.message.id} className="procedure-item">
+                            <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 4 }}>
+                              {entry.message.sender_name || (isSpanish ? "Staff" : "Staff")}
+                            </p>
+                            <p className="body-muted">{formatDateTimeLocal(entry.message.created_at)}</p>
+                            <p className="body-copy">{parseInternalNoteText(entry.message.content) || (isSpanish ? "Nota interna sin contenido." : "Internal note has no content.")}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                  {renderMediaGroup(t.internalPhotos, internalPhotoEntries, t.noInternalPhotos)}
+                </div>
+              </section>
+
               <section className="card" id="media" style={{ marginTop: 16 }}>
                 <div className="section-head">
                   <div>
@@ -1463,7 +1528,7 @@ export default function AdminPatientRecordPage() {
                   </div>
                 </div>
                 <div className="grid-2">
-                  {renderMediaGroup(t.images, media.images, t.noImages)}
+                  {renderMediaGroup(t.images, publicImageEntries, t.noImages)}
                   {renderMediaGroup(t.videos, media.videos, t.noVideos)}
                   {renderMediaGroup(t.audios, media.audios, t.noAudios)}
                   {renderMediaGroup(t.files, regularFileEntries, t.noFiles)}

@@ -30,6 +30,7 @@ type Message = {
   deleted_by_patient?: boolean | null;
   deleted_by_staff?: boolean | null;
   deleted_at?: string | null;
+  is_internal?: boolean | null;
   created_at?: string;
 };
 
@@ -1358,6 +1359,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
   const visibleChatMessages = messages.filter((message) => {
     const fileName = `${message.file_name || ""}`;
+    if (message.is_internal) return false;
     if (isLegacyRoomCreatedMessage(message)) return false;
     if (fileName === HISTORIA_CLINICA_FILE_NAME || fileName.startsWith("[FORM]") || parseFormMessage(message.content)) return false;
     if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || `${message.content || ""}`.includes("patient-profiles/") || `${message.content || ""}`.includes("patient-photos/")) return false;
