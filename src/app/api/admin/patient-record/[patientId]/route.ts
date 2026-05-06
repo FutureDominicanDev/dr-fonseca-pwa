@@ -14,6 +14,11 @@ const isAdminLevel = (value?: string | null) => {
   return level === "owner" || level === "super_admin";
 };
 
+const canEditClinicalRecord = (profile: any, email: string) =>
+  isOwnerEmail(email) || (`${profile?.role || ""}`.toLowerCase() === "doctor" && isAdminLevel(profile?.admin_level));
+
+const cleanOffice = (value: unknown) => (value === "Guadalajara" || value === "Tijuana" ? value : null);
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ patientId: string }> },
@@ -88,5 +93,103 @@ export async function GET(
     });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Unexpected admin record error." }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ patientId: string }> },
+) {
+  try {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: "Admin record access is not configured." }, { status: 503 });
+    }
+
+    const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!token) return NextResponse.json({ error: "Missing session." }, { status: 401 });
+
+    const { patientId } = await context.params;
+    if (!patientId) return NextResponse.json({ error: "Missing patient id." }, { status: 400 });
+
+    const { data: authData, error: authError } = await authClient.auth.getUser(token);
+    const user = authData?.user;
+    if (authError || !user?.id) return NextResponse.json({ error: "Invalid session." }, { status: 401 });
+
+    const { data: viewerProfile, error: viewerError } = await adminClient
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (viewerError || !viewerProfile?.id) {
+      return NextResponse.json({ error: "Profile not found." }, { status: 403 });
+    }
+
+    const viewerEmail = user.email?.toLowerCase() || "";
+    if (!canEditClinicalRecord(viewerProfile, viewerEmail)) {
+      return NextResponse.json({ error: "Only the doctor with full control can modify this record." }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    if (body?.action === "updatePatient") {
+      const payload = body?.payload || {};
+      const updatePayload = {
+        full_name: `${payload.full_name || ""}`.trim() || null,
+        phone: `${payload.phone || ""}`.trim() || null,
+        email: `${payload.email || ""}`.trim() || null,
+        birthdate: payload.birthdate ? `${payload.birthdate}` : null,
+        preferred_language: payload.preferred_language ? `${payload.preferred_language}` : null,
+        timezone: payload.timezone ? `${payload.timezone}` : null,
+        allergies: `${payload.allergies || ""}`.trim() || null,
+        current_medications: `${payload.current_medications || ""}`.trim() || null,
+      };
+
+      const { data: patient, error: updateError } = await adminClient
+        .from("patients")
+        .update(updatePayload)
+        .eq("id", patientId)
+        .select("*")
+        .maybeSingle();
+      if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+      if (!patient?.id) return NextResponse.json({ error: "The patient record could not be updated." }, { status: 500 });
+
+      return NextResponse.json({ patient });
+    }
+
+    if (body?.action !== "updateProcedure") {
+      return NextResponse.json({ error: "Unsupported record action." }, { status: 400 });
+    }
+
+    const procedureId = `${body?.procedureId || ""}`.trim();
+    if (!procedureId) return NextResponse.json({ error: "Missing procedure id." }, { status: 400 });
+
+    const { data: existingProcedure, error: existingError } = await adminClient
+      .from("procedures")
+      .select("id, patient_id")
+      .eq("id", procedureId)
+      .eq("patient_id", patientId)
+      .maybeSingle();
+    if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
+    if (!existingProcedure?.id) return NextResponse.json({ error: "Procedure not found for this patient." }, { status: 404 });
+
+    const payload = body?.payload || {};
+    const updatePayload = {
+      procedure_name: `${payload.procedure_name || ""}`.trim() || null,
+      office_location: cleanOffice(payload.office_location),
+      surgery_date: payload.surgery_date ? `${payload.surgery_date}` : null,
+    };
+
+    const { data: procedure, error: updateError } = await adminClient
+      .from("procedures")
+      .update(updatePayload)
+      .eq("id", procedureId)
+      .eq("patient_id", patientId)
+      .select("*")
+      .maybeSingle();
+    if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+    if (!procedure?.id) return NextResponse.json({ error: "The procedure could not be updated." }, { status: 500 });
+
+    return NextResponse.json({ procedure });
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || "Unexpected admin record update error." }, { status: 500 });
   }
 }

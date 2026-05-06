@@ -274,6 +274,7 @@ export const downloadFile = (filename: string, content: string, type: string) =>
 };
 
 export const messageTypeLabel = (message: MessageRecord) => {
+  if (`${message.content || ""}`.startsWith("__DRF_FORM_MESSAGE__:")) return "Formulario";
   if (message.is_internal) return "Nota interna";
   if (message.message_type === "image") return "Imagen";
   if (message.message_type === "video") return "Video";
@@ -284,6 +285,7 @@ export const messageTypeLabel = (message: MessageRecord) => {
 
 export const messageReason = (message: MessageRecord, procedure: ProcedureRecord) => {
   const rawName = message.file_name || "";
+  if (`${message.content || ""}`.startsWith("__DRF_FORM_MESSAGE__:")) return "Historia Clinica";
   if (message.is_internal) return "Seguimiento interno del equipo";
   if (rawName.startsWith("[MED]")) return "Seguimiento de medicamento";
   if (rawName.startsWith("[BEFORE]")) return "Material preoperatorio";
@@ -296,6 +298,9 @@ export const messageReason = (message: MessageRecord, procedure: ProcedureRecord
 };
 
 export const messageDetailsHtml = (message: MessageRecord) => {
+  if (`${message.content || ""}`.startsWith("__DRF_FORM_MESSAGE__:")) {
+    return "Historia Clinica enviada";
+  }
   const fileName = escapeHtml((message.file_name || "").replace(/^\[(MED|BEFORE|FORM)\]\s*/i, "")) || "Archivo";
   const url = escapeHtml(message.content);
 

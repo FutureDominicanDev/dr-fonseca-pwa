@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { parseFormMessage } from "@/components/FormMessage";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone } from "@/lib/patientMeta";
 import { useAdminLang } from "@/lib/useAdminLang";
@@ -97,7 +98,7 @@ export default function AdminPatientRecordPage() {
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
   const hasAdminAccess = ["owner", "super_admin"].includes(viewerAdminLevel);
-  const canChangeProcedureStatus = viewerProfile?.role === "doctor" || ["owner", "super_admin"].includes(viewerAdminLevel);
+  const canEditRecord = viewerAdminLevel === "owner" || (viewerAdminLevel === "super_admin" && viewerProfile?.role === "doctor");
   const staffById = useMemo(() => new Map(staffProfiles.map((member) => [member.id, member])), [staffProfiles]);
   const patientStatus = normalizeRecordStatus(patient?.record_status);
 
@@ -135,11 +136,11 @@ export default function AdminPatientRecordPage() {
     relatedOffices: isSpanish ? "Sedes relacionadas" : "Related offices",
     noOffice: isSpanish ? "📍 Sin sede" : "📍 No office",
     heroCopy: isSpanish
-      ? "Aquí puedes revisar datos del paciente, procedimientos, medios y toda la cronología del chat antes de decidir si quieres exportar este expediente."
-      : "Here you can review patient details, procedures, media, and the full chat timeline before deciding whether to export this record.",
+      ? "Documento, procedimiento, sede, datos y medios viven en secciones separadas para revisar el expediente sin buscar entre todo el historial."
+      : "Documents, procedure, office, details, and media live in separate sections so the record can be reviewed without digging through the full history.",
     heroHelper: isSpanish
-      ? "Puedes corregir datos del paciente y del procedimiento aquí mismo. La cronología del chat se conserva sin edición."
-      : "You can correct patient and procedure details here. The chat timeline stays read-only.",
+      ? "Solo el doctor con control total puede modificar datos clínicos. El equipo revisa el expediente en modo lectura."
+      : "Only the doctor with full control can modify clinical data. The team reviews the record in read-only mode.",
     patientPhoto: isSpanish ? "Foto del paciente" : "Patient photo",
     addPhoto: isSpanish ? "Agregar foto" : "Add photo",
     changePhoto: isSpanish ? "Cambiar foto" : "Change photo",
@@ -148,8 +149,8 @@ export default function AdminPatientRecordPage() {
       : "Use this if the patient never uploaded a photo or if you need to correct it.",
     basicInfo: isSpanish ? "Datos del paciente" : "Patient details",
     basicInfoCopy: isSpanish
-      ? "Puedes corregir nombre, teléfono, correo, fecha de nacimiento, idioma, zona horaria, alergias y medicamentos."
-      : "You can correct the patient's name, phone, email, birth date, language, time zone, allergies, and medications.",
+      ? "Nombre, teléfono, correo, fecha de nacimiento, idioma, zona horaria, alergias y medicamentos."
+      : "Name, phone, email, birth date, language, time zone, allergies, and medications.",
     dateHint: isSpanish ? "Usa formato dd/mm/aaaa" : "Use dd/mm/yyyy format",
     patientLanguage: isSpanish ? "Idioma del paciente" : "Patient language",
     patientTimezone: isSpanish ? "Zona horaria del paciente" : "Patient time zone",
@@ -172,13 +173,16 @@ export default function AdminPatientRecordPage() {
     trash: isSpanish ? "🗑️ Papelera" : "🗑️ Trash",
     proceduresTitle: isSpanish ? "Procedimientos y sedes" : "Procedures and offices",
     proceduresCopy: isSpanish
-      ? "Aquí puedes corregir procedimiento, sede, fecha de cirugía y estatus."
-      : "Here you can correct procedure, office, surgery date, and status.",
+      ? "Procedimiento, sede y fecha de cirugía del expediente."
+      : "Procedure, office, and surgery date for this record.",
     selectStatus: isSpanish ? "Selecciona estatus" : "Select status",
     saveProcedure: isSpanish ? "Guardar procedimiento" : "Save procedure",
     savingProcedure: isSpanish ? "Guardando..." : "Saving...",
     statusPermissionHint: isSpanish ? "Solo doctor o super admin puede cambiar estatus." : "Only doctor or super admin can change status.",
     statusPermissionError: isSpanish ? "Solo doctor o super admin puede cambiar el estatus del procedimiento." : "Only doctor or super admin can change procedure status.",
+    recordEditLocked: isSpanish ? "Modo lectura para el equipo. Solo el doctor con control total puede modificar este expediente." : "Team read-only mode. Only the doctor with full control can modify this record.",
+    doctorEditNote: isSpanish ? "Edición disponible solo para el doctor con control total." : "Editing is available only to the doctor with full control.",
+    procedureLockedError: isSpanish ? "Solo el doctor con control total puede modificar procedimiento, sede o fecha." : "Only the doctor with full control can modify procedure, office, or date.",
     noProcedures: isSpanish ? "No hay procedimientos registrados para este paciente." : "There are no procedures registered for this patient.",
     roomsRelated: isSpanish ? "Salas relacionadas" : "Related rooms",
     documentsTitle: isSpanish ? "Documento" : "Documents",
@@ -317,7 +321,10 @@ export default function AdminPatientRecordPage() {
     return bundles[0] || null;
   }, [messages, patient, procedures, rooms]);
 
-  const timeline = useMemo(() => (bundle ? getTimelineEntries(bundle) : []), [bundle]);
+  const timeline = useMemo(
+    () => (bundle ? getTimelineEntries(bundle).filter((entry) => !parseFormMessage(entry.message.content)) : []),
+    [bundle]
+  );
   const media = useMemo(() => (bundle ? getMediaEntries(bundle) : { images: [], videos: [], audios: [], files: [] }), [bundle]);
   const clinicalHistoryEntries = useMemo(() => {
     const latestByRoom = new Map<string, typeof media.files[number]>();
@@ -473,6 +480,10 @@ export default function AdminPatientRecordPage() {
 
   const savePatientInfo = async () => {
     if (!patient) return;
+    if (!canEditRecord) {
+      setPageError(t.procedureLockedError);
+      return;
+    }
     const birthdateIso = patientDraft.birthdate ? displayToIsoDate(patientDraft.birthdate) : "";
     if (patientDraft.birthdate && !birthdateIso) {
       setPageError(isSpanish ? "La fecha de nacimiento debe ir en formato dd/mm/aaaa." : "Birth date must use dd/mm/yyyy format.");
@@ -502,14 +513,34 @@ export default function AdminPatientRecordPage() {
       payloadFieldChanged(patient.current_medications, patientDraft.current_medications.trim(), "current_medications"),
     ].filter(Boolean) as string[];
 
-    const { data, error } = await supabase.from("patients").update(payload).eq("id", patient.id).select().single();
-    setSavingPatient(false);
-
-    if (error) {
-      setPageError(error.message || (isSpanish ? "No pude guardar los datos del paciente." : "I could not save the patient details."));
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    if (!token) {
+      setSavingPatient(false);
+      setPageError(isSpanish ? "Tu sesión expiró. Vuelve a iniciar sesión." : "Your session expired. Please sign in again.");
       return;
     }
 
+    const response = await fetch(`/api/admin/patient-record/${encodeURIComponent(patient.id)}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        action: "updatePatient",
+        payload,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    setSavingPatient(false);
+
+    if (!response.ok || !result?.patient) {
+      setPageError(result?.error || (isSpanish ? "No pude guardar los datos del paciente." : "I could not save the patient details."));
+      return;
+    }
+
+    const data = result.patient as PatientRecord;
     setPatient(data as PatientRecord);
     await logAdminEvent({
       action: "patient_details_updated",
@@ -527,6 +558,10 @@ export default function AdminPatientRecordPage() {
   };
 
   const saveProcedure = async (procedureId: string) => {
+    if (!canEditRecord) {
+      setPageError(t.procedureLockedError);
+      return;
+    }
     const draft = procedureDrafts[procedureId];
     if (!draft) return;
     const currentProcedure = procedures.find((procedure) => procedure.id === procedureId);
@@ -536,65 +571,43 @@ export default function AdminPatientRecordPage() {
       setPageError(isSpanish ? "La fecha de cirugía debe ir en formato dd/mm/aaaa." : "Surgery date must use dd/mm/yyyy format.");
       return;
     }
-    const statusChanged = (draft.status || "") !== (currentProcedure.status || "");
-    if (statusChanged && !canChangeProcedureStatus) {
-      setPageError(t.statusPermissionError);
-      return;
-    }
-
     setSavingProcedureId(procedureId);
     const payload = {
       procedure_name: draft.procedure_name.trim() || null,
       office_location: draft.office_location || null,
-      status: canChangeProcedureStatus ? (draft.status || null) : (currentProcedure.status || null),
       surgery_date: surgeryDateIso || null,
     };
 
-    const { data, error } = await supabase.from("procedures").update(payload).eq("id", procedureId).select().single();
-    setSavingProcedureId("");
-
-    if (error) {
-      setPageError(error.message || (isSpanish ? "No pude guardar el procedimiento." : "I could not save the procedure."));
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    if (!token) {
+      setSavingProcedureId("");
+      setPageError(isSpanish ? "Tu sesión expiró. Vuelve a iniciar sesión." : "Your session expired. Please sign in again.");
       return;
     }
 
-    setProcedures((previous) => previous.map((procedure) => (procedure.id === procedureId ? (data as ProcedureRecord) : procedure)));
-    if (statusChanged) {
-      const relatedRooms = rooms.filter((roomEntry) => roomEntry.procedure_id === procedureId);
-      if (relatedRooms.length > 0) {
-        const previousStatusLabel = procedureStatusLabel(currentProcedure.status, lang);
-        const nextStatusLabel = procedureStatusLabel((data as ProcedureRecord).status, lang);
-        const actorName = viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail || "Staff";
-        const statusMessage =
-          isSpanish
-            ? `⚙️ Estado del procedimiento actualizado: ${previousStatusLabel} → ${nextStatusLabel}. (${actorName})`
-            : `⚙️ Procedure status updated: ${previousStatusLabel} → ${nextStatusLabel}. (${actorName})`;
+    const response = await fetch(`/api/admin/patient-record/${encodeURIComponent(patient?.id || patientId)}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        action: "updateProcedure",
+        procedureId,
+        payload,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    setSavingProcedureId("");
 
-        for (const roomEntry of relatedRooms) {
-          let statusInsert = await supabase.from("messages").insert({
-            room_id: roomEntry.id,
-            content: statusMessage,
-            message_type: "text",
-            sender_type: "staff",
-            sender_name: "Sistema",
-            sender_role: "system",
-            sender_id: viewerProfile?.id || null,
-            is_internal: false,
-          });
-          if (statusInsert.error && isMissingColumnError(statusInsert.error)) {
-            statusInsert = await supabase.from("messages").insert({
-              room_id: roomEntry.id,
-              content: statusMessage,
-              message_type: "text",
-              sender_type: "staff",
-              sender_name: "Sistema",
-              sender_role: "system",
-              sender_id: viewerProfile?.id || null,
-            });
-          }
-        }
-      }
+    if (!response.ok || !result?.procedure) {
+      setPageError(result?.error || (isSpanish ? "No pude guardar el procedimiento." : "I could not save the procedure."));
+      return;
     }
+
+    const data = result.procedure as ProcedureRecord;
+    setProcedures((previous) => previous.map((procedure) => (procedure.id === procedureId ? (data as ProcedureRecord) : procedure)));
     await logAdminEvent({
       action: "procedure_updated",
       entityType: "procedure",
@@ -665,6 +678,10 @@ export default function AdminPatientRecordPage() {
 
   const uploadPatientPhoto = async (file: File) => {
     if (!patient) return;
+    if (!canEditRecord) {
+      setPageError(t.procedureLockedError);
+      return;
+    }
     setPhotoUploading(true);
 
     const storagePath = `patients/${patient.id}/${Date.now()}-${file.name}`;
@@ -1032,8 +1049,12 @@ export default function AdminPatientRecordPage() {
         .photo-fallback { width: 124px; height: 124px; border-radius: 22px; background: linear-gradient(135deg,#111827,#1D4ED8); display: flex; align-items: center; justify-content: center; color: white; font-size: 34px; font-weight: 900; }
         .photo-actions { display: flex; flex-wrap: wrap; gap: 10px; }
         .record-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px; }
-        .record-nav-btn { min-height: 54px; border-radius: 15px; border: 1px solid #D7E7FA; background: #FFFFFF; color: #0E2D4A; font-size: 14px; font-weight: 900; font-family: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(28,66,104,0.05); }
+        .record-nav-btn { min-height: 82px; border-radius: 16px; border: 1px solid #D7E7FA; background: #FFFFFF; color: #0E2D4A; font-family: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(28,66,104,0.05); text-align: left; padding: 14px; }
+        .record-nav-btn strong { display: block; font-size: 16px; font-weight: 950; line-height: 1.25; }
+        .record-nav-btn span { display: block; color: #64748B; font-size: 13px; font-weight: 800; line-height: 1.35; margin-top: 5px; }
         .record-nav-btn:hover, .record-nav-btn:focus-visible { border-color: #93C5FD; background: #F8FBFF; outline: none; }
+        .locked-note { border: 1px solid #DBEAFE; background: #F8FBFF; color: #1D4ED8; border-radius: 16px; padding: 12px 14px; font-size: 14px; font-weight: 850; line-height: 1.5; margin: 0 0 14px; }
+        .readonly-field { min-height: 52px; display: flex; align-items: center; padding: 13px 14px; background: #F8FAFC; border: 1px solid #E5EDF6; border-radius: 14px; color: #111827; font-size: 16px; font-weight: 850; line-height: 1.45; overflow-wrap: anywhere; }
         @media (max-width: 980px) {
           .hero-grid, .grid-2, .grid-4 { grid-template-columns: 1fr; }
           .form-grid { grid-template-columns: 1fr; }
@@ -1161,36 +1182,182 @@ export default function AdminPatientRecordPage() {
                 </div>
               </section>
 
-              <section className="grid-4">
-                <div className="stat-card">
-                  <p className="section-kicker">{isSpanish ? "Procedimientos" : "Procedures"}</p>
-                  <div className="value-display">{procedures.length}</div>
-                  <p className="muted">{isSpanish ? "Relacionados al paciente" : "Linked to the patient"}</p>
-                </div>
-                <div className="stat-card">
-                  <p className="section-kicker">{isSpanish ? "Salas" : "Rooms"}</p>
-                  <div className="value-display">{rooms.length}</div>
-                  <p className="muted">{isSpanish ? "Chats o salas del expediente" : "Chats or record rooms"}</p>
-                </div>
-                <div className="stat-card">
-                  <p className="section-kicker">{isSpanish ? "Eventos" : "Events"}</p>
-                  <div className="value-display">{timeline.length}</div>
-                  <p className="muted">{isSpanish ? "Mensajes y archivos en historial" : "Messages and files in history"}</p>
-                </div>
-                <div className="stat-card">
-                  <p className="section-kicker">{isSpanish ? "Medios" : "Media"}</p>
-                  <div className="value-display">{media.images.length + media.videos.length + media.audios.length + regularFileEntries.length + clinicalHistoryEntries.length}</div>
-                  <p className="muted">{isSpanish ? "Imágenes, videos, audios y archivos" : "Images, videos, audio files, and files"}</p>
-                </div>
+              <section className="record-nav" aria-label={isSpanish ? "Navegación del expediente" : "Record navigation"}>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("documentos")}>
+                  <strong>{isSpanish ? "Documento" : "Documents"}</strong>
+                  <span>{clinicalHistoryEntries.length} {isSpanish ? "Historia Clinica" : "clinical form"}</span>
+                </button>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("procedimientos")}>
+                  <strong>{isSpanish ? "Procedimiento y sede" : "Procedure and office"}</strong>
+                  <span>{procedures.length} {isSpanish ? "procedimiento(s)" : "procedure(s)"}</span>
+                </button>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("datos-paciente")}>
+                  <strong>{isSpanish ? "Datos" : "Details"}</strong>
+                  <span>{isSpanish ? "Información del paciente" : "Patient information"}</span>
+                </button>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("media")}>
+                  <strong>Media</strong>
+                  <span>{media.images.length + media.videos.length + media.audios.length + regularFileEntries.length} {isSpanish ? "archivo(s)" : "file(s)"}</span>
+                </button>
+                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("historial")}>
+                  <strong>{isSpanish ? "Historial" : "History"}</strong>
+                  <span>{timeline.length} {isSpanish ? "evento(s)" : "event(s)"}</span>
+                </button>
               </section>
 
-              <section className="record-nav" aria-label={isSpanish ? "Navegación del expediente" : "Record navigation"}>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("datos-paciente")}>{isSpanish ? "Datos" : "Details"}</button>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("procedimientos")}>{isSpanish ? "Procedimientos" : "Procedures"}</button>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("documentos")}>{isSpanish ? "Documento" : "Documents"}</button>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("media")}>Media</button>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("historial")}>{isSpanish ? "Historial" : "History"}</button>
-              </section>
+              {!canEditRecord && <p className="locked-note">{t.recordEditLocked}</p>}
+
+              <div className="grid-2" style={{ alignItems: "start", marginBottom: 16 }}>
+                <section className="card" id="documentos">
+                  <div className="section-head">
+                    <div>
+                      <p className="section-kicker">{t.documentsTitle}</p>
+                      <p className="section-sub">{t.documentsCopy}</p>
+                    </div>
+                  </div>
+                  {clinicalHistoryEntries.length === 0 ? (
+                    <div className="empty-mini">{t.noDocuments}</div>
+                  ) : (
+                    <div className="procedure-list">
+                      {clinicalHistoryEntries.map((entry) => {
+                        const senderProfile = entry.message.sender_id ? staffById.get(entry.message.sender_id) : null;
+                        const senderOffice =
+                          normalizeOffice(entry.message.sender_office) ||
+                          normalizeOffice(senderProfile?.office_location) ||
+                          normalizeOffice(entry.procedure.office_location) ||
+                          "";
+
+                        return (
+                          <div key={entry.message.id} className="procedure-item">
+                            <p style={{ fontSize: 16, fontWeight: 900, color: "#111827", marginBottom: 4 }}>Historia Clinica.pdf</p>
+                            <p className="body-muted">
+                              {entry.message.sender_name || patient.full_name || t.unnamedPatient} · {roleText(entry.message.sender_role || entry.message.sender_type || "patient")} · {senderOffice ? officeText(senderOffice) : t.noOffice}
+                            </p>
+                            <p className="body-muted">{formatDateTimeLocal(entry.message.created_at)}</p>
+                            <div className="pill-row">
+                              <button type="button" className="open-link" onClick={() => setSelectedClinicalHistoryEntry(entry)}>{t.open}</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                <section className="card" id="procedimientos">
+                  <div className="section-head">
+                    <div>
+                      <p className="section-kicker">{t.proceduresTitle}</p>
+                      <p className="section-sub">{t.proceduresCopy}</p>
+                    </div>
+                  </div>
+                  <div className="procedure-list">
+                    {procedures.length === 0 ? (
+                      <div className="empty-mini">{t.noProcedures}</div>
+                    ) : (
+                      procedures.map((procedure) => {
+                        const relatedRooms = rooms.filter((room) => room.procedure_id === procedure.id);
+                        const draft = procedureDrafts[procedure.id] || {
+                          procedure_name: procedure.procedure_name || "",
+                          office_location: normalizeOffice(procedure.office_location),
+                          status: procedure.status || "",
+                          surgery_date: procedure.surgery_date || "",
+                        };
+
+                        return (
+                          <div key={procedure.id} className="procedure-item">
+                            <div className="form-grid">
+                              <div>
+                                <label className="field-label">{isSpanish ? "Procedimiento" : "Procedure"}</label>
+                                {canEditRecord ? (
+                                  <input
+                                    className="line-input"
+                                    value={draft.procedure_name}
+                                    onChange={(event) =>
+                                      setProcedureDrafts((prev) => ({
+                                        ...prev,
+                                        [procedure.id]: { ...draft, procedure_name: event.target.value },
+                                      }))
+                                    }
+                                  />
+                                ) : (
+                                  <div className="readonly-field">{procedure.procedure_name || (isSpanish ? "Sin procedimiento" : "No procedure")}</div>
+                                )}
+                              </div>
+                              <div>
+                                <label className="field-label">{isSpanish ? "Fecha de cirugía" : "Surgery date"}</label>
+                                {canEditRecord ? (
+                                  <input
+                                    className="line-input"
+                                    inputMode="numeric"
+                                    placeholder={t.dateHint}
+                                    value={draft.surgery_date}
+                                    onChange={(event) =>
+                                      setProcedureDrafts((prev) => ({
+                                        ...prev,
+                                        [procedure.id]: { ...draft, surgery_date: formatDateTyping(event.target.value) },
+                                      }))
+                                    }
+                                  />
+                                ) : (
+                                  <div className="readonly-field">{isoToDisplayDate(procedure.surgery_date) || t.noBirthdate}</div>
+                                )}
+                              </div>
+                              <div style={{ gridColumn: "1 / -1" }}>
+                                <label className="field-label">{isSpanish ? "Sede" : "Office"}</label>
+                                {canEditRecord ? (
+                                  <div className="pill-row" style={{ marginTop: 0 }}>
+                                    {(["Guadalajara", "Tijuana"] as Office[]).map((office) => (
+                                      <button
+                                        key={`${procedure.id}-${office}`}
+                                        className="ghost-btn"
+                                        style={{
+                                          background: draft.office_location === office ? "#DBEAFE" : "#EFF3F8",
+                                          color: draft.office_location === office ? "#1D4ED8" : "#111827",
+                                        }}
+                                        onClick={() =>
+                                          setProcedureDrafts((prev) => ({
+                                            ...prev,
+                                            [procedure.id]: { ...draft, office_location: office },
+                                          }))
+                                        }
+                                      >
+                                        {office === "Guadalajara" ? "🏙️ Guadalajara" : "🌊 Tijuana"}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="readonly-field">{officeText(normalizeOffice(procedure.office_location))}</div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="pill-row">
+                              <span className="meta-badge" style={{ color: "#166534", background: "#ECFDF5" }}>
+                                {t.roomsRelated}: {relatedRooms.length}
+                              </span>
+                              <span className="meta-badge" style={{ color: "#1D4ED8", background: "#EFF6FF" }}>
+                                {officeText(normalizeOffice(procedure.office_location))}
+                              </span>
+                            </div>
+
+                            {canEditRecord && (
+                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+                                <button className="main-btn" onClick={() => saveProcedure(procedure.id)} disabled={savingProcedureId === procedure.id}>
+                                  {savingProcedureId === procedure.id ? t.savingProcedure : t.saveProcedure}
+                                </button>
+                                <span className="meta-badge" style={{ color: "#1D4ED8", background: "#EFF6FF" }}>
+                                  {t.doctorEditNote}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </section>
+              </div>
 
               <div className="grid-2">
                 <section className="card" id="datos-paciente">
@@ -1204,23 +1371,23 @@ export default function AdminPatientRecordPage() {
                   <div className="form-grid">
                     <div>
                       <label className="field-label">{isSpanish ? "Nombre completo" : "Full name"}</label>
-                      <input className="line-input" value={patientDraft.full_name} onChange={(event) => setPatientDraft((prev) => ({ ...prev, full_name: event.target.value }))} />
+                      <input className="line-input" disabled={!canEditRecord} value={patientDraft.full_name} onChange={(event) => setPatientDraft((prev) => ({ ...prev, full_name: event.target.value }))} />
                     </div>
                     <div>
                       <label className="field-label">{isSpanish ? "Teléfono" : "Phone"}</label>
-                      <input className="line-input" value={patientDraft.phone} onChange={(event) => setPatientDraft((prev) => ({ ...prev, phone: event.target.value }))} />
+                      <input className="line-input" disabled={!canEditRecord} value={patientDraft.phone} onChange={(event) => setPatientDraft((prev) => ({ ...prev, phone: event.target.value }))} />
                     </div>
                     <div>
                       <label className="field-label">{isSpanish ? "Correo" : "Email"}</label>
-                      <input className="line-input" type="email" value={patientDraft.email} onChange={(event) => setPatientDraft((prev) => ({ ...prev, email: event.target.value }))} />
+                      <input className="line-input" disabled={!canEditRecord} type="email" value={patientDraft.email} onChange={(event) => setPatientDraft((prev) => ({ ...prev, email: event.target.value }))} />
                     </div>
                     <div>
                       <label className="field-label">{isSpanish ? "Fecha de nacimiento" : "Birth date"}</label>
-                      <input className="line-input" inputMode="numeric" placeholder={t.dateHint} value={patientDraft.birthdate} onChange={(event) => setPatientDraft((prev) => ({ ...prev, birthdate: formatDateTyping(event.target.value) }))} />
+                      <input className="line-input" disabled={!canEditRecord} inputMode="numeric" placeholder={t.dateHint} value={patientDraft.birthdate} onChange={(event) => setPatientDraft((prev) => ({ ...prev, birthdate: formatDateTyping(event.target.value) }))} />
                     </div>
                     <div>
                       <label className="field-label">{t.patientLanguage}</label>
-                      <select className="line-input" value={patientDraft.preferred_language} onChange={(event) => setPatientDraft((prev) => ({ ...prev, preferred_language: event.target.value }))}>
+                      <select className="line-input" disabled={!canEditRecord} value={patientDraft.preferred_language} onChange={(event) => setPatientDraft((prev) => ({ ...prev, preferred_language: event.target.value }))}>
                         {PATIENT_LANGUAGE_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{isSpanish ? option.labelEs : option.labelEn}</option>
                         ))}
@@ -1228,7 +1395,7 @@ export default function AdminPatientRecordPage() {
                     </div>
                     <div>
                       <label className="field-label">{t.patientTimezone}</label>
-                      <select className="line-input" value={patientDraft.timezone} onChange={(event) => setPatientDraft((prev) => ({ ...prev, timezone: event.target.value }))}>
+                      <select className="line-input" disabled={!canEditRecord} value={patientDraft.timezone} onChange={(event) => setPatientDraft((prev) => ({ ...prev, timezone: event.target.value }))}>
                         {PATIENT_TIMEZONE_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
@@ -1236,19 +1403,21 @@ export default function AdminPatientRecordPage() {
                     </div>
                     <div style={{ gridColumn: "1 / -1" }}>
                       <label className="field-label">{t.patientAllergies}</label>
-                      <textarea className="line-input" rows={3} value={patientDraft.allergies} onChange={(event) => setPatientDraft((prev) => ({ ...prev, allergies: event.target.value }))} />
+                      <textarea className="line-input" disabled={!canEditRecord} rows={3} value={patientDraft.allergies} onChange={(event) => setPatientDraft((prev) => ({ ...prev, allergies: event.target.value }))} />
                     </div>
                     <div style={{ gridColumn: "1 / -1" }}>
                       <label className="field-label">{t.patientMedications}</label>
-                      <textarea className="line-input" rows={3} value={patientDraft.current_medications} onChange={(event) => setPatientDraft((prev) => ({ ...prev, current_medications: event.target.value }))} />
+                      <textarea className="line-input" disabled={!canEditRecord} rows={3} value={patientDraft.current_medications} onChange={(event) => setPatientDraft((prev) => ({ ...prev, current_medications: event.target.value }))} />
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-                    <button className="main-btn" onClick={savePatientInfo} disabled={savingPatient}>
-                      {savingPatient ? t.savingPatient : t.savePatient}
-                    </button>
-                  </div>
+                  {canEditRecord && (
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+                      <button className="main-btn" onClick={savePatientInfo} disabled={savingPatient}>
+                        {savingPatient ? t.savingPatient : t.savePatient}
+                      </button>
+                    </div>
+                  )}
 
                   <div className="procedure-list" style={{ marginTop: 16 }}>
                     <div className="procedure-item">
@@ -1276,173 +1445,15 @@ export default function AdminPatientRecordPage() {
                     <div className="photo-fallback">{initials(patient.full_name)}</div>
                   )}
 
-                  <div className="photo-actions">
-                    <button className="main-btn" onClick={() => photoInputRef.current?.click()} disabled={photoUploading}>
-                      {photoUploading ? (isSpanish ? "Subiendo..." : "Uploading...") : patient.profile_picture_url ? t.changePhoto : t.addPhoto}
-                    </button>
-                  </div>
-
-                  <div className="procedure-item">
-                    <p style={{ fontSize: 14, fontWeight: 900, color: "#111827", marginBottom: 6 }}>{t.recordStatus}</p>
-                    <p className="muted" style={{ marginBottom: 10 }}>{t.recordStatusCopy}</p>
-                    <div className="pill-row">
-                      {([
-                        ["active", t.active],
-                        ["archived", t.archived],
-                        ["trash", t.trash],
-                      ] as Array<[PatientRecordStatus, string]>).map(([status, label]) => (
-                        <button
-                          key={status}
-                          className="ghost-btn"
-                          style={{
-                            background: patientStatus === status ? `${recordStatusColor(status)}18` : "#EFF3F8",
-                            color: patientStatus === status ? recordStatusColor(status) : "#111827",
-                            opacity: statusSaving && statusSaving !== status ? 0.7 : 1,
-                          }}
-                          disabled={Boolean(statusSaving)}
-                          onClick={() => changeRecordStatus(status)}
-                        >
-                          {statusSaving === status ? (isSpanish ? "Guardando..." : "Saving...") : label}
-                        </button>
-                      ))}
+                  {canEditRecord && (
+                    <div className="photo-actions">
+                      <button className="main-btn" onClick={() => photoInputRef.current?.click()} disabled={photoUploading}>
+                        {photoUploading ? (isSpanish ? "Subiendo..." : "Uploading...") : patient.profile_picture_url ? t.changePhoto : t.addPhoto}
+                      </button>
                     </div>
-                    <p className="muted" style={{ marginTop: 10 }}>
-                      {isSpanish ? "Estado actual" : "Current status"}: {recordStatusText(patientStatus)}
-                    </p>
-                  </div>
+                  )}
                 </section>
               </div>
-
-              <section className="card" id="procedimientos" style={{ marginTop: 16 }}>
-                <div className="section-head">
-                  <div>
-                    <p className="section-kicker">{t.proceduresTitle}</p>
-                    <p className="section-sub">{t.proceduresCopy}</p>
-                  </div>
-                </div>
-                <div className="procedure-list">
-                  {procedures.length === 0 ? (
-                    <div className="empty-mini">{t.noProcedures}</div>
-                  ) : (
-                    procedures.map((procedure) => {
-                      const relatedRooms = rooms.filter((room) => room.procedure_id === procedure.id);
-                      const draft = procedureDrafts[procedure.id] || {
-                        procedure_name: procedure.procedure_name || "",
-                        office_location: normalizeOffice(procedure.office_location),
-                        status: procedure.status || "",
-                        surgery_date: procedure.surgery_date || "",
-                      };
-
-                      return (
-                        <div key={procedure.id} className="procedure-item">
-                          <div className="form-grid">
-                            <div>
-                              <label className="field-label">{isSpanish ? "Procedimiento" : "Procedure"}</label>
-                              <input
-                                className="line-input"
-                                value={draft.procedure_name}
-                                onChange={(event) =>
-                                  setProcedureDrafts((prev) => ({
-                                    ...prev,
-                                    [procedure.id]: { ...draft, procedure_name: event.target.value },
-                                  }))
-                                }
-                              />
-                            </div>
-                            <div>
-                              <label className="field-label">{isSpanish ? "Estatus" : "Status"}</label>
-                              <select
-                                className="line-input"
-                                value={draft.status}
-                                disabled={!canChangeProcedureStatus}
-                                onChange={(event) =>
-                                  setProcedureDrafts((prev) => ({
-                                    ...prev,
-                                    [procedure.id]: { ...draft, status: event.target.value },
-                                  }))
-                                }
-                              >
-                                <option value="">{t.selectStatus}</option>
-                                {PROCEDURE_STATUS_OPTIONS.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {isSpanish ? option.es : option.en}
-                                  </option>
-                                ))}
-                                {draft.status && !PROCEDURE_STATUS_OPTIONS.some((option) => option.value === draft.status) ? (
-                                  <option value={draft.status}>{procedureStatusLabel(draft.status, lang)}</option>
-                                ) : null}
-                              </select>
-                              {!canChangeProcedureStatus && (
-                                <p className="body-muted" style={{ marginTop: 6 }}>{t.statusPermissionHint}</p>
-                              )}
-                            </div>
-                            <div>
-                              <label className="field-label">{isSpanish ? "Fecha de cirugía" : "Surgery date"}</label>
-                              <input
-                                className="line-input"
-                                inputMode="numeric"
-                                placeholder={t.dateHint}
-                                value={draft.surgery_date}
-                                onChange={(event) =>
-                                  setProcedureDrafts((prev) => ({
-                                    ...prev,
-                                    [procedure.id]: { ...draft, surgery_date: formatDateTyping(event.target.value) },
-                                  }))
-                                }
-                              />
-                            </div>
-                            <div>
-                              <label className="field-label">{isSpanish ? "Sede" : "Office"}</label>
-                              <div className="pill-row" style={{ marginTop: 0 }}>
-                                {(["Guadalajara", "Tijuana"] as Office[]).map((office) => (
-                                  <button
-                                    key={`${procedure.id}-${office}`}
-                                    className="ghost-btn"
-                                    style={{
-                                      background: draft.office_location === office ? "#DBEAFE" : "#EFF3F8",
-                                      color: draft.office_location === office ? "#1D4ED8" : "#111827",
-                                    }}
-                                    onClick={() =>
-                                      setProcedureDrafts((prev) => ({
-                                        ...prev,
-                                        [procedure.id]: { ...draft, office_location: office },
-                                      }))
-                                    }
-                                  >
-                                    {office === "Guadalajara" ? "🏙️ Guadalajara" : "🌊 Tijuana"}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-                            <button className="main-btn" onClick={() => saveProcedure(procedure.id)} disabled={savingProcedureId === procedure.id}>
-                              {savingProcedureId === procedure.id ? t.savingProcedure : t.saveProcedure}
-                            </button>
-                            <span className="meta-badge" style={{ color: "#166534", background: "#ECFDF5" }}>
-                              {t.roomsRelated}: {relatedRooms.length}
-                            </span>
-                            <span className="meta-badge" style={{ color: "#1D4ED8", background: "#EFF6FF" }}>
-                              {draft.office_location ? officeText(draft.office_location) : t.noOffice}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </section>
-
-              <section className="card" id="documentos" style={{ marginTop: 16 }}>
-                <div className="section-head">
-                  <div>
-                    <p className="section-kicker">{t.documentsTitle}</p>
-                    <p className="section-sub">{t.documentsCopy}</p>
-                  </div>
-                </div>
-                {renderMediaGroup("Historia Clinica", clinicalHistoryEntries, t.noDocuments)}
-              </section>
 
               <section className="card" id="media" style={{ marginTop: 16 }}>
                 <div className="section-head">
