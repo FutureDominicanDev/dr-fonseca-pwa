@@ -3356,8 +3356,9 @@ export default function InboxPage() {
   const roomImageVideoEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && (entry.message_type === "image" || entry.message_type === "video"));
   const roomAudioEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && entry.message_type === "audio");
   const roomPrescriptionEntries = roomMediaEntries.filter((entry) => isPrescriptionEntry(entry));
+  const latestClinicalHistoryFileEntry = [...roomMediaEntries].reverse().find((entry) => isClinicalHistoryFileEntry(entry));
   const roomFormEntries = canViewClinicalHistoryForms
-    ? roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content) || isClinicalHistoryFileEntry(entry))
+    ? roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content) || (isClinicalHistoryFileEntry(entry) && entry.id === latestClinicalHistoryFileEntry?.id))
     : [];
   const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry) && !isClinicalHistoryFileEntry(entry));
   const formExportText = (entry: any) => {

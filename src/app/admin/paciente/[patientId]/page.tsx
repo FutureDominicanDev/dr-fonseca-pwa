@@ -287,6 +287,7 @@ export default function AdminPatientRecordPage() {
     if (message.is_internal) return isSpanish ? "Seguimiento interno del equipo" : "Internal team follow-up";
     if (rawName.startsWith("[MED]")) return isSpanish ? "Seguimiento de medicamento" : "Medication follow-up";
     if (rawName.startsWith("[BEFORE]")) return isSpanish ? "Material preoperatorio" : "Pre-op material";
+    if (rawName.startsWith("[FORM]")) return "Historia Clinica";
     if (message.message_type === "image") return isSpanish ? "Imagen compartida en el chat" : "Image shared in chat";
     if (message.message_type === "video") return isSpanish ? "Video compartido en el chat" : "Video shared in chat";
     if (message.message_type === "audio") return isSpanish ? "Audio compartido en el chat" : "Audio shared in chat";
@@ -314,6 +315,18 @@ export default function AdminPatientRecordPage() {
 
   const timeline = useMemo(() => (bundle ? getTimelineEntries(bundle) : []), [bundle]);
   const media = useMemo(() => (bundle ? getMediaEntries(bundle) : { images: [], videos: [], audios: [], files: [] }), [bundle]);
+  const clinicalHistoryEntries = useMemo(() => {
+    const latestByRoom = new Map<string, typeof media.files[number]>();
+    media.files.forEach((entry) => {
+      if (!`${entry.message.file_name || ""}`.startsWith("[FORM]")) return;
+      latestByRoom.set(entry.room.id, entry);
+    });
+    return Array.from(latestByRoom.values());
+  }, [media.files]);
+  const regularFileEntries = useMemo(
+    () => media.files.filter((entry) => !`${entry.message.file_name || ""}`.startsWith("[FORM]")),
+    [media.files]
+  );
   const filteredTimeline = useMemo(() => {
     const q = timelineQuery.trim().toLowerCase();
     const fromMs = timelineFrom ? new Date(`${timelineFrom}T00:00:00`).getTime() : null;
@@ -765,7 +778,7 @@ export default function AdminPatientRecordPage() {
 
   const renderTimelineBody = (entry: (typeof timeline)[number]) => {
     const { message } = entry;
-    const cleanFileName = (message.file_name || "").replace(/^\[(MED|BEFORE)\]\s*/i, "");
+    const cleanFileName = (message.file_name || "").replace(/^\[(MED|BEFORE|FORM)\]\s*/i, "");
 
     if (message.deleted_by_staff || message.deleted_by_patient) {
       return <p className="body-muted">{t.deletedMessage}</p>;
@@ -834,7 +847,7 @@ export default function AdminPatientRecordPage() {
               normalizeOffice(senderProfile?.office_location) ||
               normalizeOffice(entry.procedure.office_location) ||
               "";
-            const cleanFileName = (entry.message.file_name || "").replace(/^\[(MED|BEFORE)\]\s*/i, "");
+            const cleanFileName = (entry.message.file_name || "").replace(/^\[(MED|BEFORE|FORM)\]\s*/i, "");
 
             return (
               <div key={entry.message.id} className="media-item">
@@ -1114,7 +1127,7 @@ export default function AdminPatientRecordPage() {
                 </div>
                 <div className="stat-card">
                   <p className="section-kicker">{isSpanish ? "Medios" : "Media"}</p>
-                  <div className="value-display">{media.images.length + media.videos.length + media.audios.length + media.files.length}</div>
+                  <div className="value-display">{media.images.length + media.videos.length + media.audios.length + regularFileEntries.length + clinicalHistoryEntries.length}</div>
                   <p className="muted">{isSpanish ? "Imágenes, videos, audios y archivos" : "Images, videos, audio files, and files"}</p>
                 </div>
               </section>
@@ -1372,7 +1385,8 @@ export default function AdminPatientRecordPage() {
                   {renderMediaGroup(t.images, media.images, t.noImages)}
                   {renderMediaGroup(t.videos, media.videos, t.noVideos)}
                   {renderMediaGroup(t.audios, media.audios, t.noAudios)}
-                  {renderMediaGroup(t.files, media.files, t.noFiles)}
+                  {renderMediaGroup(isSpanish ? "Documento" : "Documents", clinicalHistoryEntries, isSpanish ? "No hay documentos en el historial." : "There are no documents in the history.")}
+                  {renderMediaGroup(t.files, regularFileEntries, t.noFiles)}
                 </div>
               </section>
 

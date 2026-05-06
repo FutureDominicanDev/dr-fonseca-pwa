@@ -287,6 +287,7 @@ export const messageReason = (message: MessageRecord, procedure: ProcedureRecord
   if (message.is_internal) return "Seguimiento interno del equipo";
   if (rawName.startsWith("[MED]")) return "Seguimiento de medicamento";
   if (rawName.startsWith("[BEFORE]")) return "Material preoperatorio";
+  if (rawName.startsWith("[FORM]")) return "Historia Clinica";
   if (message.message_type === "image") return "Imagen compartida en el chat";
   if (message.message_type === "video") return "Video compartido en el chat";
   if (message.message_type === "audio") return "Audio compartido en el chat";
@@ -295,7 +296,7 @@ export const messageReason = (message: MessageRecord, procedure: ProcedureRecord
 };
 
 export const messageDetailsHtml = (message: MessageRecord) => {
-  const fileName = escapeHtml((message.file_name || "").replace(/^\[(MED|BEFORE)\]\s*/i, "")) || "Archivo";
+  const fileName = escapeHtml((message.file_name || "").replace(/^\[(MED|BEFORE|FORM)\]\s*/i, "")) || "Archivo";
   const url = escapeHtml(message.content);
 
   if (message.message_type === "image" || message.message_type === "video" || message.message_type === "audio" || message.message_type === "file") {

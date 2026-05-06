@@ -960,7 +960,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       if (update.data) {
         await logMessageAudit(timestamp);
         setMessages((current) => current.map((message) => (message.id === existing.id ? (update.data as Message) : message)));
-        sendStaffPushNotification(notificationText, "advanced_assigned");
       }
       return url;
     }
@@ -1181,6 +1180,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       saveClinicalHistory: "Save and send",
       savingClinicalHistory: "Saving...",
       clinicalHistoryInstructions: "Choose Spanish or English, fill it in on this screen, and save it. The completed PDF is sent automatically.",
+      clinicalHistoryEditInstructions: "Your submitted form is saved. Reopen it to edit the same document.",
+      clinicalHistorySubmitted: "Form submitted",
+      downloadClinicalHistory: "Save PDF to device",
       clinicalForm: "Medical history form",
       noPrescriptions: "No prescriptions yet.",
       prescriptionInstructions: "Instructions",
@@ -1221,6 +1223,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       saveClinicalHistory: "Guardar y enviar",
       savingClinicalHistory: "Guardando...",
       clinicalHistoryInstructions: "Elige Version español o English version, llenalo en esta pantalla y guardalo. El PDF completo se envia automaticamente.",
+      clinicalHistoryEditInstructions: "Tu formulario enviado esta guardado. Abrelo de nuevo para editar el mismo documento.",
+      clinicalHistorySubmitted: "Formulario enviado",
+      downloadClinicalHistory: "Guardar PDF en dispositivo",
       clinicalForm: "Historia clínica",
       noPrescriptions: "Todavía no hay recetas.",
       prescriptionInstructions: "Indicaciones",
@@ -1265,6 +1270,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const prescriptionUrl = (message?: Message | null) => message?.file_url || message?.content || "";
   const selectedPrescriptionInfo = selectedPrescription ? parsePrescriptionText(selectedPrescription.file_name) : null;
   const selectedPrescriptionUrl = prescriptionUrl(selectedPrescription);
+  const latestClinicalPdfUrl = latestClinicalPdfMessage?.file_url || latestClinicalPdfMessage?.content || "";
   const selectedPrescriptionIsImage = /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(selectedPrescriptionUrl) || `${selectedPrescription?.file_type || ""}`.startsWith("image/");
   const selectedPrescriptionShareText = selectedPrescriptionInfo
     ? `${selectedPrescriptionInfo.title}${selectedPrescriptionInfo.instructions ? `\n${labels.prescriptionInstructions}: ${selectedPrescriptionInfo.instructions}` : ""}\n${selectedPrescriptionUrl}`
@@ -1306,6 +1312,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const visibleChatMessages = messages.filter((message) => {
     const fileName = `${message.file_name || ""}`;
     if (isLegacyRoomCreatedMessage(message)) return false;
+    if (fileName === HISTORIA_CLINICA_FILE_NAME || fileName.startsWith("[FORM]") || parseFormMessage(message.content)) return false;
     if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || `${message.content || ""}`.includes("patient-profiles/") || `${message.content || ""}`.includes("patient-photos/")) return false;
     if (viewerType === "patient" && (message.deleted_by_patient || message.deleted_by_staff)) return false;
     return true;
@@ -1557,9 +1564,16 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                   <span style={{ fontSize: 25 }}>📄</span>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: patientTextBase, fontWeight: 900, lineHeight: 1.25 }}>{labels.clinicalHistoryFile}</div>
-                    <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 650, lineHeight: 1.45 }}>{labels.clinicalHistoryInstructions}</div>
+                    <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 650, lineHeight: 1.45 }}>
+                      {latestClinicalPdfMessage ? labels.clinicalHistoryEditInstructions : labels.clinicalHistoryInstructions}
+                    </div>
                   </div>
                 </div>
+                {latestClinicalPdfMessage && (
+                  <div style={{ border: "1px solid rgba(34,197,94,0.28)", background: darkMode ? "rgba(22,101,52,0.24)" : "#F0FDF4", color: darkMode ? "#BBF7D0" : "#166534", borderRadius: 12, padding: "10px 12px", fontSize: patientTextSmall, fontWeight: 900, lineHeight: 1.35 }}>
+                    {labels.clinicalHistorySubmitted}
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <button type="button" onClick={() => void openClinicalPdfEditor("es")} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", lineHeight: 1.2 }}>
                     {labels.openClinicalHistorySpanish}
@@ -1568,6 +1582,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                     {labels.openClinicalHistoryEnglish}
                   </button>
                 </div>
+                {latestClinicalPdfUrl && (
+                  <a href={latestClinicalPdfUrl} download="Historia Clinica.pdf" style={{ minHeight: 46, borderRadius: 12, background: darkMode ? "#1F2937" : "#F1F5F9", color: textPrimary, display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextBase, fontWeight: 900 }}>
+                    {labels.downloadClinicalHistory}
+                  </a>
+                )}
               </div>
             </div>
           </div>
