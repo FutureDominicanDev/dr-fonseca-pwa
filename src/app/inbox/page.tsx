@@ -3968,8 +3968,17 @@ export default function InboxPage() {
                   : (lang==="es"?"Mensajes privados y salas internas del equipo.":"Private messages and internal team rooms.")}
               </p>
             </div>
-            <button onClick={closePanel} style={{background:cardBg,border:`1px solid ${borderColor}`,borderRadius:999,padding:"8px 16px",fontSize:15,fontWeight:800,cursor:"pointer",color:textColor,fontFamily:"inherit"}}>
-              {lang==="es" ? "Salir" : "Exit"}
+            <button
+              onClick={closePanel}
+              aria-label={lang==="es" ? "Salir" : "Exit"}
+              title={lang==="es" ? "Salir" : "Exit"}
+              style={{width:54,height:54,display:"inline-flex",alignItems:"center",justifyContent:"center",background:cardBg,border:`1px solid ${borderColor}`,borderRadius:999,padding:0,cursor:"pointer",color:textColor,fontFamily:"inherit",flex:"0 0 auto"}}
+            >
+              <svg aria-hidden="true" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3" />
+                <path d="M10 17l5-5-5-5" />
+                <path d="M15 12H3" />
+              </svg>
             </button>
           </div>
 
