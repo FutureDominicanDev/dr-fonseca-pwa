@@ -803,24 +803,6 @@ export default function AdminPatientRecordPage() {
     } catch {}
     showClinicalHistoryShareBlocked();
   };
-  const emailClinicalHistoryEntry = () => {
-    if (!clinicalHistoryUrl) return;
-    void shareClinicalHistoryEntry();
-  };
-  const messageClinicalHistoryEntry = () => {
-    if (!clinicalHistoryUrl) return;
-    void shareClinicalHistoryEntry();
-  };
-  const printClinicalHistoryEntry = () => {
-    if (!clinicalHistoryUrl) return;
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
-    if (!printWindow) {
-      window.open(clinicalHistoryUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    printWindow.document.write(`<!doctype html><html><head><title>Historia Clinica</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#f8fafc}@media print{body{background:#fff}}</style></head><body><iframe src="${clinicalHistoryUrl}" title="Historia Clinica" style="width:100%;height:100vh;border:0;background:#fff;"></iframe><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));</script></body></html>`);
-    printWindow.document.close();
-  };
 
   const renderTimelineBody = (entry: (typeof timeline)[number]) => {
     const { message } = entry;
@@ -1542,11 +1524,8 @@ export default function AdminPatientRecordPage() {
                   {isSpanish ? "Cerrar" : "Close"}
                 </button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+              <div style={{ display: "grid", gap: 8 }}>
                 <button type="button" onClick={() => void shareClinicalHistoryEntry()} style={{ border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", minHeight: 46, fontSize: 16, fontWeight: 850, fontFamily: "inherit", cursor: "pointer" }}>{isSpanish ? "Compartir" : "Share"}</button>
-                <button type="button" onClick={messageClinicalHistoryEntry} style={{ border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", minHeight: 46, fontSize: 16, fontWeight: 850, fontFamily: "inherit", cursor: "pointer" }}>{isSpanish ? "Mensaje" : "Message"}</button>
-                <button type="button" onClick={emailClinicalHistoryEntry} style={{ border: "none", borderRadius: 12, background: "#FDE68A", color: "#854D0E", minHeight: 46, fontSize: 16, fontWeight: 850, fontFamily: "inherit", cursor: "pointer" }}>{isSpanish ? "Correo" : "Email"}</button>
-                <button type="button" onClick={printClinicalHistoryEntry} style={{ border: "none", borderRadius: 12, background: "#E0E7FF", color: "#3730A3", minHeight: 46, fontSize: 16, fontWeight: 850, fontFamily: "inherit", cursor: "pointer" }}>{isSpanish ? "PDF / Imprimir" : "PDF / Print"}</button>
               </div>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>

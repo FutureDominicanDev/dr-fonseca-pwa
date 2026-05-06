@@ -1342,24 +1342,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     } catch {}
     showClinicalPdfShareBlocked();
   };
-  const emailClinicalPdf = () => {
-    if (!latestClinicalPdfUrl) return;
-    void shareClinicalPdf();
-  };
-  const messageClinicalPdf = () => {
-    if (!latestClinicalPdfUrl) return;
-    void shareClinicalPdf();
-  };
-  const printClinicalPdf = () => {
-    if (!latestClinicalPdfUrl) return;
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
-    if (!printWindow) {
-      window.open(latestClinicalPdfUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    printWindow.document.write(`<!doctype html><html><head><title>${labels.clinicalHistoryFile}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#f8fafc}@media print{body{background:#fff}}</style></head><body><iframe src="${latestClinicalPdfUrl}" title="${labels.clinicalHistoryFile}" style="width:100%;height:100vh;border:0;background:#fff;"></iframe><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));</script></body></html>`);
-    printWindow.document.close();
-  };
   const visibleChatMessages = messages.filter((message) => {
     const fileName = `${message.file_name || ""}`;
     if (isLegacyRoomCreatedMessage(message)) return false;
@@ -1651,11 +1633,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               <div style={{ minWidth: 0, fontSize: patientTextBase, fontWeight: 900, lineHeight: 1.35, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{labels.clinicalHistoryFile}</div>
               <button type="button" onClick={closeClinicalPdfViewer} style={{ border: "none", borderRadius: 999, background: inputPanelBg, color: textPrimary, minWidth: 86, height: 44, padding: "0 14px", fontSize: patientTextSmall, fontWeight: 850, fontFamily: "inherit" }}>{labels.close}</button>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+            <div style={{ display: "grid", gap: 8 }}>
               <button type="button" onClick={() => void shareClinicalPdf()} style={{ border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.share}</button>
-              <button type="button" onClick={messageClinicalPdf} style={{ border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.messages}</button>
-              <button type="button" onClick={emailClinicalPdf} style={{ border: "none", borderRadius: 12, background: "#FDE68A", color: "#854D0E", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.email}</button>
-              <button type="button" onClick={printClinicalPdf} style={{ border: "none", borderRadius: 12, background: "#E0E7FF", color: "#3730A3", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.print}</button>
             </div>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>
