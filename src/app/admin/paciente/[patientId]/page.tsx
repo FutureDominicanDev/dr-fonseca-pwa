@@ -90,6 +90,7 @@ export default function AdminPatientRecordPage() {
   const [timelineQuery, setTimelineQuery] = useState("");
   const [timelineFrom, setTimelineFrom] = useState("");
   const [timelineTo, setTimelineTo] = useState("");
+  const [selectedClinicalHistoryEntry, setSelectedClinicalHistoryEntry] = useState<any | null>(null);
 
   const photoInputRef = useRef<HTMLInputElement>(null);
   const timelineSectionRef = useRef<HTMLElement | null>(null);
@@ -776,9 +777,53 @@ export default function AdminPatientRecordPage() {
     }
   };
 
+  const clinicalHistoryUrl = selectedClinicalHistoryEntry?.message?.content || "";
+  const clinicalHistoryShareText = clinicalHistoryUrl ? `Historia Clinica\n${clinicalHistoryUrl}` : "";
+  const closeClinicalHistoryViewer = () => setSelectedClinicalHistoryEntry(null);
+  const shareClinicalHistoryEntry = async () => {
+    if (!clinicalHistoryUrl) return;
+    if (navigator.share) {
+      try {
+        const response = await fetch(clinicalHistoryUrl);
+        const blob = await response.blob();
+        const file = new File([blob], "Historia Clinica.pdf", { type: blob.type || "application/pdf" });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ title: "Historia Clinica", text: "Historia Clinica", files: [file] });
+          return;
+        }
+      } catch {}
+      try {
+        await navigator.share({ title: "Historia Clinica", text: "Historia Clinica", url: clinicalHistoryUrl });
+        return;
+      } catch {}
+    }
+    await navigator.clipboard?.writeText(clinicalHistoryShareText).catch(() => {});
+    updateSuccess(isSpanish ? "Enlace del formulario copiado." : "Form link copied.");
+  };
+  const emailClinicalHistoryEntry = () => {
+    if (!clinicalHistoryUrl) return;
+    window.location.href = `mailto:?subject=${encodeURIComponent("Historia Clinica")}&body=${encodeURIComponent(clinicalHistoryShareText)}`;
+  };
+  const messageClinicalHistoryEntry = () => {
+    if (!clinicalHistoryUrl) return;
+    const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
+    window.location.href = `sms:${separator}body=${encodeURIComponent(clinicalHistoryShareText)}`;
+  };
+  const printClinicalHistoryEntry = () => {
+    if (!clinicalHistoryUrl) return;
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!printWindow) {
+      window.open(clinicalHistoryUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    printWindow.document.write(`<!doctype html><html><head><title>Historia Clinica</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#f8fafc}@media print{body{background:#fff}}</style></head><body><iframe src="${clinicalHistoryUrl}" title="Historia Clinica" style="width:100%;height:100vh;border:0;background:#fff;"></iframe><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));</script></body></html>`);
+    printWindow.document.close();
+  };
+
   const renderTimelineBody = (entry: (typeof timeline)[number]) => {
     const { message } = entry;
     const cleanFileName = (message.file_name || "").replace(/^\[(MED|BEFORE|FORM)\]\s*/i, "");
+    const isClinicalHistoryFile = `${message.file_name || ""}`.startsWith("[FORM]");
 
     if (message.deleted_by_staff || message.deleted_by_patient) {
       return <p className="body-muted">{t.deletedMessage}</p>;
@@ -815,7 +860,11 @@ export default function AdminPatientRecordPage() {
       return (
         <div className="preview-wrap">
           <p style={{ fontWeight: 800, color: "#111827", marginBottom: 6 }}>{cleanFileName || (isSpanish ? "Archivo" : "File")}</p>
-          <a href={message.content} target="_blank" rel="noopener noreferrer" className="open-link">{isSpanish ? "Abrir archivo" : "Open file"}</a>
+          {isClinicalHistoryFile ? (
+            <button type="button" className="open-link" onClick={() => setSelectedClinicalHistoryEntry(entry)}>{isSpanish ? "Abrir archivo" : "Open file"}</button>
+          ) : (
+            <a href={message.content} target="_blank" rel="noopener noreferrer" className="open-link">{isSpanish ? "Abrir archivo" : "Open file"}</a>
+          )}
         </div>
       );
     }
@@ -848,6 +897,7 @@ export default function AdminPatientRecordPage() {
               normalizeOffice(entry.procedure.office_location) ||
               "";
             const cleanFileName = (entry.message.file_name || "").replace(/^\[(MED|BEFORE|FORM)\]\s*/i, "");
+            const isClinicalHistoryFile = `${entry.message.file_name || ""}`.startsWith("[FORM]");
 
             return (
               <div key={entry.message.id} className="media-item">
@@ -859,9 +909,15 @@ export default function AdminPatientRecordPage() {
                   <p className="body-muted">{formatDateTimeLocal(entry.message.created_at)}</p>
                 </div>
                 {entry.message.content && (
-                  <a href={entry.message.content} target="_blank" rel="noopener noreferrer" className="open-link">
-                    {t.open}
-                  </a>
+                  isClinicalHistoryFile ? (
+                    <button type="button" className="open-link" onClick={() => setSelectedClinicalHistoryEntry(entry)}>
+                      {t.open}
+                    </button>
+                  ) : (
+                    <a href={entry.message.content} target="_blank" rel="noopener noreferrer" className="open-link">
+                      {t.open}
+                    </a>
+                  )
                 )}
               </div>
             );
@@ -955,7 +1011,7 @@ export default function AdminPatientRecordPage() {
         .media-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #EEF2F7; }
         .media-item:last-child { border-bottom: none; padding-bottom: 0; }
         .empty-mini { border: 1px dashed #D6E0EB; border-radius: 16px; padding: 16px; text-align: center; color: #6B7280; background: #FAFCFF; }
-        .open-link { display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; border-radius: 12px; background: #EFF6FF; color: #1D4ED8; font-weight: 800; text-decoration: none; white-space: nowrap; }
+        .open-link { display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; border: none; border-radius: 12px; background: #EFF6FF; color: #1D4ED8; font-weight: 800; font-family: inherit; text-decoration: none; white-space: nowrap; cursor: pointer; }
         .timeline-list { display: grid; gap: 14px; }
         .timeline-item { border: 1px solid #E5EDF6; border-radius: 18px; padding: 16px; background: #FCFDFF; }
         .timeline-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
@@ -1474,6 +1530,28 @@ export default function AdminPatientRecordPage() {
             </>
           )}
         </div>
+
+        {selectedClinicalHistoryEntry && clinicalHistoryUrl && (
+          <div style={{ position: "fixed", inset: 0, background: "#F8FAFC", color: "#111827", zIndex: 300, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ flexShrink: 0, padding: "calc(14px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 12px max(14px, env(safe-area-inset-left))", background: "#FFFFFF", borderBottom: "1px solid #D9E4F2", boxShadow: "0 6px 18px rgba(15,23,42,0.08)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                <div style={{ minWidth: 0, fontSize: 17, fontWeight: 900, lineHeight: 1.35, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Historia Clinica</div>
+                <button type="button" onClick={closeClinicalHistoryViewer} style={{ border: "none", borderRadius: 999, background: "#EFF3F8", color: "#111827", minWidth: 86, height: 44, padding: "0 14px", fontSize: 15, fontWeight: 850, fontFamily: "inherit", cursor: "pointer" }}>
+                  {isSpanish ? "Cerrar" : "Close"}
+                </button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                <button type="button" onClick={() => void shareClinicalHistoryEntry()} style={{ border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", minHeight: 46, fontSize: 16, fontWeight: 850, fontFamily: "inherit", cursor: "pointer" }}>{isSpanish ? "Compartir" : "Share"}</button>
+                <button type="button" onClick={messageClinicalHistoryEntry} style={{ border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", minHeight: 46, fontSize: 16, fontWeight: 850, fontFamily: "inherit", cursor: "pointer" }}>{isSpanish ? "Mensaje" : "Message"}</button>
+                <button type="button" onClick={emailClinicalHistoryEntry} style={{ border: "none", borderRadius: 12, background: "#FDE68A", color: "#854D0E", minHeight: 46, fontSize: 16, fontWeight: 850, fontFamily: "inherit", cursor: "pointer" }}>{isSpanish ? "Correo" : "Email"}</button>
+                <button type="button" onClick={printClinicalHistoryEntry} style={{ border: "none", borderRadius: 12, background: "#E0E7FF", color: "#3730A3", minHeight: 46, fontSize: 16, fontWeight: 850, fontFamily: "inherit", cursor: "pointer" }}>{isSpanish ? "PDF / Imprimir" : "PDF / Print"}</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>
+              <iframe src={clinicalHistoryUrl} title="Historia Clinica" style={{ width: "100%", height: "100%", minHeight: "70dvh", border: "none", borderRadius: 14, background: "#fff", boxShadow: "0 8px 28px rgba(15,23,42,0.14)" }} />
+            </div>
+          </div>
+        )}
 
         <div className="toast-stack" aria-live="polite">
           {pageError && <div className="toast error">⚠️ {pageError}</div>}
