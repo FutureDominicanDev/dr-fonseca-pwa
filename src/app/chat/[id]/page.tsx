@@ -524,55 +524,70 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     };
 
     const loadMessages = async () => {
-      const { data } = await supabase
+      let query = supabase
         .from("messages")
         .select("*")
-        .eq("room_id", id)
-        .order("created_at", { ascending: true });
+        .eq("room_id", id);
+
+      if (viewerType === "patient") query = query.eq("is_internal", false);
+
+      const { data } = await query.order("created_at", { ascending: true });
 
       if (mounted) setMessages((data || []) as Message[]);
     };
 
+    let pollTimer: number | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
     validateRoom().then((allowed) => {
-      if (allowed) loadMessages();
+      if (!allowed) return;
+      loadMessages();
+      if (viewerType === "patient") {
+        pollTimer = window.setInterval(loadMessages, 3000);
+      }
     });
 
-    const channel = supabase
-      .channel(`chat-${id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `room_id=eq.${id}`,
-        },
-        ({ new: message }: { new: Message }) => {
-          setMessages((current) => {
-            if (current.some((item) => item.id === message.id)) return current;
-            return [...current, message];
-          });
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "messages",
-          filter: `room_id=eq.${id}`,
-        },
-        ({ new: message }: { new: Message }) => {
-          setMessages((current) => current.map((item) => (item.id === message.id ? message : item)));
-        },
-      )
-      .subscribe();
+    if (viewerType !== "patient") {
+      channel = supabase
+        .channel(`chat-${id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `room_id=eq.${id}`,
+          },
+          ({ new: message }: { new: Message }) => {
+            if (message.is_internal) return;
+            setMessages((current) => {
+              if (current.some((item) => item.id === message.id)) return current;
+              return [...current, message];
+            });
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "messages",
+            filter: `room_id=eq.${id}`,
+          },
+          ({ new: message }: { new: Message }) => {
+            if (message.is_internal) return;
+            setMessages((current) => current.map((item) => (item.id === message.id ? message : item)));
+          },
+        )
+        .subscribe();
+    }
 
     return () => {
       mounted = false;
-      supabase.removeChannel(channel);
+      if (pollTimer) window.clearInterval(pollTimer);
+      if (channel) supabase.removeChannel(channel);
     };
-  }, [id, token]);
+  }, [id, token, viewerType]);
 
   useEffect(() => {
     scrollToLatest();
