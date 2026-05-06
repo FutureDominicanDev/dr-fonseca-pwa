@@ -70,6 +70,16 @@ type StaffAccessRequest = {
   created_at?: string | null;
 };
 
+type AdminSectionId =
+  | "buscar-paciente"
+  | "equipo"
+  | "solicitudes-pendientes"
+  | "staff-to-staff"
+  | "herramientas-expediente"
+  | "invitar-personal"
+  | "telefonos-sede"
+  | "bloqueos";
+
 export default function AdminPage() {
   const { lang, setLang, isSpanish } = useAdminLang();
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -97,6 +107,7 @@ export default function AdminPage() {
   const [deletingStaffId, setDeletingStaffId] = useState("");
   const [unblockBusyKey, setUnblockBusyKey] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
+  const [activeAdminSection, setActiveAdminSection] = useState<AdminSectionId | "">("");
   const [successMsg, setSuccessMsg] = useState("");
   const [pageError, setPageError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -260,9 +271,12 @@ export default function AdminPage() {
     window.location.href = path;
   };
 
-  const scrollToAdminSection = (id: string) => {
+  const openAdminSection = (id: AdminSectionId) => {
+    setActiveAdminSection(id);
     setMobileMenuOpen(false);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => {
+      document.getElementById("admin-active-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   };
 
   const scrollAdminToTop = () => {
@@ -1025,8 +1039,9 @@ export default function AdminPage() {
         .menu-btn { display: none; width: 42px; height: 42px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; cursor: pointer; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
         .menu-panel { display: none; }
         .hero { background: linear-gradient(135deg, #0B2438 0%, #0E3F63 58%, #155C95 100%); color: white; border-radius: 30px; padding: 26px; margin-bottom: 18px; box-shadow: 0 18px 50px rgba(7,51,77,0.20); border: 1px solid rgba(255,255,255,0.12); }
-        .hero-grid { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 18px; align-items: end; }
+        .hero-grid { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: end; }
         .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr); gap: 16px; align-items: start; }
+        .workspace-grid.active-workspace { grid-template-columns: minmax(0, 1fr); }
         .card { background: rgba(255,255,255,0.98); border: 1px solid rgba(102,132,163,0.14); border-radius: 20px; padding: 20px; box-shadow: 0 8px 28px rgba(28,66,104,0.06); }
         .section-title { font-size: 15px; font-weight: 900; color: #6B7280; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; line-height: 1.35; }
         .big-title { font-size: 34px; font-weight: 900; margin: 0 0 8px; }
@@ -1034,7 +1049,6 @@ export default function AdminPage() {
         .quick-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
         .hero-link { min-height: 44px; padding: 10px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.12); color: white; font-size: 16px; font-weight: 800; cursor: pointer; font-family: inherit; }
         .hero-link:disabled { opacity: 0.5; cursor: not-allowed; }
-        .hero-note { padding: 14px 16px; border-radius: 18px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.12); }
         .search-panel { display: grid; gap: 16px; }
         .search-toolbar { display: grid; gap: 12px; }
         .search-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
@@ -1058,7 +1072,7 @@ export default function AdminPage() {
         .command-btn { min-height: 78px; padding: 14px 15px; border-radius: 16px; border: 1px solid #D7E7FA; background: #FFFFFF; color: #0E2D4A; text-align: left; font-family: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(28,66,104,0.05); }
         .command-btn strong { display: block; font-size: 17px; font-weight: 950; line-height: 1.25; }
         .command-btn span { display: block; margin-top: 5px; color: #64748B; font-size: 14px; font-weight: 750; line-height: 1.35; }
-        .command-btn:hover, .command-btn:focus-visible { border-color: #93C5FD; background: #F8FBFF; outline: none; }
+        .command-btn:hover, .command-btn:focus-visible, .command-btn.active { border-color: #93C5FD; background: #F8FBFF; outline: none; }
         .admin-section-search { order: 1; }
         .admin-section-results { order: 2; }
         .admin-section-requests { order: 3; }
@@ -1215,56 +1229,50 @@ export default function AdminPage() {
                     : "Search patients, review records, manage team access, and control invitations from one secure screen."}
                 </p>
               </div>
-              <div className="hero-note">
-                <p className="section-title" style={{ color: "rgba(255,255,255,0.84)", marginBottom: 8 }}>{isSpanish ? "Flujo recomendado" : "Recommended flow"}</p>
-                <p style={{ margin: 0, fontSize: 16, fontWeight: 800, lineHeight: 1.6 }}>
-                  {isSpanish
-                    ? "Primero busca al paciente. Después abre su expediente. Las acciones sensibles quedan separadas y confirmadas."
-                    : "Search for the patient first. Then open the record. Sensitive actions stay separated and confirmed."}
-                </p>
-              </div>
             </div>
           </section>
 
           <section className="command-strip" aria-label={isSpanish ? "Navegación del centro administrativo" : "Admin center navigation"}>
-            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("buscar-paciente")}>
+            <button type="button" className={`command-btn ${activeAdminSection === "buscar-paciente" ? "active" : ""}`} onClick={() => openAdminSection("buscar-paciente")}>
               <strong>{isSpanish ? "Buscar paciente" : "Find patient"}</strong>
               <span>{activePatientCount} {isSpanish ? "activos. Abre el expediente correcto." : "active. Open the correct record."}</span>
             </button>
-            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("equipo")}>
+            <button type="button" className={`command-btn ${activeAdminSection === "equipo" ? "active" : ""}`} onClick={() => openAdminSection("equipo")}>
               <strong>{isSpanish ? "Equipo" : "Team"}</strong>
               <span>{staff.length} {isSpanish ? "usuarios. Teléfonos y acceso." : "users. Phones and access."}</span>
             </button>
             {canReviewAccessRequests && (
-              <button type="button" className="command-btn" onClick={() => scrollToAdminSection("solicitudes-pendientes")}>
+              <button type="button" className={`command-btn ${activeAdminSection === "solicitudes-pendientes" ? "active" : ""}`} onClick={() => openAdminSection("solicitudes-pendientes")}>
                 <strong>{isSpanish ? "Solicitudes" : "Requests"}</strong>
                 <span>{pendingAccessRequests.length} {isSpanish ? "pendiente(s) de acceso" : "pending access request(s)"}</span>
               </button>
             )}
-            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("staff-to-staff")}>
+            <button type="button" className={`command-btn ${activeAdminSection === "staff-to-staff" ? "active" : ""}`} onClick={() => openAdminSection("staff-to-staff")}>
               <strong>{isSpanish ? "Chat staff" : "Staff chat"}</strong>
               <span>{staffPrivateConversations.length} {isSpanish ? "conversaciones internas" : "internal conversation(s)"}</span>
             </button>
-            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("herramientas-expediente")}>
+            <button type="button" className={`command-btn ${activeAdminSection === "herramientas-expediente" ? "active" : ""}`} onClick={() => openAdminSection("herramientas-expediente")}>
               <strong>{isSpanish ? "Herramientas" : "Tools"}</strong>
               <span>{isSpanish ? "Auditoría, archivo y papelera" : "Audit, archive, and trash"}</span>
             </button>
-            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("invitar-personal")}>
+            <button type="button" className={`command-btn ${activeAdminSection === "invitar-personal" ? "active" : ""}`} onClick={() => openAdminSection("invitar-personal")}>
               <strong>{isSpanish ? "Invitar" : "Invite"}</strong>
               <span>{isSpanish ? "Alta segura de personal" : "Secure staff onboarding"}</span>
             </button>
-            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("telefonos-sede")}>
+            <button type="button" className={`command-btn ${activeAdminSection === "telefonos-sede" ? "active" : ""}`} onClick={() => openAdminSection("telefonos-sede")}>
               <strong>{isSpanish ? "Teléfonos" : "Phones"}</strong>
               <span>{isSpanish ? "Números por consultorio" : "Office phone numbers"}</span>
             </button>
-            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("bloqueos")}>
+            <button type="button" className={`command-btn ${activeAdminSection === "bloqueos" ? "active" : ""}`} onClick={() => openAdminSection("bloqueos")}>
               <strong>{isSpanish ? "Bloqueos" : "Blocked"}</strong>
               <span>{blockedAccessCount} {isSpanish ? "correos o teléfonos" : "emails or phones"}</span>
             </button>
           </section>
 
-          <div className="workspace-grid">
+          {activeAdminSection && (
+          <div id="admin-active-section" className="workspace-grid active-workspace">
             <div className="stack">
+              {activeAdminSection === "staff-to-staff" && (
               <section className="card admin-section-internal" id="staff-to-staff">
                 <div className="header-row">
                   <div>
@@ -1298,8 +1306,9 @@ export default function AdminPage() {
                   )}
                 </div>
               </section>
+              )}
 
-              {canReviewAccessRequests && (
+              {canReviewAccessRequests && activeAdminSection === "solicitudes-pendientes" && (
                 <section className="card admin-section-requests" id="solicitudes-pendientes">
                   <div className="header-row">
                     <div>
@@ -1339,6 +1348,7 @@ export default function AdminPage() {
                 </section>
               )}
 
+              {activeAdminSection === "buscar-paciente" && (
               <section className="card search-panel admin-section-search" id="buscar-paciente">
                 <div className="header-row" style={{ marginBottom: 0 }}>
                   <div>
@@ -1376,9 +1386,9 @@ export default function AdminPage() {
                     </button>
                   </div>
 
-                  <div className="search-status">
-                    {hasActiveSearch ? (
-                      patientCards.length > 0 ? (
+                  {hasActiveSearch && (
+                    <div className="search-status">
+                      {patientCards.length > 0 ? (
                         isSpanish
                           ? `Encontré ${patientCards.length} expediente(s). Ahora solo elige al paciente correcto y abre su expediente.`
                           : `I found ${patientCards.length} record(s). Now simply choose the right patient and open the record.`
@@ -1386,38 +1396,23 @@ export default function AdminPage() {
                         isSpanish
                           ? "No encontré coincidencias. Prueba con menos palabras o intenta otro dato del paciente."
                           : "No matches found. Try fewer words or a different patient detail."
-                      )
-                    ) : (
-                      isSpanish
-                        ? "Desde aquí solo buscas. La revisión completa y la exportación suceden dentro del expediente."
-                        : "This screen is only for searching. Full review and export happen inside the record."
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              <section className="card admin-section-results" id="expedientes">
-              <div className="header-row">
-                <div>
-                  <p className="card-title">{isSpanish ? "Resultados de búsqueda" : "Search results"}</p>
-                  <p className="muted">{isSpanish ? "Aquí solo eliges al paciente correcto. La revisión completa y la exportación viven dentro del expediente." : "This is only for choosing the right patient. Full review and export live inside the record."}</p>
-                </div>
-                <div className="inline-actions">
-                  {renderSectionTopButton()}
-                  {hasActiveSearch && (
-                    <span className="result-count">
-                      {isSpanish ? `${patientCards.length} resultado(s)` : `${patientCards.length} result(s)`}
-                    </span>
+                      )}
+                    </div>
                   )}
                 </div>
+              </section>
+              )}
+
+              {activeAdminSection === "buscar-paciente" && hasActiveSearch && (
+              <section className="card admin-section-results" id="expedientes">
+              <div className="header-row" style={{ marginBottom: 0 }}>
+                <span className="result-count">
+                  {isSpanish ? `${patientCards.length} coincidencia(s)` : `${patientCards.length} match(es)`}
+                </span>
+                {renderSectionTopButton()}
               </div>
 
-              {!hasActiveSearch ? (
-                <div className="empty-state" style={{ padding: "24px 18px" }}>
-                  <p style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "Empieza con una búsqueda" : "Start with a search"}</p>
-                  <p className="muted">{isSpanish ? "Escribe el nombre, teléfono, correo o procedimiento del paciente." : "Type the patient's name, phone, email, or procedure."}</p>
-                </div>
-              ) : patientCards.length === 0 ? (
+              {patientCards.length === 0 ? (
                 <div className="empty-state">
                   <div style={{ fontSize: 40, marginBottom: 8 }}>📁</div>
                   <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "No encontré expedientes con esa búsqueda" : "No records matched that search"}</p>
@@ -1489,9 +1484,11 @@ export default function AdminPage() {
                 </>
               )}
               </section>
+              )}
             </div>
 
             <div className="stack">
+              {activeAdminSection === "equipo" && (
               <section className="card team-card admin-side-team" id="equipo">
                 <div className="header-row">
                   <div>
@@ -1656,7 +1653,9 @@ export default function AdminPage() {
                   })
                 )}
               </section>
+              )}
 
+              {activeAdminSection === "herramientas-expediente" && (
               <section className="card admin-side-tools" id="herramientas-expediente">
                 <div className="header-row">
                   <div>
@@ -1674,7 +1673,9 @@ export default function AdminPage() {
                   </button>
                 </div>
               </section>
+              )}
 
+              {activeAdminSection === "bloqueos" && (
               <section className="card admin-side-blocks" id="bloqueos">
                 <div className="header-row">
                   <div>
@@ -1732,7 +1733,9 @@ export default function AdminPage() {
                   </div>
                 </div>
               </section>
+              )}
 
+              {activeAdminSection === "invitar-personal" && (
               <section className="card admin-side-invite" id="invitar-personal">
                 <div className="header-row">
                   <div>
@@ -1782,7 +1785,9 @@ export default function AdminPage() {
                   </div>
                 </div>
               </section>
+              )}
 
+              {activeAdminSection === "telefonos-sede" && (
               <section className="card admin-side-phones" id="telefonos-sede">
                 <div className="header-row">
                   <div>
@@ -1807,14 +1812,18 @@ export default function AdminPage() {
                   </div>
                 </div>
               </section>
+              )}
 
             </div>
           </div>
+          )}
+          {activeAdminSection && (
           <div className="admin-bottom-actions">
             <button type="button" className="back-top-inline-btn" onClick={scrollAdminToTop}>
               {isSpanish ? "⬆️ Volver arriba" : "⬆️ Back to top"}
             </button>
           </div>
+          )}
         </div>
 
         {exportMenu && (

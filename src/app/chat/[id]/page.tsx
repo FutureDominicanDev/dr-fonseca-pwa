@@ -325,14 +325,43 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const chatScrollRef = useRef<HTMLElement | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shouldAutoScrollRef = useRef(true);
   const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior, block: "end" }));
+  };
+  const isNearChatBottom = () => {
+    const container = chatScrollRef.current;
+    if (!container) return true;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+  };
+  const handleChatScroll = () => {
+    shouldAutoScrollRef.current = isNearChatBottom();
+  };
+  const sameMessageList = (current: Message[], next: Message[]) => {
+    if (current.length !== next.length) return false;
+    return current.every((message, index) => {
+      const incoming = next[index];
+      return (
+        message.id === incoming.id &&
+        message.content === incoming.content &&
+        message.file_url === incoming.file_url &&
+        message.file_name === incoming.file_name &&
+        message.message_type === incoming.message_type &&
+        !!message.deleted_by_patient === !!incoming.deleted_by_patient &&
+        !!message.deleted_by_staff === !!incoming.deleted_by_staff &&
+        !!message.is_internal === !!incoming.is_internal
+      );
+    });
+  };
+  const replaceMessagesIfChanged = (next: Message[]) => {
+    setMessages((current) => (sameMessageList(current, next) ? current : next));
   };
   const setComposerText = (value: string) => {
     setText(value);
@@ -533,7 +562,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
       const { data } = await query.order("created_at", { ascending: true });
 
-      if (mounted) setMessages((data || []) as Message[]);
+      if (mounted) replaceMessagesIfChanged((data || []) as Message[]);
     };
 
     let pollTimer: number | null = null;
@@ -590,7 +619,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }, [id, token, viewerType]);
 
   useEffect(() => {
-    scrollToLatest();
+    if (shouldAutoScrollRef.current) scrollToLatest();
   }, [messages]);
 
   const isLegacyRoomCreatedMessage = (message: Message) => {
@@ -666,6 +695,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const content = text.trim();
     if (!content || accessDenied || !accessReady) return;
 
+    shouldAutoScrollRef.current = true;
     setComposerText("");
     const createdAt = new Date().toISOString();
     const messageHash = await generateMessageHash(content, createdAt, currentUserId);
@@ -726,6 +756,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         .select("*")
         .single();
       if (!error && data) {
+        shouldAutoScrollRef.current = true;
         setMessages((current) => current.map((message) => (message.id === existing.id ? (data as Message) : message)));
         sendStaffPushNotification(uiLang === "es" ? "Historia clínica actualizada" : "Medical history updated", "advanced_assigned");
       }
@@ -746,6 +777,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       .select("*")
       .single();
     if (data) {
+      shouldAutoScrollRef.current = true;
       setMessages((current) => current.some((item) => item.id === data.id) ? current : [...current, data as Message]);
       sendStaffPushNotification(uiLang === "es" ? "Historia clínica enviada" : "Medical history submitted", "advanced_assigned");
     }
@@ -874,6 +906,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     const message = insert.data;
     if (message) {
+      shouldAutoScrollRef.current = true;
       await logMessageAudit(timestamp);
       setMessages((current) => {
         if (current.some((item) => item.id === message.id)) return current;
@@ -989,6 +1022,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         return null;
       }
       if (update.data) {
+        shouldAutoScrollRef.current = true;
         await logMessageAudit(timestamp);
         setMessages((current) => current.map((message) => (message.id === existing.id ? (update.data as Message) : message)));
       }
@@ -1010,6 +1044,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       return null;
     }
     if (insert.data) {
+      shouldAutoScrollRef.current = true;
       await logMessageAudit(timestamp);
       setMessages((current) => current.some((item) => item.id === insert.data.id) ? current : [...current, insert.data as Message]);
       sendStaffPushNotification(notificationText, "advanced_assigned");
@@ -1144,12 +1179,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const formPayload = parseFormMessage(message.content);
     if (formPayload) {
       return (
-        <FormMessage
-          payload={formPayload}
-          lang={uiLang}
-          editable={viewerType === "patient" && message.sender_type === "patient"}
-          onSubmit={saveClinicalForm}
-        />
+        <button
+          type="button"
+          onClick={() => setDocumentFolderOpen(true)}
+          style={{ border: "none", background: "transparent", color: "inherit", display: "flex", alignItems: "center", gap: 10, padding: 0, font: "inherit", fontWeight: 850, textAlign: "left", cursor: "pointer" }}
+        >
+          <span style={{ fontSize: 24 }}>📄</span>
+          <span>{uiLang === "es" ? "Historia Clinica enviada" : "Historia Clinica submitted"}</span>
+        </button>
       );
     }
 
@@ -1465,7 +1502,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         )}
       </header>
 
-      <section style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))" }} onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}>
+      <section
+        ref={chatScrollRef}
+        onScroll={handleChatScroll}
+        style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))" }}
+        onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}
+      >
         {(() => {
           let previousMessageDate = "";
           return visibleChatMessages.map((message) => {

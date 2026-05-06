@@ -57,6 +57,8 @@ type ProcedureDraft = {
   surgery_date: string;
 };
 
+type RecordSectionId = "documentos" | "procedimientos" | "datos-paciente" | "archivo-interno" | "media" | "historial";
+
 export default function AdminPatientRecordPage() {
   const params = useParams<{ patientId: string }>();
   const patientId = Array.isArray(params?.patientId) ? params.patientId[0] : params?.patientId || "";
@@ -93,6 +95,7 @@ export default function AdminPatientRecordPage() {
   const [timelineQuery, setTimelineQuery] = useState("");
   const [timelineFrom, setTimelineFrom] = useState("");
   const [timelineTo, setTimelineTo] = useState("");
+  const [activeRecordSection, setActiveRecordSection] = useState<RecordSectionId | "">("");
   const [selectedClinicalHistoryEntry, setSelectedClinicalHistoryEntry] = useState<any | null>(null);
 
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -396,9 +399,12 @@ export default function AdminPatientRecordPage() {
     timelineSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const scrollToRecordSection = (id: string) => {
+  const openRecordSection = (id: RecordSectionId) => {
+    setActiveRecordSection(id);
     setMobileMenuOpen(false);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   };
 
   useEffect(() => {
@@ -1078,7 +1084,8 @@ export default function AdminPatientRecordPage() {
         .record-nav-btn { min-height: 82px; border-radius: 16px; border: 1px solid #D7E7FA; background: #FFFFFF; color: #0E2D4A; font-family: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(28,66,104,0.05); text-align: left; padding: 14px; }
         .record-nav-btn strong { display: block; font-size: 16px; font-weight: 950; line-height: 1.25; }
         .record-nav-btn span { display: block; color: #64748B; font-size: 13px; font-weight: 800; line-height: 1.35; margin-top: 5px; }
-        .record-nav-btn:hover, .record-nav-btn:focus-visible { border-color: #93C5FD; background: #F8FBFF; outline: none; }
+        .record-nav-btn:hover, .record-nav-btn:focus-visible, .record-nav-btn.active { border-color: #93C5FD; background: #F8FBFF; outline: none; }
+        .record-section-shell { margin-top: 16px; }
         .locked-note { border: 1px solid #DBEAFE; background: #F8FBFF; color: #1D4ED8; border-radius: 16px; padding: 12px 14px; font-size: 14px; font-weight: 850; line-height: 1.5; margin: 0 0 14px; }
         .readonly-field { min-height: 52px; display: flex; align-items: center; padding: 13px 14px; background: #F8FAFC; border: 1px solid #E5EDF6; border-radius: 14px; color: #111827; font-size: 16px; font-weight: 850; line-height: 1.45; overflow-wrap: anywhere; }
         @media (max-width: 980px) {
@@ -1209,27 +1216,27 @@ export default function AdminPatientRecordPage() {
               </section>
 
               <section className="record-nav" aria-label={isSpanish ? "Navegación del expediente" : "Record navigation"}>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("documentos")}>
+                <button type="button" className={`record-nav-btn ${activeRecordSection === "documentos" ? "active" : ""}`} onClick={() => openRecordSection("documentos")}>
                   <strong>{isSpanish ? "Documento" : "Documents"}</strong>
                   <span>{clinicalHistoryEntries.length} {isSpanish ? "Historia Clinica" : "clinical form"}</span>
                 </button>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("procedimientos")}>
+                <button type="button" className={`record-nav-btn ${activeRecordSection === "procedimientos" ? "active" : ""}`} onClick={() => openRecordSection("procedimientos")}>
                   <strong>{isSpanish ? "Procedimiento y sede" : "Procedure and office"}</strong>
                   <span>{procedures.length} {isSpanish ? "procedimiento(s)" : "procedure(s)"}</span>
                 </button>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("datos-paciente")}>
+                <button type="button" className={`record-nav-btn ${activeRecordSection === "datos-paciente" ? "active" : ""}`} onClick={() => openRecordSection("datos-paciente")}>
                   <strong>{isSpanish ? "Datos" : "Details"}</strong>
                   <span>{isSpanish ? "Información del paciente" : "Patient information"}</span>
                 </button>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("archivo-interno")}>
+                <button type="button" className={`record-nav-btn ${activeRecordSection === "archivo-interno" ? "active" : ""}`} onClick={() => openRecordSection("archivo-interno")}>
                   <strong>{isSpanish ? "Archivo interno" : "Internal record"}</strong>
                   <span>{internalNoteEntries.length + internalPhotoEntries.length} {isSpanish ? "elemento(s)" : "item(s)"}</span>
                 </button>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("media")}>
+                <button type="button" className={`record-nav-btn ${activeRecordSection === "media" ? "active" : ""}`} onClick={() => openRecordSection("media")}>
                   <strong>Media</strong>
                   <span>{publicImageEntries.length + media.videos.length + media.audios.length + regularFileEntries.length} {isSpanish ? "archivo(s)" : "file(s)"}</span>
                 </button>
-                <button type="button" className="record-nav-btn" onClick={() => scrollToRecordSection("historial")}>
+                <button type="button" className={`record-nav-btn ${activeRecordSection === "historial" ? "active" : ""}`} onClick={() => openRecordSection("historial")}>
                   <strong>{isSpanish ? "Historial" : "History"}</strong>
                   <span>{timeline.length} {isSpanish ? "evento(s)" : "event(s)"}</span>
                 </button>
@@ -1237,8 +1244,16 @@ export default function AdminPatientRecordPage() {
 
               {!canEditRecord && <p className="locked-note">{t.recordEditLocked}</p>}
 
-              <div className="grid-2" style={{ alignItems: "start", marginBottom: 16 }}>
-                <section className="card" id="documentos">
+              <div
+                className="grid-2 record-section-shell"
+                style={{
+                  alignItems: "start",
+                  marginBottom: 16,
+                  display: activeRecordSection === "documentos" || activeRecordSection === "procedimientos" ? "grid" : "none",
+                  gridTemplateColumns: "minmax(0, 1fr)",
+                }}
+              >
+                <section className="card" id="documentos" style={{ display: activeRecordSection === "documentos" ? "block" : "none" }}>
                   <div className="section-head">
                     <div>
                       <p className="section-kicker">{t.documentsTitle}</p>
@@ -1274,7 +1289,7 @@ export default function AdminPatientRecordPage() {
                   )}
                 </section>
 
-                <section className="card" id="procedimientos">
+                <section className="card" id="procedimientos" style={{ display: activeRecordSection === "procedimientos" ? "block" : "none" }}>
                   <div className="section-head">
                     <div>
                       <p className="section-kicker">{t.proceduresTitle}</p>
@@ -1389,7 +1404,7 @@ export default function AdminPatientRecordPage() {
                 </section>
               </div>
 
-              <div className="grid-2">
+              <div className="grid-2 record-section-shell" style={{ display: activeRecordSection === "datos-paciente" ? "grid" : "none" }}>
                 <section className="card" id="datos-paciente">
                   <div className="section-head">
                     <div>
@@ -1485,7 +1500,7 @@ export default function AdminPatientRecordPage() {
                 </section>
               </div>
 
-              <section className="card" id="archivo-interno" style={{ marginTop: 16 }}>
+              <section className="card record-section-shell" id="archivo-interno" style={{ display: activeRecordSection === "archivo-interno" ? "block" : "none" }}>
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">{t.staffRecordTitle}</p>
@@ -1520,7 +1535,7 @@ export default function AdminPatientRecordPage() {
                 </div>
               </section>
 
-              <section className="card" id="media" style={{ marginTop: 16 }}>
+              <section className="card record-section-shell" id="media" style={{ display: activeRecordSection === "media" ? "block" : "none" }}>
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">{t.mediaTitle}</p>
@@ -1535,7 +1550,7 @@ export default function AdminPatientRecordPage() {
                 </div>
               </section>
 
-              <section className="card" id="historial" style={{ marginTop: 16 }} ref={timelineSectionRef}>
+              <section className="card record-section-shell" id="historial" style={{ display: activeRecordSection === "historial" ? "block" : "none" }} ref={timelineSectionRef}>
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">{t.timelineTitle}</p>

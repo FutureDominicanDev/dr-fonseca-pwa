@@ -617,14 +617,11 @@ function TopbarActionIcon({ kind }: { kind: "staff" | "labels" | "admin" }) {
   );
 }
 
-function AttachmentTrayIcon() {
+function SettingsGearIcon() {
   return (
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 7.5h16" />
-      <path d="M6.5 7.5 8 19h8l1.5-11.5" />
-      <path d="M9 7.5V5.8A2.8 2.8 0 0 1 11.8 3h.4A2.8 2.8 0 0 1 15 5.8v1.7" />
-      <path d="M10 11v4" />
-      <path d="M14 11v4" />
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.08a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.04A1.7 1.7 0 0 0 4.6 8.92a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34A1.7 1.7 0 0 0 10 3V3a2 2 0 0 1 4 0v.08a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87 1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.04A1.7 1.7 0 0 0 19.4 15Z" />
     </svg>
   );
 }
@@ -3692,7 +3689,9 @@ export default function InboxPage() {
   const roomPrescriptionEntries = roomMediaEntries.filter((entry) => isPrescriptionEntry(entry));
   const latestClinicalHistoryFileEntry = [...roomMediaEntries].reverse().find((entry) => isClinicalHistoryFileEntry(entry));
   const roomFormEntries = canViewClinicalHistoryForms
-    ? roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content) || (isClinicalHistoryFileEntry(entry) && entry.id === latestClinicalHistoryFileEntry?.id))
+    ? latestClinicalHistoryFileEntry
+      ? [latestClinicalHistoryFileEntry]
+      : roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content))
     : [];
   const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry) && !isClinicalHistoryFileEntry(entry));
   const formExportText = (entry: any) => {
@@ -6040,7 +6039,7 @@ export default function InboxPage() {
                       </div>
                     )}
                     <button className="plus-btn" onClick={()=>{setShowEmojiMenu(false);setShowMediaMenu(v=>!v);}} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>
-                      {showMediaMenu ? "×" : <AttachmentTrayIcon />}
+                      {showMediaMenu ? "×" : <SettingsGearIcon />}
                       {staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread && <span className="staff-record-dot" aria-hidden="true" />}
                     </button>
                     <div
