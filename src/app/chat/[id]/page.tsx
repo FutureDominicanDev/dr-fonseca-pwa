@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, use, useEffect, useRef, useState } from "react";
+import { Fragment, use, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import {
   FormMessage,
   createClinicalHistoryPayload,
@@ -82,6 +83,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [textSize, setTextSize] = useState<"normal" | "large">("normal");
   const [recording, setRecording] = useState(false);
   const [uiLang, setUiLang] = useState<"es" | "en">(() => deviceUiLang());
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationFeedback, setNotificationFeedback] = useState("");
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
@@ -126,9 +130,103 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
   const prescriptionSeenKey = `patient_seen_recetas_${id}`;
 
+  const urlBase64ToUint8Array = (b64: string) => {
+    const padding = "=".repeat((4 - (b64.length % 4)) % 4);
+    const base64 = (b64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
+  };
+
+  const subscribePatientToPush = useCallback(async () => {
+    if (typeof window === "undefined" || !accessReady || accessDenied || !token) return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setNotificationPermission("unsupported");
+      return;
+    }
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!vapidKey) return;
+    const registration = await navigator.serviceWorker.ready;
+    const existing = await registration.pushManager.getSubscription();
+    const subscription = existing || await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    });
+    await syncPushSubscription({
+      subscription: subscription.toJSON(),
+      userType: "patient",
+      roomId: id,
+      roomToken: token,
+    });
+  }, [accessDenied, accessReady, id, token]);
+
+  const requestPatientNotifications = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      setNotificationFeedback(uiLang === "es" ? "Este dispositivo no soporta alertas." : "This device does not support alerts.");
+      return;
+    }
+
+    setNotificationBusy(true);
+    setNotificationFeedback("");
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === "granted") {
+        await subscribePatientToPush();
+        setNotificationFeedback(uiLang === "es" ? "Alertas activadas en este dispositivo." : "Alerts are enabled on this device.");
+      } else if (permission === "denied") {
+        setNotificationFeedback(uiLang === "es" ? "Las alertas están bloqueadas en este dispositivo." : "Alerts are blocked on this device.");
+      } else {
+        setNotificationFeedback(uiLang === "es" ? "Permiso pendiente." : "Permission is still pending.");
+      }
+    } catch {
+      setNotificationFeedback(uiLang === "es" ? "No pude activar alertas." : "I could not enable alerts.");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }, [subscribePatientToPush, uiLang]);
+
+  const patientDisplayName = useCallback(() => {
+    const patient = room?.procedures?.patients as any;
+    const name = Array.isArray(patient) ? patient[0]?.full_name : patient?.full_name;
+    return name || (uiLang === "es" ? "Paciente" : "Patient");
+  }, [room, uiLang]);
+
+  const sendStaffPushNotification = useCallback((body: string, audience?: "advanced_assigned") => {
+    if (!token || !body.trim()) return;
+    fetch("/api/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roomId: id,
+        roomToken: token,
+        userType: "staff",
+        title: patientDisplayName(),
+        body: body.trim().slice(0, 300),
+        url: "/inbox",
+        tag: id,
+        audience,
+      }),
+    }).catch(() => {});
+  }, [id, patientDisplayName, token]);
+
   useEffect(() => {
     setUiLang(deviceUiLang());
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if ("Notification" in window) {
+      setNotificationPermission(Notification.permission);
+    } else {
+      setNotificationPermission("unsupported");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (notificationPermission === "granted") subscribePatientToPush().catch(() => {});
+  }, [notificationPermission, subscribePatientToPush]);
 
   useEffect(() => {
     const patient = room?.procedures?.patients;
@@ -349,6 +447,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         if (current.some((item) => item.id === data.id)) return current;
         return [...current, data as Message];
       });
+      sendStaffPushNotification(content);
     }
   };
 
@@ -371,6 +470,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         .single();
       if (!error && data) {
         setMessages((current) => current.map((message) => (message.id === existing.id ? (data as Message) : message)));
+        sendStaffPushNotification(uiLang === "es" ? "Historia clínica actualizada" : "Medical history updated", "advanced_assigned");
       }
       return;
     }
@@ -388,7 +488,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       })
       .select("*")
       .single();
-    if (data) setMessages((current) => current.some((item) => item.id === data.id) ? current : [...current, data as Message]);
+    if (data) {
+      setMessages((current) => current.some((item) => item.id === data.id) ? current : [...current, data as Message]);
+      sendStaffPushNotification(uiLang === "es" ? "Historia clínica enviada" : "Medical history submitted", "advanced_assigned");
+    }
   };
 
   const deletePatientMessage = async (messageId: string) => {
@@ -519,6 +622,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         if (current.some((item) => item.id === message.id)) return current;
         return [...current, message as Message];
       });
+      sendStaffPushNotification(message.message_type === "file" && overrideFileName === HISTORIA_CLINICA_FILE_NAME
+        ? (uiLang === "es" ? "Historia Clinica enviada" : "Historia Clinica submitted")
+        : file.name || (uiLang === "es" ? "Nuevo archivo" : "New file"),
+        message.message_type === "file" && overrideFileName === HISTORIA_CLINICA_FILE_NAME ? "advanced_assigned" : undefined);
     }
 
     return url;
@@ -703,6 +810,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       delete: "Delete",
       deletedByUser: "This message was Deleted by user",
       darkMode: "Dark mode",
+      alerts: "Alerts",
+      enableAlerts: "Enable alerts",
+      enablingAlerts: "Enabling...",
       textSize: "Text size",
       normal: "Normal",
       large: "Large",
@@ -736,6 +846,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       delete: "Eliminar",
       deletedByUser: "Este mensaje fue eliminado por el usuario",
       darkMode: "Modo oscuro",
+      alerts: "Alertas",
+      enableAlerts: "Activar alertas",
+      enablingAlerts: "Activando...",
       textSize: "Tamaño de texto",
       normal: "Normal",
       large: "Grande",
@@ -1178,6 +1291,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {labels.darkMode}
               <input type="checkbox" checked={darkMode} onChange={(event) => setDarkMode(event.target.checked)} style={{ width: 24, height: 24 }} />
             </label>
+            <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
+              <div style={{ fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.alerts}</div>
+              {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
+                <button onClick={()=>void requestPatientNotifications()} disabled={notificationBusy} style={{ minHeight: 48, border: "none", borderRadius: 14, background: "#DBEAFE", color: "#1D4ED8", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit", opacity: notificationBusy ? 0.6 : 1 }}>
+                  {notificationBusy ? labels.enablingAlerts : labels.enableAlerts}
+                </button>
+              )}
+              {notificationFeedback && (
+                <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 700, lineHeight: 1.45 }}>
+                  {notificationFeedback}
+                </div>
+              )}
+            </div>
             <div style={{ fontSize: patientTextBase, lineHeight: 1.45, marginBottom: 10 }}>{labels.textSize}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <button onClick={() => setTextSize("normal")} style={{ height: 48, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 800 }}>{labels.normal}</button>

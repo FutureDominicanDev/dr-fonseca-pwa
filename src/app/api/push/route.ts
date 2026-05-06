@@ -52,6 +52,21 @@ async function canNotifyPatientRoom(userId: string, adminLevel: string, roomId: 
   return Boolean(membership?.id);
 }
 
+async function getPatientRoomAccess(body: any) {
+  if (!supabase) return null;
+  const roomId = typeof body?.roomId === "string" ? body.roomId.trim() : "";
+  const roomToken = typeof body?.roomToken === "string" ? body.roomToken.trim() : "";
+  if (!roomId || !roomToken) return null;
+
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("id, patient_access_token")
+    .eq("id", roomId)
+    .maybeSingle();
+
+  return room?.id && room.patient_access_token === roomToken ? { roomId: room.id } : null;
+}
+
 async function storeSubscription(req: NextRequest, body: any) {
   if (!supabase) return NextResponse.json({ error: "Push is not configured on server." }, { status: 503 });
   const userType = body?.userType === "staff" ? "staff" : body?.userType === "patient" ? "patient" : null;
@@ -64,8 +79,9 @@ async function storeSubscription(req: NextRequest, body: any) {
     return NextResponse.json({ error: "Invalid subscription payload" }, { status: 400 });
   }
 
+  let staff: { id: string; adminLevel: string } | null = null;
   if (userType === "staff") {
-    const staff = await getAuthenticatedStaff(req);
+    staff = await getAuthenticatedStaff(req);
     if (!staff) return NextResponse.json({ error: "Missing or invalid staff session." }, { status: 401 });
   }
 
@@ -109,7 +125,7 @@ async function storeSubscription(req: NextRequest, body: any) {
 
   const nextRow: { user_type: "patient" | "staff"; room_id?: string; subscription: any } = {
     user_type: userType,
-    subscription,
+    subscription: userType === "staff" && staff?.id ? { ...subscription, portalUserId: staff.id } : subscription,
   };
 
   if (userType === "patient" && roomId) nextRow.room_id = roomId;
@@ -137,10 +153,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Push VAPID credentials are not configured." }, { status: 503 });
     }
 
-    const staff = await getAuthenticatedStaff(req);
-    if (!staff) return NextResponse.json({ error: "Missing or invalid staff session." }, { status: 401 });
-
-    const { roomId, title, body: messageBody, url, userType } = body;
+    const { roomId, title, body: messageBody, url, userType, tag } = body;
     if (userType !== "patient" && userType !== "staff") {
       return NextResponse.json({ error: "Invalid userType." }, { status: 400 });
     }
@@ -153,7 +166,15 @@ export async function POST(req: NextRequest) {
     if (userType === "patient" && (typeof roomId !== "string" || !roomId.trim())) {
       return NextResponse.json({ error: "roomId is required for patient notifications." }, { status: 400 });
     }
+
+    const staff = await getAuthenticatedStaff(req);
+    const patientRoomAccess = !staff && userType === "staff" ? await getPatientRoomAccess(body) : null;
+    if (!staff && !patientRoomAccess) {
+      return NextResponse.json({ error: "Missing or invalid notification sender." }, { status: 401 });
+    }
+
     if (userType === "patient") {
+      if (!staff) return NextResponse.json({ error: "Missing or invalid staff session." }, { status: 401 });
       const allowed = await canNotifyPatientRoom(staff.id, staff.adminLevel, roomId);
       if (!allowed) return NextResponse.json({ error: "You do not have access to this patient room." }, { status: 403 });
     }
@@ -163,15 +184,41 @@ export async function POST(req: NextRequest) {
     if (userType === "patient") {
       query = query.eq("user_type", "patient").eq("room_id", roomId);
     } else {
-      // Notify ALL staff — small team, every staff member should know
       query = query.eq("user_type", "staff");
     }
 
-    const { data: subs, error } = await query;
+    const { data: rawSubs, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    let subs = rawSubs || [];
+    if (userType === "staff" && typeof roomId === "string" && roomId.trim()) {
+      const { data: members } = await supabase
+        .from("room_members")
+        .select("user_id")
+        .eq("room_id", roomId.trim());
+      let targetStaffIds = Array.from(new Set((members || []).map((member: any) => `${member.user_id || ""}`).filter(Boolean)));
+
+      if (body?.audience === "advanced_assigned" && targetStaffIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, admin_level")
+          .in("id", targetStaffIds);
+        const advancedIds = new Set(
+          (profiles || [])
+            .filter((profile: any) => ["owner", "super_admin"].includes(`${profile.admin_level || ""}`.toLowerCase()))
+            .map((profile: any) => profile.id)
+        );
+        targetStaffIds = targetStaffIds.filter((id) => advancedIds.has(id));
+      }
+
+      const targetSet = new Set(targetStaffIds);
+      subs = subs.filter((sub: any) => {
+        const staffId = `${sub?.subscription?.portalUserId || ""}`;
+        return staffId && targetSet.has(staffId);
+      });
+    }
     if (!subs || subs.length === 0) return NextResponse.json({ sent: 0 });
 
-    const payload = JSON.stringify({ title, body: messageBody, url: url || "/inbox" });
+    const payload = JSON.stringify({ title, body: messageBody, url: url || "/inbox", tag: typeof tag === "string" ? tag.slice(0, 80) : undefined });
     let sent = 0;
     const toDelete: string[] = [];
 

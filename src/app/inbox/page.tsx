@@ -1159,6 +1159,11 @@ export default function InboxPage() {
   const isSuperAdmin = isOwnerEmail(currentUserEmail) || ["owner","super_admin"].includes((userProfile?.admin_level || "").toLowerCase());
   const canOpenAdmin = isSuperAdmin;
   const canManageCareTeam = isSuperAdmin;
+  const currentUserAssignedToSelectedRoom =
+    !!currentUserId &&
+    (!!selectedRoom?.created_by && selectedRoom.created_by === currentUserId ||
+      selectedRoomTeam.some((member) => member.id === currentUserId));
+  const canViewClinicalHistoryForms = isSuperAdmin && (isOwnerEmail(currentUserEmail) || currentUserAssignedToSelectedRoom);
   const canViewInternalNote = (entry: any) => {
     const note = parseInternalNote(entry?.content);
     if (note.visibility !== "private") return true;
@@ -3351,7 +3356,9 @@ export default function InboxPage() {
   const roomImageVideoEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && (entry.message_type === "image" || entry.message_type === "video"));
   const roomAudioEntries = roomMediaEntries.filter((entry) => !isPatientFolderEntry(entry) && entry.message_type === "audio");
   const roomPrescriptionEntries = roomMediaEntries.filter((entry) => isPrescriptionEntry(entry));
-  const roomFormEntries = roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content) || isClinicalHistoryFileEntry(entry));
+  const roomFormEntries = canViewClinicalHistoryForms
+    ? roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content) || isClinicalHistoryFileEntry(entry))
+    : [];
   const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry) && !isClinicalHistoryFileEntry(entry));
   const formExportText = (entry: any) => {
     const payload = parseFormMessage(entry.content);
@@ -3603,16 +3610,28 @@ export default function InboxPage() {
         ):effectiveType==="file"?(
           <div style={{...bubbleStyle,cursor:"pointer"}}>
             {bubbleHeader()}
-            <a href={msg.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,color:"inherit",textDecoration:"none"}}>
-              <span style={{fontSize:28}}>📄</span>
-              <div><div style={{fontSize:14,fontWeight:600}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
-            </a>
+            {isClinicalHistoryFileEntry(msg) && !canViewClinicalHistoryForms ? (
+              <div style={{padding:12,borderRadius:14,background:darkMode?"#1F2937":"#F8FAFC",border:`1px solid ${borderColor}`,fontSize:uiSmallSize,fontWeight:800,color:subTextColor}}>
+                {lang==="es" ? "Historia Clinica restringida a Admin Avanzado asignado." : "Historia Clinica restricted to assigned Advanced Admin."}
+              </div>
+            ) : (
+              <a href={msg.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,color:"inherit",textDecoration:"none"}}>
+                <span style={{fontSize:28}}>📄</span>
+                <div><div style={{fontSize:14,fontWeight:600}}>{(msg.file_name||"Archivo").replace(/^\[MED\] |\[BEFORE\] |\[FORM\] /,"")}</div><div style={{fontSize:12,opacity:0.78}}>{fmtSize(msg.file_size)}</div></div>
+              </a>
+            )}
             {patientDeletedNotice}
             {bubbleTime(false,{marginTop:6})}
           </div>
         ):formPayload ? (
           <div style={{...bubbleStyle,padding:0,background:"transparent",border:"none",boxShadow:"none"}}>
-            <FormMessage payload={formPayload} lang={lang} />
+            {canViewClinicalHistoryForms ? (
+              <FormMessage payload={formPayload} lang={lang} />
+            ) : (
+              <div style={{padding:12,borderRadius:14,background:darkMode?"#1F2937":"#F8FAFC",border:`1px solid ${borderColor}`,fontSize:uiSmallSize,fontWeight:800,color:subTextColor}}>
+                {lang==="es" ? "Historia clínica restringida a Admin Avanzado asignado." : "Medical history restricted to assigned Advanced Admin."}
+              </div>
+            )}
           </div>
         ):callRequestToken ? (
           <div style={{ ...bubbleStyle, padding: 12, minWidth: 250 }}>
@@ -4819,7 +4838,7 @@ export default function InboxPage() {
                 { key:"media", label: lang==="es" ? "Media" : "Media" },
                 { key:"audio", label: lang==="es" ? "Audios" : "Audio" },
                 { key:"prescriptions", label: lang==="es" ? "Recetas" : "Prescriptions" },
-                { key:"forms", label: t.forms },
+                ...(canViewClinicalHistoryForms ? [{ key:"forms" as MediaTab, label: t.forms }] : []),
                 { key:"docs", label: lang==="es" ? "Archivos" : "Files" },
               ] as { key: MediaTab; label: string }[]).map((tab)=>(
                 <button key={tab.key} onClick={()=>setMediaLibraryTab(tab.key)} style={{padding:"10px 14px",borderRadius:999,border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:800,background:mediaLibraryTab===tab.key?"#DBEAFE":cardBg,color:mediaLibraryTab===tab.key?"#1D4ED8":textColor}}>
@@ -4878,7 +4897,7 @@ export default function InboxPage() {
                 ))}
               </div>
             )}
-            {mediaLibraryTab==="forms" && (
+            {mediaLibraryTab==="forms" && canViewClinicalHistoryForms && (
               <div style={{display:"grid",gap:10}}>
                 <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{t.formFolderTitle}</div>
                 {roomFormEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{t.noForms}</div>}
@@ -5232,6 +5251,16 @@ export default function InboxPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input className="search-input" placeholder={t.search} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
               </div>
+              {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
+                <button
+                  type="button"
+                  onClick={()=>void requestStaffNotifications()}
+                  disabled={notificationBusy}
+                  style={{marginTop:10,width:"100%",minHeight:40,border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer",opacity:notificationBusy?0.6:1}}
+                >
+                  {notificationBusy ? (lang==="es" ? "Activando..." : "Enabling...") : (lang==="es" ? "Activar alertas" : "Enable alerts")}
+                </button>
+              )}
               {userLabels.length > 0 && (
                 <div className="label-filter-row">
                   <button className={`label-chip all${!activeLabelFilter ? " active" : ""}`} onClick={()=>setActiveLabelFilter("")}>
