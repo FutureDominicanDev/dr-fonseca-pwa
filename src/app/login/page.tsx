@@ -257,10 +257,12 @@ export default function LoginPage() {
 
     setLoading(true);
     setError("");
-    const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-      redirectTo: `${appBaseUrl}/reset-password?lang=${lang}`,
+    const response = await fetch("/api/auth/password-reset-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: resetEmail.trim(), lang }),
     });
-    if (err) {
+    if (!response.ok) {
       setError(t.errors.resetFailed);
       setLoading(false);
       return;
