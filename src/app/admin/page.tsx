@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
   adminColor,
-  adminLabel,
   formatDate,
   initials,
   isMissingColumnError,
@@ -94,7 +93,6 @@ export default function AdminPage() {
   const [savingCode, setSavingCode] = useState(false);
   const [savingPhones, setSavingPhones] = useState(false);
   const [savingKey, setSavingKey] = useState("");
-  const [staffNameDrafts, setStaffNameDrafts] = useState<Record<string, string>>({});
   const [staffPhoneDrafts, setStaffPhoneDrafts] = useState<Record<string, string>>({});
   const [deletingStaffId, setDeletingStaffId] = useState("");
   const [unblockBusyKey, setUnblockBusyKey] = useState("");
@@ -126,13 +124,20 @@ export default function AdminPage() {
 
   const adminText = (level: AdminLevel) =>
     isSpanish
-      ? adminLabel(level)
+      ? (
+          {
+            owner: "👑 Propietario",
+            super_admin: "Control total",
+            admin: "Crear pacientes",
+            none: "Solo chats",
+          } as const
+        )[level]
       : (
           {
-            owner: "👑 Full access",
-            super_admin: "⭐ Advanced admin",
-            admin: "🛡️ Admin",
-            none: "No admin",
+            owner: "👑 Owner",
+            super_admin: "Full control",
+            admin: "Create patients",
+            none: "Assigned chats",
           } as const
         )[level];
 
@@ -199,9 +204,7 @@ export default function AdminPage() {
     ? `${window.location.origin}/register?code=${encodeURIComponent(inviteCode)}`
     : "";
   const activePatientCount = patients.filter((patient) => normalizeRecordStatus(patient.record_status) === "active").length;
-  const activePatientCards = allPatientCards.filter((card) => card.recordStatus === "active");
   const blockedAccessCount = blockedEmails.length + blockedPhones.length;
-  const adminAccessCount = staff.filter((member) => normalizeAdminLevel(member.admin_level, member.id === viewerId ? viewerEmail : "") !== "none").length;
   const inviteCodePreview = inviteCode ? `${inviteCode.slice(0, Math.min(7, inviteCode.length))}••••` : "";
   const staffById = useMemo(() => new Map(staff.map((member) => [member.id, member])), [staff]);
   const patientById = useMemo(() => new Map(patients.map((patient) => [patient.id, patient])), [patients]);
@@ -270,6 +273,12 @@ export default function AdminPage() {
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  const renderSectionTopButton = () => (
+    <button type="button" className="section-top-btn" onClick={scrollAdminToTop}>
+      {isSpanish ? "Arriba" : "Top"}
+    </button>
+  );
 
   const fetchData = async () => {
     setPageError("");
@@ -1018,14 +1027,7 @@ export default function AdminPage() {
         .hero { background: linear-gradient(135deg, #0B2438 0%, #0E3F63 58%, #155C95 100%); color: white; border-radius: 30px; padding: 26px; margin-bottom: 18px; box-shadow: 0 18px 50px rgba(7,51,77,0.20); border: 1px solid rgba(255,255,255,0.12); }
         .hero-grid { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 18px; align-items: end; }
         .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr); gap: 16px; align-items: start; }
-        .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 18px 0; }
-        .stat-card, .card { background: rgba(255,255,255,0.98); border: 1px solid rgba(102,132,163,0.14); border-radius: 20px; padding: 20px; box-shadow: 0 8px 28px rgba(28,66,104,0.06); }
-        .stat-card { display: block; width: 100%; padding: 18px 16px; min-height: 124px; appearance: none; text-align: left; font-family: inherit; cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
-        .stat-card:hover, .stat-card:focus-visible { transform: translateY(-2px); border-color: rgba(37,99,235,0.35); box-shadow: 0 14px 34px rgba(28,66,104,0.10); outline: none; }
-        .stat-icon { width: 38px; height: 38px; border-radius: 14px; display: grid; place-items: center; background: #EAF5FF; color: #075EA8; font-size: 18px; margin-bottom: 12px; }
-        .stat-label { color: #64748B; font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; line-height: 1.35; }
-        .stat-value { color: #0E2D4A; font-size: 30px; line-height: 1; font-weight: 950; }
-        .stat-help { color: #64748B; font-size: 15px; font-weight: 700; line-height: 1.45; margin-top: 8px; }
+        .card { background: rgba(255,255,255,0.98); border: 1px solid rgba(102,132,163,0.14); border-radius: 20px; padding: 20px; box-shadow: 0 8px 28px rgba(28,66,104,0.06); }
         .section-title { font-size: 15px; font-weight: 900; color: #6B7280; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; line-height: 1.35; }
         .big-title { font-size: 34px; font-weight: 900; margin: 0 0 8px; }
         .subtle { color: rgba(255,255,255,0.84); line-height: 1.6; font-size: 15px; }
@@ -1053,15 +1055,14 @@ export default function AdminPage() {
         .summary-value { font-size: 28px; font-weight: 900; color: #111827; line-height: 1; }
         .summary-copy { color: #6B7280; font-size: 15px; line-height: 1.55; margin-top: 6px; overflow-wrap: anywhere; }
         .command-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; }
-        .command-btn { min-height: 58px; padding: 12px 14px; border-radius: 16px; border: 1px solid #D7E7FA; background: #FFFFFF; color: #0E2D4A; text-align: left; font-family: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(28,66,104,0.05); }
-        .command-btn strong { display: block; font-size: 15px; font-weight: 950; line-height: 1.25; }
-        .command-btn span { display: block; margin-top: 4px; color: #64748B; font-size: 13px; font-weight: 750; line-height: 1.35; }
+        .command-btn { min-height: 78px; padding: 14px 15px; border-radius: 16px; border: 1px solid #D7E7FA; background: #FFFFFF; color: #0E2D4A; text-align: left; font-family: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(28,66,104,0.05); }
+        .command-btn strong { display: block; font-size: 17px; font-weight: 950; line-height: 1.25; }
+        .command-btn span { display: block; margin-top: 5px; color: #64748B; font-size: 14px; font-weight: 750; line-height: 1.35; }
         .command-btn:hover, .command-btn:focus-visible { border-color: #93C5FD; background: #F8FBFF; outline: none; }
         .admin-section-search { order: 1; }
         .admin-section-results { order: 2; }
-        .admin-section-active { order: 3; }
-        .admin-section-requests { order: 4; }
-        .admin-section-internal { order: 5; }
+        .admin-section-requests { order: 3; }
+        .admin-section-internal { order: 4; }
         .admin-side-team { order: 1; }
         .admin-side-invite { order: 2; }
         .admin-side-phones { order: 3; }
@@ -1083,6 +1084,7 @@ export default function AdminPage() {
         .staff-row.compact { gap: 12px; padding: 14px 0; }
         .staff-heading-line { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
         .staff-contact { color: #64748B; font-size: 15px; font-weight: 700; line-height: 1.45; margin-top: 3px; overflow-wrap: anywhere; }
+        .staff-badge-row { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 8px; }
         .staff-controls { margin-top: 10px; border: 1px solid #E6EEF7; border-radius: 14px; overflow: hidden; background: #FBFDFF; }
         .staff-controls summary { list-style: none; min-height: 44px; padding: 10px 12px; cursor: pointer; color: #075EA8; font-size: 15px; font-weight: 900; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .staff-controls summary::-webkit-details-marker { display: none; }
@@ -1122,14 +1124,14 @@ export default function AdminPage() {
         .admin-bottom-actions { margin-top: 16px; display: flex; justify-content: center; }
         .back-top-inline-btn { padding: 12px 20px; border-radius: 999px; border: 1px solid #DBEAFE; background: #EFF6FF; color: #1D4ED8; font-size: 14px; font-weight: 800; font-family: inherit; cursor: pointer; }
         .back-top-inline-btn:hover { background: #DBEAFE; }
+        .section-top-btn { min-height: 40px; padding: 9px 13px; border-radius: 999px; border: 1px solid #DBEAFE; background: #EFF6FF; color: #1D4ED8; font-size: 13px; font-weight: 900; font-family: inherit; cursor: pointer; white-space: nowrap; }
+        .access-help { padding: 10px 12px; border-radius: 14px; background: #F8FAFC; border: 1px solid #E6EEF7; color: #64748B; font-size: 14px; line-height: 1.45; font-weight: 700; }
         @media (max-width: 980px) {
           .hero-grid, .workspace-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
-          .stats-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
           .admin-brand-logo { width: min(245px, 34vw); }
           .admin-title-copy { display: none; }
         }
         @media (max-width: 560px) {
-          .stats-grid { grid-template-columns: 1fr 1fr; }
           .admin-topbar { position: static; min-height: calc(84px + env(safe-area-inset-top)); padding-bottom: 14px; align-items: center; }
           .topbar-title { gap: 10px; }
           .admin-brand-logo { width: min(245px, 68vw); height: 62px; }
@@ -1224,49 +1226,40 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="stats-grid" aria-label={isSpanish ? "Resumen administrativo" : "Administrative summary"}>
-            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("pacientes-activos")}>
-              <div className="stat-icon">🏥</div>
-              <p className="stat-label">{isSpanish ? "Pacientes activos" : "Active patients"}</p>
-              <p className="stat-value">{activePatientCount}</p>
-              <p className="stat-help">{isSpanish ? "Lista completa de pacientes" : "Complete patient list"}</p>
-            </button>
-            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("staff-to-staff")}>
-              <div className="stat-icon">💬</div>
-              <p className="stat-label">{isSpanish ? "Comunicación interna" : "Internal chat"}</p>
-              <p className="stat-value">{staffPrivateConversations.length}</p>
-              <p className="stat-help">{isSpanish ? "Conversaciones privadas del equipo" : "Private staff conversations"}</p>
-            </button>
-            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("equipo")}>
-              <div className="stat-icon">👥</div>
-              <p className="stat-label">{isSpanish ? "Equipo" : "Team"}</p>
-              <p className="stat-value">{staff.length}</p>
-              <p className="stat-help">{isSpanish ? `${adminAccessCount} con acceso admin` : `${adminAccessCount} with admin access`}</p>
-            </button>
-            <button type="button" className="stat-card" onClick={() => scrollToAdminSection("bloqueos")}>
-              <div className="stat-icon">🔒</div>
-              <p className="stat-label">{isSpanish ? "Bloqueos" : "Blocks"}</p>
-              <p className="stat-value">{blockedAccessCount}</p>
-              <p className="stat-help">{isSpanish ? "Correos y teléfonos restringidos" : "Restricted emails and phones"}</p>
-            </button>
-          </section>
-
           <section className="command-strip" aria-label={isSpanish ? "Navegación del centro administrativo" : "Admin center navigation"}>
             <button type="button" className="command-btn" onClick={() => scrollToAdminSection("buscar-paciente")}>
               <strong>{isSpanish ? "Buscar paciente" : "Find patient"}</strong>
-              <span>{isSpanish ? "Abrir expediente correcto" : "Open the correct record"}</span>
-            </button>
-            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("pacientes-activos")}>
-              <strong>{isSpanish ? "Pacientes activos" : "Active patients"}</strong>
-              <span>{activePatientCount} {isSpanish ? "en seguimiento" : "in follow-up"}</span>
+              <span>{activePatientCount} {isSpanish ? "activos. Abre el expediente correcto." : "active. Open the correct record."}</span>
             </button>
             <button type="button" className="command-btn" onClick={() => scrollToAdminSection("equipo")}>
-              <strong>{isSpanish ? "Equipo y permisos" : "Team and access"}</strong>
-              <span>{adminAccessCount} {isSpanish ? "con admin" : "with admin"}</span>
+              <strong>{isSpanish ? "Equipo" : "Team"}</strong>
+              <span>{staff.length} {isSpanish ? "usuarios. Teléfonos y acceso." : "users. Phones and access."}</span>
+            </button>
+            {canReviewAccessRequests && (
+              <button type="button" className="command-btn" onClick={() => scrollToAdminSection("solicitudes-pendientes")}>
+                <strong>{isSpanish ? "Solicitudes" : "Requests"}</strong>
+                <span>{pendingAccessRequests.length} {isSpanish ? "pendiente(s) de acceso" : "pending access request(s)"}</span>
+              </button>
+            )}
+            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("staff-to-staff")}>
+              <strong>{isSpanish ? "Chat staff" : "Staff chat"}</strong>
+              <span>{staffPrivateConversations.length} {isSpanish ? "conversaciones internas" : "internal conversation(s)"}</span>
             </button>
             <button type="button" className="command-btn" onClick={() => scrollToAdminSection("herramientas-expediente")}>
               <strong>{isSpanish ? "Herramientas" : "Tools"}</strong>
               <span>{isSpanish ? "Auditoría, archivo y papelera" : "Audit, archive, and trash"}</span>
+            </button>
+            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("invitar-personal")}>
+              <strong>{isSpanish ? "Invitar" : "Invite"}</strong>
+              <span>{isSpanish ? "Alta segura de personal" : "Secure staff onboarding"}</span>
+            </button>
+            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("telefonos-sede")}>
+              <strong>{isSpanish ? "Teléfonos" : "Phones"}</strong>
+              <span>{isSpanish ? "Números por consultorio" : "Office phone numbers"}</span>
+            </button>
+            <button type="button" className="command-btn" onClick={() => scrollToAdminSection("bloqueos")}>
+              <strong>{isSpanish ? "Bloqueos" : "Blocked"}</strong>
+              <span>{blockedAccessCount} {isSpanish ? "correos o teléfonos" : "emails or phones"}</span>
             </button>
           </section>
 
@@ -1282,6 +1275,7 @@ export default function AdminPage() {
 	                        : "Administrative list for reviewing and exporting private staff-to-staff conversations."}
                     </p>
                   </div>
+                  {renderSectionTopButton()}
                 </div>
                 <div style={{ display: "grid", gap: 10 }}>
 	                  {staffPrivateConversations.length === 0 ? (
@@ -1312,6 +1306,7 @@ export default function AdminPage() {
                       <p className="card-title">Solicitudes pendientes</p>
                       <p className="muted">{isSpanish ? "Revisa quién pidió acceso a un paciente." : "Review who requested access to a patient."}</p>
                     </div>
+                    {renderSectionTopButton()}
                   </div>
                   <div style={{ display: "grid", gap: 10 }}>
                     {pendingAccessRequests.length === 0 ? (
@@ -1344,41 +1339,13 @@ export default function AdminPage() {
                 </section>
               )}
 
-              <section className="card admin-section-active" id="pacientes-activos">
-                <div className="header-row">
-                  <div>
-                    <p className="card-title">{isSpanish ? "Pacientes activos" : "Active patients"}</p>
-                    <p className="muted">{isSpanish ? "Lista completa de pacientes activos. Toca un paciente para abrir su expediente." : "Complete active patient list. Tap a patient to open the record."}</p>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gap: 10 }}>
-                  {activePatientCards.length === 0 ? (
-                    <p className="muted">{isSpanish ? "No hay pacientes activos." : "No active patients."}</p>
-                  ) : (
-                    activePatientCards.map((card) => (
-                      <button
-                        key={`active-${card.patient.id}`}
-                        type="button"
-                        className="list-action-row"
-                        onClick={() => goTo(`/admin/paciente/${card.patient.id}`)}
-                      >
-                        <span className="avatar small-avatar">{initials(card.patient.full_name)}</span>
-                        <span style={{ minWidth: 0, flex: 1 }}>
-                          <strong>{card.patient.full_name || (isSpanish ? "Paciente sin nombre" : "Unnamed patient")}</strong>
-                          <span>{card.patient.phone || (isSpanish ? "Sin teléfono" : "No phone")} · {card.patient.email || (isSpanish ? "Sin correo" : "No email")}</span>
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </section>
-
               <section className="card search-panel admin-section-search" id="buscar-paciente">
                 <div className="header-row" style={{ marginBottom: 0 }}>
                   <div>
                     <p className="card-title">{isSpanish ? "Buscar paciente" : "Find patient"}</p>
                     <p className="muted">{isSpanish ? "Escribe nombre, teléfono, correo o procedimiento y después toca buscar." : "Type a name, phone, email, or procedure, then tap search."}</p>
                   </div>
+                  {renderSectionTopButton()}
                 </div>
 
                 <div className="search-toolbar">
@@ -1436,6 +1403,7 @@ export default function AdminPage() {
                   <p className="muted">{isSpanish ? "Aquí solo eliges al paciente correcto. La revisión completa y la exportación viven dentro del expediente." : "This is only for choosing the right patient. Full review and export live inside the record."}</p>
                 </div>
                 <div className="inline-actions">
+                  {renderSectionTopButton()}
                   {hasActiveSearch && (
                     <span className="result-count">
                       {isSpanish ? `${patientCards.length} resultado(s)` : `${patientCards.length} result(s)`}
@@ -1527,13 +1495,14 @@ export default function AdminPage() {
               <section className="card team-card admin-side-team" id="equipo">
                 <div className="header-row">
                   <div>
-                    <p className="card-title">{isSpanish ? "Equipo y permisos" : "Team and permissions"}</p>
+                    <p className="card-title">{isSpanish ? "Equipo" : "Team"}</p>
                     <p className="muted">
                       {isSpanish
-                        ? "Nombre, teléfono, correo y acceso administrativo en una vista compacta."
-                        : "Name, phone, email, and admin access in a compact view."}
+                        ? "Teléfonos, consultorio y nivel de acceso. El nombre lo edita cada usuario desde su perfil."
+                        : "Phones, office, and access level. Each user edits their own name from their profile."}
                     </p>
                   </div>
+                  {renderSectionTopButton()}
                 </div>
 
                 {staff.length === 0 ? (
@@ -1544,17 +1513,15 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   staff.map((member) => {
-                    const memberEmail = member.id === viewerId ? viewerEmail : member.email || "";
-                    const contactLine = [member.phone, memberEmail].filter(Boolean).join(" · ");
-                    const level = normalizeAdminLevel(member.admin_level, memberEmail);
+                    const rawMemberEmail = member.id === viewerId ? viewerEmail : member.email || "";
+                    const visibleMemberEmail = rawMemberEmail.endsWith("@portal-staff.local") ? "" : rawMemberEmail;
+                    const contactLine = [member.phone, visibleMemberEmail].filter(Boolean).join(" · ");
+                    const level = normalizeAdminLevel(member.admin_level, rawMemberEmail);
                     const canEditThisMember = canManageAdmins && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const isSelf = member.id === viewerId;
                     const canDeleteThisMember = canManageAdmins && !isSelf && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const accessKey = `${member.id}-admin_level`;
-                    const nameKey = `${member.id}-full_name-display_name`;
                     const phoneKey = `${member.id}-phone`;
-                    const nameDraft = staffNameDrafts[member.id] ?? (member.full_name || member.display_name || "");
-                    const cleanNameDraft = nameDraft.trim();
                     const phoneDraft = staffPhoneDrafts[member.id] ?? (member.phone || "");
                     const cleanPhoneDraft = phoneDraft.trim();
                     const deleteBusy = deletingStaffId === member.id;
@@ -1573,39 +1540,30 @@ export default function AdminPage() {
 	                            <div style={{ minWidth: 0 }}>
 	                              <p style={{ fontSize: 16, fontWeight: 900, color: "#111827", marginBottom: 2 }}>{member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name")}</p>
 	                              <p className="staff-contact">{contactLine || (isSpanish ? "Sin teléfono o correo registrado" : "No phone or email listed")}</p>
+                                <div className="staff-badge-row">
+                                  <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>
+                                    {adminText(level)}
+                                  </span>
+                                  {member.office_location && (
+                                    <span className="meta-badge" style={{ color: "#1D4ED8", background: "#EFF6FF" }}>
+                                      {member.office_location}
+                                    </span>
+                                  )}
+                                  {member.role && (
+                                    <span className="meta-badge" style={{ color: "#475569", background: "#F1F5F9" }}>
+                                      {member.role}
+                                    </span>
+                                  )}
+                                </div>
 	                            </div>
 	                          </div>
 
 	                          <details className="staff-controls">
 	                            <summary>
-	                              {isSpanish ? "Ajustar permisos" : "Adjust permissions"}
+	                              {isSpanish ? "Control de usuario" : "User controls"}
 	                              <span>⌄</span>
 	                            </summary>
 		                            <div className="staff-controls-body">
-                                  <div className="setting-group">
-                                    <p className="group-label">{isSpanish ? "Nombre" : "Name"}</p>
-                                    <div className="mini-actions" style={{ alignItems: "stretch" }}>
-                                      <input
-                                        className="line-input"
-                                        value={nameDraft}
-                                        disabled={!canEditThisMember}
-                                        onChange={(event) => setStaffNameDrafts((current) => ({ ...current, [member.id]: event.target.value }))}
-                                        placeholder={isSpanish ? "Nombre visible" : "Display name"}
-                                        style={{ minWidth: 180, flex: "1 1 220px", height: 42, padding: "0 12px", fontSize: 14 }}
-                                      />
-                                      <button
-                                        className="mini-btn"
-                                        disabled={!canEditThisMember || savingKey === nameKey || !cleanNameDraft}
-                                        onClick={() => updateStaffField(
-                                          member,
-                                          { full_name: cleanNameDraft, display_name: cleanNameDraft },
-                                          isSpanish ? `Nombre actualizado a ${cleanNameDraft}.` : `Name updated to ${cleanNameDraft}.`
-                                        )}
-                                      >
-                                        {savingKey === nameKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar nombre" : "Save name")}
-                                      </button>
-                                    </div>
-                                  </div>
                                   <div className="setting-group">
                                     <p className="group-label">{isSpanish ? "Teléfono" : "Phone"}</p>
                                     <div className="mini-actions" style={{ alignItems: "stretch" }}>
@@ -1633,7 +1591,12 @@ export default function AdminPage() {
                                     </div>
                                   </div>
 		                              <div className="setting-group">
-		                                <p className="group-label">{isSpanish ? "Admin" : "Admin"}</p>
+		                                <p className="group-label">{isSpanish ? "Acceso en portal" : "Portal access"}</p>
+                                    <p className="access-help">
+                                      {isSpanish
+                                        ? "Solo chats ve pacientes asignados. Crear pacientes puede abrir salas nuevas. Control total administra equipo, auditoría y archivo."
+                                        : "Assigned chats sees assigned rooms. Create patients can open new rooms. Full control manages team, audit, and archive."}
+                                    </p>
                                 <div className="mini-actions">
                                   {(["none", "admin", "super_admin"] as AdminLevel[]).map((option) => (
                                     <button
@@ -1645,7 +1608,7 @@ export default function AdminPage() {
                                         opacity: !canEditThisMember || savingKey === accessKey ? 0.55 : 1,
                                       }}
                                       disabled={!canEditThisMember || savingKey === accessKey || (option === "super_admin" && !canManageOwner)}
-                                      onClick={() => updateStaffField(member, { admin_level: option }, isSpanish ? `Acceso de ${member.full_name || "staff"} actualizado a ${adminLabel(option)}.` : `Access for ${member.full_name || "staff"} updated to ${adminText(option)}.`)}
+                                      onClick={() => updateStaffField(member, { admin_level: option }, isSpanish ? `Acceso de ${member.full_name || "staff"} actualizado a ${adminText(option)}.` : `Access for ${member.full_name || "staff"} updated to ${adminText(option)}.`)}
                                     >
                                       {adminText(option)}
                                     </button>
@@ -1700,6 +1663,7 @@ export default function AdminPage() {
                     <p className="card-title">{isSpanish ? "Herramientas del expediente" : "Record tools"}</p>
                     <p className="muted">{isSpanish ? "Cuando necesites revisar cambios o recuperar expedientes, entra aquí." : "When you need to review changes or recover records, start here."}</p>
                   </div>
+                  {renderSectionTopButton()}
                 </div>
                 <div className="inline-actions">
                   <button className="ghost-btn" onClick={() => goTo("/admin/auditoria")}>
@@ -1721,6 +1685,7 @@ export default function AdminPage() {
                         : "If someone rejoins the team, remove them here to allow registration again."}
                     </p>
                   </div>
+                  {renderSectionTopButton()}
                 </div>
 
                 <div style={{ display: "grid", gap: 12 }}>
@@ -1774,6 +1739,7 @@ export default function AdminPage() {
                     <p className="card-title">{isSpanish ? "Invitar personal" : "Invite team member"}</p>
                     <p className="muted">{isSpanish ? "Envía este enlace a un nuevo integrante. El código ya va incluido para que el registro tenga menos pasos." : "Send this link to a new team member. The code is already included so registration has fewer steps."}</p>
                   </div>
+                  {renderSectionTopButton()}
                 </div>
 
                 <div className="secure-invite">
@@ -1823,6 +1789,7 @@ export default function AdminPage() {
                     <p className="card-title">{isSpanish ? "Teléfonos de sede" : "Office phone numbers"}</p>
                     <p className="muted">{isSpanish ? "Estos números alimentan el botón de llamada en el chat del paciente." : "These numbers power the call button inside the patient chat."}</p>
                   </div>
+                  {renderSectionTopButton()}
                 </div>
                 <div style={{ display: "grid", gap: 10 }}>
                   <div>

@@ -104,6 +104,8 @@ const T = {
     careTeam: "Equipo Asignado",
     careTeamHint: "Elige qué personas verán este chat. No se manda enlace al equipo; solo aparecerá en su portal.",
     careTeamFocused: "Consultorio elegido",
+    careTeamOfficeVisible: "Equipo visible para este consultorio",
+    careTeamSelectOffice: "Seleccionar todo el consultorio",
     careTeamShowAll: "Todos",
     careTeamShowOffice: "Consultorio",
     careTeamSelectAll: "Todos",
@@ -265,6 +267,8 @@ const T = {
     careTeam: "Assigned Care Team",
     careTeamHint: "Choose who will see this room inside the portal/app. No SMS or staff links are sent.",
     careTeamFocused: "Selected office",
+    careTeamOfficeVisible: "Visible team for this office",
+    careTeamSelectOffice: "Select all from this office",
     careTeamShowAll: "All",
     careTeamShowOffice: "Office",
     careTeamSelectAll: "All",
@@ -1239,13 +1243,15 @@ export default function InboxPage() {
     ["owner", "super_admin", "admin"].includes((userProfile?.admin_level || "").toLowerCase());
   const careTeamDirectory = sortCareTeamMembers(
     careTeamFilter === "guadalajara"
-      ? staffDirectory.filter((member) => member.office_location === "Guadalajara" || !member.office_location)
+      ? staffDirectory.filter((member) => member.office_location === "Guadalajara")
       : careTeamFilter === "tijuana"
-        ? staffDirectory.filter((member) => member.office_location === "Tijuana" || !member.office_location)
+        ? staffDirectory.filter((member) => member.office_location === "Tijuana")
         : careTeamFilter === "selected"
           ? staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id))
           : staffDirectory
   );
+  const selectedOfficeFilter: CareTeamFilter = newLocation === "Tijuana" ? "tijuana" : "guadalajara";
+  const selectedOfficeCareTeam = sortCareTeamMembers(staffDirectory.filter((member) => member.office_location === newLocation));
   const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id));
   const careStaffInviteDirectory = sortCareTeamMembers(
     staffDirectory.filter((member) => {
@@ -1585,8 +1591,6 @@ export default function InboxPage() {
       members: careTeamDirectory.filter((member) => !member.office_location),
     },
   ].filter((group) => group.members.length > 0);
-  const guadalajaraDoctors = staffDirectory.filter((member) => member.role === "doctor" && member.office_location === "Guadalajara");
-  const tijuanaDoctors = staffDirectory.filter((member) => member.role === "doctor" && member.office_location === "Tijuana");
   const careTeamRoleLabel = (role: string) => {
     if (role === "doctor") return t.careTeamRoleDoctor;
     if (role === "enfermeria") return t.careTeamRoleEnfermeria;
@@ -2504,6 +2508,11 @@ export default function InboxPage() {
       setSelectedCareTeamIds((current) => current.includes(currentUserId) ? current : [currentUserId, ...current]);
     }
   }, [showNewRoom, currentUserId]);
+
+  useEffect(() => {
+    if (!showNewRoom) return;
+    setCareTeamFilter(newLocation === "Tijuana" ? "tijuana" : "guadalajara");
+  }, [showNewRoom, newLocation]);
 
   useEffect(() => {
     setManagedTeamIds(selectedRoomTeam.map((member) => member.id));
@@ -4832,7 +4841,7 @@ export default function InboxPage() {
               </div>
             </details>
 
-            <details className="room-toggle">
+            <details className="room-toggle" open>
               <summary>
                 <div>
                   <p className="room-toggle-title">{t.careTeam}</p>
@@ -4845,17 +4854,17 @@ export default function InboxPage() {
                 <span className="room-toggle-chevron">⌄</span>
               </summary>
               <div className="room-toggle-body">
-                <p className="room-note">{t.careTeamHint}</p>
+                <p className="room-note">
+                  {t.careTeamFocused}: <strong>{newLocation}</strong>. {t.careTeamHint}
+                </p>
                 <div className="care-team-panel">
                   <div className="care-team-toolbar">
                     <p className="care-team-count">
-                      {t.careTeamSelected}: {careTeamSelectedMembers.length} · {staffDirectory.length} {lang==="es" ? "en el equipo" : "on team"}
+                      {t.careTeamOfficeVisible}: {selectedOfficeCareTeam.length} · {t.careTeamSelected}: {careTeamSelectedMembers.length}
                     </p>
                     <div className="care-team-actions">
                       {([
-                        { key: "all", label: t.careTeamShowAll },
-                        { key: "guadalajara", label: t.careTeamFilterGdl },
-                        { key: "tijuana", label: t.careTeamFilterTjn },
+                        { key: selectedOfficeFilter, label: newLocation },
                         { key: "selected", label: t.careTeamFilterSelected },
                       ] as { key: CareTeamFilter; label: string }[]).map((filter) => (
                         <button
@@ -4873,18 +4882,10 @@ export default function InboxPage() {
                       <button
                         type="button"
                         className="care-team-chip"
-                        onClick={() => addCareTeamMembers(guadalajaraDoctors)}
-                        disabled={guadalajaraDoctors.length === 0}
+                        onClick={() => addCareTeamMembers(selectedOfficeCareTeam)}
+                        disabled={selectedOfficeCareTeam.length === 0}
                       >
-                        {t.careTeamDoctorsGdl}
-                      </button>
-                      <button
-                        type="button"
-                        className="care-team-chip"
-                        onClick={() => addCareTeamMembers(tijuanaDoctors)}
-                        disabled={tijuanaDoctors.length === 0}
-                      >
-                        {t.careTeamDoctorsTjn}
+                        {t.careTeamSelectOffice}
                       </button>
                       <button
                         type="button"
