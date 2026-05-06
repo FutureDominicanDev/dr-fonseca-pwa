@@ -1473,16 +1473,6 @@ export default function InboxPage() {
     fetchStaffPrivateMessages();
   };
 
-  const leaveCurrentChatView = () => {
-    setMobileView("list");
-    setSelectedRoom(null);
-    setShowQREditor(false);
-    setShowMediaMenu(false);
-    setShowEmojiMenu(false);
-    setShowSlashMenu(false);
-    closeMessageActions();
-  };
-
   const requestNewPatientRoom = () => {
     if (!canCreatePatientRooms) {
       setNotificationFeedback({
@@ -1522,19 +1512,6 @@ export default function InboxPage() {
           +
         </button>
       )}
-      <button
-        className="chat-exit-btn"
-        type="button"
-        onClick={leaveCurrentChatView}
-        title={lang==="es" ? "Salir" : "Exit"}
-        aria-label={lang==="es" ? "Salir" : "Exit"}
-      >
-        <svg className="logout-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-          <path d="M16 17l5-5-5-5" />
-          <path d="M21 12H9" />
-        </svg>
-      </button>
     </div>
   );
   const careTeamOfficeGroups = [
@@ -4422,9 +4399,6 @@ export default function InboxPage() {
 	        .admin-inline-btn { padding: 0 12px; min-height: 44px; border-radius: 999px; background: ${darkMode?"#253244":"#EEF6FF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#BFDBFE"}; color: ${darkMode?"#E0F2FE":"#075EA8"}; font-size: var(--app-ui-small-size); font-weight: 850; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
         .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; max-width: 100%; }
         .staff-plus-btn { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: #007AFF; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,122,255,0.3); font-size: 26px; line-height: 1; font-weight: 850; font-family: inherit; flex-shrink: 0; }
-        .chat-exit-btn { width: 44px; height: 44px; min-height: 44px; padding: 0; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#D5E4F2"}; border-radius: 50%; background: ${darkMode?"#1F2C34":"#F5F9FF"}; color: ${darkMode?"#DBEAFE":"#075EA8"}; cursor: pointer; flex-shrink: 0; font-family: inherit; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(15,23,42,0.08); }
-        .chat-exit-btn:hover { background: ${darkMode?"#263846":"#EAF3FF"}; }
-        .logout-icon { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; display: block; }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 13px 14px 10px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
@@ -4573,7 +4547,6 @@ export default function InboxPage() {
           .topbar-logo { grid-column: 1; justify-self: center; align-self: start; height: 92px; width: min(620px, 92vw); }
           .topbar-actions { right: max(12px, env(safe-area-inset-right)); left: max(12px, env(safe-area-inset-left)); top: auto; bottom: 8px; transform: none; justify-content: flex-end; }
           .topbar-actions .admin-inline-btn { min-height: 40px; padding: 0 10px; font-size: 14px; }
-          .topbar-actions .chat-exit-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; }
           .topbar-actions .staff-plus-btn { width: 40px; height: 40px; min-height: 40px; }
           .sidebar-head { padding: 15px 14px 12px; }
           .patient-list { padding-left: 10px; padding-right: 10px; }
@@ -4592,8 +4565,7 @@ export default function InboxPage() {
 	          .room-progress { grid-template-columns: 1fr; }
 	          .room-grid-2, .room-phone-grid { grid-template-columns: 1fr; }
 	          .room-progress-step { padding: 8px 10px; }
-          .chat-exit-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; }
-	        }
+        }
       `}</style>
 
       <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setPrescriptionInstructions("");setShowMediaMenu(false);}e.target.value="";}}/>
