@@ -14,6 +14,12 @@ import {
   type FormMessagePayload,
 } from "@/components/FormMessage";
 
+const CLINIC_PRIMARY_PHONE_TEL = "+523333948421";
+const CLINIC_PRIMARY_PHONE_DISPLAY = "+52 33 3394 8421";
+const CLINIC_BACKUP_PHONE_TEL = "+523311543678";
+const CLINIC_BACKUP_PHONE_DISPLAY = "+52 33 1154 3678";
+const CLINIC_FALLBACK_SECONDS = 20;
+
 type Message = {
   id: string;
   content: string;
@@ -302,6 +308,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
   const [selectedPrescription, setSelectedPrescription] = useState<Message | null>(null);
   const [lastPrescriptionSeenAt, setLastPrescriptionSeenAt] = useState("");
+  const [callSheetOpen, setCallSheetOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>(["Gracias", "Tengo una pregunta", "Voy en camino"]);
   const [replyDraft, setReplyDraft] = useState("");
@@ -340,6 +347,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const container = chatScrollRef.current;
     if (!container) return true;
     return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+  };
+  const callClinicNumber = (phone: string) => {
+    window.location.href = `tel:${phone}`;
   };
   const handleChatScroll = () => {
     shouldAutoScrollRef.current = isNearChatBottom();
@@ -1269,6 +1279,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       alerts: "Alerts",
       enableAlerts: "Enable alerts",
       enablingAlerts: "Enabling...",
+      callClinic: "Call clinic",
+      callSheetTitle: "Call clinic",
+      callSheetCopy: `Call the main number first. If no one answers after ${CLINIC_FALLBACK_SECONDS} seconds, call the backup number immediately.`,
+      callPrimary: "Call main number",
+      callBackup: "Call backup number",
+      emergencyNotice: "For a medical emergency, call local emergency services first.",
       textSize: "Text size",
       normal: "Normal",
       large: "Large",
@@ -1312,6 +1328,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       alerts: "Alertas",
       enableAlerts: "Activar alertas",
       enablingAlerts: "Activando...",
+      callClinic: "Llamar a la clínica",
+      callSheetTitle: "Llamar a la clínica",
+      callSheetCopy: `Llama primero al número principal. Si nadie contesta después de ${CLINIC_FALLBACK_SECONDS} segundos, llama de inmediato al número de respaldo.`,
+      callPrimary: "Llamar número principal",
+      callBackup: "Llamar respaldo",
+      emergencyNotice: "Si es una emergencia médica, llama primero a los servicios de emergencia locales.",
       textSize: "Tamaño de texto",
       normal: "Normal",
       large: "Grande",
@@ -1607,7 +1629,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
         <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
 
-        <button onClick={() => { window.location.href = "tel:+523332314480"; }} aria-label="Call" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
+        <button onClick={() => setCallSheetOpen(true)} aria-label={labels.callClinic} style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
           <Image src="/Phone_icon.png" alt="" width={30} height={30} style={{ width: 30, height: 30, objectFit: "contain" }} />
         </button>
 
@@ -1618,6 +1640,33 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
         <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
       </footer>
+
+      {callSheetOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.48)", display: "grid", placeItems: "center", padding: "max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))", zIndex: 28 }} onClick={() => setCallSheetOpen(false)}>
+          <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 20, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.30)" }} onClick={(event)=>event.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+              <strong style={{ fontSize: patientTextBase, lineHeight: 1.35 }}>{labels.callSheetTitle}</strong>
+              <button onClick={() => setCallSheetOpen(false)} style={{ border: "none", background: inputPanelBg, color: textPrimary, borderRadius: 999, width: 42, height: 42, fontSize: 24, lineHeight: 1 }}>×</button>
+            </div>
+            <p style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#475569", fontWeight: 750, lineHeight: 1.5, marginBottom: 12 }}>
+              {labels.callSheetCopy}
+            </p>
+            <div style={{ display: "grid", gap: 10 }}>
+              <button onClick={() => callClinicNumber(CLINIC_PRIMARY_PHONE_TEL)} style={{ border: "none", borderRadius: 16, background: "#DBEAFE", color: "#0B4EA2", minHeight: 58, padding: "10px 14px", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit", textAlign: "left" }}>
+                <span style={{ display: "block" }}>{labels.callPrimary}</span>
+                <span style={{ display: "block", fontSize: patientTextSmall, marginTop: 3 }}>{CLINIC_PRIMARY_PHONE_DISPLAY}</span>
+              </button>
+              <button onClick={() => callClinicNumber(CLINIC_BACKUP_PHONE_TEL)} style={{ border: "none", borderRadius: 16, background: "#DCFCE7", color: "#166534", minHeight: 58, padding: "10px 14px", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit", textAlign: "left" }}>
+                <span style={{ display: "block" }}>{labels.callBackup}</span>
+                <span style={{ display: "block", fontSize: patientTextSmall, marginTop: 3 }}>{CLINIC_BACKUP_PHONE_DISPLAY}</span>
+              </button>
+            </div>
+            <p style={{ fontSize: patientTextSmall, color: "#B45309", background: "#FEF3C7", borderRadius: 14, padding: "10px 12px", fontWeight: 800, lineHeight: 1.45, marginTop: 12 }}>
+              {labels.emergencyNotice}
+            </p>
+          </div>
+        </div>
+      )}
 
       {audioPreviewUrl && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", display: "grid", placeItems: "center", padding: 18, zIndex: 25 }}>
