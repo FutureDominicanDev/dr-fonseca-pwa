@@ -208,6 +208,20 @@ const createEmptyClinicalPdfValues = (): Record<ClinicalPdfFieldKey, string> =>
     return values;
   }, {} as Record<ClinicalPdfFieldKey, string>);
 
+const normalizeClinicalPdfValues = (input: unknown): Record<ClinicalPdfFieldKey, string> | null => {
+  if (!input || typeof input !== "object") return null;
+  const source = input as Partial<Record<ClinicalPdfFieldKey, unknown>>;
+  const values = createEmptyClinicalPdfValues();
+  let hasValue = false;
+  clinicalPdfFields.forEach((field) => {
+    const value = source[field.key];
+    if (typeof value !== "string") return;
+    values[field.key] = value;
+    if (value.trim()) hasValue = true;
+  });
+  return hasValue ? values : null;
+};
+
 const splitPdfText = (text: string, font: PDFFont, fontSize: number, maxWidth: number) => {
   const lines: string[] = [];
   text.replace(/\r/g, "").split("\n").forEach((paragraph) => {
@@ -300,7 +314,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-  const clinicalHistoryUploadRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -331,6 +344,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     applyComposerInputHints(node);
   };
   const prescriptionSeenKey = `patient_seen_recetas_${id}`;
+  const clinicalPdfValuesStorageKey = `historia_clinica_values_${id}`;
+  const clinicalPdfValuesStoragePath = `patients/${id}/historia-clinica-values.json`;
 
   const urlBase64ToUint8Array = (b64: string) => {
     const padding = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -656,6 +671,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const latestClinicalFormMessage = [...messages]
     .reverse()
     .find((message) => message.sender_type === "patient" && parseFormMessage(message.content));
+  const latestClinicalPdfMessage = [...messages]
+    .reverse()
+    .find((message) => (
+      message.sender_type === "patient" &&
+      message.message_type === "file" &&
+      `${message.file_name || ""}` === HISTORIA_CLINICA_FILE_NAME &&
+      !message.deleted_by_patient &&
+      !message.deleted_by_staff
+    ));
 
   const saveClinicalForm = async (payload: FormMessagePayload) => {
     if (accessDenied || !accessReady) return;
@@ -840,20 +864,135 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     event.target.value = "";
   };
 
-  const handleClinicalHistoryUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    await uploadFile(file, "file", HISTORIA_CLINICA_FILE_NAME);
-    setDocumentFolderOpen(false);
+  const loadStoredClinicalPdfValues = async () => {
+    const { data } = await supabase.storage.from("chat-files").download(clinicalPdfValuesStoragePath);
+    if (data) {
+      try {
+        const saved = normalizeClinicalPdfValues(JSON.parse(await data.text()));
+        if (saved) return saved;
+      } catch {}
+    }
+
+    if (typeof window !== "undefined") {
+      try {
+        const saved = normalizeClinicalPdfValues(JSON.parse(window.localStorage.getItem(clinicalPdfValuesStorageKey) || "null"));
+        if (saved) return saved;
+      } catch {}
+    }
+    return null;
   };
 
-  const openClinicalPdfEditor = (language: "es" | "en" = uiLang) => {
+  const persistClinicalPdfValues = async (values: Record<ClinicalPdfFieldKey, string>) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(clinicalPdfValuesStorageKey, JSON.stringify(values));
+    }
+    const body = JSON.stringify(values);
+    const blob = new Blob([body], { type: "application/json" });
+    const { error } = await supabase.storage.from("chat-files").upload(clinicalPdfValuesStoragePath, blob, {
+      contentType: "application/json",
+      upsert: true,
+    });
+    if (error) console.warn("clinical history values backup failed", error.message);
+  };
+
+  const uploadClinicalHistoryPdf = async (file: File) => {
+    if (accessDenied || !accessReady) return null;
+
+    const timestamp = new Date().toISOString();
+    const storageTimestamp = Date.now();
+    const safeFileName = file.name || `historia-clinica-${storageTimestamp}.pdf`;
+    const path = `patients/${id}/${storageTimestamp}-${safeFileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+    const { error } = await supabase.storage.from("chat-files").upload(path, file, {
+      contentType: file.type || "application/pdf",
+    });
+    if (error) {
+      console.error("clinical history upload failed", error);
+      window.alert(`No pude guardar el formulario: ${error.message}`);
+      return null;
+    }
+
+    const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
+    const url = data.publicUrl;
+    const messageHash = await generateMessageHash(url, timestamp, currentUserId);
+    const payload = {
+      room_id: id,
+      sender_id: currentUserId,
+      sender_type: "patient",
+      type: "file" as const,
+      message_type: "file" as const,
+      content: url,
+      file_url: url,
+      file_name: HISTORIA_CLINICA_FILE_NAME,
+      file_type: file.type || "application/pdf",
+      created_at: timestamp,
+      message_hash: messageHash,
+    };
+    const existing = latestClinicalPdfMessage;
+    const notificationText = existing?.id
+      ? (uiLang === "es" ? "Historia Clinica actualizada" : "Historia Clinica updated")
+      : (uiLang === "es" ? "Historia Clinica enviada" : "Historia Clinica submitted");
+
+    if (existing?.id) {
+      let update = await supabase
+        .from("messages")
+        .update(payload)
+        .eq("id", existing.id)
+        .eq("room_id", id)
+        .eq("sender_type", "patient")
+        .select("*")
+        .single();
+      if (update.error && `${update.error.message || ""} ${update.error.details || ""}`.toLowerCase().includes("column")) {
+        const { type: _type, file_type: _fileType, file_url: _fileUrl, message_hash: _messageHash, ...compatiblePayload } = payload;
+        update = await supabase
+          .from("messages")
+          .update(compatiblePayload)
+          .eq("id", existing.id)
+          .eq("room_id", id)
+          .eq("sender_type", "patient")
+          .select("*")
+          .single();
+      }
+      if (update.error) {
+        console.error("clinical history message update failed", update.error);
+        window.alert(`El formulario se subió, pero no pude actualizar el mensaje: ${update.error.message}`);
+        return null;
+      }
+      if (update.data) {
+        await logMessageAudit(timestamp);
+        setMessages((current) => current.map((message) => (message.id === existing.id ? (update.data as Message) : message)));
+        sendStaffPushNotification(notificationText, "advanced_assigned");
+      }
+      return url;
+    }
+
+    let insert = await supabase
+      .from("messages")
+      .insert(payload)
+      .select("*")
+      .single();
+    if (insert.error && `${insert.error.message || ""} ${insert.error.details || ""}`.toLowerCase().includes("column")) {
+      const { type: _type, file_type: _fileType, file_url: _fileUrl, message_hash: _messageHash, ...compatiblePayload } = payload;
+      insert = await supabase.from("messages").insert(compatiblePayload).select("*").single();
+    }
+    if (insert.error) {
+      console.error("clinical history message insert failed", insert.error);
+      window.alert(`El formulario se subió, pero no pude guardar el mensaje: ${insert.error.message}`);
+      return null;
+    }
+    if (insert.data) {
+      await logMessageAudit(timestamp);
+      setMessages((current) => current.some((item) => item.id === insert.data.id) ? current : [...current, insert.data as Message]);
+      sendStaffPushNotification(notificationText, "advanced_assigned");
+    }
+    return url;
+  };
+
+  const openClinicalPdfEditor = async (language: "es" | "en" = uiLang) => {
     setClinicalPdfLanguage(language);
     const patientName = room?.procedures?.patients?.full_name?.trim();
-    if (patientName) {
-      setClinicalPdfValues((current) => current.nombre.trim() ? current : { ...current, nombre: patientName });
-    }
+    const saved = await loadStoredClinicalPdfValues();
+    if (saved) setClinicalPdfValues(saved);
+    else if (patientName) setClinicalPdfValues((current) => current.nombre.trim() ? current : { ...current, nombre: patientName });
     setClinicalPdfEditorOpen(true);
   };
 
@@ -874,9 +1013,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       const pdfBuffer = new ArrayBuffer(pdfBytes.byteLength);
       new Uint8Array(pdfBuffer).set(pdfBytes);
       const file = new File([pdfBuffer], "Historia Clinica.pdf", { type: "application/pdf" });
-      await uploadFile(file, "file", HISTORIA_CLINICA_FILE_NAME);
+      const savedUrl = await uploadClinicalHistoryPdf(file);
+      if (!savedUrl) return;
+      await persistClinicalPdfValues(clinicalPdfValues);
       setClinicalPdfEditorOpen(false);
       setDocumentFolderOpen(false);
+      setMenuOpen(false);
+      window.setTimeout(() => scrollToLatest("smooth"), 80);
     } catch (error) {
       const message = error instanceof Error ? error.message : (uiLang === "es" ? "No pude guardar el formulario." : "Could not save the form.");
       window.alert(message);
@@ -1032,12 +1175,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       documentFolder: "Documento",
       clinicalHistoryFile: "Historia Clinica",
       openClinicalHistory: "Open form",
-      openClinicalHistorySpanish: "Spanish version",
+      openClinicalHistorySpanish: "Version español",
       openClinicalHistoryEnglish: "English version",
       clinicalHistoryLanguage: "Form language",
       saveClinicalHistory: "Save and send",
       savingClinicalHistory: "Saving...",
-      uploadCompletedClinicalHistory: "Upload completed form",
       clinicalHistoryInstructions: "Choose Spanish or English, fill it in on this screen, and save it. The completed PDF is sent automatically.",
       clinicalForm: "Medical history form",
       noPrescriptions: "No prescriptions yet.",
@@ -1073,13 +1215,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       documentFolder: "Documento",
       clinicalHistoryFile: "Historia Clinica",
       openClinicalHistory: "Abrir formulario",
-      openClinicalHistorySpanish: "Version en español",
-      openClinicalHistoryEnglish: "Version en ingles",
+      openClinicalHistorySpanish: "Version español",
+      openClinicalHistoryEnglish: "English version",
       clinicalHistoryLanguage: "Idioma del formulario",
       saveClinicalHistory: "Guardar y enviar",
       savingClinicalHistory: "Guardando...",
-      uploadCompletedClinicalHistory: "Subir formulario completo",
-      clinicalHistoryInstructions: "Elige español o ingles, llenalo en esta pantalla y guardalo. El PDF completo se envia automaticamente.",
+      clinicalHistoryInstructions: "Elige Version español o English version, llenalo en esta pantalla y guardalo. El PDF completo se envia automaticamente.",
       clinicalForm: "Historia clínica",
       noPrescriptions: "Todavía no hay recetas.",
       prescriptionInstructions: "Indicaciones",
@@ -1362,7 +1503,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         </button>
 
         <input ref={fileRef} type="file" accept={fileAccept} onChange={handleFileChange} style={{ display: "none" }} />
-        <input ref={clinicalHistoryUploadRef} type="file" accept="application/pdf,.pdf" onChange={handleClinicalHistoryUpload} style={{ display: "none" }} />
         <input ref={videoCaptureRef} type="file" accept="video/*" capture="environment" onChange={handleVideoCapture} style={{ display: "none" }} />
       </footer>
 
@@ -1421,16 +1561,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                   </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <button type="button" onClick={() => openClinicalPdfEditor("es")} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", lineHeight: 1.2 }}>
+                  <button type="button" onClick={() => void openClinicalPdfEditor("es")} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", lineHeight: 1.2 }}>
                     {labels.openClinicalHistorySpanish}
                   </button>
-                  <button type="button" onClick={() => openClinicalPdfEditor("en")} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#E0F2FE", color: "#0369A1", display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", lineHeight: 1.2 }}>
+                  <button type="button" onClick={() => void openClinicalPdfEditor("en")} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#E0F2FE", color: "#0369A1", display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", lineHeight: 1.2 }}>
                     {labels.openClinicalHistoryEnglish}
                   </button>
                 </div>
-                <button type="button" onClick={() => clinicalHistoryUploadRef.current?.click()} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit" }}>
-                  {labels.uploadCompletedClinicalHistory}
-                </button>
               </div>
             </div>
           </div>
