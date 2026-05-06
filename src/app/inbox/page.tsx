@@ -3587,10 +3587,28 @@ export default function InboxPage() {
     setSlashFilter("");
     composerRef.current?.focus();
   };
+  const patientMatchesLabel = (patient: any, labelId: string) => {
+    if (!patient?.id || !labelId) return false;
+    const label = userLabels.find((item) => item.id === labelId);
+    if (!label) return patientLabelIdsFor(patient).includes(labelId);
+    const key = labelKey(label);
+    return patientLabelAssignments.some((assignment) => assignment.patient_id === patient.id && labelKey(assignment) === key);
+  };
+  const selectLabelFilter = (labelId: string) => {
+    setActiveLabelFilter(labelId);
+    setSearchQuery("");
+    const matches = patients.filter((patient) => patientMatchesLabel(patient, labelId));
+    if (matches.length === 1 && matches[0]?.rooms?.[0]) {
+      setSelectedRoom(matches[0].rooms[0]);
+      setMobileView("chat");
+      return;
+    }
+    setMobileView("list");
+  };
   const filtPts = patients
     .filter(p=>{
       const q=searchQuery.toLowerCase();
-      if (activeLabelFilter && !patientLabelIdsFor(p).includes(activeLabelFilter)) return false;
+      if (activeLabelFilter && !patientMatchesLabel(p, activeLabelFilter)) return false;
       return (
         p.full_name?.toLowerCase().includes(q) ||
         String(p.phone || "").toLowerCase().includes(q) ||
@@ -5305,7 +5323,7 @@ export default function InboxPage() {
                     </div>
                   ) : (
                     <>
-                      <button type="button" className="label-manage-main" onClick={()=>{setActiveLabelFilter(label.id);setShowLabelManager(false);}}>
+                      <button type="button" className="label-manage-main" onClick={()=>{selectLabelFilter(label.id);setShowLabelManager(false);}}>
                         <span className="label-chip" style={{background: label.color || "#64748B", width:"fit-content", maxWidth:"100%"}}>{labelName(label)}</span>
                         <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:800}}>
                           {labelPatientCount(label)} {lang === "es" ? "paciente(s)" : "patient(s)"}
@@ -5497,7 +5515,7 @@ export default function InboxPage() {
               )}
               {userLabels.length > 0 && (
                 <div className="label-filter-row">
-                  <button className={`label-chip all${!activeLabelFilter ? " active" : ""}`} onClick={()=>setActiveLabelFilter("")}>
+                  <button className={`label-chip all${!activeLabelFilter ? " active" : ""}`} onClick={()=>{setActiveLabelFilter("");setMobileView("list");}}>
                     {lang === "es" ? "Todos" : "All"}
                   </button>
                   {userLabels.map((label)=>(
@@ -5505,7 +5523,7 @@ export default function InboxPage() {
                       key={label.id}
                       className={`label-chip${activeLabelFilter === label.id ? " active" : ""}`}
                       style={{background: label.color || "#64748B"}}
-                      onClick={()=>setActiveLabelFilter(label.id)}
+                      onClick={()=>selectLabelFilter(label.id)}
                     >
                       {labelName(label)}
                     </button>
@@ -5524,8 +5542,12 @@ export default function InboxPage() {
               ):filtPts.length===0?(
                 <div style={{padding:"60px 20px",textAlign:"center"}}>
                   <div style={{fontSize:48,marginBottom:12}}>🏥</div>
-                  <p style={{fontSize:17,fontWeight:600,color:textColor}}>{t.noPatients}</p>
-                  <p style={{fontSize:14,color:subTextColor,marginTop:6}}>{t.noPatientsHint}</p>
+                  <p style={{fontSize:17,fontWeight:600,color:textColor}}>
+                    {activeLabelFilter ? (lang === "es" ? "Sin chats con esta etiqueta" : "No chats with this label") : t.noPatients}
+                  </p>
+                  <p style={{fontSize:14,color:subTextColor,marginTop:6}}>
+                    {activeLabelFilter ? (lang === "es" ? "Guarda la etiqueta en un paciente para verlo aquí." : "Save the label on a patient to see it here.") : t.noPatientsHint}
+                  </p>
                 </div>
               ):filtPts.map(pt=>{
                 const ptUnreadCount=pt.rooms.reduce((sum:number,r:any)=>sum+(unreadCounts[r.id]||0),0);
