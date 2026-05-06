@@ -778,36 +778,38 @@ export default function AdminPatientRecordPage() {
   };
 
   const clinicalHistoryUrl = selectedClinicalHistoryEntry?.message?.content || "";
-  const clinicalHistoryShareText = clinicalHistoryUrl ? `Historia Clinica\n${clinicalHistoryUrl}` : "";
   const closeClinicalHistoryViewer = () => setSelectedClinicalHistoryEntry(null);
+  const showClinicalHistoryShareBlocked = () => {
+    alert(isSpanish
+      ? "Por privacidad, no se enviara un enlace del formulario. Usa Compartir desde un dispositivo que permita adjuntar el PDF."
+      : "For privacy, a form link will not be sent. Use Share from a device that can attach the PDF file.");
+  };
   const shareClinicalHistoryEntry = async () => {
     if (!clinicalHistoryUrl) return;
-    if (navigator.share) {
-      try {
-        const response = await fetch(clinicalHistoryUrl);
-        const blob = await response.blob();
-        const file = new File([blob], "Historia Clinica.pdf", { type: blob.type || "application/pdf" });
-        if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ title: "Historia Clinica", text: "Historia Clinica", files: [file] });
+    try {
+      const response = await fetch(clinicalHistoryUrl);
+      if (!response.ok) throw new Error("pdf-download-failed");
+      const blob = await response.blob();
+      const file = new File([blob], "Historia Clinica.pdf", { type: blob.type || "application/pdf" });
+      const shareData = { title: "Historia Clinica", text: "Historia Clinica", files: [file] };
+      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        try {
+          await navigator.share(shareData);
           return;
+        } catch (error: any) {
+          if (error?.name === "AbortError") return;
         }
-      } catch {}
-      try {
-        await navigator.share({ title: "Historia Clinica", text: "Historia Clinica", url: clinicalHistoryUrl });
-        return;
-      } catch {}
-    }
-    await navigator.clipboard?.writeText(clinicalHistoryShareText).catch(() => {});
-    updateSuccess(isSpanish ? "Enlace del formulario copiado." : "Form link copied.");
+      }
+    } catch {}
+    showClinicalHistoryShareBlocked();
   };
   const emailClinicalHistoryEntry = () => {
     if (!clinicalHistoryUrl) return;
-    window.location.href = `mailto:?subject=${encodeURIComponent("Historia Clinica")}&body=${encodeURIComponent(clinicalHistoryShareText)}`;
+    void shareClinicalHistoryEntry();
   };
   const messageClinicalHistoryEntry = () => {
     if (!clinicalHistoryUrl) return;
-    const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
-    window.location.href = `sms:${separator}body=${encodeURIComponent(clinicalHistoryShareText)}`;
+    void shareClinicalHistoryEntry();
   };
   const printClinicalHistoryEntry = () => {
     if (!clinicalHistoryUrl) return;

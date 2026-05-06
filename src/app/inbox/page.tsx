@@ -3444,41 +3444,42 @@ export default function InboxPage() {
   const clinicalHistoryEntryUrl = (entry?: any | null) => entry?.file_url || entry?.content || "";
   const clinicalHistoryPdfTitle = "Historia Clinica";
   const selectedClinicalHistoryUrl = clinicalHistoryEntryUrl(selectedClinicalHistoryEntry);
-  const selectedClinicalHistoryShareText = selectedClinicalHistoryUrl ? `${clinicalHistoryPdfTitle}\n${selectedClinicalHistoryUrl}` : "";
   const closeClinicalHistoryViewer = () => {
     setSelectedClinicalHistoryEntry(null);
     setShowMediaLibrary(false);
   };
+  const showClinicalHistoryShareBlocked = () => {
+    alert(lang === "es"
+      ? "Por privacidad, no se enviara un enlace del formulario. Usa Compartir desde un dispositivo que permita adjuntar el PDF."
+      : "For privacy, a form link will not be sent. Use Share from a device that can attach the PDF file.");
+  };
   const shareClinicalHistoryEntry = async (entry?: any | null) => {
     const url = clinicalHistoryEntryUrl(entry || selectedClinicalHistoryEntry);
     if (!url) return;
-    const shareText = `${clinicalHistoryPdfTitle}\n${url}`;
-    if (navigator.share) {
-      try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const file = new File([blob], "Historia Clinica.pdf", { type: blob.type || "application/pdf" });
-        if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ title: clinicalHistoryPdfTitle, text: clinicalHistoryPdfTitle, files: [file] });
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("pdf-download-failed");
+      const blob = await response.blob();
+      const file = new File([blob], "Historia Clinica.pdf", { type: blob.type || "application/pdf" });
+      const shareData = { title: clinicalHistoryPdfTitle, text: clinicalHistoryPdfTitle, files: [file] };
+      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        try {
+          await navigator.share(shareData);
           return;
+        } catch (error: any) {
+          if (error?.name === "AbortError") return;
         }
-      } catch {}
-      try {
-        await navigator.share({ title: clinicalHistoryPdfTitle, text: clinicalHistoryPdfTitle, url });
-        return;
-      } catch {}
-    }
-    await navigator.clipboard?.writeText(shareText).catch(() => {});
-    alert(lang === "es" ? "Enlace del formulario copiado." : "Form link copied.");
+      }
+    } catch {}
+    showClinicalHistoryShareBlocked();
   };
   const emailClinicalHistoryEntry = () => {
     if (!selectedClinicalHistoryUrl) return;
-    window.location.href = `mailto:?subject=${encodeURIComponent(clinicalHistoryPdfTitle)}&body=${encodeURIComponent(selectedClinicalHistoryShareText)}`;
+    void shareClinicalHistoryEntry();
   };
   const messageClinicalHistoryEntry = () => {
     if (!selectedClinicalHistoryUrl) return;
-    const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
-    window.location.href = `sms:${separator}body=${encodeURIComponent(selectedClinicalHistoryShareText)}`;
+    void shareClinicalHistoryEntry();
   };
   const printClinicalHistoryEntry = () => {
     if (!selectedClinicalHistoryUrl) return;

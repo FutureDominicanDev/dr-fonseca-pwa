@@ -1272,7 +1272,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const selectedPrescriptionInfo = selectedPrescription ? parsePrescriptionText(selectedPrescription.file_name) : null;
   const selectedPrescriptionUrl = prescriptionUrl(selectedPrescription);
   const latestClinicalPdfUrl = latestClinicalPdfMessage?.file_url || latestClinicalPdfMessage?.content || "";
-  const clinicalPdfShareText = latestClinicalPdfUrl ? `${labels.clinicalHistoryFile}\n${latestClinicalPdfUrl}` : "";
   const selectedPrescriptionIsImage = /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(selectedPrescriptionUrl) || `${selectedPrescription?.file_type || ""}`.startsWith("image/");
   const selectedPrescriptionShareText = selectedPrescriptionInfo
     ? `${selectedPrescriptionInfo.title}${selectedPrescriptionInfo.instructions ? `\n${labels.prescriptionInstructions}: ${selectedPrescriptionInfo.instructions}` : ""}\n${selectedPrescriptionUrl}`
@@ -1319,34 +1318,37 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setClinicalPdfViewerOpen(false);
     setDocumentFolderOpen(false);
   };
+  const showClinicalPdfShareBlocked = () => {
+    alert(uiLang === "es"
+      ? "Por privacidad, no se enviara un enlace del formulario. Usa Compartir desde un dispositivo que permita adjuntar el PDF."
+      : "For privacy, a form link will not be sent. Use Share from a device that can attach the PDF file.");
+  };
   const shareClinicalPdf = async () => {
     if (!latestClinicalPdfUrl) return;
-    if (navigator.share) {
-      try {
-        const response = await fetch(latestClinicalPdfUrl);
-        const blob = await response.blob();
-        const file = new File([blob], "Historia Clinica.pdf", { type: blob.type || "application/pdf" });
-        if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ title: labels.clinicalHistoryFile, text: labels.clinicalHistoryFile, files: [file] });
+    try {
+      const response = await fetch(latestClinicalPdfUrl);
+      if (!response.ok) throw new Error("pdf-download-failed");
+      const blob = await response.blob();
+      const file = new File([blob], "Historia Clinica.pdf", { type: blob.type || "application/pdf" });
+      const shareData = { title: labels.clinicalHistoryFile, text: labels.clinicalHistoryFile, files: [file] };
+      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        try {
+          await navigator.share(shareData);
           return;
+        } catch (error: any) {
+          if (error?.name === "AbortError") return;
         }
-      } catch {}
-      try {
-        await navigator.share({ title: labels.clinicalHistoryFile, text: labels.clinicalHistoryFile, url: latestClinicalPdfUrl });
-        return;
-      } catch {}
-    }
-    await navigator.clipboard?.writeText(clinicalPdfShareText).catch(() => {});
-    alert(uiLang === "es" ? "Enlace del formulario copiado." : "Form link copied.");
+      }
+    } catch {}
+    showClinicalPdfShareBlocked();
   };
   const emailClinicalPdf = () => {
     if (!latestClinicalPdfUrl) return;
-    window.location.href = `mailto:?subject=${encodeURIComponent(labels.clinicalHistoryFile)}&body=${encodeURIComponent(clinicalPdfShareText)}`;
+    void shareClinicalPdf();
   };
   const messageClinicalPdf = () => {
     if (!latestClinicalPdfUrl) return;
-    const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
-    window.location.href = `sms:${separator}body=${encodeURIComponent(clinicalPdfShareText)}`;
+    void shareClinicalPdf();
   };
   const printClinicalPdf = () => {
     if (!latestClinicalPdfUrl) return;
