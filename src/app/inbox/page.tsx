@@ -2029,30 +2029,49 @@ export default function InboxPage() {
     if (data) { setUserProfile(data); setDisplayNameEdit(data.full_name||data.display_name||""); setPhoneEdit(data.phone || ""); if (data.quick_replies?.length) setQuickReplies(data.quick_replies); }
   };
 
+  const applyPatientLabelRows = (rows: PatientLabel[]) => {
+    const assignments = rows.filter((label) => !!label.patient_id);
+    const definitions = rows.filter((label) => !label.patient_id);
+    const knownKeys = new Set(definitions.map((label) => labelKey(label)));
+    assignments.forEach((assignment) => {
+      const key = labelKey(assignment);
+      if (!knownKeys.has(key)) {
+        knownKeys.add(key);
+        definitions.push({ ...assignment, patient_id: null });
+      }
+    });
+    setUserLabels(definitions);
+    setPatientLabelAssignments(assignments);
+  };
+
+  const patientLabelsApi = useCallback(async (options?: { method?: string; body?: Record<string, unknown> }) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    if (!token) throw new Error(lang === "es" ? "La sesión expiró. Inicia sesión otra vez." : "Session expired. Please sign in again.");
+    const response = await fetch("/api/patient-labels", {
+      method: options?.method || "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(options?.body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: options?.body ? JSON.stringify(options.body) : undefined,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
+    }
+    return payload as { label?: PatientLabel; labels?: PatientLabel[] };
+  }, [lang]);
+
   const fetchUserLabels = useCallback(async () => {
     if (!currentUserId) return;
-    const { data, error } = await supabase
-      .from("labels")
-      .select("*")
-      .eq("created_by", currentUserId)
-      .eq("scope", "patient")
-      .order("created_at", { ascending: true });
-    if (!error) {
-      const rows = (data || []) as PatientLabel[];
-      const assignments = rows.filter((label) => !!label.patient_id);
-      const definitions = rows.filter((label) => !label.patient_id);
-      const knownKeys = new Set(definitions.map((label) => labelKey(label)));
-      assignments.forEach((assignment) => {
-        const key = labelKey(assignment);
-        if (!knownKeys.has(key)) {
-          knownKeys.add(key);
-          definitions.push({ ...assignment, patient_id: null });
-        }
-      });
-      setUserLabels(definitions);
-      setPatientLabelAssignments(assignments);
+    try {
+      const payload = await patientLabelsApi();
+      applyPatientLabelRows((payload.labels || []) as PatientLabel[]);
+    } catch (error) {
+      console.warn("Could not load patient labels", error);
     }
-  }, [currentUserId]);
+  }, [currentUserId, patientLabelsApi]);
 
   const createPatientLabel = async () => {
     const name = newLabelName.trim();
@@ -2062,31 +2081,22 @@ export default function InboxPage() {
       return;
     }
     setSavingLabel(true);
-    const { data, error } = await supabase
-      .from("labels")
-      .insert({
-        name,
-        color: newLabelColor,
-        scope: "patient",
-        created_by: currentUserId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select("*")
-      .single();
-    setSavingLabel(false);
-    if (error) {
-      alert(error.message || (lang === "es" ? "No pude crear la etiqueta." : "I could not create the label."));
-      return;
-    }
-    if (data) {
-      const created = data as PatientLabel;
-      setUserLabels((current) => [...current, created]);
-      if (showLabelSelector && activeLabelPatient?.id) {
-        setLabelDraftIds((current) => current.includes(created.id) ? current : [...current, created.id]);
+    try {
+      const payload = await patientLabelsApi({ method: "POST", body: { action: "create", name, color: newLabelColor } });
+      const created = payload.label as PatientLabel | undefined;
+      if (payload.labels) applyPatientLabelRows(payload.labels);
+      else if (created?.id) setUserLabels((current) => [...current, created]);
+      if (created?.id) {
+        if (showLabelSelector && activeLabelPatient?.id) {
+          setLabelDraftIds((current) => current.includes(created.id) ? current : [...current, created.id]);
+        }
       }
+      setNewLabelName("");
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude crear la etiqueta." : "I could not create the label."));
+    } finally {
+      setSavingLabel(false);
     }
-    setNewLabelName("");
   };
 
   const openLabelSheetForPatient = (patient: any) => {
@@ -2106,51 +2116,18 @@ export default function InboxPage() {
   const updateSelectedPatientLabels = async (nextLabelIds: string[]) => {
     if (!activeLabelPatient?.id || !currentUserId || savingPatientLabels) return;
     setSavingPatientLabels(true);
-    const currentIds = selectedPatientLabelIds;
-    const addedIds = nextLabelIds.filter((id) => !currentIds.includes(id));
-    const removedIds = currentIds.filter((id) => !nextLabelIds.includes(id));
-    const now = new Date().toISOString();
-
-    const addedRows = addedIds
-      .map((id) => userLabels.find((label) => label.id === id))
-      .filter(Boolean)
-      .map((label) => ({
-        name: labelName(label as PatientLabel),
-        color: (label as PatientLabel).color || "#64748B",
-        scope: "patient",
-        patient_id: activeLabelPatient.id,
-        created_by: currentUserId,
-        created_at: now,
-        updated_at: now,
-      }));
-
-    const assignmentIdsToRemove = patientLabelAssignments
-      .filter((assignment) => assignment.patient_id === activeLabelPatient.id)
-      .filter((assignment) => removedIds.some((id) => {
-        const label = userLabels.find((item) => item.id === id);
-        return label && labelKey(label) === labelKey(assignment);
-      }))
-      .map((assignment) => assignment.id);
-
-    const insertResult = addedRows.length
-      ? await supabase.from("labels").insert(addedRows)
-      : { error: null };
-    if (insertResult.error) {
+    try {
+      const payload = await patientLabelsApi({
+        method: "POST",
+        body: { action: "assign", patientId: activeLabelPatient.id, labelIds: nextLabelIds },
+      });
+      applyPatientLabelRows((payload.labels || []) as PatientLabel[]);
+      closeLabelSheet();
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
+    } finally {
       setSavingPatientLabels(false);
-      alert(insertResult.error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
-      return;
     }
-
-    const deleteResult = assignmentIdsToRemove.length
-      ? await supabase.from("labels").delete().in("id", assignmentIdsToRemove)
-      : { error: null };
-    setSavingPatientLabels(false);
-    if (deleteResult.error) {
-      alert(deleteResult.error.message || (lang === "es" ? "No pude guardar etiquetas." : "I could not save labels."));
-      return;
-    }
-    await fetchUserLabels();
-    closeLabelSheet();
   };
 
   const toggleSelectedPatientLabel = (labelId: string) => {
@@ -2171,29 +2148,19 @@ export default function InboxPage() {
     const name = editingLabelName.trim();
     if (!label || !name || !currentUserId || savingLabel) return;
     setSavingLabel(true);
-    const previousKey = labelKey(label);
-    const now = new Date().toISOString();
-    const updatePayload = { name, color: editingLabelColor, updated_at: now };
-    const definitionResult = await supabase.from("labels").update(updatePayload).eq("id", label.id);
-    if (definitionResult.error) {
+    try {
+      const payload = await patientLabelsApi({
+        method: "PATCH",
+        body: { labelId: label.id, name, color: editingLabelColor },
+      });
+      applyPatientLabelRows((payload.labels || []) as PatientLabel[]);
+      setEditingLabelId("");
+      setEditingLabelName("");
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude actualizar la etiqueta." : "I could not update the label."));
+    } finally {
       setSavingLabel(false);
-      alert(definitionResult.error.message || (lang === "es" ? "No pude actualizar la etiqueta." : "I could not update the label."));
-      return;
     }
-    const matchingAssignmentIds = patientLabelAssignments
-      .filter((assignment) => labelKey(assignment) === previousKey)
-      .map((assignment) => assignment.id);
-    const assignmentResult = matchingAssignmentIds.length
-      ? await supabase.from("labels").update(updatePayload).in("id", matchingAssignmentIds)
-      : { error: null };
-    setSavingLabel(false);
-    if (assignmentResult.error) {
-      alert(assignmentResult.error.message || (lang === "es" ? "No pude actualizar algunas etiquetas asignadas." : "I could not update some assigned labels."));
-      return;
-    }
-    setEditingLabelId("");
-    setEditingLabelName("");
-    await fetchUserLabels();
   };
 
   const deletePatientLabel = async (label: PatientLabel) => {
@@ -2201,20 +2168,15 @@ export default function InboxPage() {
     const confirmed = confirm(lang === "es" ? `¿Eliminar la etiqueta "${labelName(label)}"?` : `Delete label "${labelName(label)}"?`);
     if (!confirmed) return;
     setDeletingLabelId(label.id);
-    const idsToDelete = [
-      label.id,
-      ...patientLabelAssignments
-        .filter((assignment) => labelKey(assignment) === labelKey(label))
-        .map((assignment) => assignment.id),
-    ];
-    const { error } = await supabase.from("labels").delete().in("id", idsToDelete);
-    setDeletingLabelId("");
-    if (error) {
-      alert(error.message || (lang === "es" ? "No pude eliminar la etiqueta." : "I could not delete the label."));
-      return;
+    try {
+      const payload = await patientLabelsApi({ method: "DELETE", body: { labelId: label.id } });
+      if (activeLabelFilter === label.id) setActiveLabelFilter("");
+      applyPatientLabelRows((payload.labels || []) as PatientLabel[]);
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude eliminar la etiqueta." : "I could not delete the label."));
+    } finally {
+      setDeletingLabelId("");
     }
-    if (activeLabelFilter === label.id) setActiveLabelFilter("");
-    await fetchUserLabels();
   };
 
   const cancelPatientLabelPress = () => {
