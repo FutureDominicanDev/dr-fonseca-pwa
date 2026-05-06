@@ -53,9 +53,7 @@ const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
 };
 
 const HISTORIA_CLINICA_TEMPLATE_URL = "/documents/historia-clinica.pdf";
-const HISTORIA_CLINICA_PREVIEW_URL = "/documents/historia-clinica-preview.png";
 const HISTORIA_CLINICA_FILE_NAME = "[FORM] Historia Clinica.pdf";
-const CLINICAL_PDF_WIDTH = 612;
 const CLINICAL_PDF_HEIGHT = 792;
 
 type ClinicalPdfFieldKey =
@@ -109,45 +107,100 @@ type ClinicalPdfField = {
   maxLines?: number;
 };
 
+type ClinicalPdfSection = {
+  titleEs: string;
+  titleEn: string;
+  keys: ClinicalPdfFieldKey[];
+};
+
 const clinicalPdfFields: ClinicalPdfField[] = [
-  { key: "nombre", labelEs: "Nombre", labelEn: "Name", left: 113, top: 121, width: 263, height: 17 },
-  { key: "fechaHora", labelEs: "Fecha y hora", labelEn: "Date and time", left: 459, top: 121, width: 122, height: 17 },
-  { key: "fechaNacimiento", labelEs: "Fecha de nacimiento", labelEn: "Date of birth", left: 113, top: 142, width: 263, height: 17 },
-  { key: "ocupacion", labelEs: "Ocupacion", labelEn: "Occupation", left: 459, top: 142, width: 122, height: 17 },
-  { key: "escolaridad", labelEs: "Escolaridad", labelEn: "Education", left: 113, top: 163, width: 263, height: 17 },
-  { key: "edad", labelEs: "Edad", labelEn: "Age", left: 459, top: 163, width: 122, height: 17 },
-  { key: "religion", labelEs: "Religion", labelEn: "Religion", left: 113, top: 184, width: 263, height: 17 },
-  { key: "estadoCivil", labelEs: "Estado civil", labelEn: "Marital status", left: 459, top: 184, width: 122, height: 17 },
-  { key: "telefono", labelEs: "Telefono", labelEn: "Phone", left: 113, top: 205, width: 263, height: 17 },
-  { key: "peso", labelEs: "Peso", labelEn: "Weight", left: 459, top: 205, width: 122, height: 17 },
-  { key: "direccion", labelEs: "Direccion", labelEn: "Address", left: 113, top: 226, width: 263, height: 17 },
-  { key: "talla", labelEs: "Talla", labelEn: "Height", left: 459, top: 226, width: 53, height: 17 },
+  { key: "nombre", labelEs: "NOMBRE:", labelEn: "Name", left: 113, top: 121, width: 263, height: 17 },
+  { key: "fechaHora", labelEs: "FECHA Y HORA:", labelEn: "Date and time", left: 459, top: 121, width: 122, height: 17 },
+  { key: "fechaNacimiento", labelEs: "F. DE NACIMIENTO:", labelEn: "Date of birth", left: 113, top: 142, width: 263, height: 17 },
+  { key: "ocupacion", labelEs: "OCUPACION:", labelEn: "Occupation", left: 459, top: 142, width: 122, height: 17 },
+  { key: "escolaridad", labelEs: "ESCOLARIDAD:", labelEn: "Education", left: 113, top: 163, width: 263, height: 17 },
+  { key: "edad", labelEs: "EDAD:", labelEn: "Age", left: 459, top: 163, width: 122, height: 17 },
+  { key: "religion", labelEs: "RELIGION:", labelEn: "Religion", left: 113, top: 184, width: 263, height: 17 },
+  { key: "estadoCivil", labelEs: "ESTADO CIVIL:", labelEn: "Marital status", left: 459, top: 184, width: 122, height: 17 },
+  { key: "telefono", labelEs: "TELEFONO:", labelEn: "Phone", left: 113, top: 205, width: 263, height: 17 },
+  { key: "peso", labelEs: "PESO:", labelEn: "Weight", left: 459, top: 205, width: 122, height: 17 },
+  { key: "direccion", labelEs: "DIRECCION:", labelEn: "Address", left: 113, top: 226, width: 263, height: 17 },
+  { key: "talla", labelEs: "TALLA:", labelEn: "Height", left: 459, top: 226, width: 53, height: 17 },
   { key: "imc", labelEs: "IMC", labelEn: "BMI", left: 545, top: 226, width: 36, height: 17, pdfSize: 6.5 },
-  { key: "diabetes", labelEs: "Diabetes", labelEn: "Diabetes", left: 144, top: 273, width: 159, height: 17 },
-  { key: "nefropatias", labelEs: "Nefropatias", labelEn: "Kidney disease", left: 414, top: 273, width: 167, height: 17 },
-  { key: "hipertension", labelEs: "Hipertension", labelEn: "Hypertension", left: 144, top: 294, width: 159, height: 17 },
-  { key: "malformaciones", labelEs: "Malformaciones", labelEn: "Malformations", left: 414, top: 294, width: 167, height: 17 },
-  { key: "cancer", labelEs: "Cancer", labelEn: "Cancer", left: 144, top: 315, width: 159, height: 17 },
-  { key: "otrosFamiliares", labelEs: "Otros familiares", labelEn: "Other family history", left: 414, top: 315, width: 167, height: 37, maxLines: 2 },
-  { key: "cardiopatias", labelEs: "Cardiopatias", labelEn: "Heart disease", left: 144, top: 336, width: 159, height: 17 },
-  { key: "tabaquismo", labelEs: "Tabaquismo", labelEn: "Smoking", left: 281, top: 380, width: 300, height: 17 },
-  { key: "alcoholismo", labelEs: "Alcoholismo", labelEn: "Alcohol use", left: 281, top: 401, width: 300, height: 17 },
-  { key: "medicamentos", labelEs: "Medicamentos", labelEn: "Medications", left: 281, top: 422, width: 300, height: 17 },
-  { key: "vitaminas", labelEs: "Vitaminas o suplementos", labelEn: "Vitamins or supplements", left: 281, top: 443, width: 300, height: 17 },
-  { key: "otrasSustancias", labelEs: "Otras sustancias", labelEn: "Other substances", left: 281, top: 464, width: 300, height: 17 },
-  { key: "tipoSanguineo", labelEs: "Tipo sanguineo", labelEn: "Blood type", left: 160, top: 485, width: 421, height: 17 },
-  { key: "alimentosNoConsume", labelEs: "Alimentos que no consume", labelEn: "Foods not consumed", left: 160, top: 506, width: 421, height: 17 },
-  { key: "infancia", labelEs: "Enf. de la infancia", labelEn: "Childhood illnesses", left: 160, top: 550, width: 421, height: 17 },
-  { key: "hospitalizaciones", labelEs: "Hospitalizaciones previas", labelEn: "Previous hospitalizations", left: 160, top: 571, width: 421, height: 17 },
-  { key: "quirurgicos", labelEs: "Antecedentes quirurgicos", labelEn: "Surgical history", left: 160, top: 592, width: 421, height: 17 },
-  { key: "transfusiones", labelEs: "Transfusiones previas", labelEn: "Previous transfusions", left: 160, top: 613, width: 421, height: 17 },
-  { key: "traumatismos", labelEs: "Traumatismos / fracturas", labelEn: "Trauma / fractures", left: 160, top: 634, width: 421, height: 17 },
-  { key: "otrasEnfermedades", labelEs: "Otras enfermedades", labelEn: "Other illnesses", left: 160, top: 655, width: 421, height: 17 },
-  { key: "psicologico", labelEs: "Psicologico / psiquiatrico", labelEn: "Psychological / psychiatric", left: 160, top: 676, width: 421, height: 17 },
-  { key: "embarazos", labelEs: "Embarazos", labelEn: "Pregnancies", left: 134, top: 726, width: 75, height: 17, pdfSize: 6.5 },
-  { key: "cesareas", labelEs: "Cesareas", labelEn: "C-sections", left: 315, top: 726, width: 88, height: 17, pdfSize: 6.5 },
-  { key: "abortos", labelEs: "Abortos", labelEn: "Miscarriages/abortions", left: 508, top: 726, width: 74, height: 17, pdfSize: 6.5 },
+  { key: "diabetes", labelEs: "DIABETES:", labelEn: "Diabetes", left: 144, top: 273, width: 159, height: 17 },
+  { key: "nefropatias", labelEs: "NEFROPATIAS:", labelEn: "Kidney disease", left: 414, top: 273, width: 167, height: 17 },
+  { key: "hipertension", labelEs: "HIPERTENSION:", labelEn: "High blood pressure", left: 144, top: 294, width: 159, height: 17 },
+  { key: "malformaciones", labelEs: "MALFORMACIONES:", labelEn: "Malformations", left: 414, top: 294, width: 167, height: 17 },
+  { key: "cancer", labelEs: "CANCER:", labelEn: "Cancer", left: 144, top: 315, width: 159, height: 17 },
+  { key: "otrosFamiliares", labelEs: "OTROS:", labelEn: "Other", left: 414, top: 315, width: 167, height: 37, maxLines: 2 },
+  { key: "cardiopatias", labelEs: "CARDIOPATIAS:", labelEn: "Heart disease", left: 144, top: 336, width: 159, height: 17 },
+  { key: "tabaquismo", labelEs: "TABAQUISMO: FRECUENCIA Y DURACION?", labelEn: "Smoking: frequency and duration?", left: 281, top: 380, width: 300, height: 17 },
+  { key: "alcoholismo", labelEs: "ALCOHOLISMO: FRECUENCIA Y DURACION?", labelEn: "Alcohol use: frequency and duration?", left: 281, top: 401, width: 300, height: 17 },
+  { key: "medicamentos", labelEs: "MEDICAMENTOS: FRECUENCIA Y DURACION?", labelEn: "Medications: frequency and duration?", left: 281, top: 422, width: 300, height: 17 },
+  { key: "vitaminas", labelEs: "VITAMINAS O SUPLEMENTOS: FRECUENCIA Y DURACION?", labelEn: "Vitamins or supplements: frequency and duration?", left: 281, top: 443, width: 300, height: 17 },
+  { key: "otrasSustancias", labelEs: "OTRAS SUSTANCIAS: FRECUENCIA Y DURACION?", labelEn: "Other substances: frequency and duration?", left: 281, top: 464, width: 300, height: 17 },
+  { key: "tipoSanguineo", labelEs: "TIPO SANGUINEO:", labelEn: "Blood type", left: 160, top: 485, width: 421, height: 17 },
+  { key: "alimentosNoConsume", labelEs: "ALIMENTOS QUE NO CONSUME:", labelEn: "Foods you do not eat", left: 160, top: 506, width: 421, height: 17 },
+  { key: "infancia", labelEs: "ENF. DE LA INFANCIA:", labelEn: "Childhood illnesses", left: 160, top: 550, width: 421, height: 17 },
+  { key: "hospitalizaciones", labelEs: "HOSPITALIZACIONES PREVIAS:", labelEn: "Previous hospitalizations", left: 160, top: 571, width: 421, height: 17 },
+  { key: "quirurgicos", labelEs: "ANTECEDENTES QUIRURGICOS:", labelEn: "Surgical history", left: 160, top: 592, width: 421, height: 17 },
+  { key: "transfusiones", labelEs: "TRANSFUSIONES PREVIAS:", labelEn: "Previous transfusions", left: 160, top: 613, width: 421, height: 17 },
+  { key: "traumatismos", labelEs: "TRAUMATISMOS / FRACTURAS:", labelEn: "Trauma / fractures", left: 160, top: 634, width: 421, height: 17 },
+  { key: "otrasEnfermedades", labelEs: "OTRAS ENFERMEDADES:", labelEn: "Other illnesses", left: 160, top: 655, width: 421, height: 17 },
+  { key: "psicologico", labelEs: "PSICOLOGICO/PSIQUIATRICO", labelEn: "Psychological / psychiatric", left: 160, top: 676, width: 421, height: 17 },
+  { key: "embarazos", labelEs: "EMBARAZOS (CUANTOS Y FECHAS)", labelEn: "Pregnancies (how many and dates)", left: 134, top: 726, width: 75, height: 17, pdfSize: 6.5 },
+  { key: "cesareas", labelEs: "CESAREAS (CUANTAS Y FECHAS)", labelEn: "C-sections (how many and dates)", left: 315, top: 726, width: 88, height: 17, pdfSize: 6.5 },
+  { key: "abortos", labelEs: "ABORTOS (CUANTOS Y FECHAS)", labelEn: "Miscarriages/abortions (how many and dates)", left: 508, top: 726, width: 74, height: 17, pdfSize: 6.5 },
 ];
+
+const clinicalPdfSections: ClinicalPdfSection[] = [
+  {
+    titleEs: "FICHA DE PRESENTACION",
+    titleEn: "Patient information",
+    keys: ["nombre", "fechaHora", "fechaNacimiento", "ocupacion", "escolaridad", "edad", "religion", "estadoCivil", "telefono", "peso", "direccion", "talla", "imc"],
+  },
+  {
+    titleEs: "ANTECEDENTES HEREDOFAMILIARES (MAMA, PAPA, ABUELOS O TIOS)",
+    titleEn: "Family history (mother, father, grandparents, uncles/aunts)",
+    keys: ["diabetes", "nefropatias", "hipertension", "malformaciones", "cancer", "otrosFamiliares", "cardiopatias"],
+  },
+  {
+    titleEs: "ANTECEDENTES PERSONALES NO PATOLOGICOS",
+    titleEn: "Non-pathological personal history",
+    keys: ["tabaquismo", "alcoholismo", "medicamentos", "vitaminas", "otrasSustancias", "tipoSanguineo", "alimentosNoConsume"],
+  },
+  {
+    titleEs: "ANTECEDENTES PERSONALES PATOLOGICOS",
+    titleEn: "Pathological personal history",
+    keys: ["infancia", "hospitalizaciones", "quirurgicos", "transfusiones", "traumatismos", "otrasEnfermedades", "psicologico"],
+  },
+  {
+    titleEs: "ANTECEDENTES GINECO-OBSTETRICOS",
+    titleEn: "Gynecologic-obstetric history",
+    keys: ["embarazos", "cesareas", "abortos"],
+  },
+];
+
+const clinicalPdfFieldByKey = clinicalPdfFields.reduce((fields, field) => {
+  fields[field.key] = field;
+  return fields;
+}, {} as Record<ClinicalPdfFieldKey, ClinicalPdfField>);
+
+const clinicalPdfTextAreaFields = new Set<ClinicalPdfFieldKey>([
+  "direccion",
+  "otrosFamiliares",
+  "medicamentos",
+  "vitaminas",
+  "otrasSustancias",
+  "alimentosNoConsume",
+  "infancia",
+  "hospitalizaciones",
+  "quirurgicos",
+  "transfusiones",
+  "traumatismos",
+  "otrasEnfermedades",
+  "psicologico",
+]);
 
 const createEmptyClinicalPdfValues = (): Record<ClinicalPdfFieldKey, string> =>
   clinicalPdfFields.reduce((values, field) => {
@@ -218,6 +271,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [clinicalFormOpen, setClinicalFormOpen] = useState(false);
   const [documentFolderOpen, setDocumentFolderOpen] = useState(false);
   const [clinicalPdfEditorOpen, setClinicalPdfEditorOpen] = useState(false);
+  const [clinicalPdfLanguage, setClinicalPdfLanguage] = useState<"es" | "en">(() => deviceUiLang());
   const [clinicalPdfValues, setClinicalPdfValues] = useState<Record<ClinicalPdfFieldKey, string>>(() => createEmptyClinicalPdfValues());
   const [clinicalPdfSaving, setClinicalPdfSaving] = useState(false);
   const [prescriptionsOpen, setPrescriptionsOpen] = useState(false);
@@ -794,7 +848,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setDocumentFolderOpen(false);
   };
 
-  const openClinicalPdfEditor = () => {
+  const openClinicalPdfEditor = (language: "es" | "en" = uiLang) => {
+    setClinicalPdfLanguage(language);
     const patientName = room?.procedures?.patients?.full_name?.trim();
     if (patientName) {
       setClinicalPdfValues((current) => current.nombre.trim() ? current : { ...current, nombre: patientName });
@@ -977,10 +1032,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       documentFolder: "Documento",
       clinicalHistoryFile: "Historia Clinica",
       openClinicalHistory: "Open form",
+      openClinicalHistorySpanish: "Spanish version",
+      openClinicalHistoryEnglish: "English version",
+      clinicalHistoryLanguage: "Form language",
       saveClinicalHistory: "Save and send",
       savingClinicalHistory: "Saving...",
       uploadCompletedClinicalHistory: "Upload completed form",
-      clinicalHistoryInstructions: "Fill it in on this screen and save it. The completed PDF is sent automatically.",
+      clinicalHistoryInstructions: "Choose Spanish or English, fill it in on this screen, and save it. The completed PDF is sent automatically.",
       clinicalForm: "Medical history form",
       noPrescriptions: "No prescriptions yet.",
       prescriptionInstructions: "Instructions",
@@ -1015,10 +1073,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       documentFolder: "Documento",
       clinicalHistoryFile: "Historia Clinica",
       openClinicalHistory: "Abrir formulario",
+      openClinicalHistorySpanish: "Version en español",
+      openClinicalHistoryEnglish: "Version en ingles",
+      clinicalHistoryLanguage: "Idioma del formulario",
       saveClinicalHistory: "Guardar y enviar",
       savingClinicalHistory: "Guardando...",
       uploadCompletedClinicalHistory: "Subir formulario completo",
-      clinicalHistoryInstructions: "Llénalo en esta pantalla y guárdalo. El PDF completo se envía automáticamente.",
+      clinicalHistoryInstructions: "Elige español o ingles, llenalo en esta pantalla y guardalo. El PDF completo se envia automaticamente.",
       clinicalForm: "Historia clínica",
       noPrescriptions: "Todavía no hay recetas.",
       prescriptionInstructions: "Indicaciones",
@@ -1359,9 +1420,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                     <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 650, lineHeight: 1.45 }}>{labels.clinicalHistoryInstructions}</div>
                   </div>
                 </div>
-                <button type="button" onClick={openClinicalPdfEditor} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit" }}>
-                  {labels.openClinicalHistory}
-                </button>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <button type="button" onClick={() => openClinicalPdfEditor("es")} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", lineHeight: 1.2 }}>
+                    {labels.openClinicalHistorySpanish}
+                  </button>
+                  <button type="button" onClick={() => openClinicalPdfEditor("en")} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#E0F2FE", color: "#0369A1", display: "grid", placeItems: "center", textDecoration: "none", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", lineHeight: 1.2 }}>
+                    {labels.openClinicalHistoryEnglish}
+                  </button>
+                </div>
                 <button type="button" onClick={() => clinicalHistoryUploadRef.current?.click()} style={{ minHeight: 46, border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit" }}>
                   {labels.uploadCompletedClinicalHistory}
                 </button>
@@ -1379,38 +1445,86 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             </button>
             <strong style={{ minWidth: 0, flex: 1, color: textPrimary, fontSize: patientTextBase, lineHeight: 1.2, textAlign: "center" }}>{labels.clinicalHistoryFile}</strong>
             <button type="button" disabled={clinicalPdfSaving} onClick={saveClinicalPdfForm} style={{ minHeight: 42, border: "none", borderRadius: 12, background: clinicalPdfSaving ? "#93c5fd" : "#1D4ED8", color: "#fff", padding: "0 14px", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", whiteSpace: "nowrap" }}>
-              {clinicalPdfSaving ? labels.savingClinicalHistory : labels.saveClinicalHistory}
+              {clinicalPdfSaving
+                ? (clinicalPdfLanguage === "es" ? translations.es.savingClinicalHistory : translations.en.savingClinicalHistory)
+                : (clinicalPdfLanguage === "es" ? translations.es.saveClinicalHistory : translations.en.saveClinicalHistory)}
             </button>
           </div>
-          <div style={{ flex: "1 1 auto", overflow: "auto", WebkitOverflowScrolling: "touch", padding: 12 }}>
-            <div style={{ position: "relative", width: CLINICAL_PDF_WIDTH, height: CLINICAL_PDF_HEIGHT, margin: "0 auto", background: "#fff", boxShadow: "0 16px 44px rgba(15,23,42,0.22)" }}>
-              <Image src={HISTORIA_CLINICA_PREVIEW_URL} alt="" fill sizes={`${CLINICAL_PDF_WIDTH}px`} priority style={{ objectFit: "contain", pointerEvents: "none", userSelect: "none" }} />
-              {clinicalPdfFields.map((field) => (
-                <input
-                  key={field.key}
-                  aria-label={uiLang === "es" ? field.labelEs : field.labelEn}
-                  value={clinicalPdfValues[field.key]}
-                  onChange={(event) => setClinicalPdfValues((current) => ({ ...current, [field.key]: event.target.value }))}
-                  disabled={clinicalPdfSaving}
-                  style={{
-                    position: "absolute",
-                    left: field.left,
-                    top: field.top,
-                    width: field.width,
-                    height: field.height,
-                    boxSizing: "border-box",
-                    border: "1px solid rgba(29,78,216,0.32)",
-                    outline: "none",
-                    borderRadius: 2,
-                    background: "rgba(255,255,255,0.86)",
-                    color: "#0f172a",
-                    padding: "1px 3px",
-                    fontSize: field.pdfSize || 8.5,
-                    fontWeight: 700,
-                    fontFamily: chatFontFamily,
-                    lineHeight: 1.1,
-                  }}
-                />
+          <div style={{ flex: "1 1 auto", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "14px max(12px, env(safe-area-inset-right)) 22px max(12px, env(safe-area-inset-left))" }}>
+            <div style={{ width: "100%", maxWidth: 560, margin: "0 auto", display: "grid", gap: 12 }}>
+              <div style={{ background: panelBg, color: textPrimary, border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.10)"}`, borderRadius: 14, padding: 10, display: "grid", gap: 8 }}>
+                <span style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#475569", fontWeight: 850 }}>
+                  {clinicalPdfLanguage === "es" ? translations.es.clinicalHistoryLanguage : translations.en.clinicalHistoryLanguage}
+                </span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {(["es", "en"] as const).map((language) => (
+                    <button
+                      key={language}
+                      type="button"
+                      disabled={clinicalPdfSaving}
+                      onClick={() => setClinicalPdfLanguage(language)}
+                      style={{
+                        minHeight: 40,
+                        border: "none",
+                        borderRadius: 10,
+                        background: clinicalPdfLanguage === language ? "#1D4ED8" : (darkMode ? "#1f2937" : "#E2E8F0"),
+                        color: clinicalPdfLanguage === language ? "#fff" : textPrimary,
+                        fontSize: patientTextSmall,
+                        fontWeight: 900,
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {language === "es" ? "Español" : "English"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {clinicalPdfSections.map((section) => (
+                <section key={section.titleEs} style={{ background: panelBg, color: textPrimary, border: `1px solid ${darkMode ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.10)"}`, borderRadius: 14, padding: 14, boxShadow: darkMode ? "none" : "0 8px 22px rgba(15,23,42,0.06)", display: "grid", gap: 12 }}>
+                  <strong style={{ fontSize: patientTextBase, lineHeight: 1.25 }}>{clinicalPdfLanguage === "es" ? section.titleEs : section.titleEn}</strong>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+                    {section.keys.map((key) => {
+                      const field = clinicalPdfFieldByKey[key];
+                      const isTextArea = clinicalPdfTextAreaFields.has(key);
+                      const commonStyle = {
+                        width: "100%",
+                        boxSizing: "border-box" as const,
+                        border: `1px solid ${darkMode ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.16)"}`,
+                        outline: "none",
+                        borderRadius: 10,
+                        background: inputPanelBg,
+                        color: textPrimary,
+                        padding: "11px 12px",
+                        fontSize: 16,
+                        fontWeight: 650,
+                        fontFamily: chatFontFamily,
+                        lineHeight: 1.3,
+                      };
+
+                      return (
+                        <label key={field.key} style={{ display: "grid", gap: 6, minWidth: 0, gridColumn: isTextArea ? "1 / -1" : "auto" }}>
+                          <span style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#475569", fontWeight: 850, lineHeight: 1.2 }}>{clinicalPdfLanguage === "es" ? field.labelEs : field.labelEn}</span>
+                          {isTextArea ? (
+                            <textarea
+                              value={clinicalPdfValues[field.key]}
+                              onChange={(event) => setClinicalPdfValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                              disabled={clinicalPdfSaving}
+                              rows={3}
+                              style={{ ...commonStyle, minHeight: 82, resize: "vertical" }}
+                            />
+                          ) : (
+                            <input
+                              value={clinicalPdfValues[field.key]}
+                              onChange={(event) => setClinicalPdfValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                              disabled={clinicalPdfSaving}
+                              style={{ ...commonStyle, minHeight: 46 }}
+                            />
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </section>
               ))}
             </div>
           </div>
