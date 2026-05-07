@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SOURCE_ICON="${1:-$ROOT_DIR/public/LOGO_02.png}"
+SOURCE_ICON="${1:-$ROOT_DIR/public/app-icon-master.png}"
 OUT_DIR="$ROOT_DIR/assets/store"
 
 if [[ ! -f "$SOURCE_ICON" ]]; then
