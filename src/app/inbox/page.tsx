@@ -19,8 +19,15 @@ const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", 
 const MAX_PATIENT_LABELS = 20;
 const LABEL_COLORS = ["#EF4444", "#F97316", "#F59E0B", "#10B981", "#14B8A6", "#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", "#64748B"];
 const STAFF_FONT_SIZE_STORAGE_KEY = "drf_staff_font_size_level";
+const STAFF_LANG_STORAGE_KEY = "drf_staff_ui_lang";
 const STAFF_RECORD_ALERTS_MUTED_KEY = "drf_staff_record_alerts_muted";
 const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
+
+const readStaffLang = (): Lang => {
+  if (typeof window === "undefined") return "es";
+  const stored = window.localStorage.getItem(STAFF_LANG_STORAGE_KEY);
+  return stored === "en" ? "en" : "es";
+};
 
 const readStaffFontSizeLevel = (): StaffFontSizeLevel => {
   if (typeof window === "undefined") return "large";
@@ -223,6 +230,7 @@ const T = {
     settings: "Ajustes", myProfile: "Mi Perfil",
     displayName: "Nombre a Mostrar",
     darkMode: "Modo Oscuro", fontSize: "Tamaño de Texto",
+    language: "Idioma", spanish: "Español", english: "English",
     role: "Rol", fileCategory: "¿Cómo clasificar este archivo?",
     general: "💬 General", medication: "💊 Medicamento", beforePhoto: "📸 Foto Pre-Op",
     generalSub: "Solo aparece en el chat", medicationSub: "Carpeta de medicamentos",
@@ -399,6 +407,7 @@ const T = {
     settings: "Settings", myProfile: "My Profile",
     displayName: "Display Name",
     darkMode: "Dark Mode", fontSize: "Font Size",
+    language: "Language", spanish: "Español", english: "English",
     role: "Role", fileCategory: "How to classify this file?",
     general: "💬 General", medication: "💊 Medication", beforePhoto: "📸 Pre-Op Photo",
     generalSub: "Appears in chat only", medicationSub: "Medication folder",
@@ -691,7 +700,7 @@ function QREditor({ show, onClose, quickReplies, onSave, savingQR, savedQR, dark
 }
 
 export default function InboxPage() {
-  const [lang, setLang] = useState<Lang>("es");
+  const [lang, setLang] = useState<Lang>(() => readStaffLang());
   const t = T[lang];
   const [darkMode, setDarkMode] = useState(false);
   const [fontSizeLevel, setFontSizeLevel] = useState<StaffFontSizeLevel>(() => readStaffFontSizeLevel());
@@ -699,6 +708,10 @@ export default function InboxPage() {
   const uiBaseSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 19 : 18;
   const uiLabelSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 18 : 17;
   const uiSmallSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 17 : 16;
+  const settingsBaseSize = fontSizeLevel === "large" ? 17 : uiBaseSize;
+  const settingsLabelSize = fontSizeLevel === "large" ? 16 : uiLabelSize;
+  const settingsSmallSize = fontSizeLevel === "large" ? 15 : uiSmallSize;
+  const settingsTitleSize = fontSizeLevel === "large" ? 21 : 20;
 
   const headerBg = "#07334D";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
@@ -1580,8 +1593,19 @@ export default function InboxPage() {
     setShowNewRoom(true);
   };
 
+  const toggleStaffLanguage = () => setLang((current) => current === "es" ? "en" : "es");
+
   const StaffGlobalActions = ({ compact = false }: { compact?: boolean }) => (
     <div className={`staff-global-actions${compact ? " compact" : ""}`}>
+      <button
+        type="button"
+        className="admin-inline-btn staff-lang-btn"
+        onClick={toggleStaffLanguage}
+        title={lang === "es" ? "Cambiar a English" : "Switch to Español"}
+        aria-label={lang === "es" ? "Cambiar idioma a English" : "Switch language to Español"}
+      >
+        <span aria-hidden="true">{lang === "es" ? "🇲🇽" : "🇺🇸"}</span>
+      </button>
       <div className="staff-action-cluster">
         <button
           type="button"
@@ -1981,6 +2005,11 @@ export default function InboxPage() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("inbox_auto_translate_incoming", autoTranslateIncoming ? "1" : "0");
   }, [autoTranslateIncoming]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STAFF_LANG_STORAGE_KEY, lang);
+  }, [lang]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -4082,32 +4111,30 @@ export default function InboxPage() {
     );
   };
 
-  const legalHref = (path: string) => `${path}?lang=${lang}`;
-
   const SettingsPanel = () => (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"max(16px, env(safe-area-inset-top))",paddingLeft:"max(0px, env(safe-area-inset-left))",paddingRight:"max(0px, env(safe-area-inset-right))",overflow:"hidden"}} onClick={()=>setShowSettings(false)}>
-      <div className="settings-sheet" style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"calc(100dvh - max(16px, env(safe-area-inset-top)))",overflowY:"auto",overflowX:"hidden",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`,WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}} onClick={e=>e.stopPropagation()}>
-        <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"max(20px, calc(env(safe-area-inset-top) + 8px)) max(20px, env(safe-area-inset-right)) 16px max(20px, env(safe-area-inset-left))",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <p style={{fontSize:22,fontWeight:800,color:textColor}}>⚙️ {t.settings}</p>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"calc(28px + env(safe-area-inset-top))",paddingLeft:"max(0px, env(safe-area-inset-left))",paddingRight:"max(0px, env(safe-area-inset-right))",overflow:"hidden"}} onClick={()=>setShowSettings(false)}>
+      <div className="settings-sheet" style={{background:sidebarBg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"calc(100dvh - 28px - env(safe-area-inset-top))",overflowY:"auto",overflowX:"hidden",padding:`0 0 calc(40px + env(safe-area-inset-bottom))`,WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}} onClick={e=>e.stopPropagation()}>
+        <div style={{position:"sticky",top:0,background:sidebarBg,zIndex:10,padding:"18px max(20px, env(safe-area-inset-right)) 14px max(20px, env(safe-area-inset-left))",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <p style={{fontSize:settingsTitleSize,fontWeight:800,color:textColor,lineHeight:1.25}}>⚙️ {t.settings}</p>
           <button onClick={()=>setShowSettings(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit",minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
         <div style={{padding:"0 20px"}}>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Mi nombre":"My name"}</p>
-            <label style={{display:"block",fontSize:uiBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>{t.displayName}</label>
+            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Mi nombre":"My name"}</p>
+            <label style={{display:"block",fontSize:settingsBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>{t.displayName}</label>
             <input
               value={displayNameEdit}
               onChange={(event)=>setDisplayNameEdit(event.target.value)}
               placeholder={lang==="es"?"Nombre visible para pacientes y equipo":"Name shown to patients and team"}
               style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 14px",fontSize:16,fontFamily:"inherit",fontWeight:650,marginBottom:10}}
             />
-            <button onClick={saveDisplayName} disabled={savingName || !displayNameEdit.trim()} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingName || !displayNameEdit.trim()?0.55:1}}>
+            <button onClick={saveDisplayName} disabled={savingName || !displayNameEdit.trim()} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:settingsBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingName || !displayNameEdit.trim()?0.55:1}}>
               {savingName ? (lang==="es"?"Guardando...":"Saving...") : savedName ? t.saved : t.save}
             </button>
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Teléfono / WhatsApp":"Phone / WhatsApp"}</p>
-            <label style={{display:"block",fontSize:uiBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>
+            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Teléfono / WhatsApp":"Phone / WhatsApp"}</p>
+            <label style={{display:"block",fontSize:settingsBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>
               {lang==="es"?"Número para llamadas internas del equipo":"Number for internal team calls"}
             </label>
             <input
@@ -4118,19 +4145,27 @@ export default function InboxPage() {
               placeholder="+52 664 123 4567"
               style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 14px",fontSize:16,fontFamily:"inherit",fontWeight:650,marginBottom:10}}
             />
-            <button onClick={saveProfilePhone} disabled={savingPhone} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingPhone?0.55:1}}>
+            <button onClick={saveProfilePhone} disabled={savingPhone} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:settingsBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingPhone?0.55:1}}>
               {savingPhone ? (lang==="es"?"Guardando...":"Saving...") : savedPhone ? t.saved : t.save}
             </button>
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:14,lineHeight:1.35}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
+            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:14,lineHeight:1.35}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
+            <span style={{fontSize:settingsBaseSize,color:textColor,fontWeight:650,display:"block",marginBottom:10,lineHeight:1.4}}>🌐 {t.language}</span>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+              {(["es","en"] as const).map(nextLang=>(
+                <button key={nextLang} type="button" onClick={()=>setLang(nextLang)} style={{minHeight:46,borderRadius:12,border:lang===nextLang?"2px solid #007AFF":`2px solid ${borderColor}`,background:lang===nextLang?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:lang===nextLang?"#007AFF":textColor,fontWeight:850,cursor:"pointer",fontFamily:"inherit",fontSize:16,lineHeight:1.25}}>
+                  {nextLang==="es" ? "🇲🇽 Español" : "🇺🇸 English"}
+                </button>
+              ))}
+            </div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-              <span style={{fontSize:uiBaseSize,color:textColor,fontWeight:650,lineHeight:1.4}}>🌙 {t.darkMode}</span>
+              <span style={{fontSize:settingsBaseSize,color:textColor,fontWeight:650,lineHeight:1.4}}>🌙 {t.darkMode}</span>
               <button onClick={()=>setDarkMode(d=>!d)} style={{width:52,height:30,borderRadius:99,background:darkMode?"#34C759":"#E5E5EA",border:"none",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
                 <div style={{width:26,height:26,borderRadius:"50%",background:"white",position:"absolute",top:2,left:darkMode?24:2,transition:"left 0.2s",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}}/>
               </button>
             </div>
-            <span style={{fontSize:uiBaseSize,color:textColor,fontWeight:650,display:"block",marginBottom:10,lineHeight:1.4}}>🔤 {t.fontSize}</span>
+            <span style={{fontSize:settingsBaseSize,color:textColor,fontWeight:650,display:"block",marginBottom:10,lineHeight:1.4}}>🔤 {t.fontSize}</span>
             <div style={{display:"flex",gap:8}}>
               {(["small","medium","large"] as const).map(level=>(
                 <button key={level} onClick={()=>setFontSizeLevel(level)} style={{flex:1,padding:"11px 8px",minHeight:48,borderRadius:12,border:fontSizeLevel===level?"2px solid #007AFF":`2px solid ${borderColor}`,background:fontSizeLevel===level?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:fontSizeLevel===level?"#007AFF":textColor,fontWeight:800,cursor:"pointer",fontFamily:"inherit",fontSize:level==="large"?18:16,lineHeight:1.25}}>
@@ -4140,34 +4175,15 @@ export default function InboxPage() {
             </div>
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8,lineHeight:1.35}}>{t.staffRecordAlerts}</p>
-            <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginBottom:12}}>{t.staffRecordAlertsHint}</p>
+            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8,lineHeight:1.35}}>{t.staffRecordAlerts}</p>
+            <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginBottom:12}}>{t.staffRecordAlertsHint}</p>
             <button
               type="button"
               onClick={()=>setStaffRecordAlertsMuted((current)=>!current)}
-              style={{width:"100%",minHeight:48,border:"none",borderRadius:14,background:staffRecordAlertsMuted?"#FEF3C7":"#DCFCE7",color:staffRecordAlertsMuted?"#92400E":"#166534",fontFamily:"inherit",fontSize:uiBaseSize,fontWeight:900,cursor:"pointer"}}
+              style={{width:"100%",minHeight:48,border:"none",borderRadius:14,background:staffRecordAlertsMuted?"#FEF3C7":"#DCFCE7",color:staffRecordAlertsMuted?"#92400E":"#166534",fontFamily:"inherit",fontSize:settingsBaseSize,fontWeight:900,cursor:"pointer"}}
             >
               {staffRecordAlertsMuted ? t.staffRecordAlertsOff : t.staffRecordAlertsOn}
             </button>
-          </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{t.privacySupport}</p>
-            <div style={{display:"grid",gap:8}}>
-              {[
-                { href: legalHref("/privacy"), label: t.privacyPolicy },
-                { href: legalHref("/support"), label: t.support },
-                { href: legalHref("/account-deletion"), label: t.accountDeletion },
-              ].map((item)=>(
-                <a
-                  key={item.href}
-                  href={item.href}
-                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:46,padding:"0 12px",borderRadius:12,background:darkMode?"#253244":"white",border:`1px solid ${borderColor}`,color:textColor,textDecoration:"none",fontSize:uiBaseSize,fontWeight:800,lineHeight:1.25}}
-                >
-                  <span>{item.label}</span>
-                  <span aria-hidden="true" style={{color:subTextColor,fontWeight:900}}>›</span>
-                </a>
-              ))}
-            </div>
           </div>
         </div>
       </div>
@@ -4694,6 +4710,7 @@ export default function InboxPage() {
 	        .admin-inline-btn { width: 48px; min-width: 48px; height: 48px; min-height: 48px; padding: 0; border-radius: 16px; background: rgba(8, 50, 76, 0.82); border: 1px solid rgba(210, 235, 255, 0.54); color: #F8FBFF; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 10px 24px rgba(2,14,28,0.28), 0 0 0 1px rgba(125,211,252,0.10); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease; }
         .admin-inline-btn:hover { background: rgba(14, 70, 105, 0.90); border-color: rgba(226, 242, 255, 0.70); transform: translateY(-1px); }
         .admin-inline-btn:active { transform: translateY(0); }
+        .staff-lang-btn { font-size: 23px; }
         .admin-action-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .admin-action-icon svg { width: 24px; height: 24px; display: block; }
         .staff-global-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-shrink: 0; max-width: 100%; }

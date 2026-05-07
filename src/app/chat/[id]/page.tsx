@@ -55,6 +55,7 @@ type RoomAccess = {
 type PatientTextSize = "normal" | "large";
 
 const PATIENT_TEXT_SIZE_STORAGE_KEY = "drf_patient_text_size";
+const PATIENT_LANG_STORAGE_KEY = "drf_patient_ui_lang";
 
 const readPatientTextSize = (): PatientTextSize => {
   if (typeof window === "undefined") return "large";
@@ -288,6 +289,11 @@ const deviceUiLang = (): "es" | "en" => {
   return options.map((entry) => normalizeUiLang(entry)).find(Boolean) || "es";
 };
 
+const readPatientUiLang = (): "es" | "en" => {
+  if (typeof window === "undefined") return "es";
+  return normalizeUiLang(window.localStorage.getItem(PATIENT_LANG_STORAGE_KEY)) || deviceUiLang();
+};
+
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const searchParams = useSearchParams();
@@ -316,7 +322,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [darkMode, setDarkMode] = useState(false);
   const [textSize, setTextSize] = useState<PatientTextSize>(() => readPatientTextSize());
   const [recording, setRecording] = useState(false);
-  const [uiLang, setUiLang] = useState<"es" | "en">(() => deviceUiLang());
+  const [uiLang, setUiLang] = useState<"es" | "en">(() => readPatientUiLang());
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState("");
@@ -477,9 +483,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     }).catch(() => {});
   }, [id, patientDisplayName, token]);
 
-  useEffect(() => {
-    setUiLang(deviceUiLang());
-  }, []);
+  const changePatientLanguage = (nextLang: "es" | "en") => {
+    setUiLang(nextLang);
+    if (typeof window !== "undefined") window.localStorage.setItem(PATIENT_LANG_STORAGE_KEY, nextLang);
+  };
+
+  const togglePatientLanguage = () => changePatientLanguage(uiLang === "es" ? "en" : "es");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -503,7 +512,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => {
     const patient = room?.procedures?.patients;
     const patientLang = normalizeUiLang(Array.isArray(patient) ? patient[0]?.preferred_language : patient?.preferred_language);
-    if (patientLang) setUiLang(patientLang);
+    const stored = typeof window !== "undefined" ? normalizeUiLang(window.localStorage.getItem(PATIENT_LANG_STORAGE_KEY)) : null;
+    if (patientLang && !stored) setUiLang(patientLang);
   }, [room]);
 
   useEffect(() => {
@@ -1255,6 +1265,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       openClinicalHistorySpanish: "Version español",
       openClinicalHistoryEnglish: "English version",
       clinicalHistoryLanguage: "Form language",
+      language: "Language",
+      spanish: "Español",
+      english: "English",
       saveClinicalHistory: "Save and send",
       savingClinicalHistory: "Saving...",
       clinicalHistoryInstructions: "Choose Spanish or English, fill it in on this screen, and save it. The completed PDF is sent automatically.",
@@ -1304,6 +1317,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       openClinicalHistorySpanish: "Version español",
       openClinicalHistoryEnglish: "English version",
       clinicalHistoryLanguage: "Idioma del formulario",
+      language: "Idioma",
+      spanish: "Español",
+      english: "English",
       saveClinicalHistory: "Guardar y enviar",
       savingClinicalHistory: "Guardando...",
       clinicalHistoryInstructions: "Elige Version español o English version, llenalo en esta pantalla y guardalo. El PDF completo se envia automaticamente.",
@@ -1517,6 +1533,35 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       `}</style>
       <header style={{ position: "relative", height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
+        <button
+          type="button"
+          onClick={togglePatientLanguage}
+          aria-label={uiLang === "es" ? "Cambiar idioma a English" : "Switch language to Español"}
+          title={uiLang === "es" ? "Cambiar a English" : "Switch to Español"}
+          style={{
+            position: "absolute",
+            ...(viewerType === "staff" ? { left: "max(12px, env(safe-area-inset-left))" } : { right: "max(12px, env(safe-area-inset-right))" }),
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: 46,
+            height: 46,
+            minHeight: 46,
+            borderRadius: 16,
+            border: "1px solid rgba(210,235,255,0.44)",
+            background: "rgba(4,34,53,0.68)",
+            color: "#fff",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 23,
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 18px rgba(2,14,28,0.22)",
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+            fontFamily: "inherit",
+          }}
+        >
+          <span aria-hidden="true">{uiLang === "es" ? "🇲🇽" : "🇺🇸"}</span>
+        </button>
         {viewerType === "staff" && (
           <a className="staff-exit-link" href="/inbox">
             Salir
@@ -1967,6 +2012,21 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {labels.darkMode}
               <input type="checkbox" checked={darkMode} onChange={(event) => setDarkMode(event.target.checked)} style={{ width: 24, height: 24 }} />
             </label>
+            <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
+              <div style={{ fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.language}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {(["es", "en"] as const).map((nextLang) => (
+                  <button
+                    key={nextLang}
+                    type="button"
+                    onClick={() => changePatientLanguage(nextLang)}
+                    style={{ height: 48, border: "none", borderRadius: 14, background: uiLang === nextLang ? "#075e54" : inputPanelBg, color: uiLang === nextLang ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}
+                  >
+                    {nextLang === "es" ? "🇲🇽 Español" : "🇺🇸 English"}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
               <div style={{ fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.alerts}</div>
               {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
