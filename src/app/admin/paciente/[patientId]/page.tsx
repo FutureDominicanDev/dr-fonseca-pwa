@@ -7,6 +7,7 @@ import { parseFormMessage } from "@/components/FormMessage";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone } from "@/lib/patientMeta";
 import { useAdminLang } from "@/lib/useAdminLang";
+import { hasPermission } from "@/lib/permissions";
 import {
   PROCEDURE_STATUS_OPTIONS,
   buildExportHtml,
@@ -102,8 +103,8 @@ export default function AdminPatientRecordPage() {
   const timelineSectionRef = useRef<HTMLElement | null>(null);
 
   const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
-  const hasAdminAccess = ["owner", "super_admin"].includes(viewerAdminLevel);
-  const canEditRecord = viewerAdminLevel === "owner" || (viewerAdminLevel === "super_admin" && viewerProfile?.role === "doctor");
+  const hasAdminAccess = hasPermission(viewerProfile, viewerEmail, "view_patients");
+  const canEditRecord = hasPermission(viewerProfile, viewerEmail, "edit_patient_info") && (viewerAdminLevel === "owner" || viewerProfile?.role === "doctor");
   const staffById = useMemo(() => new Map(staffProfiles.map((member) => [member.id, member])), [staffProfiles]);
   const patientStatus = normalizeRecordStatus(patient?.record_status);
 
@@ -465,8 +466,7 @@ export default function AdminPatientRecordPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    const computedAdminLevel = normalizeAdminLevel((profile as StaffProfile | null)?.admin_level, email);
-    const computedAccess = ["owner", "super_admin"].includes(computedAdminLevel);
+    const computedAccess = hasPermission(profile as StaffProfile | null, email, "view_patients");
     if (!computedAccess) {
       setSessionChecked(true);
       setLoading(false);

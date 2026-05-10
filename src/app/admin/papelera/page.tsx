@@ -8,13 +8,13 @@ import {
   initials,
   isMissingColumnError,
   logAdminEvent,
-  normalizeAdminLevel,
   normalizeRecordStatus,
   type PatientRecord,
   type PatientRecordStatus,
   type ProcedureRecord,
   type StaffProfile,
 } from "@/lib/adminPortal";
+import { hasPermission } from "@/lib/permissions";
 
 type TrashView = "archived" | "trash";
 
@@ -33,8 +33,7 @@ export default function AdminTrashPage() {
   const [view, setView] = useState<TrashView>("archived");
   const [savingId, setSavingId] = useState("");
 
-  const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
-  const hasAdminAccess = ["owner", "super_admin"].includes(viewerAdminLevel);
+  const hasAdminAccess = hasPermission(viewerProfile, viewerEmail, "restore_rooms");
 
   const goTo = (path: string) => {
     setMobileMenuOpen(false);
@@ -78,8 +77,7 @@ export default function AdminTrashPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    const computedAdminLevel = normalizeAdminLevel((profile as StaffProfile | null)?.admin_level, email);
-    const computedAccess = ["owner", "super_admin"].includes(computedAdminLevel);
+    const computedAccess = hasPermission(profile as StaffProfile | null, email, "restore_rooms");
 
     if (!computedAccess) {
       setSessionChecked(true);
@@ -136,6 +134,14 @@ export default function AdminTrashPage() {
     if (error) {
       setPageError(error.message || (isSpanish ? "No pude mover este expediente." : "I could not move this record."));
       return;
+    }
+
+    if (nextStatus === "active") {
+      await supabase
+        .from("procedures")
+        .update({ status: "scheduled" })
+        .eq("patient_id", patient.id)
+        .eq("status", "cancelled");
     }
 
     setPatients((previous) =>

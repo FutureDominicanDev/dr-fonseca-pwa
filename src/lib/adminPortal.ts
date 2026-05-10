@@ -15,6 +15,7 @@ export type StaffProfile = {
   avatar_url?: string | null;
   office_location?: string | null;
   admin_level?: string | null;
+  permissions?: unknown;
 };
 
 export type PatientRecord = {

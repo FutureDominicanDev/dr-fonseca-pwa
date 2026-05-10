@@ -6,10 +6,10 @@ import { useAdminLang } from "@/lib/useAdminLang";
 import {
   formatDateTime,
   isMissingColumnError,
-  normalizeAdminLevel,
   type AdminAuditEvent,
   type StaffProfile,
 } from "@/lib/adminPortal";
+import { hasPermission } from "@/lib/permissions";
 
 type AuditFilter = "all" | "patient" | "staff" | "system";
 
@@ -26,8 +26,7 @@ export default function AdminAuditPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<AuditFilter>("all");
 
-  const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
-  const hasAdminAccess = ["owner", "super_admin"].includes(viewerAdminLevel);
+  const hasAdminAccess = hasPermission(viewerProfile, viewerEmail, "access_audit_logs");
 
   const goTo = (path: string) => {
     setMobileMenuOpen(false);
@@ -111,8 +110,7 @@ export default function AdminAuditPage() {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
     setViewerProfile(profile || null);
 
-    const computedAdminLevel = normalizeAdminLevel((profile as StaffProfile | null)?.admin_level, email);
-    const computedAccess = ["owner", "super_admin"].includes(computedAdminLevel);
+    const computedAccess = hasPermission(profile as StaffProfile | null, email, "access_audit_logs");
 
     if (!computedAccess) {
       setSessionChecked(true);

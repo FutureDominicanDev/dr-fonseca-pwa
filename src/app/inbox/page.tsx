@@ -5,6 +5,7 @@ import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/date
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { isOwnerEmail } from "@/lib/securityConfig";
+import { hasPermission } from "@/lib/permissions";
 import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 
 type Lang = "es" | "en";
@@ -146,6 +147,14 @@ const T = {
     patientShareLink: "Compartir enlace",
     patientMessageLink: "Enviar por mensaje",
     patientLinkCopied: "Enlace copiado.",
+    roomCancelledBadge: "Sala cancelada",
+    cancelRoom: "Cancelar sala",
+    restoreRoom: "Restaurar sala",
+    cancelRoomConfirm: "Esta sala saldrá de la lista activa y el paciente ya no podrá usarla como chat activo. Los formularios, archivos, recetas y mensajes se conservan para restaurarla si fue un error.",
+    restoreRoomConfirm: "Esta sala volverá a la lista activa y el paciente podrá usar el mismo enlace de nuevo.",
+    roomCancelled: "Sala cancelada y expediente archivado.",
+    roomRestored: "Sala restaurada.",
+    roomLifecycleError: "No pude cambiar el estado de la sala.",
     addCareStaff: "Agregar personal al cuidado",
     addCareStaffHint: "Selecciona personal de cualquier sede para agregarlo a este paciente.",
     inviteStaff: "Solicitar acceso",
@@ -323,6 +332,14 @@ const T = {
     patientShareLink: "Share link",
     patientMessageLink: "Send by message",
     patientLinkCopied: "Link copied.",
+    roomCancelledBadge: "Room cancelled",
+    cancelRoom: "Cancel room",
+    restoreRoom: "Restore room",
+    cancelRoomConfirm: "This room will leave the active list and the patient will no longer use it as an active chat. Forms, files, prescriptions, and messages stay saved for recovery.",
+    restoreRoomConfirm: "This room will return to the active list and the patient can use the same link again.",
+    roomCancelled: "Room cancelled and record archived.",
+    roomRestored: "Room restored.",
+    roomLifecycleError: "I could not change the room status.",
     addCareStaff: "Add care staff",
     addCareStaffHint: "Select staff from any office to add them to this patient.",
     inviteStaff: "Request access",
@@ -783,6 +800,7 @@ export default function InboxPage() {
   const [savingInternalNote, setSavingInternalNote] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [newRoomError, setNewRoomError] = useState("");
+  const [roomLifecycleBusy, setRoomLifecycleBusy] = useState(false);
   const [createdRoomLink, setCreatedRoomLink] = useState<string|null>(null);
   const [createdPatientName, setCreatedPatientName] = useState("");
   const [createdPatientLanguage, setCreatedPatientLanguage] = useState<"es" | "en">("es");
@@ -1290,14 +1308,16 @@ export default function InboxPage() {
     setSelectedCareTeamIds((current) => Array.from(new Set([...current, ...ids])));
   };
   const isSuperAdmin = isOwnerEmail(currentUserEmail) || ["owner","super_admin"].includes((userProfile?.admin_level || "").toLowerCase());
-  const canOpenAdmin = isSuperAdmin;
-  const canManageCareTeam = isSuperAdmin;
+  const canOpenAdmin = hasPermission(userProfile, currentUserEmail, "access_settings_security");
+  const canManageCareTeam = hasPermission(userProfile, currentUserEmail, "manage_staff");
   const currentUserAssignedToSelectedRoom =
     !!currentUserId &&
     (!!selectedRoom?.created_by && selectedRoom.created_by === currentUserId ||
       selectedRoomTeam.some((member) => member.id === currentUserId));
-  const canUseStaffRecord = isSuperAdmin || currentUserAssignedToSelectedRoom;
-  const canViewClinicalHistoryForms = isSuperAdmin && (isOwnerEmail(currentUserEmail) || currentUserAssignedToSelectedRoom);
+  const canUseStaffRecord = hasPermission(userProfile, currentUserEmail, "view_internal_notes") && (isSuperAdmin || currentUserAssignedToSelectedRoom);
+  const canViewClinicalHistoryForms = hasPermission(userProfile, currentUserEmail, "view_clinical_history") && (isOwnerEmail(currentUserEmail) || currentUserAssignedToSelectedRoom);
+  const canCancelRestoreRoom = hasPermission(userProfile, currentUserEmail, "archive_rooms") || hasPermission(userProfile, currentUserEmail, "restore_rooms");
+  const selectedRoomCancelled = `${selectedRoom?.procedures?.status || ""}`.toLowerCase() === "cancelled" || `${selectedRoom?.procedures?.patients?.record_status || "active"}`.toLowerCase() !== "active";
   const canViewInternalNote = (entry: any) => {
     if (!canUseStaffRecord) return false;
     const note = parseInternalNote(entry?.content);
@@ -1313,8 +1333,7 @@ export default function InboxPage() {
         ? "Equipo"
         : "Care team";
   const canCreatePatientRooms =
-    isOwnerEmail(currentUserEmail) ||
-    ["owner", "super_admin", "admin"].includes((userProfile?.admin_level || "").toLowerCase());
+    hasPermission(userProfile, currentUserEmail, "create_patients");
   const careTeamDirectory = sortCareTeamMembers(
     careTeamFilter === "guadalajara"
       ? staffDirectory.filter((member) => member.office_location === "Guadalajara")
@@ -2782,7 +2801,7 @@ export default function InboxPage() {
   }, [callOverlayOpen]);
 
   const fetchRooms = async () => {
-    const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications))";
+    const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications, record_status))";
     const fallbackSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, profile_picture_url, birthdate))";
     const query = await supabase.from("rooms").select(extendedSelect).order("created_at",{ascending:false});
     let data = query.data;
@@ -2794,7 +2813,7 @@ export default function InboxPage() {
       error = fallbackQuery.error;
     }
 
-    if (!error&&data) { const pm: Record<string,any>={}; data.forEach(r=>{const p=r.procedures?.patients;if(!p)return;if(!pm[p.id])pm[p.id]={...p,rooms:[]};pm[p.id].rooms.push(r);}); setPatients(Object.values(pm)); }
+    if (!error&&data) { const pm: Record<string,any>={}; data.forEach(r=>{const p=r.procedures?.patients;if(!p)return;const patientStatus=`${p.record_status || "active"}`.toLowerCase();const procedureStatus=`${r.procedures?.status || ""}`.toLowerCase();if(patientStatus!=="active"||procedureStatus==="cancelled")return;if(!pm[p.id])pm[p.id]={...p,rooms:[]};pm[p.id].rooms.push(r);}); setPatients(Object.values(pm)); }
     setLoading(false);
   };
 
@@ -2835,11 +2854,57 @@ export default function InboxPage() {
     window.location.href = `sms:?&body=${encodeURIComponent(link)}`;
   };
 
+  const changeSelectedRoomLifecycle = async (action: "cancel" | "restore") => {
+    if (!selectedRoom || roomLifecycleBusy) return;
+    const confirmText = action === "cancel" ? t.cancelRoomConfirm : t.restoreRoomConfirm;
+    if (!window.confirm(confirmText)) return;
+
+    setRoomLifecycleBusy(true);
+    try {
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token || "";
+      const response = await fetch("/api/admin/room-lifecycle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ roomId: selectedRoom.id, action }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || t.roomLifecycleError);
+
+      if (action === "cancel") {
+        setSelectedRoom((current:any) => current ? {
+          ...current,
+          procedures: {
+            ...current.procedures,
+            status: "cancelled",
+            patients: { ...current.procedures?.patients, record_status: "archived" },
+          },
+        } : current);
+        setPatients((current:any[]) => current.map((patient:any) => ({
+          ...patient,
+          rooms: (patient.rooms || []).filter((room:any) => room.id !== selectedRoom.id),
+        })).filter((patient:any) => (patient.rooms || []).length > 0));
+        alert(t.roomCancelled);
+      } else {
+        alert(t.roomRestored);
+        fetchRooms();
+      }
+      setShowPatientInfo(false);
+    } catch (error:any) {
+      alert(error?.message || t.roomLifecycleError);
+    } finally {
+      setRoomLifecycleBusy(false);
+    }
+  };
+
   const fetchMessages = async (roomId: string) => { const { data } = await supabase.from("messages").select("*").eq("room_id",roomId).order("created_at",{ascending:true}); setMessages(data||[]); };
 
   const sendMessage = async (content?: string) => {
     const msg=(content||newMessage).trim();
-    if (!msg||!selectedRoom||isSending.current) return;
+    if (!msg||!selectedRoom||selectedRoomCancelled||isSending.current) return;
     updateTypingState("", selectedRoom.id);
     isSending.current=true; setSending(true);
     if (!content) setComposerText("");
@@ -3015,7 +3080,7 @@ export default function InboxPage() {
   };
 
   const startVideoCall = async () => {
-    if (!selectedRoom || isSending.current) return;
+    if (!selectedRoom || selectedRoomCancelled || isSending.current) return;
     updateTypingState("", selectedRoom.id);
     isSending.current = true;
     setSending(true);
@@ -3109,7 +3174,7 @@ export default function InboxPage() {
   };
 
   const uploadFile = async (file: File, cat: FileCategory="general", folderLabel = "") => {
-    if (!selectedRoom) return; setSending(true);
+    if (!selectedRoom || selectedRoomCancelled) return; setSending(true);
     try {
       const sName=userProfile?.full_name||userProfile?.display_name||"Staff";
       const sRole=userProfile?.role||"staff";
@@ -3206,7 +3271,7 @@ export default function InboxPage() {
   };
 
   const saveInternalNote = async (visibilityOverride?: InternalNoteVisibility) => {
-    if (!selectedRoom || !internalNoteDraft.trim() || savingInternalNote) return;
+    if (!selectedRoom || selectedRoomCancelled || !internalNoteDraft.trim() || savingInternalNote) return;
     if (!canUseStaffRecord) {
       alert(lang === "es" ? "Solo el equipo asignado puede agregar notas a este expediente." : "Only the assigned care team can add notes to this record.");
       return;
@@ -3271,7 +3336,7 @@ export default function InboxPage() {
   };
 
   const uploadStaffRecordPhoto = async (file: File) => {
-    if (!selectedRoom || !file || uploadingStaffRecordPhoto) return;
+    if (!selectedRoom || selectedRoomCancelled || !file || uploadingStaffRecordPhoto) return;
     if (!canUseStaffRecord) {
       alert(lang === "es" ? "Solo el equipo asignado puede agregar fotos internas a este expediente." : "Only the assigned care team can add internal photos to this record.");
       return;
@@ -4489,6 +4554,27 @@ export default function InboxPage() {
                 <button type="button" onClick={()=>void messagePatientRoomLink()} style={{minHeight:44,border:"none",borderRadius:12,background:"#FEF3C7",color:"#92400E",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer"}}>{t.patientMessageLink}</button>
               </div>
             </div>
+
+            {canCancelRestoreRoom && (
+              <div style={{background:selectedRoomCancelled ? (darkMode?"#3B1D1D":"#FFF1F2") : (darkMode?"#2C2414":"#FFFBEB"),border:`1px solid ${selectedRoomCancelled ? "#FCA5A5" : "#FCD34D"}`,borderRadius:18,padding:16}}>
+                <p style={{fontSize:uiLabelSize,fontWeight:900,color:selectedRoomCancelled ? "#B91C1C" : "#92400E",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,lineHeight:1.35}}>
+                  {selectedRoomCancelled ? t.roomCancelledBadge : (lang==="es" ? "Estado de sala" : "Room status")}
+                </p>
+                <p style={{fontSize:uiSmallSize,color:subTextColor,marginBottom:12,lineHeight:1.45}}>
+                  {selectedRoomCancelled
+                    ? (lang==="es" ? "La sala esta fuera del flujo activo. Puedes restaurarla sin perder mensajes, archivos, recetas ni formularios." : "This room is outside the active workflow. You can restore it without losing messages, files, prescriptions, or forms.")
+                    : (lang==="es" ? "Cancela la sala si el enlace ya no debe funcionar como tratamiento activo. Todo queda guardado." : "Cancel the room if the link should no longer work as an active treatment room. Everything stays saved.")}
+                </p>
+                <button
+                  type="button"
+                  disabled={roomLifecycleBusy}
+                  onClick={()=>void changeSelectedRoomLifecycle(selectedRoomCancelled ? "restore" : "cancel")}
+                  style={{width:"100%",minHeight:46,border:"none",borderRadius:14,background:selectedRoomCancelled ? "#16A34A" : "#B91C1C",color:"white",fontFamily:"inherit",fontSize:uiBaseSize,fontWeight:900,cursor:roomLifecycleBusy?"not-allowed":"pointer",opacity:roomLifecycleBusy?0.55:1}}
+                >
+                  {roomLifecycleBusy ? (lang==="es" ? "Guardando..." : "Saving...") : selectedRoomCancelled ? t.restoreRoom : t.cancelRoom}
+                </button>
+              </div>
+            )}
 
             <div style={{background:cardBg,borderRadius:18,padding:16,display:"grid",gridTemplateColumns:"88px 1fr",gap:14,alignItems:"center"}}>
               <div style={{width:88,height:88,borderRadius:20,overflow:"hidden",background:"linear-gradient(135deg,#0F172A,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:28,fontWeight:800}}>
@@ -6149,11 +6235,11 @@ export default function InboxPage() {
                     <div
                       ref={setComposerNode}
                       className="msg-input"
-                      contentEditable
+                      contentEditable={!selectedRoomCancelled}
                       suppressContentEditableWarning
                       role="textbox"
                       aria-label={lang==="es" ? "Mensaje" : "Message"}
-                      data-placeholder={lang==="es" ? "Mensaje" : "Message"}
+                      data-placeholder={selectedRoomCancelled ? t.roomCancelledBadge : (lang==="es" ? "Mensaje" : "Message")}
                       onFocus={()=>{closeMessageActions();jumpToLatest();}}
                       onInput={e=>{
                         const v=e.currentTarget.textContent || "";
@@ -6175,7 +6261,7 @@ export default function InboxPage() {
                         if(e.key==="Escape")setShowSlashMenu(false);
                       }}
                     />
-                    <button className="send-btn" onClick={()=>sendMessage()} disabled={sending || !newMessage.trim()} aria-label={t.send}>
+                    <button className="send-btn" onClick={()=>sendMessage()} disabled={selectedRoomCancelled || sending || !newMessage.trim()} aria-label={t.send}>
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                     </button>
                     {selectedRoom.procedures?.patients?.phone && (
@@ -6183,7 +6269,7 @@ export default function InboxPage() {
                         <img src="/Phone_icon.png" alt="" />
                       </a>
                     )}
-                    <button className="mic-btn" onPointerDown={e=>{e.preventDefault();startRec();}} aria-label={t.recordAudio}>
+                    <button className="mic-btn" disabled={selectedRoomCancelled} onPointerDown={e=>{e.preventDefault();if(!selectedRoomCancelled)startRec();}} aria-label={t.recordAudio}>
                       <img src="/Microphone_icon.png" alt="" />
                     </button>
                   </div>

@@ -45,9 +45,11 @@ type RoomAccess = {
   patient_access_token?: string | null;
   procedures?: {
     office_location?: string | null;
+    status?: string | null;
     patients?: {
       full_name?: string | null;
       preferred_language?: string | null;
+      record_status?: string | null;
     } | null;
   } | null;
 };
@@ -332,6 +334,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [expandedImage, setExpandedImage] = useState<{ url: string; name?: string } | null>(null);
   const [accessReady, setAccessReady] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [roomClosed, setRoomClosed] = useState(false);
   const [room, setRoom] = useState<RoomAccess | null>(null);
   const [fileAccept, setFileAccept] = useState("*");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -412,7 +415,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const subscribePatientToPush = useCallback(async () => {
-    if (typeof window === "undefined" || !accessReady || accessDenied || !token) return;
+    if (typeof window === "undefined" || !accessReady || accessDenied || roomClosed || !token) return;
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       setNotificationPermission("unsupported");
       return;
@@ -431,7 +434,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       roomId: id,
       roomToken: token,
     });
-  }, [accessDenied, accessReady, id, token]);
+  }, [accessDenied, accessReady, id, roomClosed, token]);
 
   const requestPatientNotifications = useCallback(async () => {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -538,10 +541,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const validateRoom = async () => {
       setAccessReady(false);
       setAccessDenied(false);
+      setRoomClosed(false);
 
       let roomQuery = await supabase
         .from("rooms")
-        .select("id, patient_access_token, procedures(office_location, patients(full_name, preferred_language))")
+        .select("id, patient_access_token, procedures(office_location, status, patients(full_name, preferred_language, record_status))")
         .eq("id", id)
         .single();
 
@@ -566,6 +570,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         setAccessDenied(true);
         setAccessReady(true);
         return false;
+      }
+
+      const procedure = Array.isArray(roomData.procedures) ? roomData.procedures[0] : roomData.procedures;
+      const patient = Array.isArray(procedure?.patients) ? procedure.patients[0] : procedure?.patients;
+      const patientStatus = `${patient?.record_status || "active"}`.toLowerCase();
+      const procedureStatus = `${procedure?.status || ""}`.toLowerCase();
+      if (patientStatus !== "active" || procedureStatus === "cancelled") {
+        setRoomClosed(true);
       }
 
       setRoom(roomData);
@@ -714,7 +726,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   const sendText = async () => {
     const content = text.trim();
-    if (!content || accessDenied || !accessReady) return;
+    if (!content || accessDenied || roomClosed || !accessReady) return;
 
     shouldAutoScrollRef.current = true;
     setComposerText("");
@@ -764,7 +776,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     ));
 
   const saveClinicalForm = async (payload: FormMessagePayload) => {
-    if (accessDenied || !accessReady) return;
+    if (accessDenied || roomClosed || !accessReady) return;
     const content = serializeFormMessage(payload);
     const existing = latestClinicalFormMessage;
 
@@ -869,7 +881,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const uploadFile = async (file: File, overrideType?: Message["message_type"], overrideFileName?: string) => {
-    if (accessDenied || !accessReady) return null;
+    if (accessDenied || roomClosed || !accessReady) return null;
 
     const timestamp = new Date().toISOString();
     const storageTimestamp = Date.now();
@@ -981,7 +993,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const uploadClinicalHistoryPdf = async (file: File) => {
-    if (accessDenied || !accessReady) return null;
+    if (accessDenied || roomClosed || !accessReady) return null;
 
     const timestamp = new Date().toISOString();
     const storageTimestamp = Date.now();
@@ -1083,7 +1095,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const saveClinicalPdfForm = async () => {
-    if (clinicalPdfSaving || accessDenied || !accessReady) return;
+    if (clinicalPdfSaving || accessDenied || roomClosed || !accessReady) return;
     setClinicalPdfSaving(true);
 
     try {
@@ -1642,11 +1654,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <div ref={bottomRef} />
       </section>
 
-      <footer onClick={() => setDeleteMenuMessageId(null)} style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)", maxWidth: "100vw" }}>
+      {roomClosed && (
+        <div style={{ flexShrink: 0, padding: "12px max(14px, env(safe-area-inset-right)) 12px max(14px, env(safe-area-inset-left))", background: darkMode ? "#2C2414" : "#FFFBEB", color: darkMode ? "#FDE68A" : "#92400E", borderTop: "1px solid rgba(146,64,14,0.18)", fontSize: patientTextSmall, fontWeight: 850, lineHeight: 1.4, textAlign: "center" }}>
+          {uiLang === "es"
+            ? "Esta sala fue cancelada por el equipo de Dr. Fonseca. Tus mensajes, formularios y archivos siguen guardados, pero el chat ya no esta activo."
+            : "This room was cancelled by Dr. Fonseca's team. Your messages, forms, and files are still saved, but the chat is no longer active."}
+        </div>
+      )}
+      <footer onClick={() => setDeleteMenuMessageId(null)} style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)", maxWidth: "100vw", opacity: roomClosed ? 0.72 : 1 }}>
         {menuOpen && (
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
-            <button onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
-            <button onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
+            <button disabled={roomClosed} onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
+            <button disabled={roomClosed} onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
             <button onClick={openPrescriptions} style={{ ...menuButtonStyle, position:"relative" }}>
               {labels.documents}
               {newPrescriptionCount > 0 && <span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",minWidth:22,height:22,borderRadius:999,background:"#DC2626",color:"white",display:"grid",placeItems:"center",fontSize:12,fontWeight:900}}>{newPrescriptionCount}</span>}
@@ -1657,7 +1676,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           </div>
         )}
 
-        <button onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ position:"relative", width: 42, height: 42, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <button disabled={roomClosed} onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ position:"relative", width: 42, height: 42, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {menuOpen ? "×" : "+"}
           {newPrescriptionCount > 0 && <span style={{position:"absolute",right:0,top:0,width:12,height:12,borderRadius:"50%",background:"#DC2626",border:"2px solid #ededed"}} />}
         </button>
@@ -1665,11 +1684,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         <div
           ref={setComposerNode}
           className="chat-composer"
-          contentEditable
+          contentEditable={!roomClosed}
           suppressContentEditableWarning
           role="textbox"
           aria-label={labels.messagePlaceholder}
-          data-placeholder={labels.messagePlaceholder}
+          data-placeholder={roomClosed ? (uiLang === "es" ? "Sala cancelada" : "Room cancelled") : labels.messagePlaceholder}
           onFocus={() => { setDeleteMenuMessageId(null); scrollToLatest(); }}
           onInput={(event) => {
             const next = event.currentTarget.textContent || "";
@@ -1679,19 +1698,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              sendText();
+              if (!roomClosed) sendText();
             }
           }}
           style={{ minWidth: 0, flex: 1, minHeight: 58, maxHeight: 104, overflowY: "auto", border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: darkMode ? "#f8fafc" : "#1f2937", padding: "16px 20px", fontSize: messageFontSize, fontWeight: 500, lineHeight: 1.42, WebkitUserSelect: "text", userSelect: "text" }}
         />
 
-        <button onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
+        <button disabled={roomClosed} onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
 
         <button onClick={() => setCallSheetOpen(true)} aria-label={labels.callClinic} style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
           <Image src="/Phone_icon.png" alt="" width={30} height={30} style={{ width: 30, height: 30, objectFit: "contain" }} />
         </button>
 
-        <button onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
+        <button disabled={roomClosed} onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
           <Image src="/Microphone_icon.png" alt="" width={36} height={36} style={{ width: 36, height: 36, objectFit: "contain" }} />
         </button>
 

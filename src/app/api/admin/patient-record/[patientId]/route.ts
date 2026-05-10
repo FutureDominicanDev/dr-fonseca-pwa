@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isOwnerEmail } from "@/lib/securityConfig";
+import { hasPermission } from "@/lib/permissions";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -9,13 +10,8 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || "missing-key");
 const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missing-key");
 
-const isAdminLevel = (value?: string | null) => {
-  const level = `${value || ""}`.toLowerCase();
-  return level === "owner" || level === "super_admin";
-};
-
 const canEditClinicalRecord = (profile: any, email: string) =>
-  isOwnerEmail(email) || (`${profile?.role || ""}`.toLowerCase() === "doctor" && isAdminLevel(profile?.admin_level));
+  isOwnerEmail(email) || (`${profile?.role || ""}`.toLowerCase() === "doctor" && hasPermission(profile, email, "edit_patient_info"));
 
 const cleanOffice = (value: unknown) => (value === "Guadalajara" || value === "Tijuana" ? value : null);
 
@@ -48,7 +44,7 @@ export async function GET(
     }
 
     const viewerEmail = user.email?.toLowerCase() || "";
-    if (!isOwnerEmail(viewerEmail) && !isAdminLevel(viewerProfile.admin_level)) {
+    if (!hasPermission(viewerProfile, viewerEmail, "view_patients")) {
       return NextResponse.json({ error: "No admin record access." }, { status: 403 });
     }
 

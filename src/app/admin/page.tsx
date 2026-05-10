@@ -23,6 +23,7 @@ import {
   type StaffProfile,
 } from "@/lib/adminPortal";
 import { isOwnerEmail } from "@/lib/securityConfig";
+import { hasPermission } from "@/lib/permissions";
 
 type PatientCard = {
   patient: PatientRecord;
@@ -113,11 +114,10 @@ export default function AdminPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [exportMenu, setExportMenu] = useState<{ type: "patient" | "staff"; id: string; title: string; body: string } | null>(null);
 
-  const viewerAdminLevel = normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail);
-  const hasAdminAccess = ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
-  const canManageAdmins = ["owner", "super_admin"].includes(viewerAdminLevel);
+  const hasAdminAccess = hasPermission(viewerProfile, viewerEmail, "access_settings_security");
+  const canManageAdmins = hasPermission(viewerProfile, viewerEmail, "manage_staff");
   const canManageOwner = isOwnerEmail(viewerEmail);
-  const canReviewAccessRequests = ["owner", "super_admin", "admin"].includes(viewerAdminLevel);
+  const canReviewAccessRequests = hasPermission(viewerProfile, viewerEmail, "manage_staff");
 
   const officeText = (office: Office) => {
     if (office === "Guadalajara") return "📍 Guadalajara";
@@ -366,8 +366,7 @@ export default function AdminPage() {
       }
     }
 
-    const computedAdminLevel = normalizeAdminLevel((profile as StaffProfile | null)?.admin_level, email);
-    const computedAccess = ["owner", "super_admin", "admin"].includes(computedAdminLevel);
+    const computedAccess = hasPermission(profile as StaffProfile | null, email, "access_settings_security");
     if (!computedAccess) {
       setSessionChecked(true);
       setLoading(false);
