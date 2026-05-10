@@ -26,6 +26,11 @@ const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
 
 const readStaffLang = (): Lang => {
   if (typeof window === "undefined") return "es";
+  const queryLang = new URLSearchParams(window.location.search).get("lang");
+  if (queryLang === "en" || queryLang === "es") {
+    window.localStorage.setItem(STAFF_LANG_STORAGE_KEY, queryLang);
+    return queryLang;
+  }
   const stored = window.localStorage.getItem(STAFF_LANG_STORAGE_KEY);
   return stored === "en" ? "en" : "es";
 };
@@ -107,6 +112,10 @@ const T = {
     birthdatePH: "dd/mm/aaaa",
     email: "Correo Electrónico",
     emailPH: "paciente@correo.com",
+    patientDataSection: "Datos del paciente",
+    patientDataSectionHint: "Nombre, contacto, datos clínicos, fotos internas y procedimiento en una sola secuencia.",
+    officeTeamSection: "Consultorio y equipo",
+    officeTeamSectionHint: "Elige el consultorio y luego selecciona qué personal verá este chat.",
     procedure: "Procedimiento *", procedurePH: "Ej: Rinoplastia, Lipo 360...",
     surgeryDate: "Fecha de Cirugía", location: "Consultorio *",
     surgeryDatePH: "dd/mm/aaaa",
@@ -124,8 +133,9 @@ const T = {
     careTeamShowAll: "Todos",
     careTeamShowOffice: "Consultorio",
     careTeamSelectAll: "Todos",
-    careTeamClear: "Solo yo",
+    careTeamClear: "Equipo base",
     careTeamSelected: "Seleccionados",
+    careTeamRequired: "Dr. Fonseca · obligatorio",
     careTeamFilterGdl: "Guadalajara",
     careTeamFilterTjn: "Tijuana",
     careTeamFilterSelected: "Elegidos",
@@ -220,7 +230,7 @@ const T = {
     staffRecordAlertsOn: "Alertas activadas",
     staffRecordAlertsOff: "Alertas pausadas",
     uploadedBy: "Subido por",
-    noTeamSelected: "Si no seleccionas a nadie, se asignará solo la persona que crea el chat.",
+    noTeamSelected: "Dr. Fonseca se mantiene asignado siempre. Si no agregas a nadie más, solo el equipo base verá la sala.",
     noPatientInfo: "Todavía no hay datos extendidos para este paciente.",
     openFullRecord: "Abrir expediente",
     teamEmpty: "No hay personal asignado todavía.",
@@ -229,9 +239,10 @@ const T = {
     profilePic: "Foto de Perfil", beforePhotos: "Fotos Pre-Op",
     tapProfilePic: "Toca para subir foto de perfil",
     tapBeforePhotos: "Toca para subir fotos pre-op",
+    internalPhotosHint: "Estas fotos son privadas para el equipo asignado. El paciente no las ve en su portal.",
     createRoom: "Crear chat del paciente", creating: "Creando chat...",
     cancel: "Cancelar", roomCreated: "¡Sala Creada!", shareLink: "Comparte este enlace con el paciente:",
-    copyLink: "📋 Copiar Enlace", copied: "✅ ¡Copiado!", whatsapp: "💬 Enviar por WhatsApp",
+    copyLink: "📋 Copiar Enlace", copied: "✅ ¡Copiado!", emailLink: "✉️ Enviar por correo", whatsapp: "💬 Enviar por WhatsApp",
     done: "Listo", required: "Nombre del paciente y procedimiento son obligatorios.",
     fixErrors: "Corrige los errores antes de continuar.",
     invalidEmail: "El correo debe incluir un formato válido, por ejemplo nombre@correo.com.",
@@ -292,6 +303,10 @@ const T = {
     birthdatePH: "dd/mm/yyyy",
     email: "Email",
     emailPH: "patient@email.com",
+    patientDataSection: "Patient details",
+    patientDataSectionHint: "Name, contact, clinical details, internal photos, and procedure in one sequence.",
+    officeTeamSection: "Office and team",
+    officeTeamSectionHint: "Choose the office, then select which staff will see this chat.",
     procedure: "Procedure *", procedurePH: "e.g. Rhinoplasty, Lipo 360...",
     surgeryDate: "Surgery Date", location: "Location *",
     surgeryDatePH: "dd/mm/yyyy",
@@ -309,8 +324,9 @@ const T = {
     careTeamShowAll: "All",
     careTeamShowOffice: "Office",
     careTeamSelectAll: "All",
-    careTeamClear: "Only me",
+    careTeamClear: "Base team",
     careTeamSelected: "Selected",
+    careTeamRequired: "Dr. Fonseca · required",
     careTeamFilterGdl: "Guadalajara",
     careTeamFilterTjn: "Tijuana",
     careTeamFilterSelected: "Selected",
@@ -405,7 +421,7 @@ const T = {
     staffRecordAlertsOn: "Alerts enabled",
     staffRecordAlertsOff: "Alerts paused",
     uploadedBy: "Uploaded by",
-    noTeamSelected: "If you do not choose anyone, only the room creator will be assigned.",
+    noTeamSelected: "Dr. Fonseca always stays assigned. If you do not add anyone else, only the base team will see the room.",
     noPatientInfo: "There is no extended patient data yet.",
     openFullRecord: "Open record",
     teamEmpty: "No staff assigned yet.",
@@ -414,9 +430,10 @@ const T = {
     profilePic: "Profile Photo", beforePhotos: "Pre-Op Photos",
     tapProfilePic: "Tap to upload profile photo",
     tapBeforePhotos: "Tap to upload pre-op photos",
+    internalPhotosHint: "These photos are private for the assigned team. The patient does not see them in the portal.",
     createRoom: "Create patient room", creating: "Creating room...",
     cancel: "Cancel", roomCreated: "Room Created!", shareLink: "Share this link with the patient:",
-    copyLink: "📋 Copy Link", copied: "✅ Copied!", whatsapp: "💬 Send via WhatsApp",
+    copyLink: "📋 Copy Link", copied: "✅ Copied!", emailLink: "✉️ Send by Email", whatsapp: "💬 Send via WhatsApp",
     done: "Done", required: "Patient name and procedure are required.",
     fixErrors: "Please correct the errors before continuing.",
     invalidEmail: "Email must use a valid format, for example name@email.com.",
@@ -522,6 +539,12 @@ interface CareTeamMember {
   phone?: string | null;
   email?: string | null;
 }
+const isDefaultDoctorMember = (member: CareTeamMember) => {
+  const email = `${member.email || ""}`.trim().toLowerCase();
+  const role = `${member.role || ""}`.toLowerCase();
+  const name = `${member.full_name || ""} ${member.display_name || ""}`.toLowerCase();
+  return isOwnerEmail(email) || (name.includes("fonseca") && (name.includes("miguel") || name.includes("dr") || role === "doctor"));
+};
 type StaffPrivateMessage = {
   id?: string;
   sender_id?: string | null;
@@ -1288,7 +1311,13 @@ export default function InboxPage() {
     composerRef.current = node;
     applyComposerInputHints(node);
   };
+  const requiredCareTeamMemberIds = useMemo(
+    () => staffDirectory.filter(isDefaultDoctorMember).map((member) => member.id),
+    [staffDirectory]
+  );
+  const requiredCareTeamIdSet = useMemo(() => new Set(requiredCareTeamMemberIds), [requiredCareTeamMemberIds]);
   const toggleCareTeamMember = (id: string) => {
+    if (requiredCareTeamIdSet.has(id)) return;
     setSelectedCareTeamIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   };
   const careTeamRoleRank = (role?: string | null) => {
@@ -1305,8 +1334,8 @@ export default function InboxPage() {
       return (a.full_name || "").localeCompare(b.full_name || "", lang === "es" ? "es" : "en");
     });
   const addCareTeamMembers = (members: CareTeamMember[]) => {
-    const ids = [currentUserId, ...members.map((member) => member.id)].filter(Boolean) as string[];
-    setSelectedCareTeamIds((current) => Array.from(new Set([...current, ...ids])));
+    const ids = [...requiredCareTeamMemberIds, currentUserId, ...members.map((member) => member.id)].filter(Boolean) as string[];
+    setSelectedCareTeamIds((current) => Array.from(new Set([...ids, ...current])));
   };
   const matchesCareTeamOffice = (member: CareTeamMember, office: string) =>
     !member.office_location || member.office_location === office;
@@ -1339,16 +1368,16 @@ export default function InboxPage() {
     hasPermission(userProfile, currentUserEmail, "create_patients");
   const careTeamDirectory = sortCareTeamMembers(
     careTeamFilter === "guadalajara"
-      ? staffDirectory.filter((member) => matchesCareTeamOffice(member, "Guadalajara"))
+      ? staffDirectory.filter((member) => matchesCareTeamOffice(member, "Guadalajara") || requiredCareTeamIdSet.has(member.id))
       : careTeamFilter === "tijuana"
-        ? staffDirectory.filter((member) => matchesCareTeamOffice(member, "Tijuana"))
+        ? staffDirectory.filter((member) => matchesCareTeamOffice(member, "Tijuana") || requiredCareTeamIdSet.has(member.id))
         : careTeamFilter === "selected"
-          ? staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id))
+          ? staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id) || requiredCareTeamIdSet.has(member.id))
           : staffDirectory
   );
   const selectedOfficeFilter: CareTeamFilter = newLocation === "Tijuana" ? "tijuana" : "guadalajara";
-  const selectedOfficeCareTeam = sortCareTeamMembers(staffDirectory.filter((member) => matchesCareTeamOffice(member, newLocation)));
-  const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id));
+  const selectedOfficeCareTeam = sortCareTeamMembers(staffDirectory.filter((member) => matchesCareTeamOffice(member, newLocation) || requiredCareTeamIdSet.has(member.id)));
+  const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id) || requiredCareTeamIdSet.has(member.id));
   const careStaffInviteDirectory = sortCareTeamMembers(
     staffDirectory.filter((member) => {
       const search = careStaffSearch.trim().toLowerCase();
@@ -1620,10 +1649,13 @@ export default function InboxPage() {
   useEffect(() => {
     if (createPatientDeepLinkHandledRef.current || loading || typeof window === "undefined") return;
     const url = new URL(window.location.href);
+    const queryLang = url.searchParams.get("lang");
+    if (queryLang === "es" || queryLang === "en") setLang(queryLang);
     if (url.searchParams.get("createPatient") !== "1") return;
     createPatientDeepLinkHandledRef.current = true;
     requestNewPatientRoom();
     url.searchParams.delete("createPatient");
+    url.searchParams.delete("lang");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }, [loading, canCreatePatientRooms]);
 
@@ -2663,10 +2695,14 @@ export default function InboxPage() {
   }, [currentUserId, fetchMediaNotificationCounts, registerIncomingMediaNotification]);
 
   useEffect(() => {
-    if (showNewRoom && currentUserId) {
-      setSelectedCareTeamIds((current) => current.includes(currentUserId) ? current : [currentUserId, ...current]);
-    }
-  }, [showNewRoom, currentUserId]);
+    if (!showNewRoom) return;
+    const baseIds = [...requiredCareTeamMemberIds, currentUserId].filter(Boolean) as string[];
+    if (baseIds.length === 0) return;
+    setSelectedCareTeamIds((current) => {
+      const next = Array.from(new Set([...baseIds, ...current]));
+      return next.length === current.length && next.every((id, index) => id === current[index]) ? current : next;
+    });
+  }, [showNewRoom, currentUserId, requiredCareTeamMemberIds]);
 
   useEffect(() => {
     if (!showNewRoom) return;
@@ -3643,7 +3679,7 @@ export default function InboxPage() {
         ? (rm as { patient_access_token: string }).patient_access_token
         : "";
 
-      const memberIds = Array.from(new Set([creatorId, ...selectedCareTeamIds].filter(Boolean))) as string[];
+      const memberIds = Array.from(new Set([creatorId, ...requiredCareTeamMemberIds, ...selectedCareTeamIds].filter(Boolean))) as string[];
       if (memberIds.length) {
         const selectedProfiles = staffDirectory.filter((entry) => memberIds.includes(entry.id));
         const rows = memberIds.map((memberId) => {
@@ -3701,6 +3737,12 @@ export default function InboxPage() {
   };
 
   const copyLink = async () => { if (!createdRoomLink) return; await navigator.clipboard.writeText(createdRoomLink); setLinkCopied(true); setTimeout(()=>setLinkCopied(false),2500); };
+  const emailRoomLink = () => {
+    if (!createdRoomLink) return;
+    const subject = createdPatientLanguage === "en" ? "Dr. Fonseca patient portal" : "Portal de paciente Dr. Fonseca";
+    const body = onboardingMessageForPatient({ patientName: createdPatientName, roomLink: createdRoomLink, preferredLanguage: createdPatientLanguage });
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
   const whatsAppLink = () => { if (!createdRoomLink) return; window.open(`https://wa.me/?text=${encodeURIComponent(onboardingMessageForPatient({ patientName: createdPatientName, roomLink: createdRoomLink, preferredLanguage: createdPatientLanguage }))}`, "_blank"); };
 
   const startRec = async () => {
@@ -4941,6 +4983,7 @@ export default function InboxPage() {
 	        .room-section-copy { color: ${subTextColor}; font-size: var(--app-ui-small-size); line-height: 1.5; margin-top: 2px; font-weight: 650; overflow-wrap: anywhere; }
         .room-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .room-phone-grid { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 10px; }
+        .room-file-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .room-field { min-width: 0; }
         .room-field .finput { margin-bottom: 12px; background: ${darkMode?"#253244":"#FFFFFF"}; }
         .room-toggle { background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"#DDE9F6"}; border-radius: 20px; padding: 0; margin-bottom: 12px; box-shadow: ${darkMode?"none":"0 8px 22px rgba(28,66,104,0.06)"}; overflow: hidden; }
@@ -4968,11 +5011,13 @@ export default function InboxPage() {
         .care-team-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
         .care-team-option { display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 10px 12px; border-radius: 14px; background: ${darkMode?"#111827":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#E6EEF7"}; cursor: pointer; }
         .care-team-option.selected { background: #EBF5FF; border-color: #93C5FD; }
+        .care-team-option.required { cursor: default; }
         .care-team-option.selected .care-team-name { color: #0F172A; }
         .care-team-option.selected .care-team-meta { color: #475569; }
         .care-team-avatar { width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg,#0F172A,#2563EB); display: grid; place-items: center; color: white; font-size: 12px; font-weight: 900; flex-shrink: 0; }
         .care-team-name { color: ${textColor}; font-size: 14px; font-weight: 900; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .care-team-meta { color: ${subTextColor}; font-size: 12px; font-weight: 700; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .care-team-required-badge { display: inline-flex; width: fit-content; margin-top: 4px; padding: 3px 7px; border-radius: 999px; background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 900; line-height: 1.2; }
         .care-team-empty { color: ${subTextColor}; font-size: 13px; font-weight: 700; padding: 8px 2px 0; }
 	        .flabel { font-size: var(--app-ui-label-size); font-weight: 800; color: ${subTextColor}; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 7px; display: block; line-height: 1.35; }
 	        .finput { width: 100%; min-height: 48px; padding: 14px 16px; background: ${darkMode?"#3A3A3C":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"#D9E4F2"}; border-radius: 14px; font-size: 16px; font-family: inherit; color: ${textColor}; outline: none; margin-bottom: 14px; line-height: 1.45; box-shadow: ${darkMode?"none":"0 1px 2px rgba(15,23,42,0.04)"}; }
@@ -5011,7 +5056,7 @@ export default function InboxPage() {
 	          .room-modal-head { border-radius: 0 0 22px 22px; margin-left: calc(-1 * max(20px, env(safe-area-inset-left))); margin-right: calc(-1 * max(20px, env(safe-area-inset-right))); margin-top: -18px; padding-top: calc(18px + env(safe-area-inset-top)); }
 	          .room-modal-title { font-size: clamp(28px, 8.2vw, 34px); }
 	          .room-progress { grid-template-columns: 1fr; }
-	          .room-grid-2, .room-phone-grid { grid-template-columns: 1fr; }
+	          .room-grid-2, .room-phone-grid, .room-file-grid { grid-template-columns: 1fr; }
 	          .room-progress-step { padding: 8px 10px; }
         }
       `}</style>
@@ -5131,8 +5176,8 @@ export default function InboxPage() {
               <p className="room-modal-title">{t.newRoom}</p>
               <p className="room-modal-copy">
                 {lang==="es"
-                  ? "Crea el chat con lo esencial. El equipo puede completar datos clínicos después desde el expediente."
-                  : "Create the chat with only the essentials. The team can complete clinical details later from the record."}
+                  ? "Registra los datos del paciente, elige consultorio y asigna el equipo que verá esta sala."
+                  : "Enter patient details, choose the office, and assign the team that will see this room."}
               </p>
             </div>
             {newRoomError && <div style={{background:"#FFF1F2",color:"#E11D48",borderRadius:14,padding:"12px 14px",fontSize:14,fontWeight:800,marginBottom:14}}>⚠️ {t.fixErrors} {newRoomError}</div>}
@@ -5141,16 +5186,23 @@ export default function InboxPage() {
               <div className="room-section-head">
                 <div className="room-section-num">1</div>
                 <div>
-                  <p className="room-section-title">{lang==="es" ? "Datos para abrir la sala" : "Room essentials"}</p>
-                  <p className="room-section-copy">
-                    {lang==="es" ? "Solo nombre del paciente, procedimiento y consultorio son necesarios." : "Only patient name, procedure, and office are needed."}
-                  </p>
+                  <p className="room-section-title">{t.patientDataSection}</p>
+                  <p className="room-section-copy">{t.patientDataSectionHint}</p>
                 </div>
               </div>
 
               <div className="room-field">
                 <label className="flabel">{t.patientFirstName}</label>
                 <input className="finput" placeholder={t.patientFirstNamePH} value={newPatientFirstName} onChange={e=>{setNewPatientFirstName(e.target.value);if(newRoomError)setNewRoomError("");}}/>
+              </div>
+
+              <label className="flabel">{t.preferredLanguage}</label>
+              <div className="loc-group">
+                {PATIENT_LANGUAGE_OPTIONS.map((option)=>(
+                  <div key={option.value} className={`loc-opt${newPatientLanguage===option.value?" sel":""}`} onClick={()=>setNewPatientLanguage(option.value)}>
+                    {lang==="es" ? option.labelEs : option.labelEn}
+                  </div>
+                ))}
               </div>
 
               <div className="room-phone-grid">
@@ -5168,6 +5220,53 @@ export default function InboxPage() {
                 </div>
               </div>
 
+              <div className="room-field">
+                <label className="flabel">{t.email}</label>
+                <input className="finput" type="email" placeholder={t.emailPH} value={newPatientEmail} onChange={e=>{setNewPatientEmail(e.target.value);if(newRoomError)setNewRoomError("");}}/>
+              </div>
+
+              <div className="room-grid-2">
+                <div className="room-field">
+                  <label className="flabel">{t.birthdate}</label>
+                  <input className="finput" inputMode="numeric" placeholder={t.birthdatePH} value={isoToDisplayDate(newBirthdate)} onChange={e=>setNewBirthdate(formatDateTyping(e.target.value))}/>
+                </div>
+                <div className="room-field">
+                  <label className="flabel">{t.timezone}</label>
+                  <select className="finput" value={newPatientTimezone} onChange={e=>setNewPatientTimezone(e.target.value)}>
+                    {PATIENT_TIMEZONE_OPTIONS.map((option)=>(
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="room-note">
+                {lang==="es"
+                  ? "El horario ayuda al equipo médico a responder sin confundir la hora local del paciente."
+                  : "The time zone helps the medical team reply without confusing the patient's local time."}
+              </p>
+
+              <label className="flabel">{t.allergies}</label>
+              <textarea className="finput" placeholder={t.allergiesPH} value={newPatientAllergies} onChange={e=>setNewPatientAllergies(e.target.value)} rows={3} style={{resize:"vertical"}}/>
+              <label className="flabel">{t.medications}</label>
+              <textarea className="finput" placeholder={t.medicationsPH} value={newPatientMedications} onChange={e=>setNewPatientMedications(e.target.value)} rows={3} style={{resize:"vertical"}}/>
+
+              <div className="room-file-grid">
+                <div>
+                  <label className="flabel">📸 {t.profilePic}</label>
+                  <div className="file-box" onClick={()=>profilePicRef.current?.click()}>
+                    {profilePicFile?<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><img src={URL.createObjectURL(profilePicFile)} alt="" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover"}}/><span>{profilePicFile.name}</span></div>:t.tapProfilePic}
+                  </div>
+                </div>
+                <div>
+                  <label className="flabel">📷 {t.beforePhotos}</label>
+                  {beforePhotosFiles.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{beforePhotosFiles.map((f,i)=><img key={i} src={URL.createObjectURL(f)} style={{width:60,height:60,borderRadius:10,objectFit:"cover"}} alt=""/>)}</div>}
+                  <div className="file-box" onClick={()=>beforePhotosRef.current?.click()}>
+                    {beforePhotosFiles.length===0?t.tapBeforePhotos:`📷 ${beforePhotosFiles.length} ${lang==="es" ? "foto(s)" : "photo(s)"}`}
+                  </div>
+                </div>
+              </div>
+              <p className="room-note">{t.internalPhotosHint}</p>
+
               <div className="room-grid-2">
                 <div className="room-field">
                   <label className="flabel">{t.procedure}</label>
@@ -5178,6 +5277,16 @@ export default function InboxPage() {
                   <input className="finput" inputMode="numeric" placeholder={t.surgeryDatePH} value={isoToDisplayDate(newSurgeryDate)} onChange={e=>setNewSurgeryDate(formatDateTyping(e.target.value))}/>
                 </div>
               </div>
+            </section>
+
+            <section className="room-create-card">
+              <div className="room-section-head">
+                <div className="room-section-num">2</div>
+                <div>
+                  <p className="room-section-title">{t.officeTeamSection}</p>
+                  <p className="room-section-copy">{t.officeTeamSectionHint}</p>
+                </div>
+              </div>
 
               <label className="flabel">{t.location}</label>
               <div className="loc-group">
@@ -5185,153 +5294,84 @@ export default function InboxPage() {
                 <div className={`loc-opt${newLocation==="Tijuana"?" sel":""}`} onClick={()=>setNewLocation("Tijuana")}>{t.tjn}</div>
               </div>
 
-              <label className="flabel">{t.preferredLanguage}</label>
-              <div className="loc-group" style={{marginBottom:0}}>
-                {PATIENT_LANGUAGE_OPTIONS.map((option)=>(
-                  <div key={option.value} className={`loc-opt${newPatientLanguage===option.value?" sel":""}`} onClick={()=>setNewPatientLanguage(option.value)}>
-                    {lang==="es" ? option.labelEs : option.labelEn}
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <details className="room-toggle">
-              <summary>
-                <div>
-                  <p className="room-toggle-title">{lang==="es" ? "Datos opcionales del paciente" : "Optional patient details"}</p>
-                  <p className="room-toggle-copy">
-                    {lang==="es" ? "Correo, nacimiento, horario, alergias, medicamentos y fotos." : "Email, birth date, time zone, allergies, medications, and photos."}
+              <p className="room-note">
+                {t.careTeamFocused}: <strong>{newLocation}</strong>. {t.careTeamHint}
+              </p>
+              <div className="care-team-panel">
+                <div className="care-team-toolbar">
+                  <p className="care-team-count">
+                    {t.careTeamOfficeVisible}: {selectedOfficeCareTeam.length} · {t.careTeamSelected}: {careTeamSelectedMembers.length}
                   </p>
-                </div>
-                <span className="room-toggle-chevron">⌄</span>
-              </summary>
-              <div className="room-toggle-body">
-                <div className="room-field">
-                  <label className="flabel">{t.email}</label>
-                  <input className="finput" type="email" placeholder={t.emailPH} value={newPatientEmail} onChange={e=>{setNewPatientEmail(e.target.value);if(newRoomError)setNewRoomError("");}}/>
-                </div>
-                <div className="room-grid-2">
-                  <div className="room-field">
-                    <label className="flabel">{t.birthdate}</label>
-                    <input className="finput" inputMode="numeric" placeholder={t.birthdatePH} value={isoToDisplayDate(newBirthdate)} onChange={e=>setNewBirthdate(formatDateTyping(e.target.value))}/>
-                  </div>
-                  <div className="room-field">
-                    <label className="flabel">{t.timezone}</label>
-                    <select className="finput" value={newPatientTimezone} onChange={e=>setNewPatientTimezone(e.target.value)}>
-                      {PATIENT_TIMEZONE_OPTIONS.map((option)=>(
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <p className="room-note">
-                  {lang==="es"
-                    ? "El horario ayuda al equipo médico a responder sin confundir la hora local del paciente."
-                    : "The time zone helps the medical team reply without confusing the patient's local time."}
-                </p>
-                <label className="flabel">{t.allergies}</label>
-                <textarea className="finput" placeholder={t.allergiesPH} value={newPatientAllergies} onChange={e=>setNewPatientAllergies(e.target.value)} rows={3} style={{resize:"vertical"}}/>
-                <label className="flabel">{t.medications}</label>
-                <textarea className="finput" placeholder={t.medicationsPH} value={newPatientMedications} onChange={e=>setNewPatientMedications(e.target.value)} rows={3} style={{resize:"vertical"}}/>
-                <label className="flabel">📸 {t.profilePic}</label>
-                <div className="file-box" onClick={()=>profilePicRef.current?.click()}>
-                  {profilePicFile?<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><img src={URL.createObjectURL(profilePicFile)} alt="" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover"}}/><span>{profilePicFile.name}</span></div>:t.tapProfilePic}
-                </div>
-                <label className="flabel">📷 {t.beforePhotos}</label>
-                {beforePhotosFiles.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{beforePhotosFiles.map((f,i)=><img key={i} src={URL.createObjectURL(f)} style={{width:60,height:60,borderRadius:10,objectFit:"cover"}} alt=""/>)}</div>}
-                <div className="file-box" onClick={()=>beforePhotosRef.current?.click()}>
-                  {beforePhotosFiles.length===0?t.tapBeforePhotos:`📷 ${beforePhotosFiles.length} foto(s)`}
-                </div>
-              </div>
-            </details>
-
-            <details className="room-toggle" open>
-              <summary>
-                <div>
-                  <p className="room-toggle-title">{t.careTeam}</p>
-                  <p className="room-toggle-copy">
-                    {careTeamSelectedMembers.length > 0
-                      ? `${t.careTeamSelected}: ${careTeamSelectedMembers.length}`
-                      : t.noTeamSelected}
-                  </p>
-                </div>
-                <span className="room-toggle-chevron">⌄</span>
-              </summary>
-              <div className="room-toggle-body">
-                <p className="room-note">
-                  {t.careTeamFocused}: <strong>{newLocation}</strong>. {t.careTeamHint}
-                </p>
-                <div className="care-team-panel">
-                  <div className="care-team-toolbar">
-                    <p className="care-team-count">
-                      {t.careTeamOfficeVisible}: {selectedOfficeCareTeam.length} · {t.careTeamSelected}: {careTeamSelectedMembers.length}
-                    </p>
-                    <div className="care-team-actions">
-                      {([
-                        { key: selectedOfficeFilter, label: newLocation },
-                        { key: "selected", label: t.careTeamFilterSelected },
-                      ] as { key: CareTeamFilter; label: string }[]).map((filter) => (
-                        <button
-                          key={filter.key}
-                          type="button"
-                          className={`care-team-chip${careTeamFilter === filter.key ? " active" : ""}`}
-                          onClick={() => setCareTeamFilter(filter.key)}
-                        >
-                          {filter.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="care-team-quick-row">
+                  <div className="care-team-actions">
+                    {([
+                      { key: selectedOfficeFilter, label: newLocation },
+                      { key: "selected", label: t.careTeamFilterSelected },
+                    ] as { key: CareTeamFilter; label: string }[]).map((filter) => (
                       <button
+                        key={filter.key}
                         type="button"
-                        className="care-team-chip"
-                        onClick={() => addCareTeamMembers(selectedOfficeCareTeam)}
-                        disabled={selectedOfficeCareTeam.length === 0}
+                        className={`care-team-chip${careTeamFilter === filter.key ? " active" : ""}`}
+                        onClick={() => setCareTeamFilter(filter.key)}
                       >
-                        {t.careTeamSelectOffice}
+                        {filter.label}
                       </button>
-                      <button
-                        type="button"
-                        className="care-team-chip secondary"
-                        onClick={() => setSelectedCareTeamIds(currentUserId ? [currentUserId] : [])}
-                      >
-                        {t.careTeamClear}
-                      </button>
+                    ))}
                   </div>
-                  <div className="care-team-groups">
-                    {careTeamOfficeGroups.map((group) => (
-                      <div className="care-team-group" key={group.key}>
-                        <div className="care-team-group-head">
-                          <span>{group.label}</span>
-                          <span>{group.members.length}</span>
-                        </div>
-                        <div className="care-team-list">
-                          {group.members.map((member)=>(
-                            <label key={member.id} className={`care-team-option${selectedCareTeamIds.includes(member.id) ? " selected" : ""}`}>
-                              <input type="checkbox" checked={selectedCareTeamIds.includes(member.id)} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB",flexShrink:0}} />
+                </div>
+                <div className="care-team-quick-row">
+                  <button
+                    type="button"
+                    className="care-team-chip"
+                    onClick={() => addCareTeamMembers(selectedOfficeCareTeam)}
+                    disabled={selectedOfficeCareTeam.length === 0}
+                  >
+                    {t.careTeamSelectOffice}
+                  </button>
+                  <button
+                    type="button"
+                    className="care-team-chip secondary"
+                    onClick={() => setSelectedCareTeamIds(Array.from(new Set([...requiredCareTeamMemberIds, ...(currentUserId ? [currentUserId] : [])])))}
+                  >
+                    {t.careTeamClear}
+                  </button>
+                </div>
+                <div className="care-team-groups">
+                  {careTeamOfficeGroups.map((group) => (
+                    <div className="care-team-group" key={group.key}>
+                      <div className="care-team-group-head">
+                        <span>{group.label}</span>
+                        <span>{group.members.length}</span>
+                      </div>
+                      <div className="care-team-list">
+                        {group.members.map((member)=>{
+                          const requiredMember = requiredCareTeamIdSet.has(member.id);
+                          const selectedMember = selectedCareTeamIds.includes(member.id) || requiredMember;
+                          return (
+                            <label key={member.id} className={`care-team-option${selectedMember ? " selected" : ""}${requiredMember ? " required" : ""}`}>
+                              <input type="checkbox" checked={selectedMember} disabled={requiredMember} onChange={()=>toggleCareTeamMember(member.id)} style={{width:16,height:16,accentColor:"#2563EB",flexShrink:0}} />
                               <div className="care-team-avatar">
                                 {member.avatar_url ? <img src={member.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(member.full_name || member.display_name || "S")}
                               </div>
                               <div style={{minWidth:0,flex:1}}>
                                 <div className="care-team-name">{member.full_name || member.display_name || (lang==="es"?"Personal":"Staff")}</div>
                                 <div className="care-team-meta">{roleName(member.role)}</div>
+                                {requiredMember && <span className="care-team-required-badge">{t.careTeamRequired}</span>}
                               </div>
                             </label>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
-                  {careTeamOfficeGroups.length === 0 && (
-                    <div className="care-team-empty">{lang==="es" ? "No hay personal visible con este filtro." : "No staff visible with this filter."}</div>
-                  )}
+                    </div>
+                  ))}
                 </div>
-                <p style={{fontSize:12,color:subTextColor,marginTop:10,marginBottom:0,lineHeight:1.45,fontWeight:650}}>
-                  {t.noTeamSelected}
-                </p>
+                {careTeamOfficeGroups.length === 0 && (
+                  <div className="care-team-empty">{lang==="es" ? "No hay personal visible con este filtro." : "No staff visible with this filter."}</div>
+                )}
               </div>
-            </details>
+              <p style={{fontSize:12,color:subTextColor,marginTop:10,marginBottom:0,lineHeight:1.45,fontWeight:650}}>
+                {t.noTeamSelected}
+              </p>
+            </section>
 
             <div className="room-action-bar">
               <button className="pbtn" onClick={createRoom} disabled={creatingRoom}>{creatingRoom?t.creating:t.createRoom}</button>
@@ -5361,6 +5401,7 @@ export default function InboxPage() {
             </div>
             <div style={{background:darkMode?"#3A3A3C":"#F2F2F7",borderRadius:12,padding:"12px 14px",marginBottom:16,wordBreak:"break-all",fontSize:13,color:"#007AFF"}}>{createdRoomLink}</div>
             <button onClick={copyLink} style={{width:"100%",padding:14,background:linkCopied?"#34C759":"#007AFF",border:"none",borderRadius:14,color:"white",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>{linkCopied?t.copied:t.copyLink}</button>
+            <button onClick={emailRoomLink} style={{width:"100%",padding:14,background:"#0F766E",border:"none",borderRadius:14,color:"white",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>{t.emailLink}</button>
             <button onClick={whatsAppLink} style={{width:"100%",padding:14,background:"#25D366",border:"none",borderRadius:14,color:"white",fontSize:16,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>{t.whatsapp}</button>
             <button onClick={()=>setCreatedRoomLink(null)} className="sbtn">{t.done}</button>
           </div>

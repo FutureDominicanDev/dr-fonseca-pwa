@@ -384,7 +384,7 @@ export default function AdminPage() {
   };
 
   const openPatientCreator = () => {
-    goTo("/inbox?createPatient=1");
+    goTo(`/inbox?createPatient=1&lang=${lang}`);
   };
 
   const openAdminSection = (id: AdminSectionId) => {
