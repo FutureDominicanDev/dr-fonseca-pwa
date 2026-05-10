@@ -1883,6 +1883,7 @@ export default function AdminPage() {
                     const canDeleteThisMember = canManageAdmins && !isSelf && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const accessKey = `${member.id}-admin_level`;
                     const permissionsKey = `${member.id}-permissions`;
+                    const officeKey = `${member.id}-office_location`;
                     const phoneKey = `${member.id}-phone`;
                     const phoneDraft = staffPhoneDrafts[member.id] ?? (member.phone || "");
                     const cleanPhoneDraft = phoneDraft.trim();
@@ -1891,6 +1892,7 @@ export default function AdminPage() {
                     const memberPermissionSet = permissionsForProfile(memberPermissionProfile, rawMemberEmail);
                     const explicitPermissionCount = normalizePermissionList(memberPermissionProfile.permissions).length;
                     const canEditPermissionsForMember = canEditThisMember && canManagePermissions;
+                    const canEditOfficeForMember = canManageAdmins && (canManageOwner || (level !== "owner" && level !== "super_admin"));
                     const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => memberPermissionSet.has(permission)).length;
 
                     return (
@@ -1911,11 +1913,9 @@ export default function AdminPage() {
                                   <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>
                                     {adminText(level)}
                                   </span>
-                                  {member.office_location && (
-                                    <span className="meta-badge" style={{ color: "#1D4ED8", background: "#EFF6FF" }}>
-                                      {member.office_location}
-                                    </span>
-                                  )}
+                                  <span className="meta-badge" style={{ color: member.office_location ? "#1D4ED8" : "#64748B", background: member.office_location ? "#EFF6FF" : "#F1F5F9" }}>
+                                    {member.office_location || (isSpanish ? "Sin sede" : "No office")}
+                                  </span>
                                   {member.role && (
                                     <span className="meta-badge" style={{ color: "#475569", background: "#F1F5F9" }}>
                                       {member.role}
@@ -1934,6 +1934,56 @@ export default function AdminPage() {
 	                              <span>⌄</span>
 	                            </summary>
 		                            <div className="staff-controls-body">
+                                  <div className="setting-group">
+                                    <p className="group-label">{isSpanish ? "Consultorio asignado" : "Assigned office"}</p>
+                                    <p className="access-help">
+                                      {isSpanish
+                                        ? "El creador de pacientes usa esta sede para mostrar quién puede asignarse cuando eliges Guadalajara o Tijuana."
+                                        : "The patient creator uses this office to show who can be assigned when you choose Guadalajara or Tijuana."}
+                                    </p>
+                                    <div className="permission-toolbar">
+                                      {(["Guadalajara", "Tijuana"] as Office[]).map((office) => {
+                                        const selected = member.office_location === office;
+                                        return (
+                                          <button
+                                            key={`${member.id}-${office}`}
+                                            type="button"
+                                            className="mini-btn"
+                                            style={{
+                                              background: selected ? "#EFF6FF" : "#EFF3F8",
+                                              color: selected ? "#1D4ED8" : "#374151",
+                                              opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
+                                            }}
+                                            disabled={!canEditOfficeForMember || savingKey === officeKey}
+                                            onClick={() => updateStaffField(
+                                              member,
+                                              { office_location: office },
+                                              isSpanish ? `${member.full_name || "Staff"} asignado a ${office}.` : `${member.full_name || "Staff"} assigned to ${office}.`
+                                            )}
+                                          >
+                                            {office}
+                                          </button>
+                                        );
+                                      })}
+                                      <button
+                                        type="button"
+                                        className="mini-btn"
+                                        style={{
+                                          background: !member.office_location ? "#F1F5F9" : "#EFF3F8",
+                                          color: !member.office_location ? "#64748B" : "#374151",
+                                          opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
+                                        }}
+                                        disabled={!canEditOfficeForMember || savingKey === officeKey}
+                                        onClick={() => updateStaffField(
+                                          member,
+                                          { office_location: null },
+                                          isSpanish ? `${member.full_name || "Staff"} quedó sin sede asignada.` : `${member.full_name || "Staff"} has no assigned office.`
+                                        )}
+                                      >
+                                        {isSpanish ? "Sin sede" : "No office"}
+                                      </button>
+                                    </div>
+                                  </div>
                                   <div className="setting-group">
                                     <p className="group-label">{isSpanish ? "Teléfono" : "Phone"}</p>
                                     <div className="mini-actions" style={{ alignItems: "stretch" }}>
