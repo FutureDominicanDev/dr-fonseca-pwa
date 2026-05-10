@@ -329,6 +329,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
+  const [expandedImage, setExpandedImage] = useState<{ url: string; name?: string } | null>(null);
   const [accessReady, setAccessReady] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [room, setRoom] = useState<RoomAccess | null>(null);
@@ -1213,7 +1214,19 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const url = message.file_url || message.content;
 
     if (message.message_type === "image") {
-      return <img src={url} alt={message.file_name || "Image"} style={{ display: "block", maxWidth: "100%", maxHeight: 280, borderRadius: 10, objectFit: "contain" }} />;
+      return (
+        <button
+          type="button"
+          onClick={(event)=>{event.stopPropagation();setExpandedImage({url,name:message.file_name||""});}}
+          onMouseDown={(event)=>event.stopPropagation()}
+          onTouchStart={(event)=>event.stopPropagation()}
+          aria-label={uiLang === "es" ? "Ampliar imagen" : "Enlarge image"}
+          style={{ border: "none", background: "transparent", padding: 0, margin: 0, display: "block", maxWidth: "100%", cursor: "zoom-in", font: "inherit" }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- Chat uploads use dynamic Supabase image URLs. */}
+          <img src={url} alt={message.file_name || "Image"} style={{ display: "block", maxWidth: "100%", maxHeight: 280, borderRadius: 10, objectFit: "contain" }} />
+        </button>
+      );
     }
 
     if (message.message_type === "video") {
@@ -2045,6 +2058,30 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               <button onClick={() => setTextSize("normal")} style={{ height: 48, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 800 }}>{labels.normal}</button>
               <button onClick={() => setTextSize("large")} style={{ height: 48, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 800 }}>{labels.large}</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {expandedImage && (
+        <div
+          onClick={()=>setExpandedImage(null)}
+          style={{position:"fixed",inset:0,zIndex:30,display:"grid",placeItems:"center",padding:"max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))",background:"rgba(2,8,23,0.86)"}}
+        >
+          <div onClick={(event)=>event.stopPropagation()} style={{position:"relative",width:"100%",height:"100%",display:"grid",placeItems:"center"}}>
+            <button
+              type="button"
+              onClick={()=>setExpandedImage(null)}
+              aria-label={uiLang === "es" ? "Cerrar imagen" : "Close image"}
+              style={{position:"absolute",top:0,right:0,width:46,height:46,border:"1px solid rgba(255,255,255,0.22)",borderRadius:999,background:"rgba(15,23,42,0.72)",color:"#fff",fontSize:28,lineHeight:1,cursor:"pointer",fontFamily:"inherit"}}
+            >
+              ×
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element -- Chat uploads use dynamic Supabase image URLs. */}
+            <img
+              src={expandedImage.url}
+              alt={expandedImage.name || ""}
+              style={{maxWidth:"94vw",maxHeight:"82dvh",objectFit:"contain",borderRadius:16,boxShadow:"0 24px 70px rgba(0,0,0,0.42)",background:"#020617"}}
+            />
           </div>
         </div>
       )}

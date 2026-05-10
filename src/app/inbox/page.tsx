@@ -796,6 +796,7 @@ export default function InboxPage() {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewType, setPreviewType] = useState<"image" | "video" | "audio" | "file">("file");
+  const [expandedImage, setExpandedImage] = useState<{ url: string; name?: string } | null>(null);
   const [pendingPrescriptionFile, setPendingPrescriptionFile] = useState<File | null>(null);
   const [prescriptionLabel, setPrescriptionLabel] = useState("");
   const [prescriptionInstructions, setPrescriptionInstructions] = useState("");
@@ -910,6 +911,7 @@ export default function InboxPage() {
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
+  const fmtShortDate = (ts?: string | null) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}); };
   const fmtChatDateLabel = (ts: string) => {
     if (!ts) return "";
     const date = new Date(ts);
@@ -3958,6 +3960,7 @@ export default function InboxPage() {
     const contentToRender = translated || msg.content;
     const effectiveType=msg.message_type==="text"&&isImageUrl(msg.content)?"image":msg.message_type;
     const formPayload = parseFormMessage(msg.content);
+    const mediaUrl = msg.file_url || msg.content;
 
     if (isSystem) return (
       <div key={msg.id} style={{display:"flex",justifyContent:"center",margin:"8px 0"}}>
@@ -4024,7 +4027,17 @@ export default function InboxPage() {
         {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
             {bubbleHeader({padding:"6px 8px 2px",marginBottom:2})}
-            <img src={msg.content} alt="" style={{width:"100%",maxWidth:160,maxHeight:160,borderRadius:12,display:"block",objectFit:"cover"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
+            <button
+              type="button"
+              onClick={(event)=>{event.stopPropagation();setExpandedImage({url:mediaUrl,name:msg.file_name||""});}}
+              onMouseDown={(event)=>event.stopPropagation()}
+              onTouchStart={(event)=>event.stopPropagation()}
+              aria-label={lang==="es" ? "Ampliar imagen" : "Enlarge image"}
+              style={{border:"none",background:"transparent",padding:0,margin:0,display:"block",width:"100%",cursor:"zoom-in",fontFamily:"inherit"}}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- Chat uploads use dynamic Supabase image URLs. */}
+              <img src={mediaUrl} alt="" style={{width:"100%",maxWidth:160,maxHeight:160,borderRadius:12,display:"block",objectFit:"cover"}} onError={e=>{(e.target as HTMLImageElement).style.display="none";}}/>
+            </button>
             {patientDeletedNotice}
             {bubbleTime(false,{padding:"4px 6px 2px",marginTop:0})}
           </div>
@@ -4775,7 +4788,10 @@ export default function InboxPage() {
         .back-btn:hover { background: ${darkMode?"#263846":"#DCEEFF"}; }
         .chat-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; box-shadow: 0 4px 14px rgba(16,52,83,0.18); }
         .chat-head-name { font-size: calc(var(--app-ui-font-size) + 2px); font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	        .chat-head-sub { font-size: var(--app-ui-small-size); color: ${subTextColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; font-weight: 650; }
+	        .chat-head-sub { font-size: var(--app-ui-small-size); color: ${subTextColor}; margin-top: 2px; font-weight: 650; display: flex; align-items: center; gap: 0; min-width: 0; overflow: hidden; white-space: nowrap; }
+        .chat-head-procedure { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .chat-head-date { flex: 0 0 auto; white-space: nowrap; }
+        .chat-head-office { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .input-area { position: relative; flex-shrink: 0; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
@@ -4952,6 +4968,31 @@ export default function InboxPage() {
                 {previewType==="audio" ? t.sendRecording : t.send}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {expandedImage && (
+        <div
+          className="modal-overlay"
+          onClick={()=>setExpandedImage(null)}
+          style={{zIndex:120,padding:"max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))",background:"rgba(2,8,23,0.86)"}}
+        >
+          <div onClick={e=>e.stopPropagation()} style={{position:"relative",width:"100%",height:"100%",display:"grid",placeItems:"center"}}>
+            <button
+              type="button"
+              onClick={()=>setExpandedImage(null)}
+              aria-label={lang==="es" ? "Cerrar imagen" : "Close image"}
+              style={{position:"absolute",top:0,right:0,width:46,height:46,border:"1px solid rgba(255,255,255,0.22)",borderRadius:999,background:"rgba(15,23,42,0.72)",color:"#fff",fontSize:28,lineHeight:1,cursor:"pointer",fontFamily:"inherit"}}
+            >
+              ×
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element -- Chat uploads use dynamic Supabase image URLs. */}
+            <img
+              src={expandedImage.url}
+              alt={expandedImage.name || ""}
+              style={{maxWidth:"94vw",maxHeight:"82dvh",objectFit:"contain",borderRadius:16,boxShadow:"0 24px 70px rgba(0,0,0,0.42)",background:"#020617"}}
+            />
           </div>
         </div>
       )}
@@ -6010,9 +6051,9 @@ export default function InboxPage() {
                   <div style={{flex:1,minWidth:0}}>
                     <div className="chat-head-name">{selectedRoom.procedures?.patients?.full_name||"Paciente"}</div>
                     <div className="chat-head-sub">
-                      {selectedRoom.procedures?.procedure_name}
-                      {selectedRoom.procedures?.surgery_date&&` · ${new Date(selectedRoom.procedures.surgery_date).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"})}`}
-                      {selectedRoom.procedures?.office_location&&` · 📍${selectedRoom.procedures.office_location}`}
+                      {selectedRoom.procedures?.procedure_name && <span className="chat-head-procedure">{selectedRoom.procedures.procedure_name}</span>}
+                      {selectedRoom.procedures?.surgery_date && <span className="chat-head-date">{selectedRoom.procedures?.procedure_name ? " · " : ""}{fmtShortDate(selectedRoom.procedures.surgery_date)}</span>}
+                      {selectedRoom.procedures?.office_location && <span className="chat-head-office"> · 📍{selectedRoom.procedures.office_location}</span>}
                     </div>
                     {patientTyping && (
                       <div style={{fontSize:12,color:"#93C5FD",fontWeight:700,marginTop:4}}>
