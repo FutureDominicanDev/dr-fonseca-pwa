@@ -25,29 +25,16 @@ import {
 import { isOwnerEmail } from "@/lib/securityConfig";
 import {
   STAFF_PERMISSION_KEYS,
+  STAFF_PERMISSIONS_SETTING_KEY,
   hasPermission,
   normalizePermissionList,
+  parseStaffPermissionMap,
   permissionLabel,
   permissionPresetForAdminLevel,
   permissionsForProfile,
+  type StaffPermissionMap,
   type StaffPermissionKey,
 } from "@/lib/permissions";
-
-const STAFF_PERMISSIONS_SETTING_KEY = "staff_permissions";
-
-type StaffPermissionMap = Record<string, StaffPermissionKey[]>;
-
-const parseStaffPermissionMap = (value: unknown): StaffPermissionMap => {
-  if (typeof value !== "string") return {};
-  try {
-    const parsed = JSON.parse(value) as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.entries(parsed).map(([staffId, permissions]) => [staffId, normalizePermissionList(permissions)])
-    );
-  } catch {
-    return {};
-  }
-};
 
 const permissionDescriptions: Record<StaffPermissionKey, { es: string; en: string }> = {
   view_patients: { es: "Puede ver la lista y abrir chats asignados.", en: "Can view the list and open assigned chats." },
@@ -310,6 +297,70 @@ export default function AdminPage() {
       })
       .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
   }, [isSpanish, staffById, staffPrivateMessages]);
+
+  const adminNavItems = ([
+    {
+      id: "buscar-paciente",
+      code: "PT",
+      label: isSpanish ? "Pacientes" : "Patients",
+      detail: isSpanish ? "Buscar y abrir expedientes" : "Search and open records",
+      metric: `${activePatientCount}`,
+    },
+    {
+      id: "equipo",
+      code: "EQ",
+      label: isSpanish ? "Equipo" : "Team",
+      detail: isSpanish ? "Usuarios, teléfonos y permisos" : "Users, phones, and rights",
+      metric: `${staff.length}`,
+    },
+    {
+      id: "solicitudes-pendientes",
+      code: "AC",
+      label: isSpanish ? "Solicitudes" : "Requests",
+      detail: isSpanish ? "Acceso pendiente a salas" : "Pending room access",
+      metric: `${pendingAccessRequests.length}`,
+      visible: canReviewAccessRequests,
+    },
+    {
+      id: "staff-to-staff",
+      code: "CH",
+      label: isSpanish ? "Chat staff" : "Staff chat",
+      detail: isSpanish ? "Conversaciones internas" : "Internal conversations",
+      metric: `${staffPrivateConversations.length}`,
+    },
+    {
+      id: "herramientas-expediente",
+      code: "AR",
+      label: isSpanish ? "Archivo" : "Archive",
+      detail: isSpanish ? "Auditoría, archivo y papelera" : "Audit, archive, and trash",
+    },
+    {
+      id: "invitar-personal",
+      code: "IN",
+      label: isSpanish ? "Invitar" : "Invite",
+      detail: isSpanish ? "Alta segura de personal" : "Secure staff onboarding",
+    },
+    {
+      id: "telefonos-sede",
+      code: "TL",
+      label: isSpanish ? "Teléfonos" : "Phones",
+      detail: isSpanish ? "Números por consultorio" : "Office numbers",
+    },
+    {
+      id: "bloqueos",
+      code: "BL",
+      label: isSpanish ? "Bloqueos" : "Blocked",
+      detail: isSpanish ? "Correos y teléfonos bloqueados" : "Blocked emails and phones",
+      metric: `${blockedAccessCount}`,
+    },
+  ] satisfies Array<{
+    id: AdminSectionId;
+    code: string;
+    label: string;
+    detail: string;
+    metric?: string;
+    visible?: boolean;
+  }>).filter((item) => item.visible !== false);
 
   const updateSuccess = (message: string) => {
     setPageError("");
@@ -1154,10 +1205,36 @@ export default function AdminPage() {
     <>
       <style>{`
         * { box-sizing: border-box; max-width: 100%; }
-        body { background: #F5F7FB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 16px; overflow-x: hidden; }
-        .admin-shell { position: fixed; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: radial-gradient(circle at top, rgba(59,130,246,0.10), transparent 26%), #F5F7FB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.55; }
+        body { background: #F2F6FB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 16px; overflow-x: hidden; }
+        .admin-shell { position: fixed; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: radial-gradient(circle at 18% 0%, rgba(29,78,216,0.10), transparent 28%), #F2F6FB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.55; }
         .admin-topbar { background: #07334D; backdrop-filter: blur(18px); min-height: calc(86px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; z-index: 100; box-shadow: 0 8px 26px rgba(7,51,77,0.22); }
-        .admin-body { width: 100%; max-width: 1180px; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+        .admin-body { width: 100%; max-width: 1440px; margin: 0 auto; padding: 20px max(18px, env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
+        .admin-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 18px; align-items: start; }
+        .admin-sidebar { position: sticky; top: calc(104px + env(safe-area-inset-top)); align-self: start; min-height: calc(100dvh - 138px - env(safe-area-inset-top)); background: rgba(255,255,255,0.96); border: 1px solid rgba(102,132,163,0.16); border-radius: 24px; padding: 16px; box-shadow: 0 18px 55px rgba(28,66,104,0.10); }
+        .sidebar-practice { display: flex; align-items: center; gap: 12px; padding: 8px 8px 14px; border-bottom: 1px solid #E6EEF7; margin-bottom: 14px; }
+        .sidebar-logo-mark { width: 42px; height: 42px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: #0B3B59; color: white; font-size: 14px; font-weight: 950; letter-spacing: 0.04em; flex-shrink: 0; }
+        .sidebar-practice strong { display: block; color: #0F172A; font-size: 15px; font-weight: 950; line-height: 1.15; }
+        .sidebar-practice span:not(.sidebar-logo-mark) { display: block; color: #64748B; font-size: 12px; font-weight: 800; margin-top: 3px; line-height: 1.25; }
+        .sidebar-stat-card { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; border-radius: 18px; background: linear-gradient(135deg, #F8FBFF, #EEF6FF); border: 1px solid #DBEAFE; margin-bottom: 14px; }
+        .sidebar-stat { min-width: 0; }
+        .sidebar-stat strong { display: block; color: #0F172A; font-size: 20px; line-height: 1; font-weight: 950; }
+        .sidebar-stat span { display: block; color: #64748B; font-size: 11px; font-weight: 850; line-height: 1.25; margin-top: 5px; }
+        .sidebar-section-label { color: #64748B; font-size: 11px; font-weight: 950; letter-spacing: 0.10em; text-transform: uppercase; margin: 6px 8px 8px; }
+        .sidebar-nav { display: grid; gap: 6px; }
+        .sidebar-btn { width: 100%; min-height: 58px; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; border-radius: 16px; border: 1px solid transparent; background: transparent; color: #334155; padding: 9px; text-align: left; cursor: pointer; font-family: inherit; }
+        .sidebar-btn:hover, .sidebar-btn:focus-visible { background: #F8FBFF; border-color: #D7E7FA; outline: none; }
+        .sidebar-btn.active { background: #EFF6FF; border-color: #BFDBFE; box-shadow: 0 10px 26px rgba(29,78,216,0.10); color: #0F172A; }
+        .nav-icon { width: 38px; height: 38px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; background: #EEF2F7; color: #475569; font-size: 11px; font-weight: 950; letter-spacing: 0.04em; }
+        .sidebar-btn.active .nav-icon { background: #1D4ED8; color: white; }
+        .nav-copy { min-width: 0; }
+        .nav-copy strong { display: block; color: inherit; font-size: 14px; font-weight: 950; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .nav-copy span { display: block; color: #64748B; font-size: 12px; font-weight: 750; line-height: 1.25; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .nav-metric { min-width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; background: #E2E8F0; color: #334155; font-size: 12px; font-weight: 950; }
+        .sidebar-btn.active .nav-metric { background: #DBEAFE; color: #1D4ED8; }
+        .sidebar-footer { display: grid; gap: 7px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #E6EEF7; }
+        .sidebar-link-btn { min-height: 42px; border-radius: 14px; border: 1px solid #E6EEF7; background: #F8FAFC; color: #334155; font-size: 13px; font-weight: 900; font-family: inherit; cursor: pointer; text-align: left; padding: 0 12px; }
+        .sidebar-link-btn:hover, .sidebar-link-btn:focus-visible { background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8; outline: none; }
+        .admin-main-panel { min-width: 0; }
         .topbar-title { min-width: 0; display: flex; align-items: center; gap: 14px; flex: 1 1 auto; }
         .admin-brand-logo { width: min(270px, 31vw); height: 64px; object-fit: contain; object-position: left center; display: block; }
         .admin-title-copy { min-width: 0; padding-left: 14px; border-left: 1px solid rgba(255,255,255,0.18); }
@@ -1167,7 +1244,7 @@ export default function AdminPage() {
         .topbar-select { appearance: none; -webkit-appearance: none; width: 96px; min-height: 44px; padding: 0 28px 0 12px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; font-weight: 850; font-size: 16px !important; cursor: pointer; font-family: inherit; background-image: linear-gradient(45deg, transparent 50%, #374151 50%), linear-gradient(135deg, #374151 50%, transparent 50%); background-position: calc(100% - 15px) calc(50% - 3px), calc(100% - 10px) calc(50% - 3px); background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
         .menu-btn { display: none; width: 42px; height: 42px; border-radius: 12px; border: none; background: #EFF3F8; color: #111827; cursor: pointer; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
         .menu-panel { display: none; }
-        .hero { background: linear-gradient(135deg, #0B2438 0%, #0E3F63 58%, #155C95 100%); color: white; border-radius: 30px; padding: 26px; margin-bottom: 18px; box-shadow: 0 18px 50px rgba(7,51,77,0.20); border: 1px solid rgba(255,255,255,0.12); }
+        .hero { background: linear-gradient(135deg, #0B2438 0%, #0E3F63 58%, #155C95 100%); color: white; border-radius: 24px; padding: 24px 26px; margin-bottom: 16px; box-shadow: 0 18px 50px rgba(7,51,77,0.18); border: 1px solid rgba(255,255,255,0.12); }
         .hero-grid { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: end; }
         .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr); gap: 16px; align-items: start; }
         .workspace-grid.active-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -1197,7 +1274,7 @@ export default function AdminPage() {
         .summary-label { font-size: 15px; font-weight: 900; color: #64748B; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; line-height: 1.35; }
         .summary-value { font-size: 28px; font-weight: 900; color: #111827; line-height: 1; }
         .summary-copy { color: #6B7280; font-size: 15px; line-height: 1.55; margin-top: 6px; overflow-wrap: anywhere; }
-        .command-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; }
+        .command-strip { display: none; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; }
         .command-btn { min-height: 78px; padding: 14px 15px; border-radius: 16px; border: 1px solid #D7E7FA; background: #FFFFFF; color: #0E2D4A; text-align: left; font-family: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(28,66,104,0.05); }
         .command-btn strong { display: block; font-size: 17px; font-weight: 950; line-height: 1.25; }
         .command-btn span { display: block; margin-top: 5px; color: #64748B; font-size: 14px; font-weight: 750; line-height: 1.35; }
@@ -1281,10 +1358,31 @@ export default function AdminPage() {
         .permission-row small { display: block; color: #64748B; font-size: 12px; line-height: 1.35; font-weight: 650; margin-top: 3px; }
         .permission-row:has(input:disabled) { cursor: not-allowed; opacity: 0.64; }
         .permission-locked { color: #64748B; font-size: 13px; font-weight: 750; line-height: 1.45; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: #F8FAFC; border: 1px dashed #D6E0EB; }
+        .admin-overview { display: grid; gap: 18px; }
+        .overview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+        .overview-kicker { color: #1D4ED8; font-size: 13px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 4px; }
+        .overview-title { color: #0F172A; font-size: 26px; font-weight: 950; line-height: 1.1; margin: 0; }
+        .overview-copy { color: #64748B; font-size: 15px; font-weight: 700; line-height: 1.55; margin-top: 8px; max-width: 680px; }
+        .overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+        .overview-tile { min-height: 118px; border-radius: 18px; border: 1px solid #E6EEF7; background: #F8FAFC; padding: 15px; display: grid; align-content: space-between; }
+        .overview-tile strong { display: block; color: #0F172A; font-size: 28px; line-height: 1; font-weight: 950; }
+        .overview-tile span { display: block; color: #64748B; font-size: 13px; line-height: 1.35; font-weight: 850; margin-top: 7px; }
+        .overview-actions { display: flex; flex-wrap: wrap; gap: 9px; }
         @media (max-width: 980px) {
           .hero-grid, .workspace-grid, .grid-2, .grid-3, .permission-grid { grid-template-columns: 1fr; }
+          .admin-layout { grid-template-columns: 236px minmax(0, 1fr); gap: 12px; }
+          .admin-sidebar { padding: 12px; border-radius: 20px; }
+          .sidebar-stat-card { grid-template-columns: 1fr; }
+          .overview-grid { grid-template-columns: 1fr 1fr; }
           .admin-brand-logo { width: min(245px, 34vw); }
           .admin-title-copy { display: none; }
+        }
+        @media (max-width: 720px) {
+          .admin-layout { display: block; }
+          .admin-sidebar { display: none; }
+          .command-strip { display: grid; grid-template-columns: 1fr 1fr; }
+          .overview-header { flex-direction: column; }
+          .overview-grid { grid-template-columns: 1fr 1fr; }
         }
         @media (max-width: 560px) {
           .admin-topbar { position: static; min-height: calc(84px + env(safe-area-inset-top)); padding-bottom: 14px; align-items: center; }
@@ -1360,57 +1458,128 @@ export default function AdminPage() {
         )}
 
         <div className="admin-body">
-          <section className="hero">
-            <div className="hero-grid">
-              <div>
-                <h1 className="big-title">{isSpanish ? "Centro médico administrativo" : "Medical administration center"}</h1>
-                <p className="subtle">
-                  {isSpanish
-                    ? "Busca pacientes, revisa expedientes, administra accesos del equipo y controla invitaciones desde una sola pantalla segura."
-                    : "Search patients, review records, manage team access, and control invitations from one secure screen."}
-                </p>
+          <div className="admin-layout">
+            <aside className="admin-sidebar" aria-label={isSpanish ? "Navegación administrativa" : "Admin navigation"}>
+              <div className="sidebar-practice">
+                <span className="sidebar-logo-mark">DF</span>
+                <div style={{ minWidth: 0 }}>
+                  <strong>Dr. Fonseca</strong>
+                  <span>{isSpanish ? "Portal médico" : "Medical portal"}</span>
+                </div>
               </div>
-            </div>
-          </section>
+              <div className="sidebar-stat-card">
+                <div className="sidebar-stat">
+                  <strong>{activePatientCount}</strong>
+                  <span>{isSpanish ? "Pacientes activos" : "Active patients"}</span>
+                </div>
+                <div className="sidebar-stat">
+                  <strong>{staff.length}</strong>
+                  <span>{isSpanish ? "Usuarios staff" : "Staff users"}</span>
+                </div>
+              </div>
+              <p className="sidebar-section-label">{isSpanish ? "Administración" : "Administration"}</p>
+              <nav className="sidebar-nav">
+                {adminNavItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`sidebar-btn ${activeAdminSection === item.id ? "active" : ""}`}
+                    onClick={() => openAdminSection(item.id)}
+                  >
+                    <span className="nav-icon">{item.code}</span>
+                    <span className="nav-copy">
+                      <strong>{item.label}</strong>
+                      <span>{item.detail}</span>
+                    </span>
+                    {item.metric !== undefined && <span className="nav-metric">{item.metric}</span>}
+                  </button>
+                ))}
+              </nav>
+              <div className="sidebar-footer">
+                <button type="button" className="sidebar-link-btn" onClick={handleRefresh} disabled={refreshing}>
+                  {refreshing ? (isSpanish ? "Actualizando..." : "Refreshing...") : (isSpanish ? "Actualizar datos" : "Refresh data")}
+                </button>
+                <button type="button" className="sidebar-link-btn" onClick={() => goTo("/admin/auditoria")}>
+                  {isSpanish ? "Auditoría" : "Audit log"}
+                </button>
+                <button type="button" className="sidebar-link-btn" onClick={() => goTo("/admin/papelera")}>
+                  {isSpanish ? "Papelera y archivo" : "Trash and archive"}
+                </button>
+              </div>
+            </aside>
 
-          <section className="command-strip" aria-label={isSpanish ? "Navegación del centro administrativo" : "Admin center navigation"}>
-            <button type="button" className={`command-btn ${activeAdminSection === "buscar-paciente" ? "active" : ""}`} onClick={() => openAdminSection("buscar-paciente")}>
-              <strong>{isSpanish ? "Buscar paciente" : "Find patient"}</strong>
-              <span>{activePatientCount} {isSpanish ? "activos. Abre el expediente correcto." : "active. Open the correct record."}</span>
-            </button>
-            <button type="button" className={`command-btn ${activeAdminSection === "equipo" ? "active" : ""}`} onClick={() => openAdminSection("equipo")}>
-              <strong>{isSpanish ? "Equipo" : "Team"}</strong>
-              <span>{staff.length} {isSpanish ? "usuarios. Teléfonos y acceso." : "users. Phones and access."}</span>
-            </button>
-            {canReviewAccessRequests && (
-              <button type="button" className={`command-btn ${activeAdminSection === "solicitudes-pendientes" ? "active" : ""}`} onClick={() => openAdminSection("solicitudes-pendientes")}>
-                <strong>{isSpanish ? "Solicitudes" : "Requests"}</strong>
-                <span>{pendingAccessRequests.length} {isSpanish ? "pendiente(s) de acceso" : "pending access request(s)"}</span>
-              </button>
-            )}
-            <button type="button" className={`command-btn ${activeAdminSection === "staff-to-staff" ? "active" : ""}`} onClick={() => openAdminSection("staff-to-staff")}>
-              <strong>{isSpanish ? "Chat staff" : "Staff chat"}</strong>
-              <span>{staffPrivateConversations.length} {isSpanish ? "conversaciones internas" : "internal conversation(s)"}</span>
-            </button>
-            <button type="button" className={`command-btn ${activeAdminSection === "herramientas-expediente" ? "active" : ""}`} onClick={() => openAdminSection("herramientas-expediente")}>
-              <strong>{isSpanish ? "Herramientas" : "Tools"}</strong>
-              <span>{isSpanish ? "Auditoría, archivo y papelera" : "Audit, archive, and trash"}</span>
-            </button>
-            <button type="button" className={`command-btn ${activeAdminSection === "invitar-personal" ? "active" : ""}`} onClick={() => openAdminSection("invitar-personal")}>
-              <strong>{isSpanish ? "Invitar" : "Invite"}</strong>
-              <span>{isSpanish ? "Alta segura de personal" : "Secure staff onboarding"}</span>
-            </button>
-            <button type="button" className={`command-btn ${activeAdminSection === "telefonos-sede" ? "active" : ""}`} onClick={() => openAdminSection("telefonos-sede")}>
-              <strong>{isSpanish ? "Teléfonos" : "Phones"}</strong>
-              <span>{isSpanish ? "Números por consultorio" : "Office phone numbers"}</span>
-            </button>
-            <button type="button" className={`command-btn ${activeAdminSection === "bloqueos" ? "active" : ""}`} onClick={() => openAdminSection("bloqueos")}>
-              <strong>{isSpanish ? "Bloqueos" : "Blocked"}</strong>
-              <span>{blockedAccessCount} {isSpanish ? "correos o teléfonos" : "emails or phones"}</span>
-            </button>
-          </section>
+            <main className="admin-main-panel">
+              <section className="hero">
+                <div className="hero-grid">
+                  <div>
+                    <h1 className="big-title">{isSpanish ? "Centro médico administrativo" : "Medical administration center"}</h1>
+                    <p className="subtle">
+                      {isSpanish
+                        ? "Busca pacientes, revisa expedientes, administra accesos del equipo y controla invitaciones desde una sola pantalla segura."
+                        : "Search patients, review records, manage team access, and control invitations from one secure screen."}
+                    </p>
+                  </div>
+                </div>
+              </section>
 
-          {activeAdminSection && (
+              <section className="command-strip" aria-label={isSpanish ? "Navegación del centro administrativo" : "Admin center navigation"}>
+                {adminNavItems.map((item) => (
+                  <button key={item.id} type="button" className={`command-btn ${activeAdminSection === item.id ? "active" : ""}`} onClick={() => openAdminSection(item.id)}>
+                    <strong>{item.label}</strong>
+                    <span>{item.metric !== undefined ? `${item.metric} · ${item.detail}` : item.detail}</span>
+                  </button>
+                ))}
+              </section>
+
+              {!activeAdminSection && (
+                <section id="admin-active-section" className="card admin-overview">
+                  <div className="overview-header">
+                    <div>
+                      <p className="overview-kicker">{isSpanish ? "Vista de escritorio" : "Desktop view"}</p>
+                      <h2 className="overview-title">{isSpanish ? "Elige una sección del panel lateral" : "Choose a section from the sidebar"}</h2>
+                      <p className="overview-copy">
+                        {isSpanish
+                          ? "El panel mantiene las herramientas separadas por trabajo: pacientes, equipo, permisos, solicitudes, archivo e invitaciones."
+                          : "The panel keeps tools separated by job: patients, team, permissions, requests, archive, and invitations."}
+                      </p>
+                    </div>
+                    <button type="button" className="main-btn" onClick={() => openAdminSection("buscar-paciente")}>
+                      {isSpanish ? "Buscar paciente" : "Find patient"}
+                    </button>
+                  </div>
+                  <div className="overview-grid">
+                    <div className="overview-tile">
+                      <strong>{activePatientCount}</strong>
+                      <span>{isSpanish ? "Pacientes activos visibles para flujo normal" : "Active patients in the normal workflow"}</span>
+                    </div>
+                    <div className="overview-tile">
+                      <strong>{staff.length}</strong>
+                      <span>{isSpanish ? "Cuentas del equipo configurables" : "Configurable team accounts"}</span>
+                    </div>
+                    <div className="overview-tile">
+                      <strong>{pendingAccessRequests.length}</strong>
+                      <span>{isSpanish ? "Solicitudes pendientes de acceso" : "Pending access requests"}</span>
+                    </div>
+                    <div className="overview-tile">
+                      <strong>{blockedAccessCount}</strong>
+                      <span>{isSpanish ? "Correos o teléfonos bloqueados" : "Blocked emails or phones"}</span>
+                    </div>
+                  </div>
+                  <div className="overview-actions">
+                    <button type="button" className="ghost-btn" onClick={() => openAdminSection("equipo")}>
+                      {isSpanish ? "Administrar equipo" : "Manage team"}
+                    </button>
+                    <button type="button" className="ghost-btn" onClick={() => openAdminSection("invitar-personal")}>
+                      {isSpanish ? "Invitar personal" : "Invite staff"}
+                    </button>
+                    <button type="button" className="ghost-btn" onClick={() => openAdminSection("herramientas-expediente")}>
+                      {isSpanish ? "Abrir herramientas" : "Open tools"}
+                    </button>
+                  </div>
+                </section>
+              )}
+
+              {activeAdminSection && (
           <div id="admin-active-section" className="workspace-grid active-workspace">
             <div className="stack">
               {activeAdminSection === "staff-to-staff" && (
@@ -2023,6 +2192,8 @@ export default function AdminPage() {
             </button>
           </div>
           )}
+            </main>
+          </div>
         </div>
 
         {exportMenu && (
