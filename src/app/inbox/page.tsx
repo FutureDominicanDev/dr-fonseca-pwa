@@ -925,6 +925,7 @@ export default function InboxPage() {
   const activeStaffChatPeerIdRef = useRef<string | null>(null);
   const activeStaffRoomIdRef = useRef<string | null>(null);
   const privateToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const createPatientDeepLinkHandledRef = useRef(false);
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
@@ -1613,6 +1614,16 @@ export default function InboxPage() {
     }
     setShowNewRoom(true);
   };
+
+  useEffect(() => {
+    if (createPatientDeepLinkHandledRef.current || loading || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("createPatient") !== "1") return;
+    createPatientDeepLinkHandledRef.current = true;
+    requestNewPatientRoom();
+    url.searchParams.delete("createPatient");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [loading, canCreatePatientRooms]);
 
   const toggleStaffLanguage = () => setLang((current) => current === "es" ? "en" : "es");
 

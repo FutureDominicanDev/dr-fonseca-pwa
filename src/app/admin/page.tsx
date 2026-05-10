@@ -107,6 +107,7 @@ type StaffAccessRequest = {
 
 type AdminSectionId =
   | "buscar-paciente"
+  | "crear-paciente"
   | "equipo"
   | "solicitudes-pendientes"
   | "staff-to-staff"
@@ -153,6 +154,7 @@ export default function AdminPage() {
     ? { ...viewerProfile, permissions: staffPermissionMap[viewerProfile.id] ?? viewerProfile.permissions }
     : null;
   const hasAdminAccess = hasPermission(viewerPermissionProfile, viewerEmail, "access_settings_security");
+  const canCreatePatients = hasPermission(viewerPermissionProfile, viewerEmail, "create_patients");
   const canManageAdmins = hasPermission(viewerPermissionProfile, viewerEmail, "manage_staff");
   const canManagePermissions = hasPermission(viewerPermissionProfile, viewerEmail, "manage_permissions");
   const canManageOwner = isOwnerEmail(viewerEmail);
@@ -307,6 +309,13 @@ export default function AdminPage() {
       metric: `${activePatientCount}`,
     },
     {
+      id: "crear-paciente",
+      code: "CP",
+      label: isSpanish ? "Crear paciente" : "Create patient",
+      detail: isSpanish ? "Abrir sala y enlace seguro" : "Open room and secure link",
+      visible: canCreatePatients,
+    },
+    {
       id: "equipo",
       code: "EQ",
       label: isSpanish ? "Equipo" : "Team",
@@ -372,6 +381,10 @@ export default function AdminPage() {
   const goTo = (path: string) => {
     setMobileMenuOpen(false);
     window.location.href = path;
+  };
+
+  const openPatientCreator = () => {
+    goTo("/inbox?createPatient=1");
   };
 
   const openAdminSection = (id: AdminSectionId) => {
@@ -1566,11 +1579,16 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="overview-actions">
-                    <button type="button" className="ghost-btn" onClick={() => openAdminSection("equipo")}>
-                      {isSpanish ? "Administrar equipo" : "Manage team"}
-                    </button>
+                    {canCreatePatients && (
+                      <button type="button" className="ghost-btn" onClick={() => openAdminSection("crear-paciente")}>
+                        {isSpanish ? "Crear paciente" : "Create patient"}
+                      </button>
+                    )}
                     <button type="button" className="ghost-btn" onClick={() => openAdminSection("invitar-personal")}>
                       {isSpanish ? "Invitar personal" : "Invite staff"}
+                    </button>
+                    <button type="button" className="ghost-btn" onClick={() => openAdminSection("equipo")}>
+                      {isSpanish ? "Administrar equipo" : "Manage team"}
                     </button>
                     <button type="button" className="ghost-btn" onClick={() => openAdminSection("herramientas-expediente")}>
                       {isSpanish ? "Abrir herramientas" : "Open tools"}
@@ -1582,6 +1600,42 @@ export default function AdminPage() {
               {activeAdminSection && (
           <div id="admin-active-section" className="workspace-grid active-workspace">
             <div className="stack">
+              {activeAdminSection === "crear-paciente" && (
+              <section className="card admin-section-create" id="crear-paciente">
+                <div className="header-row">
+                  <div>
+                    <p className="card-title">{isSpanish ? "Crear paciente" : "Create patient"}</p>
+                    <p className="muted">
+                      {isSpanish
+                        ? "Abre el creador protegido del portal para registrar paciente, procedimiento, consultorio, equipo asignado y enlace seguro."
+                        : "Open the protected portal creator to register the patient, procedure, office, assigned team, and secure link."}
+                    </p>
+                  </div>
+                  {renderSectionTopButton()}
+                </div>
+
+                <div className="export-card">
+                  <p className="secure-invite-label">{isSpanish ? "Flujo seguro existente" : "Existing secure flow"}</p>
+                  <p className="secure-invite-main">
+                    {isSpanish ? "Usa el mismo creador que ya genera la sala real del paciente." : "Use the same creator that already generates the real patient room."}
+                  </p>
+                  <p className="secure-invite-code" style={{ color: "#64748B" }}>
+                    {isSpanish
+                      ? "Se mantiene el permiso Crear pacientes y el sistema sigue creando paciente, procedimiento, sala, equipo y mensaje de bienvenida en un solo flujo."
+                      : "The Create patients permission stays enforced, and the system still creates patient, procedure, room, team assignment, and welcome message in one flow."}
+                  </p>
+                  <div className="inline-actions" style={{ marginTop: 14 }}>
+                    <button className="main-btn" type="button" onClick={openPatientCreator} disabled={!canCreatePatients}>
+                      {isSpanish ? "Abrir creador de paciente" : "Open patient creator"}
+                    </button>
+                    <button className="ghost-btn" type="button" onClick={() => openAdminSection("buscar-paciente")}>
+                      {isSpanish ? "Buscar existentes" : "Search existing"}
+                    </button>
+                  </div>
+                </div>
+              </section>
+              )}
+
               {activeAdminSection === "staff-to-staff" && (
               <section className="card admin-section-internal" id="staff-to-staff">
                 <div className="header-row">
