@@ -19,6 +19,9 @@ export const STAFF_PERMISSION_KEYS = [
 
 export type StaffPermissionKey = (typeof STAFF_PERMISSION_KEYS)[number];
 export type PermissionLang = "es" | "en";
+export type StaffPermissionMap = Record<string, StaffPermissionKey[]>;
+
+export const STAFF_PERMISSIONS_SETTING_KEY = "staff_permissions";
 
 export type PermissionProfile = {
   email?: string | null;
@@ -44,7 +47,7 @@ export const STAFF_PERMISSION_LABELS: Record<StaffPermissionKey, { es: string; e
   access_settings_security: { es: "Ajustes y seguridad", en: "Settings and security" },
 };
 
-const LEGACY_ROLE_DEFAULTS: Record<string, StaffPermissionKey[]> = {
+export const LEGACY_ROLE_PERMISSION_DEFAULTS: Record<string, StaffPermissionKey[]> = {
   owner: [...STAFF_PERMISSION_KEYS],
   super_admin: [
     "view_patients",
@@ -87,6 +90,18 @@ export const normalizePermissionList = (value: unknown): StaffPermissionKey[] =>
   );
 };
 
+export const parseStaffPermissionMap = (value: unknown): StaffPermissionMap => {
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).map(([staffId, permissions]) => [staffId, normalizePermissionList(permissions)])
+    );
+  } catch {
+    return {};
+  }
+};
+
 export const permissionsForProfile = (profile: PermissionProfile | null | undefined, email = ""): Set<StaffPermissionKey> => {
   const resolvedEmail = email || `${profile?.email || ""}`;
   if (isOwnerEmail(resolvedEmail)) return new Set(STAFF_PERMISSION_KEYS);
@@ -95,8 +110,11 @@ export const permissionsForProfile = (profile: PermissionProfile | null | undefi
   if (explicit.length) return new Set(explicit);
 
   const level = `${profile?.admin_level || "none"}`.toLowerCase();
-  return new Set(LEGACY_ROLE_DEFAULTS[level] || LEGACY_ROLE_DEFAULTS.none);
+  return new Set(LEGACY_ROLE_PERMISSION_DEFAULTS[level] || LEGACY_ROLE_PERMISSION_DEFAULTS.none);
 };
+
+export const permissionPresetForAdminLevel = (level: string) =>
+  [...(LEGACY_ROLE_PERMISSION_DEFAULTS[`${level || "none"}`.toLowerCase()] || LEGACY_ROLE_PERMISSION_DEFAULTS.none)];
 
 export const hasPermission = (
   profile: PermissionProfile | null | undefined,

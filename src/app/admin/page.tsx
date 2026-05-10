@@ -23,7 +23,54 @@ import {
   type StaffProfile,
 } from "@/lib/adminPortal";
 import { isOwnerEmail } from "@/lib/securityConfig";
-import { hasPermission } from "@/lib/permissions";
+import {
+  STAFF_PERMISSION_KEYS,
+  hasPermission,
+  normalizePermissionList,
+  permissionLabel,
+  permissionPresetForAdminLevel,
+  permissionsForProfile,
+  type StaffPermissionKey,
+} from "@/lib/permissions";
+
+const STAFF_PERMISSIONS_SETTING_KEY = "staff_permissions";
+
+type StaffPermissionMap = Record<string, StaffPermissionKey[]>;
+
+const parseStaffPermissionMap = (value: unknown): StaffPermissionMap => {
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).map(([staffId, permissions]) => [staffId, normalizePermissionList(permissions)])
+    );
+  } catch {
+    return {};
+  }
+};
+
+const permissionDescriptions: Record<StaffPermissionKey, { es: string; en: string }> = {
+  view_patients: { es: "Puede ver la lista y abrir chats asignados.", en: "Can view the list and open assigned chats." },
+  create_patients: { es: "Puede crear pacientes, procedimientos y salas nuevas.", en: "Can create new patients, procedures, and rooms." },
+  edit_patient_info: { es: "Puede editar datos clínicos y demográficos del expediente.", en: "Can edit clinical and demographic record details." },
+  archive_rooms: { es: "Puede cancelar salas y sacarlas del flujo activo.", en: "Can cancel rooms and remove them from the active workflow." },
+  restore_rooms: { es: "Puede restaurar salas archivadas o canceladas.", en: "Can restore archived or cancelled rooms." },
+  view_clinical_history: { es: "Puede ver formularios de Historia Clinica y PDFs enviados.", en: "Can view clinical history forms and submitted PDFs." },
+  view_upload_files: { es: "Puede ver y compartir archivos visibles del paciente.", en: "Can view and share patient-visible files." },
+  view_internal_notes: { es: "Puede ver notas y fotos internas del equipo asignado.", en: "Can view internal notes and photos for the assigned team." },
+  manage_internal_notes: { es: "Puede crear notas y fotos internas del expediente.", en: "Can create internal record notes and photos." },
+  manage_labels: { es: "Puede crear y asignar etiquetas de pacientes.", en: "Can create and assign patient labels." },
+  manage_staff: { es: "Puede administrar equipo, teléfonos y solicitudes.", en: "Can manage staff, phones, and access requests." },
+  manage_permissions: { es: "Puede cambiar permisos de otros usuarios.", en: "Can change permissions for other users." },
+  access_audit_logs: { es: "Puede revisar auditoria y eventos administrativos.", en: "Can review audit and admin events." },
+  access_settings_security: { es: "Puede entrar al centro admin y ajustes de seguridad.", en: "Can enter admin center and security settings." },
+};
+
+const permissionGroups: Array<{ id: string; es: string; en: string; permissions: StaffPermissionKey[] }> = [
+  { id: "patients", es: "Pacientes y salas", en: "Patients and rooms", permissions: ["view_patients", "create_patients", "edit_patient_info", "archive_rooms", "restore_rooms"] },
+  { id: "clinical", es: "Expediente clinico", en: "Clinical record", permissions: ["view_clinical_history", "view_upload_files", "view_internal_notes", "manage_internal_notes", "manage_labels"] },
+  { id: "admin", es: "Administracion y seguridad", en: "Administration and security", permissions: ["manage_staff", "manage_permissions", "access_audit_logs", "access_settings_security"] },
+];
 
 type PatientCard = {
   patient: PatientRecord;
@@ -113,11 +160,16 @@ export default function AdminPage() {
   const [pageError, setPageError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [exportMenu, setExportMenu] = useState<{ type: "patient" | "staff"; id: string; title: string; body: string } | null>(null);
+  const [staffPermissionMap, setStaffPermissionMap] = useState<StaffPermissionMap>({});
 
-  const hasAdminAccess = hasPermission(viewerProfile, viewerEmail, "access_settings_security");
-  const canManageAdmins = hasPermission(viewerProfile, viewerEmail, "manage_staff");
+  const viewerPermissionProfile = viewerProfile
+    ? { ...viewerProfile, permissions: staffPermissionMap[viewerProfile.id] ?? viewerProfile.permissions }
+    : null;
+  const hasAdminAccess = hasPermission(viewerPermissionProfile, viewerEmail, "access_settings_security");
+  const canManageAdmins = hasPermission(viewerPermissionProfile, viewerEmail, "manage_staff");
+  const canManagePermissions = hasPermission(viewerPermissionProfile, viewerEmail, "manage_permissions");
   const canManageOwner = isOwnerEmail(viewerEmail);
-  const canReviewAccessRequests = hasPermission(viewerProfile, viewerEmail, "manage_staff");
+  const canReviewAccessRequests = hasPermission(viewerPermissionProfile, viewerEmail, "manage_staff");
 
   const officeText = (office: Office) => {
     if (office === "Guadalajara") return "📍 Guadalajara";
@@ -138,7 +190,7 @@ export default function AdminPage() {
       ? (
           {
             owner: "👑 Propietario",
-            super_admin: "Control total",
+            super_admin: "Avanzado",
             admin: "Crear pacientes",
             none: "Solo chats",
           } as const
@@ -146,7 +198,7 @@ export default function AdminPage() {
       : (
           {
             owner: "👑 Owner",
-            super_admin: "Full control",
+            super_admin: "Advanced",
             admin: "Create patients",
             none: "Assigned chats",
           } as const
@@ -297,7 +349,7 @@ export default function AdminPage() {
   const fetchData = async () => {
     setPageError("");
 
-    const [staffRes, patientsRes, proceduresRes, roomsRes, staffPrivateMessagesRes, accessRequestsRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes] = await Promise.all([
+    const [staffRes, patientsRes, proceduresRes, roomsRes, staffPrivateMessagesRes, accessRequestsRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes, staffPermissionsRes] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("patients").select("*").order("full_name"),
       supabase.from("procedures").select("*"),
@@ -309,6 +361,7 @@ export default function AdminPage() {
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "office_phone_guadalajara").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "office_phone_tijuana").maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
     ]);
 
     const issues = [
@@ -322,6 +375,7 @@ export default function AdminPage() {
       blockedPhonesRes.error ? "No pude cargar teléfonos bloqueados." : "",
       gdlPhoneRes.error ? "No pude cargar el teléfono de Guadalajara." : "",
       tjnPhoneRes.error ? "No pude cargar el teléfono de Tijuana." : "",
+      staffPermissionsRes.error ? "No pude cargar permisos del equipo." : "",
     ].filter(Boolean);
 
     setStaff((staffRes.data || []) as StaffProfile[]);
@@ -335,6 +389,7 @@ export default function AdminPage() {
     setBlockedPhones(parseSettingList(blockedPhonesRes.data?.value));
     setOfficePhoneGdl((gdlPhoneRes.data?.value as string) || "");
     setOfficePhoneTjn((tjnPhoneRes.data?.value as string) || "");
+    setStaffPermissionMap(parseStaffPermissionMap(staffPermissionsRes.data?.value));
 
     if (issues.length > 0) setPageError(issues.join(" "));
   };
@@ -356,7 +411,12 @@ export default function AdminPage() {
     setViewerEmail(email);
     setViewerId(user.id);
 
-    const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    const [{ data: profile }, staffPermissionsRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+    ]);
+    const loadedStaffPermissionMap = parseStaffPermissionMap(staffPermissionsRes.data?.value);
+    setStaffPermissionMap(loadedStaffPermissionMap);
     setViewerProfile(profile || null);
 
     if (isOwnerEmail(email)) {
@@ -366,7 +426,8 @@ export default function AdminPage() {
       }
     }
 
-    const computedAccess = hasPermission(profile as StaffProfile | null, email, "access_settings_security");
+    const computedProfile = profile ? { ...(profile as StaffProfile), permissions: loadedStaffPermissionMap[user.id] ?? (profile as StaffProfile).permissions } : null;
+    const computedAccess = hasPermission(computedProfile, email, "access_settings_security");
     if (!computedAccess) {
       setSessionChecked(true);
       setLoading(false);
@@ -420,6 +481,75 @@ export default function AdminPage() {
       actorEmail: viewerEmail,
       notes: success,
       metadata: payload,
+    });
+    updateSuccess(success);
+  };
+
+  const updateStaffPermissions = async (member: StaffProfile, nextPermissions: StaffPermissionKey[], success: string) => {
+    const cleanPermissions = STAFF_PERMISSION_KEYS.filter((permission) => nextPermissions.includes(permission));
+    const nextMap = { ...staffPermissionMap, [member.id]: cleanPermissions };
+    setSavingKey(`${member.id}-permissions`);
+    const { error } = await supabase
+      .from("app_settings")
+      .upsert(
+        { key: STAFF_PERMISSIONS_SETTING_KEY, value: JSON.stringify(nextMap), updated_at: new Date().toISOString() },
+        { onConflict: "key" }
+      );
+    setSavingKey("");
+
+    if (error) {
+      setPageError(error.message || (isSpanish ? "No pude guardar permisos." : "I could not save permissions."));
+      return;
+    }
+
+    setStaffPermissionMap(nextMap);
+    await logAdminEvent({
+      action: "staff_permissions_updated",
+      entityType: "staff_profile",
+      entityId: member.id,
+      entityName: member.full_name || member.display_name || "Personal",
+      actorId: viewerId,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: success,
+      metadata: { permissions: cleanPermissions },
+    });
+    updateSuccess(success);
+  };
+
+  const applyStaffAccessPreset = async (member: StaffProfile, level: AdminLevel, success: string) => {
+    const nextPermissions = permissionPresetForAdminLevel(level);
+    const nextMap = { ...staffPermissionMap, [member.id]: nextPermissions };
+    setSavingKey(`${member.id}-admin_level`);
+    const [profileUpdate, permissionsUpdate] = await Promise.all([
+      supabase.from("profiles").update({ admin_level: level }).eq("id", member.id),
+      supabase
+        .from("app_settings")
+        .upsert(
+          { key: STAFF_PERMISSIONS_SETTING_KEY, value: JSON.stringify(nextMap), updated_at: new Date().toISOString() },
+          { onConflict: "key" }
+        ),
+    ]);
+    setSavingKey("");
+
+    const error = profileUpdate.error || permissionsUpdate.error;
+    if (error) {
+      setPageError(error.message || (isSpanish ? "No pude guardar el preset de acceso." : "I could not save the access preset."));
+      return;
+    }
+
+    setStaff((previous) => previous.map((item) => (item.id === member.id ? { ...item, admin_level: level } : item)));
+    setStaffPermissionMap(nextMap);
+    await logAdminEvent({
+      action: "staff_permissions_preset_applied",
+      entityType: "staff_profile",
+      entityId: member.id,
+      entityName: member.full_name || member.display_name || "Personal",
+      actorId: viewerId,
+      actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+      actorEmail: viewerEmail,
+      notes: success,
+      metadata: { admin_level: level, permissions: nextPermissions },
     });
     updateSuccess(success);
   };
@@ -1139,8 +1269,20 @@ export default function AdminPage() {
         .back-top-inline-btn:hover { background: #DBEAFE; }
         .section-top-btn { min-height: 40px; padding: 9px 13px; border-radius: 999px; border: 1px solid #DBEAFE; background: #EFF6FF; color: #1D4ED8; font-size: 13px; font-weight: 900; font-family: inherit; cursor: pointer; white-space: nowrap; }
         .access-help { padding: 10px 12px; border-radius: 14px; background: #F8FAFC; border: 1px solid #E6EEF7; color: #64748B; font-size: 14px; line-height: 1.45; font-weight: 700; }
+        .permission-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+        .permission-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+        .permission-card { border: 1px solid #E6EEF7; background: #FFFFFF; border-radius: 14px; padding: 12px; min-width: 0; }
+        .permission-card-title { color: #075EA8; font-size: 14px; font-weight: 950; margin: 0 0 9px; line-height: 1.25; }
+        .permission-list { display: grid; gap: 7px; }
+        .permission-row { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 9px; align-items: start; padding: 9px; border-radius: 12px; border: 1px solid #E9F0F8; background: #F8FAFC; cursor: pointer; }
+        .permission-row.enabled { background: #EFF6FF; border-color: #BFDBFE; }
+        .permission-row input { width: 18px; height: 18px; margin-top: 2px; accent-color: #1D4ED8; }
+        .permission-row strong { display: block; color: #111827; font-size: 13px; line-height: 1.25; font-weight: 900; }
+        .permission-row small { display: block; color: #64748B; font-size: 12px; line-height: 1.35; font-weight: 650; margin-top: 3px; }
+        .permission-row:has(input:disabled) { cursor: not-allowed; opacity: 0.64; }
+        .permission-locked { color: #64748B; font-size: 13px; font-weight: 750; line-height: 1.45; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: #F8FAFC; border: 1px dashed #D6E0EB; }
         @media (max-width: 980px) {
-          .hero-grid, .workspace-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
+          .hero-grid, .workspace-grid, .grid-2, .grid-3, .permission-grid { grid-template-columns: 1fr; }
           .admin-brand-logo { width: min(245px, 34vw); }
           .admin-title-copy { display: none; }
         }
@@ -1517,10 +1659,16 @@ export default function AdminPage() {
                     const isSelf = member.id === viewerId;
                     const canDeleteThisMember = canManageAdmins && !isSelf && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const accessKey = `${member.id}-admin_level`;
+                    const permissionsKey = `${member.id}-permissions`;
                     const phoneKey = `${member.id}-phone`;
                     const phoneDraft = staffPhoneDrafts[member.id] ?? (member.phone || "");
                     const cleanPhoneDraft = phoneDraft.trim();
                     const deleteBusy = deletingStaffId === member.id;
+                    const memberPermissionProfile = { ...member, permissions: staffPermissionMap[member.id] ?? member.permissions };
+                    const memberPermissionSet = permissionsForProfile(memberPermissionProfile, rawMemberEmail);
+                    const explicitPermissionCount = normalizePermissionList(memberPermissionProfile.permissions).length;
+                    const canEditPermissionsForMember = canEditThisMember && canManagePermissions;
+                    const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => memberPermissionSet.has(permission)).length;
 
                     return (
                       <div key={member.id} className="staff-row compact">
@@ -1550,6 +1698,9 @@ export default function AdminPage() {
                                       {member.role}
                                     </span>
                                   )}
+                                  <span className="meta-badge" style={{ color: "#0E7490", background: "#ECFEFF" }}>
+                                    {enabledPermissionCount}/{STAFF_PERMISSION_KEYS.length} {isSpanish ? "permisos" : "rights"}
+                                  </span>
                                 </div>
 	                            </div>
 	                          </div>
@@ -1587,34 +1738,83 @@ export default function AdminPage() {
                                     </div>
                                   </div>
 		                              <div className="setting-group">
-		                                <p className="group-label">{isSpanish ? "Acceso en portal" : "Portal access"}</p>
+		                                <p className="group-label">{isSpanish ? "Permisos del portal" : "Portal permissions"}</p>
                                     <p className="access-help">
                                       {isSpanish
-                                        ? "Solo chats ve pacientes asignados. Crear pacientes puede abrir salas nuevas. Control total administra equipo, auditoría y archivo."
-                                        : "Assigned chats sees assigned rooms. Create patients can open new rooms. Full control manages team, audit, and archive."}
+                                        ? "Los botones de preset solo llenan una base. La lista de abajo muestra los derechos reales que este usuario recibe."
+                                        : "Preset buttons only fill a starting point. The list below shows the exact rights this user receives."}
                                     </p>
-                                <div className="mini-actions">
-                                  {(["none", "admin", "super_admin"] as AdminLevel[]).map((option) => (
-                                    <button
-                                      key={`${member.id}-${option}`}
-                                      className="mini-btn"
-                                      style={{
-                                        background: level === option ? `${adminColor(option)}18` : "#EFF3F8",
-                                        color: level === option ? adminColor(option) : "#374151",
-                                        opacity: !canEditThisMember || savingKey === accessKey ? 0.55 : 1,
-                                      }}
-                                      disabled={!canEditThisMember || savingKey === accessKey || (option === "super_admin" && !canManageOwner)}
-                                      onClick={() => updateStaffField(member, { admin_level: option }, isSpanish ? `Acceso de ${member.full_name || "staff"} actualizado a ${adminText(option)}.` : `Access for ${member.full_name || "staff"} updated to ${adminText(option)}.`)}
-                                    >
-                                      {adminText(option)}
-                                    </button>
-                                  ))}
-                                  {level === "owner" && (
-                                    <span className="meta-badge" style={{ color: adminColor("owner"), background: `${adminColor("owner")}18` }}>
-                                      {isSpanish ? "Protegido" : "Protected"}
-                                    </span>
-                                  )}
-                                </div>
+                                    <div className="permission-toolbar">
+                                      {(["none", "admin", "super_admin"] as AdminLevel[]).map((option) => (
+                                        <button
+                                          key={`${member.id}-${option}`}
+                                          className="mini-btn"
+                                          style={{
+                                            background: level === option ? `${adminColor(option)}18` : "#EFF3F8",
+                                            color: level === option ? adminColor(option) : "#374151",
+                                            opacity: !canEditThisMember || savingKey === accessKey ? 0.55 : 1,
+                                          }}
+                                          disabled={!canEditThisMember || savingKey === accessKey || (option === "super_admin" && !canManageOwner)}
+                                          onClick={() => applyStaffAccessPreset(member, option, isSpanish ? `Preset de ${member.full_name || "staff"} actualizado a ${adminText(option)}.` : `Preset for ${member.full_name || "staff"} updated to ${adminText(option)}.`)}
+                                        >
+                                          {adminText(option)}
+                                        </button>
+                                      ))}
+                                      <span className="meta-badge" style={{ color: explicitPermissionCount ? "#0E7490" : "#64748B", background: explicitPermissionCount ? "#ECFEFF" : "#F1F5F9" }}>
+                                        {explicitPermissionCount ? (isSpanish ? "Personalizado" : "Custom") : (isSpanish ? "Preset heredado" : "Inherited preset")}
+                                      </span>
+                                      {level === "owner" && (
+                                        <span className="meta-badge" style={{ color: adminColor("owner"), background: `${adminColor("owner")}18` }}>
+                                          {isSpanish ? "Protegido" : "Protected"}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="permission-grid">
+                                      {permissionGroups.map((group) => (
+                                        <div key={`${member.id}-${group.id}`} className="permission-card">
+                                          <p className="permission-card-title">{isSpanish ? group.es : group.en}</p>
+                                          <div className="permission-list">
+                                            {group.permissions.map((permission) => {
+                                              const checked = memberPermissionSet.has(permission);
+                                              return (
+                                                <label key={`${member.id}-${permission}`} className={`permission-row ${checked ? "enabled" : ""}`}>
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    disabled={!canEditPermissionsForMember || savingKey === permissionsKey}
+                                                    onChange={(event) => {
+                                                      const next = STAFF_PERMISSION_KEYS.filter((candidate) =>
+                                                        candidate === permission ? event.target.checked : memberPermissionSet.has(candidate)
+                                                      );
+                                                      updateStaffPermissions(
+                                                        member,
+                                                        next,
+                                                        isSpanish
+                                                          ? `Permisos de ${member.full_name || "staff"} actualizados.`
+                                                          : `Permissions for ${member.full_name || "staff"} updated.`
+                                                      );
+                                                    }}
+                                                  />
+                                                  <span>
+                                                    <strong>{permissionLabel(permission, lang)}</strong>
+                                                    <small>{permissionDescriptions[permission][lang]}</small>
+                                                  </span>
+                                                </label>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    {!canEditPermissionsForMember && (
+                                      <p className="permission-locked">
+                                        {level === "owner"
+                                          ? (isSpanish ? "La cuenta propietaria siempre conserva acceso total." : "The owner account always keeps full access.")
+                                          : !canManagePermissions
+                                            ? (isSpanish ? "Tu cuenta puede administrar equipo, pero no cambiar permisos finos." : "Your account can manage staff but cannot change granular permissions.")
+                                            : (isSpanish ? "No puedes editar permisos de este usuario." : "You cannot edit permissions for this user.")}
+                                      </p>
+                                    )}
                               </div>
                               <div className="setting-group">
                                 <p className="group-label">{isSpanish ? "Eliminar usuario" : "Delete user"}</p>

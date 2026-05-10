@@ -5,7 +5,7 @@ import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/date
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { isOwnerEmail } from "@/lib/securityConfig";
-import { hasPermission } from "@/lib/permissions";
+import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
 import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 
 type Lang = "es" | "en";
@@ -2208,8 +2208,19 @@ export default function InboxPage() {
   };
 
   const fetchProfile = async (id: string) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id",id).single();
-    if (data) { setUserProfile(data); setDisplayNameEdit(data.full_name||data.display_name||""); setPhoneEdit(data.phone || ""); if (data.quick_replies?.length) setQuickReplies(data.quick_replies); }
+    const [profileRes, permissionsRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id",id).single(),
+      supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+    ]);
+    const data = profileRes.data;
+    const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
+    if (data) {
+      const profileWithPermissions = { ...data, permissions: permissionMap[id] ?? data.permissions };
+      setUserProfile(profileWithPermissions);
+      setDisplayNameEdit(data.full_name||data.display_name||"");
+      setPhoneEdit(data.phone || "");
+      if (data.quick_replies?.length) setQuickReplies(data.quick_replies);
+    }
   };
 
   const applyPatientLabelRows = (rows: PatientLabel[]) => {

@@ -14,7 +14,7 @@ import {
   type ProcedureRecord,
   type StaffProfile,
 } from "@/lib/adminPortal";
-import { hasPermission } from "@/lib/permissions";
+import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
 
 type TrashView = "archived" | "trash";
 
@@ -74,7 +74,12 @@ export default function AdminTrashPage() {
     const email = user.email?.toLowerCase() || "";
     setViewerEmail(email);
 
-    const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    const [profileRes, permissionsRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+    ]);
+    const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
+    const profile = profileRes.data ? { ...(profileRes.data as StaffProfile), permissions: permissionMap[user.id] ?? (profileRes.data as StaffProfile).permissions } : null;
     setViewerProfile(profile || null);
 
     const computedAccess = hasPermission(profile as StaffProfile | null, email, "restore_rooms");

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, normalizePermissionList } from "@/lib/permissions";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const STAFF_PERMISSIONS_SETTING_KEY = "staff_permissions";
 
 const getAdminClient = () =>
   createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missing-key", {
@@ -14,6 +15,16 @@ const isSchemaError = (error: unknown) => {
   const value = error as { message?: string; details?: string; hint?: string };
   const text = `${value?.message || ""} ${value?.details || ""} ${value?.hint || ""}`.toLowerCase();
   return text.includes("column") || text.includes("relation") || text.includes("schema cache") || text.includes("does not exist");
+};
+
+const parseStaffPermissionMap = (value: unknown) => {
+  if (typeof value !== "string") return {} as Record<string, ReturnType<typeof normalizePermissionList>>;
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(parsed).map(([id, permissions]) => [id, normalizePermissionList(permissions)]));
+  } catch {
+    return {};
+  }
 };
 
 export async function POST(request: NextRequest) {
@@ -37,10 +48,15 @@ export async function POST(request: NextRequest) {
     if (!roomId || !action) return NextResponse.json({ error: "Missing room action." }, { status: 400 });
 
     const requesterEmail = requester.email?.trim().toLowerCase() || "";
-    const { data: profile } = await adminClient.from("profiles").select("*").eq("id", requester.id).maybeSingle();
+    const [{ data: profile }, permissionsRes] = await Promise.all([
+      adminClient.from("profiles").select("*").eq("id", requester.id).maybeSingle(),
+      adminClient.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+    ]);
+    const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
+    const profileWithPermissions = profile ? { ...(profile as any), permissions: permissionMap[requester.id] ?? (profile as any).permissions } : profile;
     const allowed = action === "restore"
-      ? hasPermission(profile as any, requesterEmail, "restore_rooms")
-      : hasPermission(profile as any, requesterEmail, "archive_rooms");
+      ? hasPermission(profileWithPermissions as any, requesterEmail, "restore_rooms")
+      : hasPermission(profileWithPermissions as any, requesterEmail, "archive_rooms");
     if (!allowed) return NextResponse.json({ error: "You do not have permission to change room status." }, { status: 403 });
 
     const roomQuery = await adminClient
@@ -87,7 +103,7 @@ export async function POST(request: NextRequest) {
       entity_name: procedure?.procedure_name || patient?.full_name || "Patient room",
       patient_id: patientId || null,
       actor_id: requester.id,
-      actor_name: (profile as any)?.full_name || (profile as any)?.display_name || requesterEmail,
+      actor_name: (profileWithPermissions as any)?.full_name || (profileWithPermissions as any)?.display_name || requesterEmail,
       actor_email: requesterEmail,
       notes: action === "restore" ? "Room restored to active workflow." : "Room cancelled and patient record archived.",
       metadata: { room_id: roomId, procedure_id: procedure?.id || null, next_patient_status: nextPatientStatus, next_procedure_status: nextProcedureStatus },

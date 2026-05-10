@@ -36,7 +36,9 @@ This gives the doctor a fresh active patient list while keeping recovery possibl
 
 ## Permissions model
 
-The app now has named feature permissions in code. Owner emails keep permanent full access. Existing roles still provide safe fallback permissions until the new `profiles.permissions` JSONB column is applied.
+The app now has named feature permissions in code. Owner emails keep permanent full access. Existing roles still provide safe fallback permissions.
+
+The live UI stores explicit staff permissions in `app_settings.key = staff_permissions` so the doctor can use granular controls without a blocking schema migration. The `profiles.permissions` SQL column remains an optional future normalization step.
 
 Feature keys:
 
@@ -55,7 +57,7 @@ Feature keys:
 - `access_audit_logs`
 - `access_settings_security`
 
-SQL proposal: `docs/supabase-launch-reset-and-permissions-2026-05-10.sql`
+SQL proposal for a future normalized column: `docs/supabase-launch-reset-and-permissions-2026-05-10.sql`
 
 ## Room cancellation
 

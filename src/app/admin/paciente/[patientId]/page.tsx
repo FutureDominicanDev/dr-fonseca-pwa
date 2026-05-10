@@ -7,7 +7,7 @@ import { parseFormMessage } from "@/components/FormMessage";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone } from "@/lib/patientMeta";
 import { useAdminLang } from "@/lib/useAdminLang";
-import { hasPermission } from "@/lib/permissions";
+import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
 import {
   PROCEDURE_STATUS_OPTIONS,
   buildExportHtml,
@@ -463,7 +463,12 @@ export default function AdminPatientRecordPage() {
     const email = user.email?.toLowerCase() || "";
     setViewerEmail(email);
 
-    const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    const [profileRes, permissionsRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+    ]);
+    const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
+    const profile = profileRes.data ? { ...(profileRes.data as StaffProfile), permissions: permissionMap[user.id] ?? (profileRes.data as StaffProfile).permissions } : null;
     setViewerProfile(profile || null);
 
     const computedAccess = hasPermission(profile as StaffProfile | null, email, "view_patients");

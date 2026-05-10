@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isOwnerEmail } from "@/lib/securityConfig";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, normalizePermissionList } from "@/lib/permissions";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const STAFF_PERMISSIONS_SETTING_KEY = "staff_permissions";
 
 const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || "missing-key");
 const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missing-key");
@@ -14,6 +15,22 @@ const canEditClinicalRecord = (profile: any, email: string) =>
   isOwnerEmail(email) || (`${profile?.role || ""}`.toLowerCase() === "doctor" && hasPermission(profile, email, "edit_patient_info"));
 
 const cleanOffice = (value: unknown) => (value === "Guadalajara" || value === "Tijuana" ? value : null);
+
+const parseStaffPermissionMap = (value: unknown) => {
+  if (typeof value !== "string") return {} as Record<string, ReturnType<typeof normalizePermissionList>>;
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(parsed).map(([id, permissions]) => [id, normalizePermissionList(permissions)]));
+  } catch {
+    return {};
+  }
+};
+
+const profileWithStoredPermissions = async (profile: any, userId: string) => {
+  const { data } = await adminClient.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle();
+  const permissionMap = parseStaffPermissionMap(data?.value);
+  return profile ? { ...profile, permissions: permissionMap[userId] ?? profile.permissions } : profile;
+};
 
 export async function GET(
   request: NextRequest,
@@ -44,7 +61,8 @@ export async function GET(
     }
 
     const viewerEmail = user.email?.toLowerCase() || "";
-    if (!hasPermission(viewerProfile, viewerEmail, "view_patients")) {
+    const permissionProfile = await profileWithStoredPermissions(viewerProfile, user.id);
+    if (!hasPermission(permissionProfile, viewerEmail, "view_patients")) {
       return NextResponse.json({ error: "No admin record access." }, { status: 403 });
     }
 
@@ -121,7 +139,8 @@ export async function PATCH(
     }
 
     const viewerEmail = user.email?.toLowerCase() || "";
-    if (!canEditClinicalRecord(viewerProfile, viewerEmail)) {
+    const permissionProfile = await profileWithStoredPermissions(viewerProfile, user.id);
+    if (!canEditClinicalRecord(permissionProfile, viewerEmail)) {
       return NextResponse.json({ error: "Only the doctor with full control can modify this record." }, { status: 403 });
     }
 
