@@ -1767,19 +1767,47 @@ export default function InboxPage() {
     if (!context) return;
     const doPlay = () => {
       const startAt = context.currentTime;
-      const gain = context.createGain();
-      gain.gain.setValueAtTime(0.0001, startAt);
-      gain.gain.exponentialRampToValueAtTime(0.05, startAt + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.22);
-      gain.connect(context.destination);
+      const limiter = context.createDynamicsCompressor();
+      limiter.threshold.setValueAtTime(-12, startAt);
+      limiter.knee.setValueAtTime(8, startAt);
+      limiter.ratio.setValueAtTime(12, startAt);
+      limiter.attack.setValueAtTime(0.002, startAt);
+      limiter.release.setValueAtTime(0.12, startAt);
 
-      const oscillator = context.createOscillator();
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(880, startAt);
-      oscillator.frequency.exponentialRampToValueAtTime(660, startAt + 0.22);
-      oscillator.connect(gain);
-      oscillator.start(startAt);
-      oscillator.stop(startAt + 0.24);
+      const masterGain = context.createGain();
+      masterGain.gain.setValueAtTime(0.86, startAt);
+      masterGain.connect(limiter);
+      limiter.connect(context.destination);
+
+      const playPulse = (offset: number, frequency: number, peakGain: number) => {
+        const pulseStart = startAt + offset;
+        const pulseEnd = pulseStart + 0.18;
+        const pulseGain = context.createGain();
+        pulseGain.gain.setValueAtTime(0.0001, pulseStart);
+        pulseGain.gain.exponentialRampToValueAtTime(peakGain, pulseStart + 0.014);
+        pulseGain.gain.exponentialRampToValueAtTime(0.0001, pulseEnd);
+        pulseGain.connect(masterGain);
+
+        const oscillator = context.createOscillator();
+        oscillator.type = "square";
+        oscillator.frequency.setValueAtTime(frequency, pulseStart);
+        oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.18, pulseEnd);
+        oscillator.connect(pulseGain);
+        oscillator.start(pulseStart);
+        oscillator.stop(pulseEnd + 0.02);
+
+        const overtone = context.createOscillator();
+        overtone.type = "triangle";
+        overtone.frequency.setValueAtTime(frequency * 1.5, pulseStart);
+        overtone.frequency.exponentialRampToValueAtTime(frequency * 1.72, pulseEnd);
+        overtone.connect(pulseGain);
+        overtone.start(pulseStart);
+        overtone.stop(pulseEnd + 0.02);
+      };
+
+      playPulse(0, 988, 0.16);
+      playPulse(0.22, 1319, 0.18);
+      playPulse(0.44, 1760, 0.2);
     };
     if (context.state === "suspended") {
       context.resume().then(doPlay).catch(() => {});
