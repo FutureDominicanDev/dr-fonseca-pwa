@@ -523,6 +523,7 @@ const staffRecordPhotoName = (entry: any, fallback: string) =>
 
 interface QuickReply { shortcut: string; message: string; }
 interface RoomMessageSummary {
+  id?: string | null;
   room_id?: string | null;
   created_at?: string | null;
   content?: string | null;
@@ -1806,7 +1807,31 @@ export default function InboxPage() {
     return patient?.full_name || t.patientLabel;
   }, [patients, t.patientLabel]);
   const translationKey = useCallback((messageId: string | number, targetLang: "es" | "en") => `incoming_translate_${String(messageId)}_${targetLang}`, []);
-  const alertMessageStorageKey = useCallback((roomId: string) => `last_alert_message_${roomId}`, []);
+  const staffRoomStorageScope = useMemo(() => currentUserId ? safeStorageSegment(currentUserId) : "anonymous", [currentUserId]);
+  const scopedRoomStorageKey = useCallback((prefix: string, roomId: string) => `${prefix}_${staffRoomStorageScope}_${roomId}`, [staffRoomStorageScope]);
+  const legacyRoomStorageKey = useCallback((prefix: string, roomId: string) => `${prefix}_${roomId}`, []);
+  const readRoomStorageValue = useCallback((prefix: string, legacyPrefix: string, roomId?: string | null) => {
+    if (typeof window === "undefined" || !roomId) return "";
+    const scopedKey = scopedRoomStorageKey(prefix, roomId);
+    const scopedValue = window.localStorage.getItem(scopedKey);
+    if (scopedValue) return scopedValue;
+    const legacyValue = window.localStorage.getItem(legacyRoomStorageKey(legacyPrefix, roomId)) || "";
+    if (legacyValue && currentUserId) {
+      window.localStorage.setItem(scopedKey, legacyValue);
+    }
+    return legacyValue;
+  }, [currentUserId, legacyRoomStorageKey, scopedRoomStorageKey]);
+  const writeRoomStorageValue = useCallback((prefix: string, legacyPrefix: string, roomId: string | null | undefined, value: string) => {
+    if (typeof window === "undefined" || !roomId || !value) return;
+    window.localStorage.setItem(scopedRoomStorageKey(prefix, roomId), value);
+    window.localStorage.setItem(legacyRoomStorageKey(legacyPrefix, roomId), value);
+  }, [legacyRoomStorageKey, scopedRoomStorageKey]);
+  const getRoomLastSeen = useCallback((roomId?: string | null) => readRoomStorageValue("staff_room_last_seen", "last_seen", roomId), [readRoomStorageValue]);
+  const setRoomLastSeen = useCallback((roomId: string | null | undefined, value: string) => writeRoomStorageValue("staff_room_last_seen", "last_seen", roomId, value), [writeRoomStorageValue]);
+  const getRoomLastAlert = useCallback((roomId?: string | null) => readRoomStorageValue("staff_room_last_alert", "last_alert", roomId), [readRoomStorageValue]);
+  const setRoomLastAlert = useCallback((roomId: string | null | undefined, value: string) => writeRoomStorageValue("staff_room_last_alert", "last_alert", roomId, value), [writeRoomStorageValue]);
+  const getRoomAlertedMessage = useCallback((roomId?: string | null) => readRoomStorageValue("staff_room_alert_message", "last_alert_message", roomId), [readRoomStorageValue]);
+  const setRoomAlertedMessage = useCallback((roomId: string | null | undefined, value: string) => writeRoomStorageValue("staff_room_alert_message", "last_alert_message", roomId, value), [writeRoomStorageValue]);
   const incomingMessageKey = useCallback((message: any) => {
     if (!message) return "";
     return `${message.room_id || ""}:${message.id || "no-id"}:${message.created_at || ""}:${message.sender_type || ""}:${message.message_type || ""}`;
@@ -1922,31 +1947,34 @@ export default function InboxPage() {
   }, [clearStaffRecordUnreadRoom, patients, toastAlert]);
 
   const markRoomAsRead = useCallback((roomId: string) => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(`last_seen_${roomId}`, new Date().toISOString());
-      window.localStorage.setItem(`last_alert_${roomId}`, new Date().toISOString());
-    }
+    const now = new Date().toISOString();
+    setRoomLastSeen(roomId, now);
+    setRoomLastAlert(roomId, now);
     setUnreadCounts((prev) => {
       if (!prev[roomId]) return prev;
       const next = { ...prev };
       delete next[roomId];
       return next;
     });
-  }, []);
+  }, [setRoomLastAlert, setRoomLastSeen]);
 
   const registerIncomingPatientMessage = useCallback((message: any, options?: { skipUnread?: boolean }) => {
     const roomId = message.room_id;
+    if (!roomId) return;
+    const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
+    const isActiveRoom = selectedRoomRef.current?.id === roomId;
+    if (options?.skipUnread && isVisible && isActiveRoom) {
+      setRoomLastSeen(roomId, message.created_at || new Date().toISOString());
+    }
     const messageKey = incomingMessageKey(message);
-    if (typeof window !== "undefined" && messageKey) {
-      const lastAlertedMessage = window.localStorage.getItem(alertMessageStorageKey(roomId)) || "";
+    if (messageKey) {
+      const lastAlertedMessage = getRoomAlertedMessage(roomId);
       if (lastAlertedMessage === messageKey) return;
-      window.localStorage.setItem(alertMessageStorageKey(roomId), messageKey);
-      window.localStorage.setItem(`last_alert_${roomId}`, message.created_at || new Date().toISOString());
+      setRoomAlertedMessage(roomId, messageKey);
+      setRoomLastAlert(roomId, message.created_at || new Date().toISOString());
     }
     const title = roomPatientName(roomId);
     const body = describeIncomingMessage(message);
-    const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
-    const isActiveRoom = selectedRoomRef.current?.id === roomId;
 
     playIncomingTone();
 
@@ -1958,7 +1986,7 @@ export default function InboxPage() {
       showToastAlert(roomId, title, body);
       pushNotif(title, body);
     }
-  }, [alertMessageStorageKey, describeIncomingMessage, incomingMessageKey, playIncomingTone, pushNotif, roomPatientName, showToastAlert]);
+  }, [describeIncomingMessage, getRoomAlertedMessage, incomingMessageKey, playIncomingTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
 
   const registerIncomingInternalNote = useCallback((message: any) => {
     const roomId = message.room_id;
@@ -1969,11 +1997,11 @@ export default function InboxPage() {
     const parsedNote = parseInternalNote(message.content);
     if (!isStaffPhoto && parsedNote.visibility === "private" && message.sender_id !== currentUserId && !isSuperAdmin) return;
     const messageKey = incomingMessageKey(message);
-    if (typeof window !== "undefined" && messageKey) {
-      const lastAlertedMessage = window.localStorage.getItem(alertMessageStorageKey(roomId)) || "";
+    if (messageKey) {
+      const lastAlertedMessage = getRoomAlertedMessage(roomId);
       if (lastAlertedMessage === messageKey) return;
-      window.localStorage.setItem(alertMessageStorageKey(roomId), messageKey);
-      window.localStorage.setItem(`last_alert_${roomId}`, message.created_at || new Date().toISOString());
+      setRoomAlertedMessage(roomId, messageKey);
+      setRoomLastAlert(roomId, message.created_at || new Date().toISOString());
     }
 
     const patientName = roomPatientName(roomId);
@@ -1998,7 +2026,7 @@ export default function InboxPage() {
     if (!isVisible || !isActiveRoom) {
       pushNotif(title, body);
     }
-  }, [alertMessageStorageKey, currentUserId, incomingMessageKey, isSuperAdmin, lang, patients, playIncomingTone, pushNotif, roomPatientName, showToastAlert, staffRecordAlertsMuted]);
+  }, [currentUserId, getRoomAlertedMessage, incomingMessageKey, isSuperAdmin, lang, patients, playIncomingTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, showToastAlert, staffRecordAlertsMuted]);
 
   const broadcastTypingState = useCallback((isTyping: boolean, roomId: string, name: string) => {
     if (!typingChannelRef.current) return;
@@ -2054,9 +2082,11 @@ export default function InboxPage() {
     if (typeof window === "undefined") return;
     const unlock = () => armAudioAlerts();
     window.addEventListener("pointerdown", unlock);
+    window.addEventListener("touchstart", unlock, { passive: true });
     window.addEventListener("keydown", unlock);
     return () => {
       window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("touchstart", unlock);
       window.removeEventListener("keydown", unlock);
     };
   }, [armAudioAlerts]);
@@ -2190,6 +2220,7 @@ export default function InboxPage() {
       setNotificationPermission(permission);
 
       if (permission === "granted") {
+        armAudioAlerts();
         await subscribeStaffToPush();
         setNotificationFeedback({
           tone: "success",
@@ -2209,15 +2240,15 @@ export default function InboxPage() {
     } finally {
       setNotificationBusy(false);
     }
-  }, [lang]);
+  }, [armAudioAlerts, lang]);
 
-  // --- Unread badge polling: check all rooms every 20s for new patient messages ---
-  // Uses localStorage timestamps so badges survive page refresh
-  const checkUnreadBadges = async () => {
-    if (pauseBackgroundRefreshRef.current) return;
+  // --- Unread badge polling: check rooms for new patient messages ---
+  // Uses per-staff localStorage timestamps so badges survive refresh without replaying old history.
+  const checkUnreadBadges = useCallback(async () => {
+    if (pauseBackgroundRefreshRef.current || !currentUserId) return;
     const { data: msgs } = await supabase
       .from("messages")
-      .select("room_id, created_at, content, message_type, file_name")
+      .select("id, room_id, created_at, content, message_type, file_name")
       .eq("sender_type", "patient")
       .eq("is_internal", false)
       .order("created_at", { ascending: false })
@@ -2225,32 +2256,48 @@ export default function InboxPage() {
     if (!msgs) return;
     const nextCounts: Record<string, number> = {};
     const latestByRoom: Record<string, RoomMessageSummary> = {};
-    for (const m of msgs) {
+    for (const m of msgs as RoomMessageSummary[]) {
       const roomId = m.room_id;
-      const lastSeen = localStorage.getItem(`last_seen_${roomId}`) || "0";
-      if (m.created_at > lastSeen) nextCounts[roomId] = (nextCounts[roomId] || 0) + 1;
+      if (!roomId) continue;
       if (!latestByRoom[roomId]) latestByRoom[roomId] = m;
+    }
+    for (const m of msgs as RoomMessageSummary[]) {
+      const roomId = m.room_id;
+      if (!roomId || !m.created_at) continue;
+      const latestCreatedAt = latestByRoom[roomId]?.created_at || "";
+      let lastSeen = getRoomLastSeen(roomId);
+      if (!lastSeen && latestCreatedAt) {
+        setRoomLastSeen(roomId, latestCreatedAt);
+        setRoomLastAlert(roomId, latestCreatedAt);
+        lastSeen = latestCreatedAt;
+      }
+      if (m.created_at > lastSeen) nextCounts[roomId] = (nextCounts[roomId] || 0) + 1;
     }
     setUnreadCounts(nextCounts);
     setLatestRoomMessages(latestByRoom);
 
     for (const [roomId, latestMessage] of Object.entries(latestByRoom)) {
-      if (selectedRoomRef.current?.id === roomId && typeof document !== "undefined" && document.visibilityState === "visible") continue;
-      const lastSeen = localStorage.getItem(`last_seen_${roomId}`) || "0";
-      const lastAlert = localStorage.getItem(`last_alert_${roomId}`) || "0";
-      const latestMessageKey = incomingMessageKey(latestMessage);
-      const lastAlertedMessage = localStorage.getItem(alertMessageStorageKey(roomId)) || "";
-      if (latestMessageKey && latestMessageKey === lastAlertedMessage) continue;
       const latestCreatedAt = latestMessage.created_at || "";
+      if (!latestCreatedAt) continue;
+      if (selectedRoomRef.current?.id === roomId && typeof document !== "undefined" && document.visibilityState === "visible") {
+        setRoomLastSeen(roomId, latestCreatedAt);
+        setRoomLastAlert(roomId, latestCreatedAt);
+        continue;
+      }
+      const lastSeen = getRoomLastSeen(roomId) || "0";
+      const lastAlert = getRoomLastAlert(roomId) || "0";
+      const latestMessageKey = incomingMessageKey(latestMessage);
+      const lastAlertedMessage = getRoomAlertedMessage(roomId);
+      if (latestMessageKey && latestMessageKey === lastAlertedMessage) continue;
       if (latestCreatedAt > lastSeen && latestCreatedAt > lastAlert) {
         playIncomingTone();
         showToastAlert(roomId, roomPatientName(roomId), describeIncomingMessage(latestMessage));
         pushNotif(roomPatientName(roomId), describeIncomingMessage(latestMessage));
-        localStorage.setItem(`last_alert_${roomId}`, latestCreatedAt);
-        if (latestMessageKey) localStorage.setItem(alertMessageStorageKey(roomId), latestMessageKey);
+        setRoomLastAlert(roomId, latestCreatedAt);
+        if (latestMessageKey) setRoomAlertedMessage(roomId, latestMessageKey);
       }
     }
-  };
+  }, [currentUserId, describeIncomingMessage, getRoomAlertedMessage, getRoomLastAlert, getRoomLastSeen, incomingMessageKey, playIncomingTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
 
   const fetchProfile = async (id: string) => {
     const [profileRes, permissionsRes] = await Promise.all([
@@ -2756,14 +2803,15 @@ export default function InboxPage() {
     document.title=totalAlerts>0?`(${totalAlerts}) Dr. Fonseca Portal`:"Dr. Fonseca Portal";
   },[staffPrivateUnread, totalUnread]);
 
-  // Poll for unread badges every 20s and on tab focus
+  // Poll for unread badges and on tab focus.
   useEffect(()=>{
-    checkUnreadBadges();
-    const interval = setInterval(checkUnreadBadges, 2000);
-    const onVisible = () => { if (document.visibilityState==="visible") checkUnreadBadges(); };
+    if (!currentUserId) return;
+    void checkUnreadBadges();
+    const interval = window.setInterval(() => { void checkUnreadBadges(); }, 2000);
+    const onVisible = () => { if (document.visibilityState==="visible") void checkUnreadBadges(); };
     document.addEventListener("visibilitychange", onVisible);
-    return ()=>{ clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
-  },[]);
+    return ()=>{ window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
+  },[checkUnreadBadges, currentUserId]);
 
   useEffect(() => {
     fetchMediaNotificationCounts();
