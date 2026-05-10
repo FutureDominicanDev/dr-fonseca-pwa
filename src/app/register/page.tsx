@@ -34,7 +34,7 @@ const COPY = {
     step1: "Abre tu enlace",
     step1Text: "El consultorio te comparte una invitación segura.",
     step2: "Crea tu acceso",
-    step2Text: "Solo nombre, celular y contraseña.",
+    step2Text: "Solo nombre, celular, consultorio y contraseña.",
     step3: "Entra al portal",
     step3Text: "Verás las salas de pacientes que te asignen.",
     detailsTitle: "Crear acceso del personal",
@@ -48,8 +48,13 @@ const COPY = {
     numberLabel: "Número",
     phonePlaceholder: "Ej: 664 123 4567",
     phoneHint: "Selecciona el país y escribe tu número.",
+    officeLabel: "3. Consultorio",
+    officeGdl: "Guadalajara",
+    officeTjn: "Tijuana",
+    officeBoth: "Ambos consultorios",
+    officeHint: "Esta sede se usa para mostrarte automáticamente al crear salas de pacientes de ese consultorio.",
     passwordTitle: "3. Contraseña",
-    passwordLabel: "Contraseña",
+    passwordLabel: "4. Contraseña",
     passwordPlaceholder: "Mínimo 6 caracteres",
     confirmLabel: "Confirmar contraseña",
     confirmPlaceholder: "Repite tu contraseña",
@@ -74,6 +79,7 @@ const COPY = {
       name: "Por favor ingresa tu nombre o nombre preferido.",
       phone: "Ingresa tu número de celular.",
       phoneShort: "Revisa el celular. Debe tener al menos 10 dígitos.",
+      office: "Selecciona tu consultorio para que el equipo pueda asignarte a pacientes.",
       password: "La contraseña debe tener al menos 6 caracteres.",
       confirm: "Las contraseñas no coinciden.",
       prepare: "No pude preparar el acceso. Revisa el celular.",
@@ -99,7 +105,7 @@ const COPY = {
     step1: "Open your link",
     step1Text: "The office sends you a secure invitation.",
     step2: "Create access",
-    step2Text: "Only name, phone, and password.",
+    step2Text: "Only name, phone, office, and password.",
     step3: "Enter the portal",
     step3Text: "You will see the patient rooms assigned to you.",
     detailsTitle: "Create staff access",
@@ -113,8 +119,13 @@ const COPY = {
     numberLabel: "Number",
     phonePlaceholder: "Example: 664 123 4567",
     phoneHint: "Select the country and enter your number.",
+    officeLabel: "3. Office",
+    officeGdl: "Guadalajara",
+    officeTjn: "Tijuana",
+    officeBoth: "Both offices",
+    officeHint: "This office is used to show you automatically when patient rooms are created for that location.",
     passwordTitle: "3. Password",
-    passwordLabel: "Password",
+    passwordLabel: "4. Password",
     passwordPlaceholder: "At least 6 characters",
     confirmLabel: "Confirm password",
     confirmPlaceholder: "Repeat your password",
@@ -139,6 +150,7 @@ const COPY = {
       name: "Please enter your name or preferred name.",
       phone: "Enter your mobile phone number.",
       phoneShort: "Check the phone number. It must have at least 10 digits.",
+      office: "Select your office so the team can assign you to patients.",
       password: "Password must be at least 6 characters.",
       confirm: "Passwords do not match.",
       prepare: "I could not prepare access. Check the phone number.",
@@ -244,8 +256,8 @@ export default function RegisterPage() {
       const officeFromLink = (params.get("office") || "").trim().toLowerCase();
 
       if (officeFromLink === "both") setOfficeLocation("Both");
-      if (officeFromLink === "gdl") setOfficeLocation("Guadalajara");
-      if (officeFromLink === "tjn") setOfficeLocation("Tijuana");
+      if (officeFromLink === "gdl" || officeFromLink === "guadalajara") setOfficeLocation("Guadalajara");
+      if (officeFromLink === "tjn" || officeFromLink === "tijuana") setOfficeLocation("Tijuana");
 
       if (!codeFromLink) {
         setInviteCode("");
@@ -295,6 +307,29 @@ export default function RegisterPage() {
     if (step === "details") detailsPageRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [error, step]);
 
+  const saveStaffProfile = async (userId: string, normalizedPhone: string, persistedOfficeLocation: "Guadalajara" | "Tijuana" | null) => {
+    const bootstrapRes = await fetch("/api/staff/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inviteCode: inviteCode.trim().toUpperCase(),
+        userId,
+        fullName: fullName.trim(),
+        role: "staff",
+        officeLocation: persistedOfficeLocation,
+        phone: normalizedPhone,
+        email: null,
+        adminLevel: "none",
+      }),
+    });
+
+    const payload = await bootstrapRes.json().catch(() => ({}));
+    return {
+      ok: bootstrapRes.ok,
+      error: payload?.error || t.errors.save,
+    };
+  };
+
   const handleRegister = async () => {
     if (!fullName.trim()) {
       setError(t.errors.name);
@@ -309,6 +344,11 @@ export default function RegisterPage() {
     const normalizedPhone = normalizeStaffPhone(phoneInput, phoneCountryCode);
     if (normalizedPhone.replace(/\D/g, "").length < 10) {
       setError(t.errors.phoneShort);
+      return;
+    }
+
+    if (!officeLocation) {
+      setError(t.errors.office);
       return;
     }
 
@@ -361,12 +401,20 @@ export default function RegisterPage() {
 
     if (authErr) {
       if (isAlreadyRegisteredAuthError(authErr.message)) {
-        const { error: signInErr } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
           email: effectiveEmail,
           password,
         });
 
         if (!signInErr) {
+          if (signInData.user) {
+            const profileSave = await saveStaffProfile(signInData.user.id, normalizedPhone, persistedOfficeLocation);
+            if (!profileSave.ok) {
+              setError(profileSave.error);
+              setLoading(false);
+              return;
+            }
+          }
           setLoading(false);
           window.location.href = "/inbox";
           return;
@@ -384,24 +432,9 @@ export default function RegisterPage() {
     }
 
     if (authData.user) {
-      const bootstrapRes = await fetch("/api/staff/bootstrap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inviteCode: inviteCode.trim().toUpperCase(),
-          userId: authData.user.id,
-          fullName: fullName.trim(),
-          role: "staff",
-          officeLocation: persistedOfficeLocation,
-          phone: normalizedPhone,
-          email: null,
-          adminLevel: "none",
-        }),
-      });
-
-      const payload = await bootstrapRes.json().catch(() => ({}));
-      if (!bootstrapRes.ok) {
-        setError(payload?.error || t.errors.save);
+      const profileSave = await saveStaffProfile(authData.user.id, normalizedPhone, persistedOfficeLocation);
+      if (!profileSave.ok) {
+        setError(profileSave.error);
         setLoading(false);
         return;
       }
@@ -491,6 +524,25 @@ export default function RegisterPage() {
           padding-right: 34px;
         }
         .phone-row { display: grid; grid-template-columns: minmax(92px, 112px) minmax(0, 1fr); gap: 10px; align-items: end; }
+        .office-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+        .office-option {
+          min-height: 50px;
+          border: 1px solid #DCE8F3;
+          border-radius: 14px;
+          background: #F7FAFD;
+          color: #25384d;
+          cursor: pointer;
+          font-family: inherit;
+          font-size: 15px;
+          font-weight: 850;
+        }
+        .office-option.active {
+          border-color: #2B78B7;
+          background: #EAF4FC;
+          color: #165D9C;
+          box-shadow: 0 0 0 4px rgba(43,120,183,0.10);
+        }
+        .office-option.full { grid-column: 1 / -1; }
         .code-input { text-align: center; color: #123A5E; font-size: 20px; font-weight: 850; }
         .input:focus { background: #fff; border-color: #2B78B7; box-shadow: 0 0 0 4px rgba(43,120,183,0.12); }
         .input::placeholder { color: #9AAFC3; font-weight: 600; }
@@ -615,6 +667,8 @@ export default function RegisterPage() {
           .top-actions { min-height: 34px; }
           .brand { margin-top: 0; }
           .phone-row { grid-template-columns: minmax(88px, 108px) minmax(0, 1fr); gap: 8px; }
+          .office-grid { grid-template-columns: 1fr; }
+          .office-option.full { grid-column: auto; }
           .existing-actions { grid-template-columns: 1fr; }
         }
       `}</style>
@@ -733,6 +787,27 @@ export default function RegisterPage() {
                   </div>
                 </div>
                 <p className="hint">{t.phoneHint}</p>
+              </div>
+
+              <div className="field">
+                <label className="field-label">{t.officeLabel}</label>
+                <div className="office-grid">
+                  {([
+                    { value: "Guadalajara" as const, label: t.officeGdl },
+                    { value: "Tijuana" as const, label: t.officeTjn },
+                    { value: "Both" as const, label: t.officeBoth, wide: true },
+                  ]).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`office-option${officeLocation === option.value ? " active" : ""}${option.wide ? " full" : ""}`}
+                      onClick={() => setOfficeLocation(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="hint">{t.officeHint}</p>
               </div>
 
               <div className="field">

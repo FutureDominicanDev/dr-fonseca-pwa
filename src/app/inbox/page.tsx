@@ -1308,6 +1308,8 @@ export default function InboxPage() {
     const ids = [currentUserId, ...members.map((member) => member.id)].filter(Boolean) as string[];
     setSelectedCareTeamIds((current) => Array.from(new Set([...current, ...ids])));
   };
+  const matchesCareTeamOffice = (member: CareTeamMember, office: string) =>
+    !member.office_location || member.office_location === office;
   const isSuperAdmin = isOwnerEmail(currentUserEmail) || ["owner","super_admin"].includes((userProfile?.admin_level || "").toLowerCase());
   const canOpenAdmin = hasPermission(userProfile, currentUserEmail, "access_settings_security");
   const canManageCareTeam = hasPermission(userProfile, currentUserEmail, "manage_staff");
@@ -1337,15 +1339,15 @@ export default function InboxPage() {
     hasPermission(userProfile, currentUserEmail, "create_patients");
   const careTeamDirectory = sortCareTeamMembers(
     careTeamFilter === "guadalajara"
-      ? staffDirectory.filter((member) => member.office_location === "Guadalajara")
+      ? staffDirectory.filter((member) => matchesCareTeamOffice(member, "Guadalajara"))
       : careTeamFilter === "tijuana"
-        ? staffDirectory.filter((member) => member.office_location === "Tijuana")
+        ? staffDirectory.filter((member) => matchesCareTeamOffice(member, "Tijuana"))
         : careTeamFilter === "selected"
           ? staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id))
           : staffDirectory
   );
   const selectedOfficeFilter: CareTeamFilter = newLocation === "Tijuana" ? "tijuana" : "guadalajara";
-  const selectedOfficeCareTeam = sortCareTeamMembers(staffDirectory.filter((member) => member.office_location === newLocation));
+  const selectedOfficeCareTeam = sortCareTeamMembers(staffDirectory.filter((member) => matchesCareTeamOffice(member, newLocation)));
   const careTeamSelectedMembers = staffDirectory.filter((member) => selectedCareTeamIds.includes(member.id));
   const careStaffInviteDirectory = sortCareTeamMembers(
     staffDirectory.filter((member) => {
