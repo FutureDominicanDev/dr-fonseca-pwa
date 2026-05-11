@@ -26,7 +26,6 @@ import { isOwnerEmail } from "@/lib/securityConfig";
 import {
   STAFF_PERMISSION_KEYS,
   STAFF_PERMISSIONS_SETTING_KEY,
-  hasExplicitPermissionList,
   hasPermission,
   parseStaffPermissionMap,
   permissionLabel,
@@ -165,6 +164,7 @@ export default function AdminPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [exportMenu, setExportMenu] = useState<{ type: "patient" | "staff"; id: string; title: string; body: string } | null>(null);
   const [expandedPendingStaffId, setExpandedPendingStaffId] = useState("");
+  const [expandedStaffControlId, setExpandedStaffControlId] = useState("");
   const [pendingSignupDetails, setPendingSignupDetails] = useState<Record<string, PendingSignupDetail>>({});
   const [staffPermissionMap, setStaffPermissionMap] = useState<StaffPermissionMap>({});
   const [staffPermissionDrafts, setStaffPermissionDrafts] = useState<Record<string, StaffPermissionKey[]>>({});
@@ -563,6 +563,7 @@ export default function AdminPage() {
     setOfficePhoneTjn((tjnPhoneRes.data?.value as string) || "");
     setStaffPermissionMap(parseStaffPermissionMap(staffPermissionsRes.data?.value));
     setStaffPermissionDrafts({});
+    setExpandedStaffControlId("");
 
     if (issues.length > 0) setPageError(issues.join(" "));
   };
@@ -591,6 +592,7 @@ export default function AdminPage() {
     const loadedStaffPermissionMap = parseStaffPermissionMap(staffPermissionsRes.data?.value);
     setStaffPermissionMap(loadedStaffPermissionMap);
     setStaffPermissionDrafts({});
+    setExpandedStaffControlId("");
     setViewerProfile(profile || null);
 
     if (isOwnerEmail(email)) {
@@ -622,6 +624,10 @@ export default function AdminPage() {
     await fetchData();
     setRefreshing(false);
     updateSuccess("Datos actualizados.");
+  };
+
+  const collapseStaffControls = (memberId: string) => {
+    setExpandedStaffControlId((current) => (current === memberId ? "" : current));
   };
 
   const updateStaffField = async (member: StaffProfile, payload: Partial<StaffProfile>, success: string) => {
@@ -657,6 +663,7 @@ export default function AdminPage() {
       metadata: payload,
     });
     updateSuccess(success);
+    collapseStaffControls(member.id);
   };
 
   const approvePendingStaff = async (member: StaffProfile) => {
@@ -828,6 +835,7 @@ export default function AdminPage() {
       metadata: { permissions: cleanPermissions },
     });
     updateSuccess(success);
+    collapseStaffControls(member.id);
   };
 
   const applyStaffAccessPreset = async (member: StaffProfile, level: AdminLevel, success: string) => {
@@ -870,6 +878,7 @@ export default function AdminPage() {
       metadata: { admin_level: level, permissions: nextPermissions },
     });
     updateSuccess(success);
+    collapseStaffControls(member.id);
   };
 
   const deleteStaffMember = async (member: StaffProfile) => {
@@ -2228,7 +2237,6 @@ export default function AdminPage() {
                     const draftPermissionList = staffPermissionDrafts[member.id] ?? savedPermissionList;
                     const draftPermissionSet = new Set(draftPermissionList);
                     const draftPermissionsDirty = !samePermissionList(draftPermissionList, savedPermissionList);
-                    const hasExplicitPermissions = hasExplicitPermissionList(memberPermissionProfile.permissions);
                     const canEditPermissionsForMember = canEditThisMember && canManagePermissions;
                     const canEditDeleteStaffAccountsPermission = canEditPermissionsForMember && canManageOwner;
                     const canEditOfficeForMember = canManageAdmins && (canManageOwner || (level !== "owner" && level !== "super_admin"));
@@ -2269,7 +2277,17 @@ export default function AdminPage() {
 	                            </div>
 	                          </div>
 
-	                          <details className="staff-controls">
+	                          <details
+                              className="staff-controls"
+                              open={expandedStaffControlId === member.id}
+                              onToggle={(event) => {
+                                const isOpen = event.currentTarget.open;
+                                setExpandedStaffControlId((current) => {
+                                  if (isOpen) return member.id;
+                                  return current === member.id ? "" : current;
+                                });
+                              }}
+                            >
 	                            <summary>
 	                              {isSpanish ? "Control de usuario" : "User controls"}
 	                              <span>⌄</span>
@@ -2435,9 +2453,6 @@ export default function AdminPage() {
                                           {adminText(option)}
                                         </button>
                                       ))}
-                                      <span className="meta-badge" style={{ color: hasExplicitPermissions ? "#0E7490" : "#64748B", background: hasExplicitPermissions ? "#ECFEFF" : "#F1F5F9" }}>
-                                        {hasExplicitPermissions ? (isSpanish ? "Personalizado" : "Custom") : (isSpanish ? "Preset heredado" : "Inherited preset")}
-                                      </span>
                                       {level === "owner" && (
                                         <span className="meta-badge" style={{ color: adminColor("owner"), background: `${adminColor("owner")}18` }}>
                                           {isSpanish ? "Protegido" : "Protected"}
