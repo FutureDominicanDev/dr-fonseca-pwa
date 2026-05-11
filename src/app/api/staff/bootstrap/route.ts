@@ -104,6 +104,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
+    const authHeader = request.headers.get("authorization") || "";
+    const accessToken = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
+    if (!accessToken) {
+      return NextResponse.json({ error: "Missing staff session." }, { status: 401 });
+    }
+
+    const requesterRes = await supabase.auth.getUser(accessToken);
+    const requester = requesterRes.data?.user;
+    if (requesterRes.error || !requester) {
+      return NextResponse.json({ error: "Invalid staff session." }, { status: 401 });
+    }
+    if (requester.id !== userId) {
+      return NextResponse.json({ error: "Staff profile does not match the signed-in user." }, { status: 403 });
+    }
+
     const inviteRes = await supabase.from("app_settings").select("value").eq("key", "invite_code").single();
     const currentInvite = `${inviteRes.data?.value || ""}`.trim().toUpperCase();
     if (inviteRes.error || !currentInvite || currentInvite !== inviteCode) {

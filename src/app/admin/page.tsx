@@ -885,9 +885,14 @@ export default function AdminPage() {
   const unblockAccess = async (type: "email" | "phone", value: string) => {
     const key = `${type}:${value}`;
     setUnblockBusyKey(key);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
     const response = await fetch("/api/staff/unblock", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ type, value }),
     });
     const payload = await response.json().catch(() => ({}));

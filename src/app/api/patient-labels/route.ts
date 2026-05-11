@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -43,16 +44,31 @@ async function requireUser(request: NextRequest) {
   const userId = authData?.user?.id || "";
   if (authError || !userId) return { response: NextResponse.json({ error: "Invalid session." }, { status: 401 }) };
 
-  const { data: profile, error: profileError } = await adminClient
+  const [{ data: profile, error: profileError }, permissionsRes] = await Promise.all([
+    adminClient
     .from("profiles")
-    .select("id")
+    .select("*")
     .eq("id", userId)
-    .maybeSingle();
+    .maybeSingle(),
+    adminClient.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+  ]);
   if (profileError || !profile?.id) {
     return { response: NextResponse.json({ error: "Profile not found." }, { status: 403 }) };
   }
 
-  return { userId };
+  const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
+  const profileWithPermissions = { ...(profile as any), permissions: permissionMap[userId] ?? (profile as any).permissions };
+  const userEmail = authData.user?.email?.trim().toLowerCase() || "";
+
+  return { userId, userEmail, profile: profileWithPermissions };
+}
+
+function requireManageLabels(auth: Awaited<ReturnType<typeof requireUser>>) {
+  if (auth.response) return auth.response;
+  if (!hasPermission(auth.profile as any, auth.userEmail || "", "manage_labels")) {
+    return NextResponse.json({ error: "You do not have permission to manage labels." }, { status: 403 });
+  }
+  return null;
 }
 
 async function loadLabels(userId: string) {
@@ -95,6 +111,8 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireUser(request);
     if (auth.response) return auth.response;
+    const permissionError = requireManageLabels(auth);
+    if (permissionError) return permissionError;
 
     const body = await request.json().catch(() => ({}));
     const action = `${body?.action || ""}`;
@@ -211,6 +229,8 @@ export async function PATCH(request: NextRequest) {
   try {
     const auth = await requireUser(request);
     if (auth.response) return auth.response;
+    const permissionError = requireManageLabels(auth);
+    if (permissionError) return permissionError;
 
     const body = await request.json().catch(() => ({}));
     const labelId = `${body?.labelId || ""}`.trim();
@@ -256,6 +276,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const auth = await requireUser(request);
     if (auth.response) return auth.response;
+    const permissionError = requireManageLabels(auth);
+    if (permissionError) return permissionError;
 
     const body = await request.json().catch(() => ({}));
     const labelId = `${body?.labelId || ""}`.trim();

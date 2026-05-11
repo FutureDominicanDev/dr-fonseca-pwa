@@ -1350,6 +1350,7 @@ export default function InboxPage() {
   const canUseStaffRecord = hasPermission(userProfile, currentUserEmail, "view_internal_notes") && (isSuperAdmin || currentUserAssignedToSelectedRoom);
   const canViewClinicalHistoryForms = hasPermission(userProfile, currentUserEmail, "view_clinical_history") && (isOwnerEmail(currentUserEmail) || currentUserAssignedToSelectedRoom);
   const canCancelRestoreRoom = hasPermission(userProfile, currentUserEmail, "archive_rooms") || hasPermission(userProfile, currentUserEmail, "restore_rooms");
+  const canManageLabels = hasPermission(userProfile, currentUserEmail, "manage_labels");
   const selectedRoomCancelled = `${selectedRoom?.procedures?.status || ""}`.toLowerCase() === "cancelled" || `${selectedRoom?.procedures?.patients?.record_status || "active"}`.toLowerCase() !== "active";
   const canViewInternalNote = (entry: any) => {
     if (!canUseStaffRecord) return false;
@@ -1689,15 +1690,17 @@ export default function InboxPage() {
             </span>
           )}
         </button>
-        <button
-          type="button"
-          className="admin-inline-btn"
-          onClick={()=>setShowLabelManager(true)}
-          title={lang === "es" ? "Etiquetas" : "Labels"}
-          aria-label={lang === "es" ? "Etiquetas" : "Labels"}
-        >
-          <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="labels" /></span>
-        </button>
+        {canManageLabels && (
+          <button
+            type="button"
+            className="admin-inline-btn"
+            onClick={()=>setShowLabelManager(true)}
+            title={lang === "es" ? "Etiquetas" : "Labels"}
+            aria-label={lang === "es" ? "Etiquetas" : "Labels"}
+          >
+            <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="labels" /></span>
+          </button>
+        )}
         {canOpenAdmin && (
           <button
             type="button"
@@ -2414,7 +2417,7 @@ export default function InboxPage() {
   };
 
   const openLabelSheetForPatient = (patient: any) => {
-    if (!patient?.id) return;
+    if (!patient?.id || !canManageLabels) return;
     setLabelTargetPatient(patient);
     setLabelDraftIds(patientLabelIdsFor(patient));
     setShowLabelSelector(true);
@@ -2501,6 +2504,7 @@ export default function InboxPage() {
   };
 
   const startPatientLabelPress = (patient: any) => {
+    if (!canManageLabels) return;
     cancelPatientLabelPress();
     patientLabelPressOpenedRef.current = false;
     patientLabelPressTimerRef.current = setTimeout(() => {
@@ -2524,7 +2528,7 @@ export default function InboxPage() {
     const absDx = Math.abs(dx);
     const dy = Math.abs(touch.clientY - start.y);
     if (dy > 14 || absDx > 14) cancelPatientLabelPress();
-    if (dx < -52 && dy < 28) {
+    if (canManageLabels && dx < -52 && dy < 28) {
       setSwipedPatientId(patient.id);
     }
   };
@@ -6193,7 +6197,7 @@ export default function InboxPage() {
                 const rowSwiped=swipedPatientId===pt.id;
                 return (
                   <div key={pt.id} className="patient-row-wrap">
-                    {rowSwiped && (
+                    {canManageLabels && rowSwiped && (
                       <button
                         type="button"
                         className="patient-swipe-action"
@@ -6222,7 +6226,7 @@ export default function InboxPage() {
                       onTouchStart={(event)=>handlePatientTouchStart(pt,event)}
                       onTouchMove={(event)=>handlePatientTouchMove(pt,event)}
                       onTouchEnd={()=>{cancelPatientLabelPress();patientTouchStartRef.current=null;}}
-                      onContextMenu={(event)=>{event.preventDefault();openLabelSheetForPatient(pt);}}
+                      onContextMenu={(event)=>{if (!canManageLabels) return; event.preventDefault();openLabelSheetForPatient(pt);}}
                     >
                       <div className="av">
                         {pt.profile_picture_url?<img src={pt.profile_picture_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:ini(pt.full_name)}
@@ -6288,15 +6292,17 @@ export default function InboxPage() {
                       </div>
                     )}
                   </div>
-                  <button
-                    className="phone-btn"
-                    onClick={()=>openLabelSheetForPatient(selectedPatient)}
-                    title={lang === "es" ? "Etiquetas" : "Labels"}
-                    aria-label={lang === "es" ? "Etiquetas" : "Labels"}
-                    style={{color:textColor,fontSize:21,fontWeight:900}}
-                  >
-                    🏷
-                  </button>
+                  {canManageLabels && (
+                    <button
+                      className="phone-btn"
+                      onClick={()=>openLabelSheetForPatient(selectedPatient)}
+                      title={lang === "es" ? "Etiquetas" : "Labels"}
+                      aria-label={lang === "es" ? "Etiquetas" : "Labels"}
+                      style={{color:textColor,fontSize:21,fontWeight:900}}
+                    >
+                      🏷
+                    </button>
+                  )}
                 </div>
 
                 <div

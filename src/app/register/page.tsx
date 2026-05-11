@@ -307,10 +307,14 @@ export default function RegisterPage() {
     if (step === "details") detailsPageRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [error, step]);
 
-  const saveStaffProfile = async (userId: string, normalizedPhone: string, persistedOfficeLocation: "Guadalajara" | "Tijuana" | null) => {
+  const saveStaffProfile = async (userId: string, normalizedPhone: string, persistedOfficeLocation: "Guadalajara" | "Tijuana" | null, accessToken?: string | null) => {
+    const token = accessToken || (await supabase.auth.getSession()).data.session?.access_token || "";
     const bootstrapRes = await fetch("/api/staff/bootstrap", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({
         inviteCode: inviteCode.trim().toUpperCase(),
         userId,
@@ -408,7 +412,7 @@ export default function RegisterPage() {
 
         if (!signInErr) {
           if (signInData.user) {
-            const profileSave = await saveStaffProfile(signInData.user.id, normalizedPhone, persistedOfficeLocation);
+            const profileSave = await saveStaffProfile(signInData.user.id, normalizedPhone, persistedOfficeLocation, signInData.session?.access_token);
             if (!profileSave.ok) {
               setError(profileSave.error);
               setLoading(false);
@@ -432,7 +436,7 @@ export default function RegisterPage() {
     }
 
     if (authData.user) {
-      const profileSave = await saveStaffProfile(authData.user.id, normalizedPhone, persistedOfficeLocation);
+      const profileSave = await saveStaffProfile(authData.user.id, normalizedPhone, persistedOfficeLocation, authData.session?.access_token);
       if (!profileSave.ok) {
         setError(profileSave.error);
         setLoading(false);
