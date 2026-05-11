@@ -639,7 +639,10 @@ const parseStaffRoomPayload = (content?: string | null): StaffRoomPayload | null
   }
 };
 
-function TopbarActionIcon({ kind }: { kind: "staff" | "labels" | "admin" }) {
+const isStaffAliasEmail = (email?: string | null) => `${email || ""}`.trim().toLowerCase().endsWith("@portal-staff.local");
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+function TopbarActionIcon({ kind }: { kind: "staff" | "labels" | "admin" | "settings" }) {
   const commonProps = { width: 24, height: 24, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.25, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   if (kind === "labels") {
     return (
@@ -660,23 +663,39 @@ function TopbarActionIcon({ kind }: { kind: "staff" | "labels" | "admin" }) {
       </svg>
     );
   }
+  if (kind === "settings") {
+    return (
+      <svg {...commonProps}>
+        <path d="M4 7h9" />
+        <path d="M17 7h3" />
+        <circle cx="15" cy="7" r="2" />
+        <path d="M4 17h3" />
+        <path d="M11 17h9" />
+        <circle cx="9" cy="17" r="2" />
+        <path d="M4 12h4" />
+        <path d="M12 12h8" />
+        <circle cx="10" cy="12" r="2" />
+      </svg>
+    );
+  }
   return (
     <svg {...commonProps}>
-      <path d="M4.3 17.7 3.5 21l3.5-.9a8.1 8.1 0 1 0-2.7-2.4Z" />
-      <path d="M8.2 11.7h.01" />
-      <path d="M12 11.7h.01" />
-      <path d="M15.8 11.7h.01" />
-      <circle cx="18.3" cy="17.6" r="1.8" fill="currentColor" stroke="none" />
-      <path d="M14.9 21.1a3.6 3.6 0 0 1 6.8 0" />
+      <circle cx="12" cy="8" r="3.4" />
+      <path d="M5.2 19.2c.9-3.2 3.2-5 6.8-5s5.9 1.8 6.8 5" />
+      <circle cx="5.9" cy="10.2" r="2.4" />
+      <path d="M2.4 18.1c.4-2 1.6-3.3 3.5-3.9" />
+      <circle cx="18.1" cy="10.2" r="2.4" />
+      <path d="M18.1 14.2c1.9.6 3.1 1.9 3.5 3.9" />
     </svg>
   );
 }
 
-function SettingsGearIcon() {
+function PatientRoomToolsIcon() {
   return (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3.2" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.08a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.04A1.7 1.7 0 0 0 4.6 8.92a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34A1.7 1.7 0 0 0 10 3V3a2 2 0 0 1 4 0v.08a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87 1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.04A1.7 1.7 0 0 0 19.4 15Z" />
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.35" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4.2 16.8 3.5 21l4.2-1.1a8.3 8.3 0 1 0-3.5-3.1Z" />
+      <path d="M12 8.4v7.2" />
+      <path d="M8.4 12h7.2" />
     </svg>
   );
 }
@@ -882,10 +901,15 @@ export default function InboxPage() {
   const [savingPatientLabels, setSavingPatientLabels] = useState(false);
   const [displayNameEdit, setDisplayNameEdit] = useState("");
   const [phoneEdit, setPhoneEdit] = useState("");
+  const [emailEdit, setEmailEdit] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [savedName, setSavedName] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
   const [savedPhone, setSavedPhone] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [savedEmail, setSavedEmail] = useState(false);
+  const [resetLinkBusy, setResetLinkBusy] = useState(false);
+  const [accountFeedback, setAccountFeedback] = useState("");
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [patientTyping, setPatientTyping] = useState(false);
@@ -911,6 +935,8 @@ export default function InboxPage() {
   const shouldAutoScrollRef = useRef(true);
   const lastMessageCountRef = useRef(0);
   const selectedRoomRef = useRef<any>(null);
+  const visibleRoomIdsRef = useRef<Set<string>>(new Set());
+  const canSeeAllRoomsRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -1005,8 +1031,8 @@ export default function InboxPage() {
   };
   const roleName = (role?: string | null) => {
     const labels = lang==="es"
-      ? { doctor: "Doctor", enfermeria: "Enfermería", coordinacion: "Coordinación", post_quirofano: "Post-Q", staff: "Personal" }
-      : { doctor: "Doctor", enfermeria: "Nursing", coordinacion: "Coordination", post_quirofano: "Post-Op", staff: "Staff" };
+      ? { doctor: "Doctor", enfermeria: "Enfermería", coordinacion: "Coordinación", post_quirofano: "Post-Q", staff: "Personal", pending_staff: "Pendiente" }
+      : { doctor: "Doctor", enfermeria: "Nursing", coordinacion: "Coordination", post_quirofano: "Post-Op", staff: "Staff", pending_staff: "Pending" };
     return (labels as any)[role || "staff"] || (lang==="es" ? "Personal" : "Staff");
   };
   const displaySenderName = (message: any, isOutgoing: boolean) => {
@@ -1690,6 +1716,15 @@ export default function InboxPage() {
             </span>
           )}
         </button>
+        <button
+          type="button"
+          className="admin-inline-btn"
+          onClick={()=>setShowSettings(true)}
+          title={lang === "es" ? "Ajustes de mi cuenta" : "My account settings"}
+          aria-label={lang === "es" ? "Ajustes de mi cuenta" : "My account settings"}
+        >
+          <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="settings" /></span>
+        </button>
         {canManageLabels && (
           <button
             type="button"
@@ -1992,6 +2027,8 @@ export default function InboxPage() {
   const registerIncomingPatientMessage = useCallback((message: any, options?: { skipUnread?: boolean }) => {
     const roomId = message.room_id;
     if (!roomId) return;
+    const roomIsVisible = canSeeAllRoomsRef.current || visibleRoomIdsRef.current.has(roomId) || selectedRoomRef.current?.id === roomId;
+    if (!roomIsVisible) return;
     const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
     const isActiveRoom = selectedRoomRef.current?.id === roomId;
     if (options?.skipUnread && isVisible && isActiveRoom) {
@@ -2021,7 +2058,7 @@ export default function InboxPage() {
 
   const registerIncomingInternalNote = useCallback((message: any) => {
     const roomId = message.room_id;
-    const roomIsAssigned = selectedRoomRef.current?.id === roomId || patients.some((patient: any) => (patient.rooms || []).some((room: any) => room.id === roomId));
+    const roomIsAssigned = selectedRoomRef.current?.id === roomId || visibleRoomIdsRef.current.has(roomId) || patients.some((patient: any) => (patient.rooms || []).some((room: any) => room.id === roomId));
     if (!roomIsAssigned) return;
     const isStaffPhoto = isStaffRecordPhotoEntry(message);
     if (!isStaffPhoto && message.message_type !== "text") return;
@@ -2277,24 +2314,36 @@ export default function InboxPage() {
   // Uses per-staff localStorage timestamps so badges survive refresh without replaying old history.
   const checkUnreadBadges = useCallback(async () => {
     if (pauseBackgroundRefreshRef.current || !currentUserId) return;
-    const { data: msgs } = await supabase
+    const visibleRoomIds = Array.from(visibleRoomIdsRef.current);
+    if (!canSeeAllRoomsRef.current && visibleRoomIds.length === 0) {
+      setUnreadCounts({});
+      setLatestRoomMessages({});
+      return;
+    }
+
+    let query = supabase
       .from("messages")
       .select("id, room_id, created_at, content, message_type, file_name")
       .eq("sender_type", "patient")
       .eq("is_internal", false)
       .order("created_at", { ascending: false })
       .limit(400);
+    if (!canSeeAllRoomsRef.current) query = query.in("room_id", visibleRoomIds);
+
+    const { data: msgs } = await query;
     if (!msgs) return;
     const nextCounts: Record<string, number> = {};
     const latestByRoom: Record<string, RoomMessageSummary> = {};
     for (const m of msgs as RoomMessageSummary[]) {
       const roomId = m.room_id;
       if (!roomId) continue;
+      if (!canSeeAllRoomsRef.current && !visibleRoomIdsRef.current.has(roomId)) continue;
       if (!latestByRoom[roomId]) latestByRoom[roomId] = m;
     }
     for (const m of msgs as RoomMessageSummary[]) {
       const roomId = m.room_id;
       if (!roomId || !m.created_at) continue;
+      if (!canSeeAllRoomsRef.current && !visibleRoomIdsRef.current.has(roomId)) continue;
       const latestCreatedAt = latestByRoom[roomId]?.created_at || "";
       let lastSeen = getRoomLastSeen(roomId);
       if (!lastSeen && latestCreatedAt) {
@@ -2342,6 +2391,7 @@ export default function InboxPage() {
       setUserProfile(profileWithPermissions);
       setDisplayNameEdit(data.full_name||data.display_name||"");
       setPhoneEdit(data.phone || "");
+      setEmailEdit(data.email || (!isStaffAliasEmail(currentUserEmail) ? currentUserEmail : ""));
       if (data.quick_replies?.length) setQuickReplies(data.quick_replies);
     }
   };
@@ -2554,11 +2604,12 @@ export default function InboxPage() {
       const { data } = await supabase
         .from("profiles")
         .select("id, full_name, display_name, role, office_location, avatar_url, phone")
+        .neq("role", "pending_staff")
         .order("full_name", { ascending: true });
       list = (data || []) as CareTeamMember[];
     }
 
-    const fallback = userProfile?.id ? [{
+    const fallback = userProfile?.id && userProfile?.role !== "pending_staff" ? [{
       id: userProfile.id,
       full_name: userProfile.full_name || userProfile.display_name || "Staff",
       display_name: userProfile.display_name || null,
@@ -2612,20 +2663,90 @@ export default function InboxPage() {
     setSavingName(false); setSavedName(true); setTimeout(()=>setSavedName(false),2000);
   };
 
+  const staffAccountApi = async (body: Record<string, unknown>) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    if (!token) throw new Error(lang === "es" ? "La sesión expiró. Inicia sesión otra vez." : "Session expired. Please sign in again.");
+    const response = await fetch("/api/staff/account", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || (lang === "es" ? "No pude guardar tu cuenta." : "I could not save your account."));
+    }
+    return payload as { phone?: string | null; email?: string | null; loginEmail?: string | null };
+  };
+
   const saveProfilePhone = async () => {
     if (!userProfile?.id) return;
     const cleanPhone = phoneEdit.trim();
     setSavingPhone(true);
-    const { error } = await supabase.from("profiles").update({ phone: cleanPhone || null }).eq("id", userProfile.id);
-    setSavingPhone(false);
-    if (error) {
-      alert(lang === "es" ? "No pude guardar el teléfono." : "I could not save the phone number.");
+    setAccountFeedback("");
+    try {
+      await staffAccountApi({ phone: cleanPhone || null });
+      setUserProfile((p: any)=>({...p,phone:cleanPhone || null}));
+      setStaffDirectory((previous) => previous.map((member) => member.id === userProfile.id ? { ...member, phone: cleanPhone || null } : member));
+      setSavedPhone(true);
+      setTimeout(()=>setSavedPhone(false),2000);
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude guardar el teléfono." : "I could not save the phone number."));
+    } finally {
+      setSavingPhone(false);
+    }
+  };
+
+  const saveProfileEmail = async () => {
+    if (!userProfile?.id) return;
+    const cleanEmail = emailEdit.trim().toLowerCase();
+    if (cleanEmail && !isValidEmail(cleanEmail)) {
+      alert(lang === "es" ? "Escribe un correo válido." : "Enter a valid email.");
       return;
     }
-    setUserProfile((p: any)=>({...p,phone:cleanPhone || null}));
-    setStaffDirectory((previous) => previous.map((member) => member.id === userProfile.id ? { ...member, phone: cleanPhone || null } : member));
-    setSavedPhone(true);
-    setTimeout(()=>setSavedPhone(false),2000);
+    setSavingEmail(true);
+    setAccountFeedback("");
+    try {
+      await staffAccountApi({ email: cleanEmail || null });
+      setUserProfile((p: any)=>({...p,email:cleanEmail || null}));
+      setStaffDirectory((previous) => previous.map((member) => member.id === userProfile.id ? { ...member, email: cleanEmail || null } : member));
+      setSavedEmail(true);
+      setAccountFeedback(lang === "es" ? "Correo de recuperación actualizado." : "Recovery email updated.");
+      setTimeout(()=>setSavedEmail(false),2000);
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude guardar el correo." : "I could not save the email."));
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
+  const sendOwnPasswordReset = async () => {
+    if (!userProfile?.id || resetLinkBusy) return;
+    setResetLinkBusy(true);
+    setAccountFeedback("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token || "";
+      if (!token) throw new Error(lang === "es" ? "La sesión expiró. Inicia sesión otra vez." : "Session expired. Please sign in again.");
+      const response = await fetch("/api/auth/staff-password-reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ targetUserId: userProfile.id, lang }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || (lang === "es" ? "No pude enviar el enlace." : "I could not send the link."));
+      setAccountFeedback(lang === "es" ? "Enlace de recuperación enviado al correo guardado." : "Recovery link sent to the saved email.");
+    } catch (error: any) {
+      setAccountFeedback(error?.message || (lang === "es" ? "No pude enviar el enlace de recuperación." : "I could not send the recovery link."));
+    } finally {
+      setResetLinkBusy(false);
+    }
   };
 
   const uploadProfilePhoto = async (file: File) => {
@@ -2639,6 +2760,9 @@ export default function InboxPage() {
   useEffect(()=>{ showStaffChatsRef.current=showStaffChats; },[showStaffChats]);
   useEffect(()=>{ activeStaffChatPeerIdRef.current=activeStaffChatPeerId; },[activeStaffChatPeerId]);
   useEffect(()=>{ activeStaffRoomIdRef.current=activeStaffRoomId; },[activeStaffRoomId]);
+  useEffect(()=>{
+    if (!emailEdit && currentUserEmail && !isStaffAliasEmail(currentUserEmail)) setEmailEdit(currentUserEmail);
+  }, [currentUserEmail, emailEdit]);
   useEffect(() => {
     if (!privateToast) return;
     if (privateToastTimeoutRef.current) clearTimeout(privateToastTimeoutRef.current);
@@ -2943,17 +3067,105 @@ export default function InboxPage() {
   const fetchRooms = async () => {
     const extendedSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, email, profile_picture_url, birthdate, preferred_language, timezone, allergies, current_medications, record_status))";
     const fallbackSelect = "*, procedures(id, procedure_name, office_location, status, surgery_date, patients(id, full_name, phone, profile_picture_url, birthdate))";
-    const query = await supabase.from("rooms").select(extendedSelect).order("created_at",{ascending:false});
+    const { data: authData } = await supabase.auth.getUser();
+    const authUser = authData?.user;
+    if (!authUser?.id) {
+      visibleRoomIdsRef.current = new Set();
+      canSeeAllRoomsRef.current = false;
+      setPatients([]);
+      setSelectedRoom(null);
+      setMessages([]);
+      setLoading(false);
+      return;
+    }
+
+    const [{ data: profile }, permissionsRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", authUser.id).maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+    ]);
+    const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
+    const profileWithPermissions = profile ? { ...(profile as any), permissions: permissionMap[authUser.id] ?? (profile as any).permissions } : null;
+    const viewerEmail = authUser.email?.trim().toLowerCase() || "";
+    const viewerAdminLevel = `${(profileWithPermissions as any)?.admin_level || ""}`.toLowerCase();
+    const viewerRole = `${(profileWithPermissions as any)?.role || ""}`.toLowerCase();
+    if (viewerRole === "pending_staff") {
+      visibleRoomIdsRef.current = new Set();
+      canSeeAllRoomsRef.current = false;
+      setPatients([]);
+      setSelectedRoom(null);
+      setMessages([]);
+      setUnreadCounts({});
+      setLatestRoomMessages({});
+      setLoading(false);
+      return;
+    }
+    const canSeeAllRooms = isOwnerEmail(viewerEmail) || viewerAdminLevel === "owner" || viewerRole === "doctor";
+    canSeeAllRoomsRef.current = canSeeAllRooms;
+
+    let restrictedRoomIds: string[] | null = null;
+    if (!canSeeAllRooms) {
+      const { data: memberRows, error: memberError } = await supabase
+        .from("room_members")
+        .select("room_id")
+        .eq("user_id", authUser.id);
+      if (memberError) {
+        visibleRoomIdsRef.current = new Set();
+        setPatients([]);
+        setSelectedRoom(null);
+        setMessages([]);
+        setLoading(false);
+        return;
+      }
+      restrictedRoomIds = Array.from(new Set((memberRows || []).map((row: any) => row.room_id).filter(Boolean)));
+      if (restrictedRoomIds.length === 0) {
+        visibleRoomIdsRef.current = new Set();
+        setPatients([]);
+        setSelectedRoom(null);
+        setMessages([]);
+        setUnreadCounts({});
+        setLatestRoomMessages({});
+        setLoading(false);
+        return;
+      }
+    }
+
+    let roomQuery = supabase.from("rooms").select(extendedSelect).order("created_at",{ascending:false});
+    if (restrictedRoomIds) roomQuery = roomQuery.in("id", restrictedRoomIds);
+    const query = await roomQuery;
     let data = query.data;
     let error = query.error;
 
     if (error && isMissingColumnError(error)) {
-      const fallbackQuery = await supabase.from("rooms").select(fallbackSelect).order("created_at",{ascending:false});
+      let fallbackRoomQuery = supabase.from("rooms").select(fallbackSelect).order("created_at",{ascending:false});
+      if (restrictedRoomIds) fallbackRoomQuery = fallbackRoomQuery.in("id", restrictedRoomIds);
+      const fallbackQuery = await fallbackRoomQuery;
       data = fallbackQuery.data;
       error = fallbackQuery.error;
     }
 
-    if (!error&&data) { const pm: Record<string,any>={}; data.forEach(r=>{const p=r.procedures?.patients;if(!p)return;const patientStatus=`${p.record_status || "active"}`.toLowerCase();const procedureStatus=`${r.procedures?.status || ""}`.toLowerCase();if(patientStatus!=="active"||procedureStatus==="cancelled")return;if(!pm[p.id])pm[p.id]={...p,rooms:[]};pm[p.id].rooms.push(r);}); setPatients(Object.values(pm)); }
+    if (!error&&data) {
+      const pm: Record<string,any>={};
+      const visibleRoomIds = new Set<string>();
+      data.forEach(r=>{
+        const p=r.procedures?.patients;
+        if(!p)return;
+        const patientStatus=`${p.record_status || "active"}`.toLowerCase();
+        const procedureStatus=`${r.procedures?.status || ""}`.toLowerCase();
+        if(patientStatus!=="active"||procedureStatus==="cancelled")return;
+        visibleRoomIds.add(r.id);
+        if(!pm[p.id])pm[p.id]={...p,rooms:[]};
+        pm[p.id].rooms.push(r);
+      });
+      visibleRoomIdsRef.current = visibleRoomIds;
+      const nextPatients = Object.values(pm);
+      setPatients(nextPatients);
+      const activeSelectedRoomId = selectedRoomRef.current?.id;
+      if (activeSelectedRoomId && !visibleRoomIds.has(activeSelectedRoomId)) {
+        setSelectedRoom(null);
+        setMessages([]);
+        setMobileView("list");
+      }
+    }
     setLoading(false);
   };
 
@@ -3040,7 +3252,14 @@ export default function InboxPage() {
     }
   };
 
-  const fetchMessages = async (roomId: string) => { const { data } = await supabase.from("messages").select("*").eq("room_id",roomId).order("created_at",{ascending:true}); setMessages(data||[]); };
+  const fetchMessages = async (roomId: string) => {
+    if (!roomId || (!canSeeAllRoomsRef.current && !visibleRoomIdsRef.current.has(roomId))) {
+      setMessages([]);
+      return;
+    }
+    const { data } = await supabase.from("messages").select("*").eq("room_id",roomId).order("created_at",{ascending:true});
+    setMessages(data||[]);
+  };
 
   const sendMessage = async (content?: string) => {
     const msg=(content||newMessage).trim();
@@ -4374,6 +4593,36 @@ export default function InboxPage() {
             </button>
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Correo y contraseña":"Email and password"}</p>
+            <label style={{display:"block",fontSize:settingsBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>
+              {lang==="es"?"Correo para acceso o recuperación":"Email for login or recovery"}
+            </label>
+            <input
+              value={emailEdit}
+              onChange={(event)=>setEmailEdit(event.target.value)}
+              inputMode="email"
+              autoComplete="email"
+              placeholder="staff@correo.com"
+              style={{width:"100%",height:48,border:`1px solid ${borderColor}`,outline:"none",borderRadius:14,background:darkMode?"#253244":"white",color:textColor,padding:"0 14px",fontSize:16,fontFamily:"inherit",fontWeight:650,marginBottom:10}}
+            />
+            <button onClick={saveProfileEmail} disabled={savingEmail || (!!emailEdit.trim() && !isValidEmail(emailEdit))} style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:settingsBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingEmail || (!!emailEdit.trim() && !isValidEmail(emailEdit))?0.55:1,marginBottom:10}}>
+              {savingEmail ? (lang==="es"?"Guardando...":"Saving...") : savedEmail ? t.saved : (lang==="es"?"Guardar correo":"Save email")}
+            </button>
+            <button onClick={sendOwnPasswordReset} disabled={resetLinkBusy} style={{width:"100%",height:48,border:"none",borderRadius:14,background:darkMode?"#334155":"#EAF2FB",color:darkMode?"#E5E7EB":"#1D4ED8",fontSize:settingsBaseSize,fontWeight:850,cursor:"pointer",fontFamily:"inherit",opacity:resetLinkBusy?0.55:1}}>
+              {resetLinkBusy ? (lang==="es"?"Enviando...":"Sending...") : (lang==="es"?"Enviar enlace para restablecer contraseña":"Send password reset link")}
+            </button>
+            <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginTop:10}}>
+              {lang==="es"
+                ? "Si entras con celular, este correo se usa para recuperación. Si entras con correo, actualizarlo cambia tu acceso."
+                : "If you sign in by phone, this email is used for recovery. If you sign in by email, updating it changes your login."}
+            </p>
+            {accountFeedback && (
+              <p style={{fontSize:settingsSmallSize,color:accountFeedback.toLowerCase().includes("no pude") || accountFeedback.toLowerCase().includes("could not") || accountFeedback.toLowerCase().includes("needs") ? "#B91C1C" : "#166534",fontWeight:750,lineHeight:1.45,marginTop:10}}>
+                {accountFeedback}
+              </p>
+            )}
+          </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:14,lineHeight:1.35}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
             <span style={{fontSize:settingsBaseSize,color:textColor,fontWeight:650,display:"block",marginBottom:10,lineHeight:1.4}}>🌐 {t.language}</span>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
@@ -4939,6 +5188,75 @@ export default function InboxPage() {
       </div>
     );
   };
+
+  if (userProfile?.role === "pending_staff") {
+    const pendingName = userProfile.full_name || userProfile.display_name || (lang === "es" ? "Personal" : "Team member");
+    const signOutPending = async () => {
+      await supabase.auth.signOut();
+      window.location.href = "/login";
+    };
+
+    return (
+      <div style={{minHeight:"100dvh",background:darkMode?"#0B141A":"#F2F7FB",color:textColor,fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",padding:"calc(18px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{width:"100%",maxWidth:620,background:darkMode?"#111B21":"#FFFFFF",border:`1px solid ${borderColor}`,borderRadius:22,overflow:"hidden",boxShadow:darkMode?"0 20px 60px rgba(0,0,0,0.28)":"0 20px 60px rgba(28,66,104,0.14)"}}>
+          <div style={{background:headerBg,padding:"22px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+            <img src="/fonseca_white.png" alt="Dr. Miguel Fonseca" style={{height:70,width:"min(72%, 360px)",objectFit:"contain",objectPosition:"left center"}}/>
+            <button
+              type="button"
+              className="admin-inline-btn staff-lang-btn"
+              onClick={toggleStaffLanguage}
+              title={lang === "es" ? "Cambiar a English" : "Switch to Español"}
+              aria-label={lang === "es" ? "Cambiar idioma a English" : "Switch language to Español"}
+              style={{width:50,minWidth:50,height:50,minHeight:50,borderRadius:16,background:"rgba(8, 50, 76, 0.82)",border:"1px solid rgba(210, 235, 255, 0.54)",color:"#F8FBFF",fontSize:23,cursor:"pointer"}}
+            >
+              {lang === "es" ? "🇲🇽" : "🇺🇸"}
+            </button>
+          </div>
+          <div style={{padding:"24px 20px 22px",display:"grid",gap:16}}>
+            <div>
+              <p style={{margin:0,color:"#2563EB",fontSize:13,fontWeight:900,textTransform:"uppercase",letterSpacing:0.7,lineHeight:1.3}}>
+                {lang === "es" ? "Acceso pendiente" : "Access pending"}
+              </p>
+              <h1 style={{margin:"8px 0 8px",fontSize:28,lineHeight:1.12,color:textColor,fontWeight:950}}>
+                {lang === "es" ? `Hola, ${pendingName}` : `Hi, ${pendingName}`}
+              </h1>
+              <p style={{margin:0,color:subTextColor,fontSize:17,fontWeight:700,lineHeight:1.55}}>
+                {lang === "es"
+                  ? "Tu cuenta ya fue creada, pero todavía no puede ver pacientes. El doctor o un administrador debe aprobar tu acceso primero."
+                  : "Your account was created, but it cannot view patients yet. The doctor or an administrator must approve access first."}
+              </p>
+            </div>
+            <div style={{background:darkMode?"#0F172A":"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:18,padding:16}}>
+              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:900,color:darkMode?"#DBEAFE":"#1E3A8A"}}>
+                {lang === "es" ? "Qué podrás hacer después de la aprobación" : "What you can do after approval"}
+              </p>
+              <div style={{display:"grid",gap:10}}>
+                {[
+                  lang === "es" ? "Personal regular: verá únicamente los chats de pacientes que le asignen." : "Regular staff: will only see patient chats assigned to them.",
+                  lang === "es" ? "El consultorio elegido ayuda a mostrarte en Guadalajara o Tijuana cuando creen una sala." : "Your selected office helps show you under Guadalajara or Tijuana when a room is created.",
+                  lang === "es" ? "Si te dan permisos admin, verás secciones extra como equipo, permisos, auditoría o archivo." : "If you receive admin permissions, extra areas appear such as team, permissions, audit, or archive.",
+                  lang === "es" ? "Los pacientes no reciben tu enlace; las salas asignadas aparecen dentro de tu portal." : "Patients do not receive your staff link; assigned rooms appear inside your portal.",
+                ].map((item) => (
+                  <div key={item} style={{display:"grid",gridTemplateColumns:"22px 1fr",gap:9,alignItems:"start"}}>
+                    <span style={{width:22,height:22,borderRadius:999,background:"#2563EB",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900}}>✓</span>
+                    <span style={{color:darkMode?"#E5E7EB":"#1E293B",fontSize:15,fontWeight:750,lineHeight:1.45}}>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              <button type="button" onClick={()=>window.location.reload()} style={{flex:"1 1 190px",minHeight:48,border:"none",borderRadius:14,background:"#2563EB",color:"#FFFFFF",fontFamily:"inherit",fontSize:16,fontWeight:900,cursor:"pointer"}}>
+                {lang === "es" ? "Revisar aprobación" : "Check approval"}
+              </button>
+              <button type="button" onClick={signOutPending} style={{flex:"1 1 190px",minHeight:48,border:`1px solid ${borderColor}`,borderRadius:14,background:darkMode?"#1F2937":"#FFFFFF",color:textColor,fontFamily:"inherit",fontSize:16,fontWeight:850,cursor:"pointer"}}>
+                {lang === "es" ? "Salir" : "Sign out"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -6361,7 +6679,6 @@ export default function InboxPage() {
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setCareStaffInviteIds([]);setShowCareStaffInvite(true);}}>{t.addCareStaff}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowQREditor(true);}}>{t.quickReplies}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowPatientInfo(true);}}>{t.patientInfo}</button>
-                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowSettings(true);}}>{t.settings}</button>
                       </div>
                     )}
                     {showEmojiMenu && (
@@ -6376,7 +6693,7 @@ export default function InboxPage() {
                       </div>
                     )}
                     <button className="plus-btn" onClick={()=>{setShowEmojiMenu(false);setShowMediaMenu(v=>!v);}} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>
-                      {showMediaMenu ? "×" : <SettingsGearIcon />}
+                      {showMediaMenu ? "×" : <PatientRoomToolsIcon />}
                       {staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread && <span className="staff-record-dot" aria-hidden="true" />}
                     </button>
                     <div

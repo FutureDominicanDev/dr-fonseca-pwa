@@ -170,6 +170,7 @@ export const roleLabel = (role: string | null | undefined) =>
       coordinacion: "📋 Coordinación",
       post_quirofano: "🏥 Post-Q",
       staff: "👤 Personal",
+      pending_staff: "⏳ Pendiente",
       patient: "🧑 Paciente",
       system: "⚙️ Sistema",
     } as Record<string, string>

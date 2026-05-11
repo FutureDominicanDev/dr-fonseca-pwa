@@ -7,6 +7,7 @@ import { COUNTRY_OPTIONS, compactCountryDialLabel } from "@/lib/countryDialing";
 
 type Lang = "es" | "en";
 type OfficeLocation = "Guadalajara" | "Tijuana" | "Both" | null;
+type RegisterMethod = "phone" | "email";
 
 const parsePhones = (value: unknown): string[] => {
   if (typeof value !== "string") return [];
@@ -34,20 +35,26 @@ const COPY = {
     step1: "Abre tu enlace",
     step1Text: "El consultorio te comparte una invitación segura.",
     step2: "Crea tu acceso",
-    step2Text: "Solo nombre, celular, consultorio y contraseña.",
+    step2Text: "Nombre, celular o correo, consultorio y contraseña.",
     step3: "Entra al portal",
     step3Text: "Verás las salas de pacientes que te asignen.",
     detailsTitle: "Crear acceso del personal",
     detailsSubtitle: "Completa estos 3 pasos para entrar al portal.",
     formTitle: "Tu cuenta",
-    formHelp: "Usa el nombre y celular que usas para comunicarte con el consultorio.",
+    formHelp: "Usa tu nombre y elige si entrarás con celular o correo.",
     nameLabel: "1. Nombre o nombre preferido",
     namePlaceholder: "Ej: Ray",
+    signupWith: "Registrarme con",
+    signupPhone: "Celular",
+    signupEmail: "Correo",
     countryLabel: "País",
     phoneLabel: "2. Celular",
     numberLabel: "Número",
     phonePlaceholder: "Ej: 664 123 4567",
     phoneHint: "Selecciona el país y escribe tu número.",
+    emailLabel: "2. Correo electrónico",
+    emailPlaceholder: "correo@ejemplo.com",
+    emailHint: "Este correo servirá para entrar y recibir enlaces de recuperación.",
     officeLabel: "3. Consultorio",
     officeGdl: "Guadalajara",
     officeTjn: "Tijuana",
@@ -79,12 +86,13 @@ const COPY = {
       name: "Por favor ingresa tu nombre o nombre preferido.",
       phone: "Ingresa tu número de celular.",
       phoneShort: "Revisa el celular. Debe tener al menos 10 dígitos.",
+      email: "Ingresa un correo electrónico válido.",
       office: "Selecciona tu consultorio para que el equipo pueda asignarte a pacientes.",
       password: "La contraseña debe tener al menos 6 caracteres.",
       confirm: "Las contraseñas no coinciden.",
       prepare: "No pude preparar el acceso. Revisa el celular.",
       blockedPhone: "Este teléfono ya no tiene acceso. Contacta al administrador.",
-      alreadyRegistered: "Este celular ya está registrado. Si la contraseña es correcta, te entraré al portal automáticamente. Si no, inicia sesión o pide ayuda al administrador para restablecer el acceso.",
+      alreadyRegistered: "Esta cuenta ya está registrada. Si la contraseña es correcta, te entraré al portal automáticamente. Si no, inicia sesión o restablece tu acceso.",
       save: "No pude guardar el perfil.",
     },
   },
@@ -105,20 +113,26 @@ const COPY = {
     step1: "Open your link",
     step1Text: "The office sends you a secure invitation.",
     step2: "Create access",
-    step2Text: "Only name, phone, office, and password.",
+    step2Text: "Name, phone or email, office, and password.",
     step3: "Enter the portal",
     step3Text: "You will see the patient rooms assigned to you.",
     detailsTitle: "Create staff access",
     detailsSubtitle: "Complete these 3 steps to enter the portal.",
     formTitle: "Your account",
-    formHelp: "Use the name and phone number you use with the office.",
+    formHelp: "Use your name and choose whether you will sign in with phone or email.",
     nameLabel: "1. Name or preferred name",
     namePlaceholder: "Example: Ray",
+    signupWith: "Register with",
+    signupPhone: "Phone",
+    signupEmail: "Email",
     countryLabel: "Country",
     phoneLabel: "2. Mobile phone",
     numberLabel: "Number",
     phonePlaceholder: "Example: 664 123 4567",
     phoneHint: "Select the country and enter your number.",
+    emailLabel: "2. Email address",
+    emailPlaceholder: "email@example.com",
+    emailHint: "This email will be used for sign-in and password recovery links.",
     officeLabel: "3. Office",
     officeGdl: "Guadalajara",
     officeTjn: "Tijuana",
@@ -150,16 +164,19 @@ const COPY = {
       name: "Please enter your name or preferred name.",
       phone: "Enter your mobile phone number.",
       phoneShort: "Check the phone number. It must have at least 10 digits.",
+      email: "Enter a valid email address.",
       office: "Select your office so the team can assign you to patients.",
       password: "Password must be at least 6 characters.",
       confirm: "Passwords do not match.",
       prepare: "I could not prepare access. Check the phone number.",
       blockedPhone: "This phone number no longer has access. Contact the administrator.",
-      alreadyRegistered: "This phone is already registered. If the password is correct, I will take you into the portal automatically. If not, sign in or ask an administrator to reset access.",
+      alreadyRegistered: "This account is already registered. If the password is correct, I will take you into the portal automatically. If not, sign in or reset access.",
       save: "I could not save the profile.",
     },
   },
 } as const;
+
+const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 const isAlreadyRegisteredAuthError = (message: string) => {
   const normalized = message.toLowerCase();
@@ -177,14 +194,32 @@ const getBrowserLang = (): Lang => {
   return "es";
 };
 
+function PasswordVisibilityIcon({ hidden }: { hidden: boolean }) {
+  return hidden ? (
+    <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ) : (
+    <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3l18 18" />
+      <path d="M10.6 10.6A2 2 0 0 0 13.4 13.4" />
+      <path d="M9.9 5.2A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a16.2 16.2 0 0 1-3.1 3.9" />
+      <path d="M6.1 6.6C3.5 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 4.2-.9" />
+    </svg>
+  );
+}
+
 export default function RegisterPage() {
   const [lang, setLang] = useState<Lang>("es");
   const [step, setStep] = useState<"code" | "details">("code");
   const [inviteCode, setInviteCode] = useState("");
   const [hasInviteLink, setHasInviteLink] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [registerMethod, setRegisterMethod] = useState<RegisterMethod>("phone");
   const [phoneCountryCode, setPhoneCountryCode] = useState("+52");
   const [phoneInput, setPhoneInput] = useState("");
+  const [emailInput, setEmailInput] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -208,6 +243,11 @@ export default function RegisterPage() {
 
   const applyPhoneInput = (value: string) => {
     setPhoneInput(value.replace(/[^\d+\s().-]/g, "").slice(0, 24));
+    setExistingAccountHint(false);
+  };
+
+  const applyEmailInput = (value: string) => {
+    setEmailInput(value.trim().toLowerCase().slice(0, 120));
     setExistingAccountHint(false);
   };
 
@@ -307,7 +347,7 @@ export default function RegisterPage() {
     if (step === "details") detailsPageRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [error, step]);
 
-  const saveStaffProfile = async (userId: string, normalizedPhone: string, persistedOfficeLocation: "Guadalajara" | "Tijuana" | null, accessToken?: string | null) => {
+  const saveStaffProfile = async (userId: string, normalizedPhone: string, realEmail: string | null, persistedOfficeLocation: "Guadalajara" | "Tijuana" | null, accessToken?: string | null) => {
     const token = accessToken || (await supabase.auth.getSession()).data.session?.access_token || "";
     const bootstrapRes = await fetch("/api/staff/bootstrap", {
       method: "POST",
@@ -319,10 +359,10 @@ export default function RegisterPage() {
         inviteCode: inviteCode.trim().toUpperCase(),
         userId,
         fullName: fullName.trim(),
-        role: "staff",
+        role: "pending_staff",
         officeLocation: persistedOfficeLocation,
         phone: normalizedPhone,
-        email: null,
+        email: realEmail,
         adminLevel: "none",
       }),
     });
@@ -340,14 +380,21 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!phoneInput.trim()) {
-      setError(t.errors.phone);
-      return;
-    }
+    const normalizedPhone = registerMethod === "phone" ? normalizeStaffPhone(phoneInput, phoneCountryCode) : "";
+    const normalizedEmail = registerMethod === "email" ? emailInput.trim().toLowerCase() : "";
 
-    const normalizedPhone = normalizeStaffPhone(phoneInput, phoneCountryCode);
-    if (normalizedPhone.replace(/\D/g, "").length < 10) {
-      setError(t.errors.phoneShort);
+    if (registerMethod === "phone") {
+      if (!phoneInput.trim()) {
+        setError(t.errors.phone);
+        return;
+      }
+
+      if (normalizedPhone.replace(/\D/g, "").length < 10) {
+        setError(t.errors.phoneShort);
+        return;
+      }
+    } else if (!validEmail(normalizedEmail)) {
+      setError(t.errors.email);
       return;
     }
 
@@ -370,16 +417,25 @@ export default function RegisterPage() {
     setError("");
     setExistingAccountHint(false);
 
-    const effectiveEmail = phoneAliasEmail(normalizedPhone);
+    const effectiveEmail = registerMethod === "email" ? normalizedEmail : phoneAliasEmail(normalizedPhone);
     if (!effectiveEmail) {
       setError(t.errors.prepare);
       setLoading(false);
       return;
     }
 
-    const { data: blockedPhoneSetting } = await supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle();
+    const [{ data: blockedPhoneSetting }, { data: blockedEmailSetting }] = await Promise.all([
+      supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle(),
+    ]);
     const blockedPhones = new Set(parsePhones(blockedPhoneSetting?.value));
-    if (blockedPhones.has(normalizedPhone)) {
+    const blockedEmails = new Set(`${blockedEmailSetting?.value || ""}`.split(/[,\n;]/g).map((entry) => entry.trim().toLowerCase()).filter(Boolean));
+    if (normalizedPhone && blockedPhones.has(normalizedPhone)) {
+      setError(t.errors.blockedPhone);
+      setLoading(false);
+      return;
+    }
+    if (normalizedEmail && blockedEmails.has(normalizedEmail)) {
       setError(t.errors.blockedPhone);
       setLoading(false);
       return;
@@ -392,11 +448,11 @@ export default function RegisterPage() {
       options: {
         data: {
           full_name: fullName.trim(),
-          role: "staff",
+          role: "pending_staff",
           office_location: persistedOfficeLocation,
-          phone: normalizedPhone,
-          login_method: "phone",
-          real_email: null,
+          phone: normalizedPhone || null,
+          login_method: registerMethod,
+          real_email: normalizedEmail || null,
         },
       },
     };
@@ -412,7 +468,7 @@ export default function RegisterPage() {
 
         if (!signInErr) {
           if (signInData.user) {
-            const profileSave = await saveStaffProfile(signInData.user.id, normalizedPhone, persistedOfficeLocation, signInData.session?.access_token);
+            const profileSave = await saveStaffProfile(signInData.user.id, normalizedPhone, normalizedEmail || null, persistedOfficeLocation, signInData.session?.access_token);
             if (!profileSave.ok) {
               setError(profileSave.error);
               setLoading(false);
@@ -436,7 +492,7 @@ export default function RegisterPage() {
     }
 
     if (authData.user) {
-      const profileSave = await saveStaffProfile(authData.user.id, normalizedPhone, persistedOfficeLocation, authData.session?.access_token);
+      const profileSave = await saveStaffProfile(authData.user.id, normalizedPhone, normalizedEmail || null, persistedOfficeLocation, authData.session?.access_token);
       if (!profileSave.ok) {
         setError(profileSave.error);
         setLoading(false);
@@ -550,24 +606,29 @@ export default function RegisterPage() {
         .code-input { text-align: center; color: #123A5E; font-size: 20px; font-weight: 850; }
         .input:focus { background: #fff; border-color: #2B78B7; box-shadow: 0 0 0 4px rgba(43,120,183,0.12); }
         .input::placeholder { color: #9AAFC3; font-weight: 600; }
+        .login-method { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 5px; border-radius: 16px; background: #EEF5FB; border: 1px solid #DCE8F3; margin-bottom: 14px; }
+        .method-btn { min-height: 44px; border: none; border-radius: 12px; background: transparent; color: #426987; font-size: 15px; font-weight: 850; cursor: pointer; font-family: inherit; }
+        .method-btn.active { background: #FFFFFF; color: #165D9C; box-shadow: 0 8px 20px rgba(32,86,132,0.12); }
         .hint { margin: 8px 0 0; color: #64748B; font-size: 12px; line-height: 1.4; font-weight: 650; }
         .password-wrap { position: relative; }
-        .password-input { padding-right: 82px; }
+        .password-input { padding-right: 58px; }
         .show-btn {
           position: absolute;
           right: 8px;
           top: 50%;
           transform: translateY(-50%);
-          height: 36px;
+          width: 40px;
+          height: 40px;
           border: none;
-          border-radius: 10px;
+          border-radius: 12px;
           background: #E8F2FA;
           color: #165D9C;
           cursor: pointer;
-          font-size: 12px;
-          font-weight: 850;
-          padding: 0 12px;
+          padding: 0;
           font-family: inherit;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
         .primary-btn {
           width: 100%;
@@ -760,37 +821,64 @@ export default function RegisterPage() {
               </div>
 
               <div className="field">
-                <label className="field-label">{t.phoneLabel}</label>
-                <div className="phone-row">
-                  <div>
-                    <label className="field-label" htmlFor="phone-country">{t.countryLabel}</label>
-                    <select
-                      id="phone-country"
-                      className="input select"
-                      value={phoneCountryCode}
-                      onChange={(event) => setPhoneCountryCode(event.target.value)}
-                    >
-                      {COUNTRY_OPTIONS.map((country) => (
-                        <option key={`${country.code}-${country.en}`} value={country.code}>
-                          {compactCountryDialLabel(country.code)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="field-label" htmlFor="phone-local">{t.numberLabel}</label>
-                    <input
-                      id="phone-local"
-                      className="input"
-                      inputMode="tel"
-                      placeholder={t.phonePlaceholder}
-                      value={phoneInput}
-                      onChange={(event) => applyPhoneInput(event.target.value)}
-                      autoComplete="tel"
-                    />
-                  </div>
+                <label className="field-label">{t.signupWith}</label>
+                <div className="login-method" role="radiogroup" aria-label={t.signupWith}>
+                  <button type="button" className={`method-btn${registerMethod === "phone" ? " active" : ""}`} onClick={() => { setRegisterMethod("phone"); setError(""); setExistingAccountHint(false); }}>
+                    {t.signupPhone}
+                  </button>
+                  <button type="button" className={`method-btn${registerMethod === "email" ? " active" : ""}`} onClick={() => { setRegisterMethod("email"); setError(""); setExistingAccountHint(false); }}>
+                    {t.signupEmail}
+                  </button>
                 </div>
-                <p className="hint">{t.phoneHint}</p>
+                {registerMethod === "phone" ? (
+                  <>
+                    <label className="field-label">{t.phoneLabel}</label>
+                    <div className="phone-row">
+                      <div>
+                        <label className="field-label" htmlFor="phone-country">{t.countryLabel}</label>
+                        <select
+                          id="phone-country"
+                          className="input select"
+                          value={phoneCountryCode}
+                          onChange={(event) => setPhoneCountryCode(event.target.value)}
+                        >
+                          {COUNTRY_OPTIONS.map((country) => (
+                            <option key={`${country.code}-${country.en}`} value={country.code}>
+                              {compactCountryDialLabel(country.code)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="field-label" htmlFor="phone-local">{t.numberLabel}</label>
+                        <input
+                          id="phone-local"
+                          className="input"
+                          inputMode="tel"
+                          placeholder={t.phonePlaceholder}
+                          value={phoneInput}
+                          onChange={(event) => applyPhoneInput(event.target.value)}
+                          autoComplete="tel"
+                        />
+                      </div>
+                    </div>
+                    <p className="hint">{t.phoneHint}</p>
+                  </>
+                ) : (
+                  <>
+                    <label className="field-label" htmlFor="staff-email">{t.emailLabel}</label>
+                    <input
+                      id="staff-email"
+                      className="input"
+                      type="email"
+                      placeholder={t.emailPlaceholder}
+                      value={emailInput}
+                      onChange={(event) => applyEmailInput(event.target.value)}
+                      autoComplete="email"
+                    />
+                    <p className="hint">{t.emailHint}</p>
+                  </>
+                )}
               </div>
 
               <div className="field">
@@ -825,8 +913,8 @@ export default function RegisterPage() {
                     onChange={(event) => setPassword(event.target.value)}
                     autoComplete="new-password"
                   />
-                  <button className="show-btn" onClick={() => setShowPassword((value) => !value)} type="button">
-                    {showPassword ? t.hide : t.show}
+                  <button className="show-btn" onClick={() => setShowPassword((value) => !value)} type="button" aria-label={showPassword ? t.hide : t.show} title={showPassword ? t.hide : t.show}>
+                    <PasswordVisibilityIcon hidden={!showPassword} />
                   </button>
                 </div>
               </div>
@@ -843,8 +931,8 @@ export default function RegisterPage() {
                     onKeyDown={(event) => { if (event.key === "Enter") handleRegister(); }}
                     autoComplete="new-password"
                   />
-                  <button className="show-btn" onClick={() => setShowConfirm((value) => !value)} type="button">
-                    {showConfirm ? t.hide : t.show}
+                  <button className="show-btn" onClick={() => setShowConfirm((value) => !value)} type="button" aria-label={showConfirm ? t.hide : t.show} title={showConfirm ? t.hide : t.show}>
+                    <PasswordVisibilityIcon hidden={!showConfirm} />
                   </button>
                 </div>
               </div>

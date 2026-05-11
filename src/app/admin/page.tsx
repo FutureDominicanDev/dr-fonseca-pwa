@@ -140,6 +140,8 @@ export default function AdminPage() {
   const [savingPhones, setSavingPhones] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [staffPhoneDrafts, setStaffPhoneDrafts] = useState<Record<string, string>>({});
+  const [staffEmailDrafts, setStaffEmailDrafts] = useState<Record<string, string>>({});
+  const [resetBusyId, setResetBusyId] = useState("");
   const [deletingStaffId, setDeletingStaffId] = useState("");
   const [unblockBusyKey, setUnblockBusyKey] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
@@ -173,6 +175,7 @@ export default function AdminPage() {
       .map((entry) => entry.trim())
       .filter(Boolean);
   };
+  const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
   const adminText = (level: AdminLevel) =>
     isSpanish
@@ -257,6 +260,8 @@ export default function AdminPage() {
     : "";
   const activePatientCount = patients.filter((patient) => normalizeRecordStatus(patient.record_status) === "active").length;
   const blockedAccessCount = blockedEmails.length + blockedPhones.length;
+  const pendingStaffMembers = staff.filter((member) => `${member.role || ""}`.toLowerCase() === "pending_staff");
+  const pendingTotalCount = pendingAccessRequests.length + pendingStaffMembers.length;
   const inviteCodePreview = inviteCode ? `${inviteCode.slice(0, Math.min(7, inviteCode.length))}••••` : "";
   const staffById = useMemo(() => new Map(staff.map((member) => [member.id, member])), [staff]);
   const patientById = useMemo(() => new Map(patients.map((patient) => [patient.id, patient])), [patients]);
@@ -326,8 +331,8 @@ export default function AdminPage() {
       id: "solicitudes-pendientes",
       code: "AC",
       label: isSpanish ? "Solicitudes" : "Requests",
-      detail: isSpanish ? "Acceso pendiente a salas" : "Pending room access",
-      metric: `${pendingAccessRequests.length}`,
+      detail: isSpanish ? "Aprobación de staff y salas" : "Staff and room approval",
+      metric: `${pendingTotalCount}`,
       visible: canReviewAccessRequests,
     },
     {
@@ -547,6 +552,45 @@ export default function AdminPage() {
       metadata: payload,
     });
     updateSuccess(success);
+  };
+
+  const approvePendingStaff = async (member: StaffProfile) => {
+    if (!canManageAdmins) return;
+    await updateStaffField(
+      member,
+      { role: "staff", admin_level: member.admin_level || "none" },
+      isSpanish
+        ? `${member.full_name || member.display_name || "Staff"} aprobado. Ahora solo verá salas asignadas hasta que le des más permisos.`
+        : `${member.full_name || member.display_name || "Staff"} approved. They will only see assigned rooms unless you grant more permissions.`
+    );
+  };
+
+  const sendStaffPasswordReset = async (member: StaffProfile) => {
+    if (!canManageAdmins || resetBusyId) return;
+    setResetBusyId(member.id);
+    setPageError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      const response = await fetch("/api/auth/staff-password-reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ targetUserId: member.id, lang }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPageError(payload?.error || (isSpanish ? "No pude enviar el enlace de recuperación." : "I could not send the reset link."));
+        return;
+      }
+      updateSuccess(isSpanish ? "Enlace de recuperación enviado." : "Password reset link sent.");
+    } catch (error: any) {
+      setPageError(error?.message || (isSpanish ? "No pude enviar el enlace de recuperación." : "I could not send the reset link."));
+    } finally {
+      setResetBusyId("");
+    }
   };
 
   const updateStaffPermissions = async (member: StaffProfile, nextPermissions: StaffPermissionKey[], success: string) => {
@@ -1575,8 +1619,8 @@ export default function AdminPage() {
                       <span>{isSpanish ? "Cuentas del equipo configurables" : "Configurable team accounts"}</span>
                     </div>
                     <div className="overview-tile">
-                      <strong>{pendingAccessRequests.length}</strong>
-                      <span>{isSpanish ? "Solicitudes pendientes de acceso" : "Pending access requests"}</span>
+                      <strong>{pendingTotalCount}</strong>
+                      <span>{isSpanish ? "Solicitudes pendientes de staff o acceso" : "Pending staff or access requests"}</span>
                     </div>
                     <div className="overview-tile">
                       <strong>{blockedAccessCount}</strong>
@@ -1681,16 +1725,40 @@ export default function AdminPage() {
                 <section className="card admin-section-requests" id="solicitudes-pendientes">
                   <div className="header-row">
                     <div>
-                      <p className="card-title">Solicitudes pendientes</p>
-                      <p className="muted">{isSpanish ? "Revisa quién pidió acceso a un paciente." : "Review who requested access to a patient."}</p>
+                      <p className="card-title">{isSpanish ? "Solicitudes pendientes" : "Pending requests"}</p>
+                      <p className="muted">{isSpanish ? "Aprueba cuentas nuevas y solicitudes de acceso a pacientes." : "Approve new accounts and patient access requests."}</p>
                     </div>
                     {renderSectionTopButton()}
                   </div>
                   <div style={{ display: "grid", gap: 10 }}>
-                    {pendingAccessRequests.length === 0 ? (
+                    {pendingTotalCount === 0 ? (
                       <p className="muted">{isSpanish ? "No hay solicitudes pendientes." : "No pending requests."}</p>
                     ) : (
-                      pendingAccessRequests.map((request) => {
+                      <>
+                      {pendingStaffMembers.map((member) => {
+                        const busy = savingKey === `${member.id}-role-admin_level`;
+                        return (
+                          <div key={`pending-staff-${member.id}`} className="list-action-row" style={{ borderColor: "#FED7AA", background: "#FFF7ED" }}>
+                            <span className="avatar small-avatar">{initials(member.full_name || member.display_name)}</span>
+                            <span style={{ minWidth: 0, flex: 1 }}>
+                              <strong>{member.full_name || member.display_name || (isSpanish ? "Personal nuevo" : "New staff")}</strong>
+                              <span>
+                                {[member.phone, member.email, member.office_location].filter(Boolean).join(" · ") ||
+                                  (isSpanish ? "Registro pendiente de aprobación" : "Registration pending approval")}
+                              </span>
+                            </span>
+                            <div className="inline-actions">
+                              <button className="mini-btn" disabled={busy || !canManageAdmins} onClick={() => approvePendingStaff(member)} style={{ background: "#DCFCE7", color: "#166534" }}>
+                                {busy ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Aprobar staff" : "Approve staff")}
+                              </button>
+                              <button className="mini-btn" onClick={() => openAdminSection("equipo")}>
+                                {isSpanish ? "Ver permisos" : "View rights"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {pendingAccessRequests.map((request) => {
                         const targetStaffId = accessRequestTargetId(request);
                         const targetStaff = staffById.get(targetStaffId);
                         const busy = savingKey === `access-request-${request.id}`;
@@ -1711,7 +1779,8 @@ export default function AdminPage() {
                             </div>
                           </div>
                         );
-                      })
+                      })}
+                      </>
                     )}
                   </div>
                 </section>
@@ -1890,8 +1959,11 @@ export default function AdminPage() {
                     const permissionsKey = `${member.id}-permissions`;
                     const officeKey = `${member.id}-office_location`;
                     const phoneKey = `${member.id}-phone`;
+                    const emailKey = `${member.id}-email`;
                     const phoneDraft = staffPhoneDrafts[member.id] ?? (member.phone || "");
+                    const emailDraft = staffEmailDrafts[member.id] ?? visibleMemberEmail;
                     const cleanPhoneDraft = phoneDraft.trim();
+                    const cleanEmailDraft = emailDraft.trim().toLowerCase();
                     const deleteBusy = deletingStaffId === member.id;
                     const memberPermissionProfile = { ...member, permissions: staffPermissionMap[member.id] ?? member.permissions };
                     const memberPermissionSet = permissionsForProfile(memberPermissionProfile, rawMemberEmail);
@@ -1899,6 +1971,8 @@ export default function AdminPage() {
                     const canEditPermissionsForMember = canEditThisMember && canManagePermissions;
                     const canEditOfficeForMember = canManageAdmins && (canManageOwner || (level !== "owner" && level !== "super_admin"));
                     const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => memberPermissionSet.has(permission)).length;
+                    const isPendingStaff = `${member.role || ""}`.toLowerCase() === "pending_staff";
+                    const canSendResetForMember = canManageAdmins && Boolean(visibleMemberEmail);
 
                     return (
                       <div key={member.id} className="staff-row compact">
@@ -1939,6 +2013,28 @@ export default function AdminPage() {
 	                              <span>⌄</span>
 	                            </summary>
 		                            <div className="staff-controls-body">
+                                  {isPendingStaff && (
+                                    <div className="setting-group" style={{ background: "#FFF7ED", borderColor: "#FED7AA" }}>
+                                      <p className="group-label" style={{ color: "#9A3412" }}>{isSpanish ? "Aprobación pendiente" : "Pending approval"}</p>
+                                      <p className="access-help" style={{ color: "#9A3412" }}>
+                                        {isSpanish
+                                          ? "Esta cuenta no puede ver pacientes ni chats hasta que el doctor o un admin la apruebe. Después seguirá viendo solo salas asignadas."
+                                          : "This account cannot view patients or chats until the doctor or an admin approves it. After approval, it will still see assigned rooms only."}
+                                      </p>
+                                      <div className="mini-actions">
+                                        <button
+                                          type="button"
+                                          className="main-btn"
+                                          disabled={!canManageAdmins || savingKey === `${member.id}-role-admin_level`}
+                                          onClick={() => approvePendingStaff(member)}
+                                        >
+                                          {savingKey === `${member.id}-role-admin_level`
+                                            ? (isSpanish ? "Aprobando..." : "Approving...")
+                                            : (isSpanish ? "Aprobar acceso" : "Approve access")}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                   <div className="setting-group">
                                     <p className="group-label">{isSpanish ? "Consultorio asignado" : "Assigned office"}</p>
                                     <p className="access-help">
@@ -2012,6 +2108,45 @@ export default function AdminPage() {
                                         )}
                                       >
                                         {savingKey === phoneKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar teléfono" : "Save phone")}
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="setting-group">
+                                    <p className="group-label">{isSpanish ? "Correo y recuperación" : "Email and recovery"}</p>
+                                    <p className="access-help">
+                                      {isSpanish
+                                        ? "Guarda un correo real para recuperación. El botón envía un enlace seguro para restablecer contraseña."
+                                        : "Save a real email for recovery. The button sends a secure password reset link."}
+                                    </p>
+                                    <div className="mini-actions" style={{ alignItems: "stretch" }}>
+                                      <input
+                                        className="line-input"
+                                        value={emailDraft}
+                                        disabled={!canEditThisMember}
+                                        inputMode="email"
+                                        autoComplete="email"
+                                        onChange={(event) => setStaffEmailDrafts((current) => ({ ...current, [member.id]: event.target.value }))}
+                                        placeholder="staff@correo.com"
+                                        style={{ minWidth: 180, flex: "1 1 240px", height: 42, padding: "0 12px", fontSize: 14 }}
+                                      />
+                                      <button
+                                        className="mini-btn"
+                                        disabled={!canEditThisMember || savingKey === emailKey || (!!cleanEmailDraft && !validEmail(cleanEmailDraft))}
+                                        onClick={() => updateStaffField(
+                                          member,
+                                          { email: cleanEmailDraft || null },
+                                          isSpanish ? `Correo de ${member.full_name || "staff"} actualizado.` : `Email for ${member.full_name || "staff"} updated.`
+                                        )}
+                                      >
+                                        {savingKey === emailKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar correo" : "Save email")}
+                                      </button>
+                                      <button
+                                        className="mini-btn"
+                                        disabled={!canSendResetForMember || resetBusyId === member.id}
+                                        onClick={() => sendStaffPasswordReset(member)}
+                                        style={{ background: "#ECFEFF", color: "#0E7490" }}
+                                      >
+                                        {resetBusyId === member.id ? (isSpanish ? "Enviando..." : "Sending...") : (isSpanish ? "Enviar reset" : "Send reset")}
                                       </button>
                                     </div>
                                   </div>
@@ -2233,6 +2368,11 @@ export default function AdminPage() {
                     {inviteCodePreview
                       ? (isSpanish ? `Código activo: ${inviteCodePreview}` : `Active code: ${inviteCodePreview}`)
                       : (isSpanish ? "Sin código activo" : "No active code")}
+                  </p>
+                  <p className="small-note" style={{ marginTop: 8 }}>
+                    {isSpanish
+                      ? "Aunque alguien tenga el enlace, la cuenta queda en espera y no ve pacientes hasta que la apruebes desde Solicitudes o Equipo."
+                      : "Even if someone has the link, the account stays pending and cannot see patients until you approve it from Requests or Team."}
                   </p>
                   <div className="inline-actions" style={{ marginTop: 10 }}>
                     <button className="main-btn" onClick={copyInviteLink} disabled={!inviteLink}>

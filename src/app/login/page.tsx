@@ -151,6 +151,22 @@ const getBrowserLang = (): Lang => {
 
 const withLang = (path: string, lang: Lang) => `${path}${path.includes("?") ? "&" : "?"}lang=${lang}`;
 
+function PasswordVisibilityIcon({ hidden }: { hidden: boolean }) {
+  return hidden ? (
+    <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ) : (
+    <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3l18 18" />
+      <path d="M10.6 10.6A2 2 0 0 0 13.4 13.4" />
+      <path d="M9.9 5.2A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a16.2 16.2 0 0 1-3.1 3.9" />
+      <path d="M6.1 6.6C3.5 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 4.2-.9" />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://portal.drfonsecacirujanoplastico.com").replace(/\/+$/, "");
   const [lang, setLang] = useState<Lang>("es");
@@ -390,22 +406,24 @@ export default function LoginPage() {
         .method-btn.active { background: #FFFFFF; color: #165D9C; box-shadow: 0 8px 20px rgba(32,86,132,0.12); }
         .phone-row { display: grid; grid-template-columns: minmax(92px, 112px) minmax(0, 1fr); gap: 10px; align-items: end; }
         .password-wrap { position: relative; }
-        .password-input { padding-right: 82px; }
+        .password-input { padding-right: 58px; }
         .show-btn {
           position: absolute;
           right: 8px;
           top: 50%;
           transform: translateY(-50%);
-          height: 36px;
+          width: 40px;
+          height: 40px;
           border: none;
-          border-radius: 10px;
+          border-radius: 12px;
           background: #E8F2FA;
           color: #165D9C;
           cursor: pointer;
-          font-size: 12px;
-          font-weight: 850;
-          padding: 0 12px;
+          padding: 0;
           font-family: inherit;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
         .primary-btn {
           width: 100%;
@@ -585,8 +603,8 @@ export default function LoginPage() {
                         onKeyDown={(event) => { if (event.key === "Enter") handleLogin(); }}
                         autoComplete="current-password"
                       />
-                      <button className="show-btn" onClick={() => setShowPassword((value) => !value)} type="button">
-                        {showPassword ? t.hide : t.show}
+                      <button className="show-btn" onClick={() => setShowPassword((value) => !value)} type="button" aria-label={showPassword ? t.hide : t.show} title={showPassword ? t.hide : t.show}>
+                        <PasswordVisibilityIcon hidden={!showPassword} />
                       </button>
                     </div>
                   </div>

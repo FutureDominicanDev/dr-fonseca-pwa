@@ -105,6 +105,7 @@ export const parseStaffPermissionMap = (value: unknown): StaffPermissionMap => {
 export const permissionsForProfile = (profile: PermissionProfile | null | undefined, email = ""): Set<StaffPermissionKey> => {
   const resolvedEmail = email || `${profile?.email || ""}`;
   if (isOwnerEmail(resolvedEmail)) return new Set(STAFF_PERMISSION_KEYS);
+  if (`${profile?.role || ""}`.toLowerCase() === "pending_staff") return new Set();
 
   const explicit = normalizePermissionList(profile?.permissions);
   if (explicit.length) return new Set(explicit);
