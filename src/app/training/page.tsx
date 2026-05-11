@@ -445,7 +445,7 @@ export default function TrainingPage() {
         .module-index { width: 42px; height: 42px; border-radius: 8px; background: #0b63ce; color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 950; }
         .module-name { font-size: 15px; font-weight: 950; display: block; }
         .module-summary { font-size: 12px; color: #64748b; line-height: 1.35; display: block; margin-top: 2px; }
-        .guide-panel { padding: clamp(16px, 2.4vw, 24px); display: grid; grid-template-columns: minmax(250px, 340px) 1fr; gap: 22px; }
+        .guide-panel { padding: clamp(16px, 2.4vw, 24px); display: grid; grid-template-columns: minmax(250px, 340px) 1fr; gap: 22px; scroll-margin-top: 112px; }
         .phone-frame { width: min(100%, 318px); aspect-ratio: 9 / 19.5; border-radius: 36px; padding: 12px; background: #0b172a; border: 7px solid #111827; box-shadow: 0 20px 50px rgba(15,23,42,.24); position: relative; margin: 0 auto; }
         .phone-screen { height: 100%; border-radius: 26px; background: linear-gradient(180deg, #eef6ff, #ffffff); overflow: hidden; position: relative; }
         .phone-status { height: 34px; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; color: #0f172a; font-size: 12px; font-weight: 900; }
@@ -480,12 +480,46 @@ export default function TrainingPage() {
           .training-actions { width: 100%; justify-content: flex-start; }
         }
         @media (max-width: 560px) {
-          .training-logo { max-width: 74vw; }
-          .module-panel { grid-template-columns: 1fr; }
-          .guide-panel { padding: 14px; }
-          .phone-frame { max-width: 286px; }
-          .note-band { grid-template-columns: 1fr; }
-          .top-btn, .lang-btn, .control-btn { padding-left: 12px; padding-right: 12px; }
+          .training-topbar { min-height: auto; padding: calc(10px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left)); gap: 9px; }
+          .training-logo { width: 198px; max-width: 70vw; }
+          .training-actions { gap: 7px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+          .training-actions::-webkit-scrollbar { display: none; }
+          .top-btn, .lang-btn, .control-btn { padding-left: 11px; padding-right: 11px; }
+          .top-btn, .lang-btn { min-height: 40px; border-radius: 13px; font-size: 14px; flex: 0 0 auto; }
+          .lang-btn { min-width: 78px; }
+          .training-hero { padding: 18px max(14px, env(safe-area-inset-right)) 22px max(14px, env(safe-area-inset-left)); }
+          .training-hero h1 { font-size: 32px; line-height: 1.04; margin-bottom: 10px; }
+          .training-hero p { font-size: 15px; line-height: 1.45; }
+          .training-layout { width: 100%; margin-top: 0; gap: 12px; }
+          .module-panel { border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; padding: 13px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left)); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(210px, 78vw); grid-template-columns: none; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+          .module-panel::-webkit-scrollbar { display: none; }
+          .panel-title { grid-column: auto; align-self: center; padding: 0 8px; min-width: 88px; }
+          .module-btn { scroll-snap-align: start; grid-template-columns: 38px 1fr; min-height: 78px; padding: 9px; }
+          .module-index { width: 38px; height: 38px; font-size: 12px; }
+          .module-name { font-size: 14px; }
+          .module-summary { font-size: 11px; line-height: 1.3; }
+          .guide-panel { width: calc(100% - 24px); margin: 0 auto; padding: 15px; display: flex; flex-direction: column; gap: 16px; }
+          .guide-copy { order: 1; }
+          .phone-frame { order: 2; max-width: 214px; border-radius: 30px; border-width: 6px; padding: 8px; box-shadow: 0 14px 30px rgba(15,23,42,.18); }
+          .phone-screen { border-radius: 22px; }
+          .phone-status { height: 26px; padding: 0 13px; font-size: 10px; }
+          .phone-header { padding: 12px 10px; }
+          .phone-header img { width: 128px; }
+          .phone-content { padding: 12px; gap: 8px; }
+          .mock-card { padding: 11px; }
+          .mock-title { font-size: 16px; }
+          .mock-copy { font-size: 12px; line-height: 1.35; }
+          .mock-input { height: 38px; font-size: 12px; }
+          .mock-action { height: 40px; font-size: 13px; }
+          .finger { width: 40px; height: 40px; right: 18px; bottom: 48px; }
+          .finger::after { width: 13px; height: 13px; }
+          .progress-row { gap: 8px; font-size: 12px; margin-bottom: 12px; }
+          .guide-copy h2 { font-size: 28px; line-height: 1.06; margin-bottom: 10px; }
+          .guide-copy p { font-size: 15px; line-height: 1.5; margin-bottom: 14px; }
+          .control-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+          .control-btn { border-radius: 14px; min-height: 44px; padding-top: 10px; padding-bottom: 10px; font-size: 14px; }
+          .control-btn.primary { grid-column: 1 / -1; }
+          .note-band { width: calc(100% - 24px); margin: 12px auto 0; grid-template-columns: 1fr; padding: 14px; }
         }
       `}</style>
 
