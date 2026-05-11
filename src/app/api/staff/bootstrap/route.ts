@@ -18,6 +18,15 @@ const SMTP_PASS = process.env.SMTP_PASS || "";
 const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || "Dr. Fonseca | Portal Médico";
 const SMTP_FROM_EMAIL = process.env.SMTP_FROM_EMAIL || SMTP_USER;
 
+type SignupContext = {
+  device: string;
+  location: string;
+  city: string;
+  region: string;
+  country: string;
+  capturedAt: string;
+};
+
 const isMissingColumnError = (error: any) => {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
   return message.includes("column") || message.includes("schema cache");
@@ -48,7 +57,61 @@ const roleLabelEs = (role: string) => {
   return "Personal";
 };
 
-const sendPendingApprovalEmail = async (params: { fullName: string; email?: string | null; phone?: string | null; officeLocation: string | null }) => {
+const decodeHeaderValue = (value: string) => {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, " "));
+  } catch {
+    return value;
+  }
+};
+
+const escapeHtml = (value: unknown) =>
+  `${value || ""}`
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const countryName = (countryCode: string) => {
+  const normalized = countryCode.trim().toUpperCase();
+  const names: Record<string, string> = {
+    MX: "Mexico",
+    US: "USA",
+    JP: "Japan",
+    CA: "Canada",
+    DO: "Dominican Republic",
+  };
+  return names[normalized] || normalized;
+};
+
+const detectDevice = (userAgent: string) => {
+  const ua = userAgent.toLowerCase();
+  if (!ua) return "";
+  if (ua.includes("iphone")) return "iPhone";
+  if (ua.includes("ipad")) return "iPad";
+  if (ua.includes("android")) return ua.includes("mobile") ? "Android phone" : "Android tablet";
+  if (ua.includes("macintosh") || ua.includes("mac os")) return "Mac computer";
+  if (ua.includes("windows")) return "Windows computer";
+  if (ua.includes("linux")) return "Linux computer";
+  return "Computer or tablet";
+};
+
+const getSignupContext = (request: NextRequest): SignupContext => {
+  const city = decodeHeaderValue(request.headers.get("x-vercel-ip-city") || "").trim();
+  const region = decodeHeaderValue(request.headers.get("x-vercel-ip-country-region") || "").trim();
+  const country = countryName(request.headers.get("x-vercel-ip-country") || "");
+  return {
+    device: detectDevice(request.headers.get("user-agent") || ""),
+    location: [city, region, country].filter(Boolean).join(", "),
+    city,
+    region,
+    country,
+    capturedAt: new Date().toISOString(),
+  };
+};
+
+const sendPendingApprovalEmail = async (params: { fullName: string; email?: string | null; phone?: string | null; officeLocation: string | null; signupContext?: SignupContext }) => {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SMTP_FROM_EMAIL) return { sent: false, reason: "smtp_not_configured" };
 
   const transporter = nodemailer.createTransport({
@@ -64,6 +127,17 @@ const sendPendingApprovalEmail = async (params: { fullName: string; email?: stri
   const adminUrl = `${APP_URL}/admin`;
   const contactText = [params.email, params.phone].filter(Boolean).join(" · ") || "Sin correo/teléfono";
   const officeText = params.officeLocation || "Sin sede";
+  const signupDeviceText = params.signupContext?.device || "No registrado";
+  const signupLocationText = params.signupContext?.location || "No registrada";
+  const signupContextHtml = params.signupContext?.device || params.signupContext?.location
+    ? `
+            <p style="margin:0 0 8px 0;">Dispositivo detectado: <strong>${escapeHtml(signupDeviceText)}</strong></p>
+            <p style="margin:0 0 18px 0;">Ubicación aproximada: <strong>${escapeHtml(signupLocationText)}</strong></p>
+      `
+    : "";
+  const signupContextText = params.signupContext?.device || params.signupContext?.location
+    ? `\nDispositivo: ${signupDeviceText}\nUbicación aproximada: ${signupLocationText}`
+    : "";
 
   await transporter.sendMail({
     from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
@@ -81,6 +155,7 @@ const sendPendingApprovalEmail = async (params: { fullName: string; email?: stri
             <p style="margin:0 0 10px 0;color:#334155;line-height:1.65;"><strong>${params.fullName}</strong> creó una cuenta de personal y está esperando aprobación.</p>
             <p style="margin:0 0 8px 0;">Contacto: <strong>${contactText}</strong></p>
             <p style="margin:0 0 18px 0;">Sede elegida: <strong>${officeText}</strong></p>
+            ${signupContextHtml}
             <p style="margin:0 0 18px 0;color:#334155;line-height:1.65;">La cuenta no puede ver pacientes hasta que se apruebe desde Equipo o Solicitudes.</p>
             <p style="margin:0;">
               <a href="${adminUrl}" style="display:inline-block;background:#0b63ce;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-weight:800;">Abrir centro de control</a>
@@ -89,7 +164,7 @@ const sendPendingApprovalEmail = async (params: { fullName: string; email?: stri
         </div>
       </div>
     `,
-    text: `Registro pendiente de aprobación\n\n${params.fullName}\n${contactText}\nSede: ${officeText}\n\nAbrir centro de control: ${adminUrl}`,
+    text: `Registro pendiente de aprobación\n\n${params.fullName}\n${contactText}\nSede: ${officeText}${signupContextText}\n\nAbrir centro de control: ${adminUrl}`,
   });
 
   return { sent: true };
@@ -164,6 +239,7 @@ export async function POST(request: NextRequest) {
     const phone = normalizePhone(`${body?.phone || ""}`);
     const email = `${body?.email || ""}`.trim().toLowerCase() || null;
     const loginMethod = email ? "email" : phone ? "phone" : "unknown";
+    const signupContext = getSignupContext(request);
 
     if (!inviteCode || !userId || !fullName) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
@@ -272,6 +348,12 @@ export async function POST(request: NextRequest) {
           phone,
           login_method: loginMethod,
           real_email: email,
+          signup_device: signupContext.device || null,
+          signup_location: signupContext.location || null,
+          signup_city: signupContext.city || null,
+          signup_region: signupContext.region || null,
+          signup_country: signupContext.country || null,
+          signup_captured_at: signupContext.capturedAt,
         },
       } as any);
     } else if (email) {
@@ -283,6 +365,12 @@ export async function POST(request: NextRequest) {
           phone: null,
           login_method: "email",
           real_email: email,
+          signup_device: signupContext.device || null,
+          signup_location: signupContext.location || null,
+          signup_city: signupContext.city || null,
+          signup_region: signupContext.region || null,
+          signup_country: signupContext.country || null,
+          signup_captured_at: signupContext.capturedAt,
         },
       } as any);
     }
@@ -297,7 +385,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       try {
-        pendingApprovalEmail = await sendPendingApprovalEmail({ fullName, email, phone, officeLocation });
+        pendingApprovalEmail = await sendPendingApprovalEmail({ fullName, email, phone, officeLocation, signupContext });
       } catch (mailError: any) {
         pendingApprovalEmail = { sent: false, error: mailError?.message || "approval_email_failed" };
       }

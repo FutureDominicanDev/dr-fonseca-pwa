@@ -106,6 +106,13 @@ type StaffAccessRequest = {
   created_at?: string | null;
 };
 
+type PendingSignupDetail = {
+  device?: string | null;
+  location?: string | null;
+  registeredAt?: string | null;
+  capturedAt?: string | null;
+};
+
 type AdminSectionId =
   | "buscar-paciente"
   | "crear-paciente"
@@ -152,6 +159,7 @@ export default function AdminPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [exportMenu, setExportMenu] = useState<{ type: "patient" | "staff"; id: string; title: string; body: string } | null>(null);
   const [expandedPendingStaffId, setExpandedPendingStaffId] = useState("");
+  const [pendingSignupDetails, setPendingSignupDetails] = useState<Record<string, PendingSignupDetail>>({});
   const [staffPermissionMap, setStaffPermissionMap] = useState<StaffPermissionMap>({});
 
   const viewerPermissionProfile = viewerProfile
@@ -287,8 +295,9 @@ export default function AdminPage() {
     return isSpanish ? "No registrado" : "Not recorded";
   };
   const pendingRegisteredAt = (member: StaffProfile) => {
-    if (!member.created_at) return isSpanish ? "No registrado" : "Not recorded";
-    return new Date(member.created_at).toLocaleString(isSpanish ? "es-MX" : "en-US", {
+    const registeredAt = pendingSignupDetails[member.id]?.registeredAt || member.created_at;
+    if (!registeredAt) return isSpanish ? "No registrado" : "Not recorded";
+    return new Date(registeredAt).toLocaleString(isSpanish ? "es-MX" : "en-US", {
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -296,15 +305,20 @@ export default function AdminPage() {
       minute: "2-digit",
     });
   };
-  const pendingDetailItems = (member: StaffProfile) => [
-    { label: isSpanish ? "Nombre enviado" : "Submitted name", value: member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name") },
-    { label: isSpanish ? "Correo" : "Email", value: visibleStaffEmail(member.email) || (isSpanish ? "No ingresó correo" : "No email entered") },
-    { label: isSpanish ? "Teléfono" : "Phone", value: member.phone || (isSpanish ? "No ingresó teléfono" : "No phone entered") },
-    { label: isSpanish ? "Sede solicitada" : "Requested office", value: member.office_location || (isSpanish ? "Sin sede" : "No office") },
-    { label: isSpanish ? "Método de registro" : "Signup method", value: pendingSignupMethod(member) },
-    { label: isSpanish ? "Fecha de registro" : "Registered", value: pendingRegisteredAt(member) },
-    { label: isSpanish ? "ID seguro" : "Secure ID", value: member.id },
-  ];
+  const pendingDetailItems = (member: StaffProfile) => {
+    const signupDetail = pendingSignupDetails[member.id] || {};
+    const notRecorded = isSpanish ? "No registrado en esta solicitud" : "Not recorded for this request";
+    return [
+      { label: isSpanish ? "Nombre enviado" : "Submitted name", value: member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name") },
+      { label: isSpanish ? "Correo" : "Email", value: visibleStaffEmail(member.email) || (isSpanish ? "No ingresó correo" : "No email entered") },
+      { label: isSpanish ? "Teléfono" : "Phone", value: member.phone || (isSpanish ? "No ingresó teléfono" : "No phone entered") },
+      { label: isSpanish ? "Sede solicitada" : "Requested office", value: member.office_location || (isSpanish ? "Sin sede" : "No office") },
+      { label: isSpanish ? "Método de registro" : "Signup method", value: pendingSignupMethod(member) },
+      { label: isSpanish ? "Fecha de registro" : "Registered", value: pendingRegisteredAt(member) },
+      { label: isSpanish ? "Dispositivo" : "Device", value: signupDetail.device || notRecorded },
+      { label: isSpanish ? "Ubicación aprox." : "Approx. location", value: signupDetail.location || notRecorded },
+    ];
+  };
   const privateMessageText = (message: StaffPrivateMessage) => message.content || message.message || message.body || "";
   const privateRecipientId = (message: StaffPrivateMessage) => message.recipient_id || message.receiver_id || message.to_user_id || message.target_user_id || "";
   const staffPrivateConversations = useMemo<StaffPrivateConversation[]>(() => {
@@ -446,6 +460,32 @@ export default function AdminPage() {
     null
   );
 
+  const loadPendingSignupDetails = async (userIds: string[]) => {
+    const cleanUserIds = [...new Set(userIds.filter(Boolean))];
+    if (cleanUserIds.length === 0) {
+      setPendingSignupDetails({});
+      return;
+    }
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      const response = await fetch("/api/staff/pending-details", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ userIds: cleanUserIds }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) return;
+      setPendingSignupDetails((payload?.details || {}) as Record<string, PendingSignupDetail>);
+    } catch {
+      // These details are helpful approval context, but the approval screen still works without them.
+    }
+  };
+
   const fetchData = async () => {
     setPageError("");
 
@@ -478,10 +518,16 @@ export default function AdminPage() {
       staffPermissionsRes.error ? "No pude cargar permisos del equipo." : "",
     ].filter(Boolean);
 
-    setStaff(await Promise.all(((staffRes.data || []) as StaffProfile[]).map(async (member) => ({
+    const loadedStaff = await Promise.all(((staffRes.data || []) as StaffProfile[]).map(async (member) => ({
       ...member,
       avatar_url: await createSignedChatFileUrl(supabase, member.avatar_url),
-    }))));
+    })));
+    setStaff(loadedStaff);
+    await loadPendingSignupDetails(
+      loadedStaff
+        .filter((member) => `${member.role || ""}`.toLowerCase() === "pending_staff")
+        .map((member) => member.id),
+    );
     setPatients(await Promise.all(((patientsRes.data || []) as PatientRecord[]).map(async (patient) => ({
       ...patient,
       profile_picture_url: await createSignedChatFileUrl(supabase, patient.profile_picture_url),
@@ -600,6 +646,11 @@ export default function AdminPage() {
         ? `${member.full_name || member.display_name || "Staff"} aprobado. Ahora solo verá salas asignadas hasta que le des más permisos.`
         : `${member.full_name || member.display_name || "Staff"} approved. They will only see assigned rooms unless you grant more permissions.`
     );
+    setPendingSignupDetails((previous) => {
+      const next = { ...previous };
+      delete next[member.id];
+      return next;
+    });
   };
 
   const denyPendingStaff = async (member: StaffProfile) => {
@@ -632,6 +683,11 @@ export default function AdminPage() {
       }
 
       setStaff((previous) => previous.filter((item) => item.id !== member.id));
+      setPendingSignupDetails((previous) => {
+        const next = { ...previous };
+        delete next[member.id];
+        return next;
+      });
       setPendingAccessRequests((previous) =>
         previous.filter((request) => accessRequestTargetId(request) !== member.id && request.requested_by !== member.id),
       );
