@@ -79,6 +79,9 @@ export const LEGACY_ROLE_PERMISSION_DEFAULTS: Record<string, StaffPermissionKey[
 export const permissionLabel = (key: StaffPermissionKey, lang: PermissionLang) =>
   STAFF_PERMISSION_LABELS[key][lang];
 
+export const hasExplicitPermissionList = (value: unknown) =>
+  Array.isArray(value) || (Boolean(value) && typeof value === "object");
+
 export const normalizePermissionList = (value: unknown): StaffPermissionKey[] => {
   if (!value) return [];
   const raw = Array.isArray(value)
@@ -110,7 +113,7 @@ export const permissionsForProfile = (profile: PermissionProfile | null | undefi
   if (`${profile?.role || ""}`.toLowerCase() === "pending_staff") return new Set();
 
   const explicit = normalizePermissionList(profile?.permissions);
-  if (explicit.length) return new Set(explicit);
+  if (hasExplicitPermissionList(profile?.permissions)) return new Set(explicit);
 
   const level = `${profile?.admin_level || "none"}`.toLowerCase();
   return new Set(LEGACY_ROLE_PERMISSION_DEFAULTS[level] || LEGACY_ROLE_PERMISSION_DEFAULTS.none);

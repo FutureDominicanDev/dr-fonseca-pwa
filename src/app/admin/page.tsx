@@ -26,8 +26,8 @@ import { isOwnerEmail } from "@/lib/securityConfig";
 import {
   STAFF_PERMISSION_KEYS,
   STAFF_PERMISSIONS_SETTING_KEY,
+  hasExplicitPermissionList,
   hasPermission,
-  normalizePermissionList,
   parseStaffPermissionMap,
   permissionLabel,
   permissionPresetForAdminLevel,
@@ -2228,7 +2228,7 @@ export default function AdminPage() {
                     const draftPermissionList = staffPermissionDrafts[member.id] ?? savedPermissionList;
                     const draftPermissionSet = new Set(draftPermissionList);
                     const draftPermissionsDirty = !samePermissionList(draftPermissionList, savedPermissionList);
-                    const explicitPermissionCount = normalizePermissionList(memberPermissionProfile.permissions).length;
+                    const hasExplicitPermissions = hasExplicitPermissionList(memberPermissionProfile.permissions);
                     const canEditPermissionsForMember = canEditThisMember && canManagePermissions;
                     const canEditDeleteStaffAccountsPermission = canEditPermissionsForMember && canManageOwner;
                     const canEditOfficeForMember = canManageAdmins && (canManageOwner || (level !== "owner" && level !== "super_admin"));
@@ -2435,8 +2435,8 @@ export default function AdminPage() {
                                           {adminText(option)}
                                         </button>
                                       ))}
-                                      <span className="meta-badge" style={{ color: explicitPermissionCount ? "#0E7490" : "#64748B", background: explicitPermissionCount ? "#ECFEFF" : "#F1F5F9" }}>
-                                        {explicitPermissionCount ? (isSpanish ? "Personalizado" : "Custom") : (isSpanish ? "Preset heredado" : "Inherited preset")}
+                                      <span className="meta-badge" style={{ color: hasExplicitPermissions ? "#0E7490" : "#64748B", background: hasExplicitPermissions ? "#ECFEFF" : "#F1F5F9" }}>
+                                        {hasExplicitPermissions ? (isSpanish ? "Personalizado" : "Custom") : (isSpanish ? "Preset heredado" : "Inherited preset")}
                                       </span>
                                       {level === "owner" && (
                                         <span className="meta-badge" style={{ color: adminColor("owner"), background: `${adminColor("owner")}18` }}>
@@ -2455,6 +2455,17 @@ export default function AdminPage() {
                                         }}
                                       >
                                         {isSpanish ? "Seleccionar todo" : "Select all"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="mini-btn"
+                                        disabled={!canEditPermissionsForMember || savingKey === permissionsKey}
+                                        onClick={() => {
+                                          setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: sanitizeEditablePermissions(member, []) }));
+                                        }}
+                                        style={{ background: "#FEE2E2", color: "#B91C1C" }}
+                                      >
+                                        {isSpanish ? "Reiniciar todo" : "Reset all"}
                                       </button>
                                       <button
                                         type="button"
