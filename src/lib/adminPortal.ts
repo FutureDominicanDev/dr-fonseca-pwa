@@ -16,6 +16,8 @@ export type StaffProfile = {
   office_location?: string | null;
   admin_level?: string | null;
   permissions?: unknown;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type PatientRecord = {

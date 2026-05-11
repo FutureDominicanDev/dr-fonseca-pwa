@@ -151,6 +151,7 @@ export default function AdminPage() {
   const [pageError, setPageError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [exportMenu, setExportMenu] = useState<{ type: "patient" | "staff"; id: string; title: string; body: string } | null>(null);
+  const [expandedPendingStaffId, setExpandedPendingStaffId] = useState("");
   const [staffPermissionMap, setStaffPermissionMap] = useState<StaffPermissionMap>({});
 
   const viewerPermissionProfile = viewerProfile
@@ -273,6 +274,37 @@ export default function AdminPage() {
     const patientId = request.patient_id || (request.room_id ? procedureById.get(roomById.get(request.room_id)?.procedure_id || "")?.patient_id : "");
     return patientById.get(patientId || "")?.full_name || (isSpanish ? "Paciente sin nombre" : "Unnamed patient");
   };
+  const visibleStaffEmail = (email?: string | null) => {
+    const normalized = `${email || ""}`.trim().toLowerCase();
+    return normalized.endsWith("@portal-staff.local") ? "" : normalized;
+  };
+  const pendingSignupMethod = (member: StaffProfile) => {
+    const hasEmail = Boolean(visibleStaffEmail(member.email));
+    const hasPhone = Boolean(member.phone);
+    if (hasEmail && hasPhone) return isSpanish ? "Correo y teléfono" : "Email and phone";
+    if (hasEmail) return isSpanish ? "Correo electrónico" : "Email";
+    if (hasPhone) return isSpanish ? "Teléfono" : "Phone";
+    return isSpanish ? "No registrado" : "Not recorded";
+  };
+  const pendingRegisteredAt = (member: StaffProfile) => {
+    if (!member.created_at) return isSpanish ? "No registrado" : "Not recorded";
+    return new Date(member.created_at).toLocaleString(isSpanish ? "es-MX" : "en-US", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+  const pendingDetailItems = (member: StaffProfile) => [
+    { label: isSpanish ? "Nombre enviado" : "Submitted name", value: member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name") },
+    { label: isSpanish ? "Correo" : "Email", value: visibleStaffEmail(member.email) || (isSpanish ? "No ingresó correo" : "No email entered") },
+    { label: isSpanish ? "Teléfono" : "Phone", value: member.phone || (isSpanish ? "No ingresó teléfono" : "No phone entered") },
+    { label: isSpanish ? "Sede solicitada" : "Requested office", value: member.office_location || (isSpanish ? "Sin sede" : "No office") },
+    { label: isSpanish ? "Método de registro" : "Signup method", value: pendingSignupMethod(member) },
+    { label: isSpanish ? "Fecha de registro" : "Registered", value: pendingRegisteredAt(member) },
+    { label: isSpanish ? "ID seguro" : "Secure ID", value: member.id },
+  ];
   const privateMessageText = (message: StaffPrivateMessage) => message.content || message.message || message.body || "";
   const privateRecipientId = (message: StaffPrivateMessage) => message.recipient_id || message.receiver_id || message.to_user_id || message.target_user_id || "";
   const staffPrivateConversations = useMemo<StaffPrivateConversation[]>(() => {
@@ -568,6 +600,91 @@ export default function AdminPage() {
         ? `${member.full_name || member.display_name || "Staff"} aprobado. Ahora solo verá salas asignadas hasta que le des más permisos.`
         : `${member.full_name || member.display_name || "Staff"} approved. They will only see assigned rooms unless you grant more permissions.`
     );
+  };
+
+  const denyPendingStaff = async (member: StaffProfile) => {
+    if (!canManageAdmins) return;
+    const memberName = member.full_name || member.display_name || visibleStaffEmail(member.email) || member.phone || (isSpanish ? "este usuario" : "this user");
+    const confirmed = window.confirm(
+      isSpanish
+        ? `Denegar a ${memberName} eliminará su cuenta pendiente, bloqueará su correo/teléfono registrado y rotará el código de invitación por seguridad. El bloqueo se puede quitar después en Bloqueos si el doctor decide permitir un nuevo registro. ¿Continuar?`
+        : `Denying ${memberName} will delete their pending account, block their registered email/phone, and rotate the invite code for security. The block can be removed later in Blocked if the doctor decides to allow a new registration. Continue?`,
+    );
+    if (!confirmed) return;
+
+    setSavingKey(`pending-deny-${member.id}`);
+    setPageError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      const response = await fetch("/api/staff/deny", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ userId: member.id, lang }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPageError(payload?.error || (isSpanish ? "No pude denegar esta cuenta." : "I could not deny this account."));
+        return;
+      }
+
+      setStaff((previous) => previous.filter((item) => item.id !== member.id));
+      setPendingAccessRequests((previous) =>
+        previous.filter((request) => accessRequestTargetId(request) !== member.id && request.requested_by !== member.id),
+      );
+      setExpandedPendingStaffId((current) => (current === member.id ? "" : current));
+      if (payload?.removedEmail) {
+        setBlockedEmails((previous) => [...new Set([...previous, `${payload.removedEmail}`.toLowerCase()])].sort());
+      }
+      if (payload?.removedPhone) {
+        setBlockedPhones((previous) => [...new Set([...previous, `${payload.removedPhone}`])].sort());
+      }
+      if (payload?.newInviteCode) {
+        setInviteCode(`${payload.newInviteCode}`);
+        setNewInviteCode("");
+      }
+
+      await logAdminEvent({
+        action: "pending_staff_denied",
+        entityType: "staff_profile",
+        entityId: member.id,
+        entityName: memberName,
+        actorId: viewerId,
+        actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+        actorEmail: viewerEmail,
+        notes: isSpanish ? `Se denegó y eliminó la cuenta pendiente de ${memberName}.` : `Denied and deleted pending account for ${memberName}.`,
+        metadata: {
+          removedEmail: payload?.removedEmail || visibleStaffEmail(member.email) || null,
+          removedPhone: payload?.removedPhone || member.phone || null,
+          notification: payload?.notification || null,
+          inviteRotated: Boolean(payload?.newInviteCode),
+        },
+      }).catch(() => undefined);
+
+      const notificationSent = Boolean(payload?.notification?.sent);
+      const phoneNoticeMissing = payload?.notification?.method === "phone" && !notificationSent;
+      const emailNoticeMissing = payload?.notification?.method === "email" && !notificationSent;
+      const noticeText = notificationSent
+        ? (isSpanish ? " Aviso enviado por correo." : " Notice sent by email.")
+        : phoneNoticeMissing
+          ? (isSpanish ? " No hay SMS configurado para avisos por teléfono." : " SMS is not configured for phone notices.")
+          : emailNoticeMissing
+            ? (isSpanish ? " No se pudo enviar el aviso por correo." : " Email notice could not be sent.")
+          : "";
+      updateSuccess(
+        isSpanish
+          ? `${memberName} fue denegado, eliminado y bloqueado. Código de invitación rotado.${noticeText}`
+          : `${memberName} was denied, deleted, and blocked. Invite code rotated.${noticeText}`,
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "";
+      setPageError(message || (isSpanish ? "No pude denegar esta cuenta." : "I could not deny this account."));
+    } finally {
+      setSavingKey("");
+    }
   };
 
   const sendStaffPasswordReset = async (member: StaffProfile) => {
@@ -1384,6 +1501,15 @@ export default function AdminPage() {
         .list-action-row strong { display: block; font-size: 16px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .list-action-row span span { display: block; margin-top: 3px; color: #64748B; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; line-height: 1.4; }
         .list-action-row:hover, .list-action-row:focus-visible { border-color: #BFDBFE; background: #EFF6FF; outline: none; }
+        .pending-staff-card { display: grid; gap: 12px; padding: 14px; border-radius: 16px; border: 1px solid #FED7AA; background: #FFF7ED; }
+        .pending-staff-summary { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .pending-staff-main { flex: 1; min-width: 0; }
+        .pending-staff-main strong { display: block; color: #111827; font-size: 16px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pending-staff-main span { display: block; margin-top: 3px; color: #64748B; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; line-height: 1.4; }
+        .pending-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; border-top: 1px solid #FED7AA; padding-top: 12px; }
+        .pending-detail-item { min-width: 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.72); border: 1px solid #FFEDD5; }
+        .pending-detail-item small { display: block; color: #9A3412; font-size: 12px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 4px; line-height: 1.25; }
+        .pending-detail-item span { display: block; color: #111827; font-size: 14px; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
         .export-overlay { position: fixed; inset: 0; z-index: 170; display: grid; place-items: center; padding: 18px; background: rgba(15,23,42,0.42); }
         .export-modal { width: min(440px, 100%); border-radius: 22px; background: white; padding: 20px; box-shadow: 0 24px 80px rgba(15,23,42,0.28); }
         .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
@@ -1477,6 +1603,8 @@ export default function AdminPage() {
           .hero-secondary-btn { width: 100%; text-align: center; padding: 12px 12px; }
           .summary-grid { grid-template-columns: 1fr 1fr; }
           .patient-row, .staff-row { flex-direction: column; }
+          .pending-staff-summary { align-items: flex-start; flex-direction: column; }
+          .pending-detail-grid { grid-template-columns: 1fr; }
           .toast-stack { right: 12px; left: 12px; width: auto; }
           .header-row { flex-direction: column; }
         }
@@ -1742,24 +1870,55 @@ export default function AdminPage() {
                       <>
                       {pendingStaffMembers.map((member) => {
                         const busy = savingKey === `${member.id}-role-admin_level`;
+                        const denyBusy = savingKey === `pending-deny-${member.id}`;
+                        const detailsOpen = expandedPendingStaffId === member.id;
+                        const contactLine = [member.phone, visibleStaffEmail(member.email), member.office_location].filter(Boolean).join(" · ");
                         return (
-                          <div key={`pending-staff-${member.id}`} className="list-action-row" style={{ borderColor: "#FED7AA", background: "#FFF7ED" }}>
-                            <span className="avatar small-avatar">{initials(member.full_name || member.display_name)}</span>
-                            <span style={{ minWidth: 0, flex: 1 }}>
-                              <strong>{member.full_name || member.display_name || (isSpanish ? "Personal nuevo" : "New staff")}</strong>
-                              <span>
-                                {[member.phone, member.email, member.office_location].filter(Boolean).join(" · ") ||
-                                  (isSpanish ? "Registro pendiente de aprobación" : "Registration pending approval")}
+                          <div key={`pending-staff-${member.id}`} className="pending-staff-card">
+                            <div className="pending-staff-summary">
+                              <span className="avatar small-avatar">{initials(member.full_name || member.display_name)}</span>
+                              <span className="pending-staff-main">
+                                <strong>{member.full_name || member.display_name || (isSpanish ? "Personal nuevo" : "New staff")}</strong>
+                                <span>{contactLine || (isSpanish ? "Registro pendiente de aprobación" : "Registration pending approval")}</span>
                               </span>
-                            </span>
-                            <div className="inline-actions">
-                              <button className="mini-btn" disabled={busy || !canManageAdmins} onClick={() => approvePendingStaff(member)} style={{ background: "#DCFCE7", color: "#166534" }}>
-                                {busy ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Aprobar staff" : "Approve staff")}
-                              </button>
-                              <button className="mini-btn" onClick={() => openAdminSection("equipo")}>
-                                {isSpanish ? "Ver permisos" : "View rights"}
-                              </button>
+                              <div className="inline-actions">
+                                <button
+                                  type="button"
+                                  className="mini-btn"
+                                  onClick={() => setExpandedPendingStaffId((current) => (current === member.id ? "" : member.id))}
+                                >
+                                  {detailsOpen ? (isSpanish ? "Ocultar" : "Hide") : (isSpanish ? "Ver detalles" : "Details")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="mini-btn"
+                                  disabled={busy || denyBusy || !canManageAdmins}
+                                  onClick={() => approvePendingStaff(member)}
+                                  style={{ background: "#DCFCE7", color: "#166534" }}
+                                >
+                                  {busy ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Aprobar staff" : "Approve staff")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="mini-btn"
+                                  disabled={busy || denyBusy || !canManageAdmins}
+                                  onClick={() => denyPendingStaff(member)}
+                                  style={{ background: "#FEE2E2", color: "#B91C1C" }}
+                                >
+                                  {denyBusy ? (isSpanish ? "Eliminando..." : "Deleting...") : (isSpanish ? "Denegar" : "Deny")}
+                                </button>
+                              </div>
                             </div>
+                            {detailsOpen && (
+                              <div className="pending-detail-grid">
+                                {pendingDetailItems(member).map((item) => (
+                                  <div key={`${member.id}-${item.label}`} className="pending-detail-item">
+                                    <small>{item.label}</small>
+                                    <span>{item.value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
