@@ -3,13 +3,21 @@ import AppUpdateWatcher from "./AppUpdateWatcher";
 import NativeKeyboardTuning from "./NativeKeyboardTuning";
 import "./globals.css";
 
+const BRAND_BROWSER_COLOR = "#0B63CE";
+const FAVICON_VERSION = "20260511";
+
 export const metadata: Metadata = {
   title: "Dr. Fonseca | Portal Médico",
   description: "Siluety Plastic Surgery - Plataforma de atención al paciente",
   metadataBase: new URL("https://portal.drfonsecacirujanoplastico.com"),
   icons: {
-    icon: "/icon.png",
-    shortcut: "/icon.png",
+    icon: [
+      { url: `/favicon.ico?v=${FAVICON_VERSION}`, sizes: "any" },
+      { url: `/favicon-32.png?v=${FAVICON_VERSION}`, type: "image/png", sizes: "32x32" },
+      { url: `/favicon-48.png?v=${FAVICON_VERSION}`, type: "image/png", sizes: "48x48" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    shortcut: `/favicon.ico?v=${FAVICON_VERSION}`,
     apple: "/apple-touch-icon.png",
   },
   openGraph: {
@@ -49,9 +57,14 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Dr. Fonseca" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#1C1C1E" />
-        <link rel="icon" href="/icon.png" sizes="any" />
-        <link rel="shortcut icon" href="/icon.png" />
+        <meta name="theme-color" content={BRAND_BROWSER_COLOR} />
+        <meta name="msapplication-TileColor" content={BRAND_BROWSER_COLOR} />
+        <meta name="msapplication-navbutton-color" content={BRAND_BROWSER_COLOR} />
+        <link rel="icon" href={`/favicon.ico?v=${FAVICON_VERSION}`} sizes="any" />
+        <link rel="shortcut icon" href={`/favicon.ico?v=${FAVICON_VERSION}`} />
+        <link rel="icon" type="image/png" sizes="16x16" href={`/favicon-16.png?v=${FAVICON_VERSION}`} />
+        <link rel="icon" type="image/png" sizes="32x32" href={`/favicon-32.png?v=${FAVICON_VERSION}`} />
+        <link rel="icon" type="image/png" sizes="48x48" href={`/favicon-48.png?v=${FAVICON_VERSION}`} />
         <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
