@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
+import { isOwnerEmail } from "@/lib/securityConfig";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -71,6 +72,87 @@ function requireManageLabels(auth: Awaited<ReturnType<typeof requireUser>>) {
   return null;
 }
 
+function canAccessAllPatientRooms(profile: any, email: string) {
+  const level = `${profile?.admin_level || ""}`.toLowerCase();
+  const role = `${profile?.role || ""}`.toLowerCase();
+  return isOwnerEmail(email) || level === "owner" || level === "super_admin" || role === "doctor";
+}
+
+async function verifyPatientAccess(auth: Awaited<ReturnType<typeof requireUser>>, patientId: string) {
+  if (auth.response) return { response: auth.response };
+  if (canAccessAllPatientRooms(auth.profile, auth.userEmail || "")) return { ok: true };
+
+  const { data: procedures, error: procedureError } = await adminClient
+    .from("procedures")
+    .select("id")
+    .eq("patient_id", patientId);
+  if (procedureError) return { response: NextResponse.json({ error: procedureError.message || "Could not verify patient access." }, { status: 500 }) };
+
+  const procedureIds = (procedures || []).map((procedure: any) => procedure.id).filter(Boolean);
+  if (procedureIds.length === 0) return { response: NextResponse.json({ error: "No access to this patient." }, { status: 403 }) };
+
+  const { data: rooms, error: roomError } = await adminClient
+    .from("rooms")
+    .select("id")
+    .in("procedure_id", procedureIds);
+  if (roomError) return { response: NextResponse.json({ error: roomError.message || "Could not verify room access." }, { status: 500 }) };
+
+  const roomIds = (rooms || []).map((room: any) => room.id).filter(Boolean);
+  if (roomIds.length === 0) return { response: NextResponse.json({ error: "No access to this patient." }, { status: 403 }) };
+
+  const { data: membership, error: membershipError } = await adminClient
+    .from("room_members")
+    .select("id")
+    .eq("user_id", auth.userId)
+    .in("room_id", roomIds)
+    .limit(1);
+  if (membershipError) return { response: NextResponse.json({ error: membershipError.message || "Could not verify membership." }, { status: 500 }) };
+  if (!membership?.length) return { response: NextResponse.json({ error: "No access to this patient." }, { status: 403 }) };
+
+  return { ok: true };
+}
+
+async function visibleLabelsForAuth(auth: Awaited<ReturnType<typeof requireUser>>, labels: PatientLabelRow[]) {
+  if (auth.response || canAccessAllPatientRooms(auth.profile, auth.userEmail || "")) return labels;
+
+  const assignmentPatientIds = [...new Set(labels.map((label) => label.patient_id).filter(Boolean))] as string[];
+  if (assignmentPatientIds.length === 0) return labels;
+
+  const { data: procedures, error: procedureError } = await adminClient
+    .from("procedures")
+    .select("id, patient_id")
+    .in("patient_id", assignmentPatientIds);
+  if (procedureError) throw procedureError;
+
+  const procedurePatientById = new Map((procedures || []).map((procedure: any) => [procedure.id, procedure.patient_id]));
+  const procedureIds = [...procedurePatientById.keys()];
+  if (procedureIds.length === 0) return labels.filter((label) => !label.patient_id);
+
+  const { data: rooms, error: roomError } = await adminClient
+    .from("rooms")
+    .select("id, procedure_id")
+    .in("procedure_id", procedureIds);
+  if (roomError) throw roomError;
+
+  const patientByRoomId = new Map(
+    (rooms || []).map((room: any) => [room.id, procedurePatientById.get(room.procedure_id)]),
+  );
+  const roomIds = [...patientByRoomId.keys()];
+  if (roomIds.length === 0) return labels.filter((label) => !label.patient_id);
+
+  const { data: memberships, error: membershipError } = await adminClient
+    .from("room_members")
+    .select("room_id")
+    .eq("user_id", auth.userId)
+    .in("room_id", roomIds);
+  if (membershipError) throw membershipError;
+
+  const allowedPatientIds = new Set(
+    (memberships || []).map((membership: any) => patientByRoomId.get(membership.room_id)).filter(Boolean),
+  );
+  return labels.filter((label) => !label.patient_id || allowedPatientIds.has(label.patient_id));
+}
+
 async function loadLabels(userId: string) {
   return adminClient
     .from("labels")
@@ -101,7 +183,8 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await loadLabels(auth.userId);
     if (error) return NextResponse.json({ error: error.message || "Could not load labels." }, { status: 500 });
-    return NextResponse.json({ labels: data || [] });
+    const labels = await visibleLabelsForAuth(auth, (data || []) as PatientLabelRow[]);
+    return NextResponse.json({ labels });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Unexpected label error." }, { status: 500 });
   }
@@ -149,7 +232,7 @@ export async function POST(request: NextRequest) {
 
       const { data: labels, error: labelsError } = await loadLabels(auth.userId);
       if (labelsError) return NextResponse.json({ error: labelsError.message || "Could not load labels." }, { status: 500 });
-      return NextResponse.json({ label, labels: labels || [] });
+      return NextResponse.json({ label, labels: await visibleLabelsForAuth(auth, (labels || []) as PatientLabelRow[]) });
     }
 
     if (action === "assign") {
@@ -164,6 +247,8 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       if (patientError) return NextResponse.json({ error: patientError.message || "Could not verify patient." }, { status: 500 });
       if (!patient?.id) return NextResponse.json({ error: "Patient not found." }, { status: 404 });
+      const access = await verifyPatientAccess(auth, patientId);
+      if (access.response) return access.response;
 
       const { data: rows, error: rowsError } = await loadLabels(auth.userId);
       if (rowsError) return NextResponse.json({ error: rowsError.message || "Could not load labels." }, { status: 500 });
@@ -216,7 +301,7 @@ export async function POST(request: NextRequest) {
 
       const { data: labels, error: labelsError } = await loadLabels(auth.userId);
       if (labelsError) return NextResponse.json({ error: labelsError.message || "Could not load labels." }, { status: 500 });
-      return NextResponse.json({ labels: labels || [] });
+      return NextResponse.json({ labels: await visibleLabelsForAuth(auth, (labels || []) as PatientLabelRow[]) });
     }
 
     return NextResponse.json({ error: "Unknown label action." }, { status: 400 });
@@ -266,7 +351,7 @@ export async function PATCH(request: NextRequest) {
 
     const { data: labels, error } = await loadLabels(auth.userId);
     if (error) return NextResponse.json({ error: error.message || "Could not load labels." }, { status: 500 });
-    return NextResponse.json({ labels: labels || [] });
+    return NextResponse.json({ labels: await visibleLabelsForAuth(auth, (labels || []) as PatientLabelRow[]) });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Unexpected label error." }, { status: 500 });
   }
@@ -305,7 +390,7 @@ export async function DELETE(request: NextRequest) {
 
     const { data: labels, error } = await loadLabels(auth.userId);
     if (error) return NextResponse.json({ error: error.message || "Could not load labels." }, { status: 500 });
-    return NextResponse.json({ labels: labels || [] });
+    return NextResponse.json({ labels: await visibleLabelsForAuth(auth, (labels || []) as PatientLabelRow[]) });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Unexpected label error." }, { status: 500 });
   }

@@ -31,16 +31,18 @@ async function getAuthenticatedStaff(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, admin_level")
+    .select("id, admin_level, role")
     .eq("id", userId)
     .maybeSingle();
 
-  return profile?.id ? { id: profile.id, adminLevel: `${profile.admin_level || ""}`.toLowerCase() } : null;
+  const role = `${profile?.role || ""}`.toLowerCase();
+  if (!profile?.id || role === "pending_staff") return null;
+  return profile.id ? { id: profile.id, adminLevel: `${profile.admin_level || ""}`.toLowerCase(), role } : null;
 }
 
-async function canNotifyPatientRoom(userId: string, adminLevel: string, roomId: string) {
+async function canNotifyPatientRoom(userId: string, adminLevel: string, role: string, roomId: string) {
   if (!supabase) return false;
-  if (adminLevel === "owner" || adminLevel === "super_admin") return true;
+  if (adminLevel === "owner" || adminLevel === "super_admin" || role === "doctor") return true;
 
   const { data: membership } = await supabase
     .from("room_members")
@@ -79,7 +81,7 @@ async function storeSubscription(req: NextRequest, body: any) {
     return NextResponse.json({ error: "Invalid subscription payload" }, { status: 400 });
   }
 
-  let staff: { id: string; adminLevel: string } | null = null;
+  let staff: { id: string; adminLevel: string; role: string } | null = null;
   if (userType === "staff") {
     staff = await getAuthenticatedStaff(req);
     if (!staff) return NextResponse.json({ error: "Missing or invalid staff session." }, { status: 401 });
@@ -175,7 +177,14 @@ export async function POST(req: NextRequest) {
 
     if (userType === "patient") {
       if (!staff) return NextResponse.json({ error: "Missing or invalid staff session." }, { status: 401 });
-      const allowed = await canNotifyPatientRoom(staff.id, staff.adminLevel, roomId);
+      const allowed = await canNotifyPatientRoom(staff.id, staff.adminLevel, staff.role, roomId);
+      if (!allowed) return NextResponse.json({ error: "You do not have access to this patient room." }, { status: 403 });
+    }
+    if (userType === "staff" && staff) {
+      if (typeof roomId !== "string" || !roomId.trim()) {
+        return NextResponse.json({ error: "roomId is required for staff room notifications." }, { status: 400 });
+      }
+      const allowed = await canNotifyPatientRoom(staff.id, staff.adminLevel, staff.role, roomId.trim());
       if (!allowed) return NextResponse.json({ error: "You do not have access to this patient room." }, { status: 403 });
     }
 

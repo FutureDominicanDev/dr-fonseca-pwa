@@ -23,11 +23,14 @@ export async function GET(request: NextRequest) {
 
     const { data: viewerProfile, error: viewerError } = await adminClient
       .from("profiles")
-      .select("id")
+      .select("id, role")
       .eq("id", userId)
       .maybeSingle();
     if (viewerError || !viewerProfile?.id) {
       return NextResponse.json({ error: "Profile not found." }, { status: 403 });
+    }
+    if (`${viewerProfile.role || ""}`.toLowerCase() === "pending_staff") {
+      return NextResponse.json({ error: "Staff approval is required before loading the directory." }, { status: 403 });
     }
 
     const { data, error } = await adminClient

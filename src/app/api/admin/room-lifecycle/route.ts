@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hasPermission, normalizePermissionList } from "@/lib/permissions";
+import { isOwnerEmail } from "@/lib/securityConfig";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -25,6 +26,12 @@ const parseStaffPermissionMap = (value: unknown) => {
   } catch {
     return {};
   }
+};
+
+const canAccessAllRooms = (profile: any, email: string) => {
+  const level = `${profile?.admin_level || ""}`.toLowerCase();
+  const role = `${profile?.role || ""}`.toLowerCase();
+  return isOwnerEmail(email) || level === "owner" || level === "super_admin" || role === "doctor";
 };
 
 export async function POST(request: NextRequest) {
@@ -58,6 +65,17 @@ export async function POST(request: NextRequest) {
       ? hasPermission(profileWithPermissions as any, requesterEmail, "restore_rooms")
       : hasPermission(profileWithPermissions as any, requesterEmail, "archive_rooms");
     if (!allowed) return NextResponse.json({ error: "You do not have permission to change room status." }, { status: 403 });
+
+    if (!canAccessAllRooms(profileWithPermissions, requesterEmail)) {
+      const { data: membership, error: membershipError } = await adminClient
+        .from("room_members")
+        .select("id")
+        .eq("room_id", roomId)
+        .eq("user_id", requester.id)
+        .maybeSingle();
+      if (membershipError) return NextResponse.json({ error: membershipError.message || "Could not verify room access." }, { status: 500 });
+      if (!membership?.id) return NextResponse.json({ error: "You do not have access to this patient room." }, { status: 403 });
+    }
 
     const roomQuery = await adminClient
       .from("rooms")

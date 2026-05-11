@@ -14,6 +14,28 @@ const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "mis
 const canEditClinicalRecord = (profile: any, email: string) =>
   isOwnerEmail(email) || (`${profile?.role || ""}`.toLowerCase() === "doctor" && hasPermission(profile, email, "edit_patient_info"));
 
+const canAccessAllPatientRooms = (profile: any, email: string) => {
+  const level = `${profile?.admin_level || ""}`.toLowerCase();
+  const role = `${profile?.role || ""}`.toLowerCase();
+  return isOwnerEmail(email) || level === "owner" || level === "super_admin" || role === "doctor";
+};
+
+const visibleMessagesForProfile = (messages: any[], profile: any, email: string) => {
+  const canViewFiles = hasPermission(profile, email, "view_upload_files");
+  const canViewInternal = hasPermission(profile, email, "view_internal_notes");
+  const canViewClinicalHistory = hasPermission(profile, email, "view_clinical_history");
+
+  return messages.filter((message) => {
+    const fileName = `${message?.file_name || ""}`;
+    const messageType = `${message?.message_type || ""}`;
+    if (message?.is_internal) return canViewInternal;
+    if (fileName.startsWith("[FORM]")) return canViewClinicalHistory;
+    if (fileName.startsWith("[MED]")) return canViewFiles;
+    if (messageType === "image" || messageType === "video" || messageType === "file") return canViewFiles;
+    return true;
+  });
+};
+
 const cleanOffice = (value: unknown) => (value === "Guadalajara" || value === "Tijuana" ? value : null);
 
 const parseStaffPermissionMap = (value: unknown) => {
@@ -87,12 +109,32 @@ export async function GET(
     if (roomsError) return NextResponse.json({ error: roomsError.message }, { status: 500 });
 
     const roomIds = (rooms || []).map((room: any) => room.id).filter(Boolean);
+    let visibleRooms = rooms || [];
+    if (!canAccessAllPatientRooms(permissionProfile, viewerEmail)) {
+      const { data: memberships, error: membershipsError } = roomIds.length
+        ? await adminClient
+            .from("room_members")
+            .select("room_id")
+            .eq("user_id", user.id)
+            .in("room_id", roomIds)
+        : { data: [], error: null };
+      if (membershipsError) return NextResponse.json({ error: membershipsError.message }, { status: 500 });
+
+      const allowedRoomIds = new Set((memberships || []).map((membership: any) => membership.room_id).filter(Boolean));
+      if (allowedRoomIds.size === 0) {
+        return NextResponse.json({ error: "No access to this patient record." }, { status: 403 });
+      }
+      visibleRooms = (rooms || []).filter((room: any) => allowedRoomIds.has(room.id));
+    }
+
+    const visibleRoomIds = visibleRooms.map((room: any) => room.id).filter(Boolean);
     const { data: messages, error: messagesError } = roomIds.length
-      ? await adminClient.from("messages").select("*").in("room_id", roomIds).order("created_at", { ascending: true })
+      ? await adminClient.from("messages").select("*").in("room_id", visibleRoomIds).order("created_at", { ascending: true })
       : { data: [], error: null };
     if (messagesError) return NextResponse.json({ error: messagesError.message }, { status: 500 });
+    const visibleMessages = visibleMessagesForProfile(messages || [], permissionProfile, viewerEmail);
 
-    const senderIds = [...new Set((messages || []).map((message: any) => message.sender_id).filter(Boolean))];
+    const senderIds = [...new Set(visibleMessages.map((message: any) => message.sender_id).filter(Boolean))];
     const { data: staffProfiles, error: staffError } = senderIds.length
       ? await adminClient.from("profiles").select("*").in("id", senderIds)
       : { data: [], error: null };
@@ -101,8 +143,8 @@ export async function GET(
     return NextResponse.json({
       patient,
       procedures: procedures || [],
-      rooms: rooms || [],
-      messages: messages || [],
+      rooms: visibleRooms || [],
+      messages: visibleMessages,
       staffProfiles: staffProfiles || [],
     });
   } catch (error: any) {
