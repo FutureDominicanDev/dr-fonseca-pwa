@@ -6,7 +6,7 @@ import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, 
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { isOwnerEmail } from "@/lib/securityConfig";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
-import { createSignedChatFileUrl, signMessageMediaUrls } from "@/lib/chatFileUrls";
+import { createSignedChatFileUrl, signMessageMediaUrls, type SignedChatFileUrlCache } from "@/lib/chatFileUrls";
 import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 
 type Lang = "es" | "en";
@@ -949,8 +949,10 @@ export default function InboxPage() {
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
   const [callOverlayOpen, setCallOverlayOpen] = useState(false);
 
-  const signChatFileUrl = useCallback((value?: string | null) => createSignedChatFileUrl(supabase, value), []);
-  const signChatMessages = useCallback((entries: any[]) => signMessageMediaUrls(supabase, entries || []), []);
+  const signedChatFileUrlCacheRef = useRef<SignedChatFileUrlCache>(new Map());
+  const backgroundRefreshRunningRef = useRef(false);
+  const signChatFileUrl = useCallback((value?: string | null) => createSignedChatFileUrl(supabase, value, 3600, signedChatFileUrlCacheRef.current), []);
+  const signChatMessages = useCallback((entries: any[]) => signMessageMediaUrls(supabase, entries || [], 3600, signedChatFileUrlCacheRef.current), []);
   const signPatientMedia = useCallback(async (patient: any) => ({
     ...patient,
     profile_picture_url: await signChatFileUrl(patient?.profile_picture_url),
@@ -3042,16 +3044,22 @@ export default function InboxPage() {
 
   // Fallback: refresh sidebar/messages frequently in case realtime drops events on mobile or background tabs
   useEffect(()=>{
-    const refresh = () => {
+    const refresh = async () => {
       if (pauseBackgroundRefreshRef.current) return;
-      fetchRooms();
-      if (selectedRoomRef.current) fetchMessages(selectedRoomRef.current.id);
+      if (backgroundRefreshRunningRef.current) return;
+      backgroundRefreshRunningRef.current = true;
+      try {
+        await fetchRooms();
+        if (selectedRoomRef.current) await fetchMessages(selectedRoomRef.current.id);
+      } finally {
+        backgroundRefreshRunningRef.current = false;
+      }
     };
-    const onFocus = () => refresh();
-    const onVisible = () => { if (document.visibilityState==="visible") refresh(); };
+    const onFocus = () => { void refresh(); };
+    const onVisible = () => { if (document.visibilityState==="visible") void refresh(); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
-    const interval = setInterval(refresh, 2000);
+    const interval = setInterval(() => { void refresh(); }, 2000);
     return ()=>{ window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVisible); clearInterval(interval); };
   },[]);
 
