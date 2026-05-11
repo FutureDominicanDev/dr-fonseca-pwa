@@ -411,9 +411,7 @@ export default function AdminPage() {
   };
 
   const renderSectionTopButton = () => (
-    <button type="button" className="section-top-btn" onClick={scrollAdminToTop}>
-      {isSpanish ? "Arriba" : "Top"}
-    </button>
+    null
   );
 
   const fetchData = async () => {
