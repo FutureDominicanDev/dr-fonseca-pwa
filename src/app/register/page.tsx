@@ -17,6 +17,7 @@ const COPY = {
     codeSubtitle: "Acceso privado para el equipo autorizado de Siluety Plastic Surgery.",
     inviteHeading: "Código de invitación",
     inviteCopy: "Ingresa el código del consultorio para empezar.",
+    inviteSecurityNote: "Después de verificarlo aparece el formulario completo con nombre, celular o correo, consultorio y contraseña. El dispositivo y la ubicación se guardan automáticamente para que el doctor revise la solicitud.",
     inviteLabel: "Código de invitación",
     invitePlaceholder: "FONSECA-XXXXXX",
     verify: "Verificar código",
@@ -95,6 +96,7 @@ const COPY = {
     codeSubtitle: "Private access for the authorized Siluety Plastic Surgery team.",
     inviteHeading: "Invitation code",
     inviteCopy: "Enter the office code to begin.",
+    inviteSecurityNote: "After the code is verified, the full form opens with name, phone or email, office, and password. Device and location are saved automatically so the doctor can review the request.",
     inviteLabel: "Invitation code",
     invitePlaceholder: "FONSECA-XXXXXX",
     verify: "Verify code",
@@ -570,6 +572,17 @@ export default function RegisterPage() {
         }
         .panel-title { margin: 0 0 8px; color: #10243b; font-size: 25px; line-height: 1.16; font-weight: 850; letter-spacing: 0; }
         .panel-copy { margin: 0 0 22px; color: #64748B; font-size: 15px; line-height: 1.5; font-weight: 650; }
+        .security-note {
+          margin: -8px 0 20px;
+          padding: 12px 14px;
+          border-radius: 14px;
+          background: #EFF7FE;
+          border: 1px solid #D9EAF7;
+          color: #426987;
+          font-size: 13px;
+          line-height: 1.45;
+          font-weight: 750;
+        }
         .field { margin-bottom: 16px; }
         .field-label { display: block; color: #25384d; font-size: 13px; font-weight: 850; margin-bottom: 8px; }
         .input {
@@ -786,6 +799,7 @@ export default function RegisterPage() {
               <section className="panel invite-panel" aria-label={t.inviteHeading}>
                 <h2 className="panel-title">{t.inviteHeading}</h2>
                 <p className="panel-copy">{t.inviteCopy}</p>
+                <p className="security-note">{t.inviteSecurityNote}</p>
                 {error && <div className="error">{error}</div>}
                 <div className="field">
                   <label className="field-label">{t.inviteLabel}</label>
