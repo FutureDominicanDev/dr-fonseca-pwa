@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
+import { isOwnerIdentity } from "@/lib/securityConfig";
 
 const VAPID_EMAIL = process.env.VAPID_EMAIL || "";
 const VAPID_PUBLIC = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
@@ -31,13 +32,26 @@ async function getAuthenticatedStaff(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, admin_level, role")
+    .select("id, admin_level, role, email, phone, full_name, display_name")
     .eq("id", userId)
     .maybeSingle();
 
   const role = `${profile?.role || ""}`.toLowerCase();
   if (!profile?.id || role === "pending_staff") return null;
-  return profile.id ? { id: profile.id, adminLevel: `${profile.admin_level || ""}`.toLowerCase(), role } : null;
+  const rawAdminLevel = `${profile.admin_level || ""}`.toLowerCase();
+  const adminLevel = isOwnerIdentity({
+    id: profile.id,
+    email: authData.user?.email || profile.email,
+    phone: profile.phone,
+    fullName: profile.full_name,
+    displayName: profile.display_name,
+    adminLevel: profile.admin_level,
+  })
+    ? "owner"
+    : rawAdminLevel === "owner"
+      ? "super_admin"
+      : rawAdminLevel;
+  return profile.id ? { id: profile.id, adminLevel, role } : null;
 }
 
 async function canNotifyPatientRoom(userId: string, adminLevel: string, role: string, roomId: string) {

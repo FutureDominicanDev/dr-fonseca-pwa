@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { isOwnerEmail } from "@/lib/securityConfig";
+import { isDeveloperAccessEmail, isOwnerIdentity } from "@/lib/securityConfig";
 import {
   STAFF_PERMISSIONS_SETTING_KEY,
   hasPermission,
@@ -91,10 +91,21 @@ export async function POST(request: NextRequest) {
     ]);
     const permissionMap = parseStaffPermissionMap(permissionSetting?.value);
     const requesterAdminLevel = `${(requesterProfile as any)?.admin_level || ""}`.toLowerCase();
+    const requesterMetadata = (requester.user_metadata || {}) as Record<string, unknown>;
+    const requesterPhone = normalizePhone(
+      `${(requesterProfile as any)?.phone || requester.phone || requesterMetadata.phone || ""}`,
+    );
+    const requesterIsOwner = isOwnerIdentity({
+      id: requester.id,
+      email: requesterEmail,
+      phone: requesterPhone,
+      fullName: (requesterProfile as any)?.full_name || `${requesterMetadata.full_name || ""}`,
+      displayName: (requesterProfile as any)?.display_name || "",
+      adminLevel: requesterAdminLevel,
+    });
     const requesterPermissionProfile = requesterProfile
       ? { ...(requesterProfile as any), permissions: permissionMap[requester.id] ?? (requesterProfile as any).permissions }
       : null;
-    const requesterIsOwner = isOwnerEmail(requesterEmail) || requesterAdminLevel === "owner";
     const requesterCanRevoke = requesterIsOwner || hasPermission(requesterPermissionProfile, requesterEmail, "delete_staff_accounts");
     if (!requesterCanRevoke) {
       return NextResponse.json({ error: "Only the doctor/owner or a user with delete accounts permission can delete staff users." }, { status: 403 });
@@ -111,15 +122,26 @@ export async function POST(request: NextRequest) {
     if (authUserRes.error && !isUserNotFoundError(authUserRes.error)) {
       return NextResponse.json({ error: authUserRes.error.message || "Could not read auth user." }, { status: 500 });
     }
-    const targetEmail = authUserRes.data?.user?.email?.trim().toLowerCase() || "";
-    const targetPhoneFromAuth = normalizePhone(authUserRes.data?.user?.phone || "");
-    if (isOwnerEmail(targetEmail)) {
-      return NextResponse.json({ error: "Owner account is protected and cannot be revoked." }, { status: 403 });
-    }
+    const targetAuthUser = authUserRes.data?.user;
+    const targetEmail = targetAuthUser?.email?.trim().toLowerCase() || "";
+    const targetPhoneFromAuth = normalizePhone(targetAuthUser?.phone || "");
 
     const { data: profileRow } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
     const targetAdminLevel = `${(profileRow as any)?.admin_level || ""}`.toLowerCase();
-    if (targetAdminLevel === "owner") {
+    const targetMetadata = (targetAuthUser?.user_metadata || {}) as Record<string, unknown>;
+    const targetPhoneFromProfile = normalizePhone((profileRow as any)?.phone || "");
+    const targetPhone = targetPhoneFromAuth || targetPhoneFromProfile || normalizePhone(`${targetMetadata.phone || ""}`);
+    const targetProfileEmail = `${(profileRow as any)?.email || ""}`.trim().toLowerCase();
+    const targetRealEmail = `${targetMetadata.real_email || ""}`.trim().toLowerCase();
+    const targetIsOwner = isOwnerIdentity({
+      id: userId,
+      email: targetEmail || targetProfileEmail || targetRealEmail,
+      phone: targetPhone,
+      fullName: (profileRow as any)?.full_name || `${targetMetadata.full_name || ""}`,
+      displayName: (profileRow as any)?.display_name || "",
+      adminLevel: targetAdminLevel,
+    });
+    if (targetIsOwner) {
       return NextResponse.json({ error: "Owner account is protected and cannot be revoked." }, { status: 403 });
     }
     if (targetAdminLevel === "super_admin" && !requesterIsOwner) {
@@ -128,8 +150,12 @@ export async function POST(request: NextRequest) {
 
     const targetRole = typeof (profileRow as any)?.role === "string" ? (profileRow as any).role : "staff";
     const neutralRoleLabel = roleLabelEs(targetRole);
-    const targetPhoneFromProfile = normalizePhone((profileRow as any)?.phone || "");
-    const targetPhone = targetPhoneFromAuth || targetPhoneFromProfile;
+    const isDeveloperAccessUser =
+      isDeveloperAccessEmail(targetEmail) ||
+      isDeveloperAccessEmail(targetProfileEmail) ||
+      isDeveloperAccessEmail(targetRealEmail) ||
+      `${(profileRow as any)?.role || ""}`.toLowerCase() === "developer" ||
+      `${targetMetadata.portal_access || ""}`.toLowerCase() === "developer";
 
     if (!targetEmail && !targetPhone) {
       return NextResponse.json({ error: "Could not resolve staff email/phone." }, { status: 404 });
@@ -147,24 +173,28 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     const blockedEmails = new Set(parseEmails(blockedEmailSetting?.value));
-    if (targetEmail) blockedEmails.add(targetEmail);
+    if (!isDeveloperAccessUser && targetEmail) blockedEmails.add(targetEmail);
     const blockedPhones = new Set(parsePhones(blockedPhoneSetting?.value));
-    if (targetPhone) blockedPhones.add(targetPhone);
+    if (!isDeveloperAccessUser && targetPhone) blockedPhones.add(targetPhone);
     const nextBlockedEmails = Array.from(blockedEmails).sort().join(", ");
     const nextBlockedPhones = Array.from(blockedPhones).sort().join(", ");
-    const nextInviteCode = createInviteCode();
+    const nextInviteCode = isDeveloperAccessUser ? "" : createInviteCode();
     const nowIso = new Date().toISOString();
 
-    const { error: settingsError } = await supabase
-      .from("app_settings")
-      .upsert(
-        [
+    const settingsPayload = isDeveloperAccessUser
+      ? [
+          { key: "blocked_signup_emails", value: nextBlockedEmails, updated_at: nowIso },
+          { key: "blocked_signup_phones", value: nextBlockedPhones, updated_at: nowIso },
+        ]
+      : [
           { key: "blocked_signup_emails", value: nextBlockedEmails, updated_at: nowIso },
           { key: "blocked_signup_phones", value: nextBlockedPhones, updated_at: nowIso },
           { key: "invite_code", value: nextInviteCode, updated_at: nowIso },
-        ],
-        { onConflict: "key" },
-      );
+        ];
+
+    const { error: settingsError } = await supabase
+      .from("app_settings")
+      .upsert(settingsPayload, { onConflict: "key" });
     if (settingsError) {
       return NextResponse.json({ error: settingsError.message || "Failed to update settings." }, { status: 500 });
     }
@@ -225,6 +255,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (permissionMap[userId]) {
+      const nextPermissionMap = { ...permissionMap };
+      delete nextPermissionMap[userId];
+      const { error: permissionCleanupError } = await supabase
+        .from("app_settings")
+        .upsert(
+          { key: STAFF_PERMISSIONS_SETTING_KEY, value: JSON.stringify(nextPermissionMap), updated_at: nowIso },
+          { onConflict: "key" },
+        );
+      if (permissionCleanupError && !isMissingSchemaError(permissionCleanupError)) {
+        return NextResponse.json({ error: permissionCleanupError.message || "Failed to clear staff permissions." }, { status: 500 });
+      }
+    }
+
     const { error: deleteProfileError } = await supabase.from("profiles").delete().eq("id", userId);
     if (deleteProfileError) {
       return NextResponse.json({ error: deleteProfileError.message || "Failed to remove profile row." }, { status: 500 });
@@ -239,7 +283,8 @@ export async function POST(request: NextRequest) {
       ok: true,
       removedEmail: targetEmail,
       removedPhone: targetPhone,
-      newInviteCode: nextInviteCode,
+      newInviteCode: nextInviteCode || null,
+      blockedAccess: !isDeveloperAccessUser,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Unexpected revoke error." }, { status: 500 });

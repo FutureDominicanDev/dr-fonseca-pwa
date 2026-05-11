@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
-import { isOwnerEmail } from "@/lib/securityConfig";
+import { isOwnerIdentity } from "@/lib/securityConfig";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -73,9 +73,17 @@ function requireManageLabels(auth: Awaited<ReturnType<typeof requireUser>>) {
 }
 
 function canAccessAllPatientRooms(profile: any, email: string) {
-  const level = `${profile?.admin_level || ""}`.toLowerCase();
+  const rawLevel = `${profile?.admin_level || ""}`.toLowerCase();
+  const level = rawLevel === "owner" ? "super_admin" : rawLevel;
   const role = `${profile?.role || ""}`.toLowerCase();
-  return isOwnerEmail(email) || level === "owner" || level === "super_admin" || role === "doctor";
+  return isOwnerIdentity({
+    id: profile?.id,
+    email,
+    phone: profile?.phone,
+    fullName: profile?.full_name,
+    displayName: profile?.display_name,
+    adminLevel: profile?.admin_level,
+  }) || level === "super_admin" || role === "doctor";
 }
 
 async function verifyPatientAccess(auth: Awaited<ReturnType<typeof requireUser>>, patientId: string) {

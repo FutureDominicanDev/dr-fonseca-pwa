@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { PRIMARY_OWNER_EMAIL, isOwnerEmail } from "@/lib/securityConfig";
+import { PRIMARY_OWNER_EMAIL, isOwnerIdentity } from "@/lib/securityConfig";
 import { normalizePhone } from "@/lib/authIdentity";
 import nodemailer from "nodemailer";
 
@@ -224,6 +224,51 @@ const sendWelcomeEmail = async (params: { fullName: string; email: string; role:
   return { sent: true };
 };
 
+const sendStaffPendingEmail = async (params: { fullName: string; email: string; officeLocation: string | null }) => {
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SMTP_FROM_EMAIL) return { sent: false, reason: "smtp_not_configured" };
+
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465,
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS,
+    },
+  });
+
+  const loginUrl = `${APP_URL}/login`;
+  const officeText = params.officeLocation || "Ambas sedes";
+
+  await transporter.sendMail({
+    from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
+    to: params.email,
+    subject: "Solicitud recibida - Portal Medico Dr. Fonseca",
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f3f6fb;padding:20px;">
+        <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
+          <div style="background:#0b3a5b;padding:20px;text-align:center;">
+            <img src="${APP_URL}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
+            <div style="color:#dbeafe;letter-spacing:.08em;font-size:13px;font-weight:700;">PORTAL MEDICO</div>
+          </div>
+          <div style="padding:22px;">
+            <h1 style="margin:0 0 12px 0;font-size:25px;color:#0f172a;">Solicitud recibida</h1>
+            <p style="margin:0 0 12px 0;color:#334155;line-height:1.65;">Hola ${escapeHtml(params.fullName)}, recibimos tu registro para el Portal Medico de Dr. Fonseca.</p>
+            <p style="margin:0 0 8px 0;">Sede indicada: <strong>${escapeHtml(officeText)}</strong></p>
+            <p style="margin:12px 0 0 0;color:#334155;line-height:1.65;">Por seguridad, tu cuenta queda en espera hasta que el doctor o un administrador autorizado la apruebe. Mientras tanto no tienes acceso a expedientes de pacientes.</p>
+            <p style="margin:18px 0 0;">
+              <a href="${loginUrl}" style="display:inline-block;background:#0b63ce;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-weight:800;">Abrir portal</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    `,
+    text: `Solicitud recibida - Portal Medico Dr. Fonseca\n\n${params.fullName}, recibimos tu registro. Sede indicada: ${officeText}. Por seguridad, tu cuenta queda en espera hasta que sea aprobada. Portal: ${loginUrl}`,
+  });
+
+  return { sent: true };
+};
+
 export async function POST(request: NextRequest) {
   try {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -279,9 +324,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "This email cannot register for staff access." }, { status: 403 });
     }
 
+    const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
     const requesterEmail = `${requester.email || ""}`.trim().toLowerCase();
     const ownerLookupEmail = email || requesterEmail;
-    const adminLevel = isOwnerEmail(ownerLookupEmail) ? "owner" : "none";
+    const ownerIdentity = isOwnerIdentity({
+      id: userId,
+      email: ownerLookupEmail,
+      phone: phone || requester.phone || (requester.user_metadata as any)?.phone,
+      fullName: (existingProfile as any)?.full_name || fullName,
+      displayName: (existingProfile as any)?.display_name || fullName,
+      adminLevel: (existingProfile as any)?.admin_level,
+    });
+    const adminLevel = ownerIdentity ? "owner" : "none";
     const profileRole = adminLevel === "owner" ? "doctor" : "pending_staff";
     const candidates = [
       {
@@ -377,6 +431,7 @@ export async function POST(request: NextRequest) {
 
     let welcomeEmail: { sent: boolean; reason?: string; error?: string } = { sent: false };
     let pendingApprovalEmail: { sent: boolean; reason?: string; error?: string } = { sent: false };
+    let pendingUserEmail: { sent: boolean; reason?: string; error?: string } = { sent: false };
     if (adminLevel === "owner" && email) {
       try {
         welcomeEmail = await sendWelcomeEmail({ fullName, email, role: profileRole, officeLocation });
@@ -389,10 +444,19 @@ export async function POST(request: NextRequest) {
       } catch (mailError: any) {
         pendingApprovalEmail = { sent: false, error: mailError?.message || "approval_email_failed" };
       }
+      if (email) {
+        try {
+          pendingUserEmail = await sendStaffPendingEmail({ fullName, email, officeLocation });
+        } catch (mailError: any) {
+          pendingUserEmail = { sent: false, error: mailError?.message || "pending_user_email_failed" };
+        }
+      } else {
+        pendingUserEmail = { sent: false, reason: "no_email" };
+      }
       welcomeEmail = { sent: false, reason: "pending_approval" };
     }
 
-    return NextResponse.json({ ok: true, role: profileRole, welcomeEmail, pendingApprovalEmail });
+    return NextResponse.json({ ok: true, role: profileRole, welcomeEmail, pendingApprovalEmail, pendingUserEmail });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Unexpected bootstrap error." }, { status: 500 });
   }

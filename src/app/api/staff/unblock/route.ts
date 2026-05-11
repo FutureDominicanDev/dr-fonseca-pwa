@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { isOwnerEmail } from "@/lib/securityConfig";
+import { isOwnerIdentity } from "@/lib/securityConfig";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -41,9 +41,18 @@ export async function POST(request: NextRequest) {
     }
 
     const requesterEmail = requester.email?.trim().toLowerCase() || "";
-    const { data: requesterProfile } = await supabase.from("profiles").select("admin_level").eq("id", requester.id).maybeSingle();
-    const requesterAdminLevel = `${(requesterProfile as any)?.admin_level || ""}`.toLowerCase();
-    const requesterCanUnblock = isOwnerEmail(requesterEmail) || requesterAdminLevel === "owner" || requesterAdminLevel === "super_admin";
+    const requesterMetadata = (requester.user_metadata || {}) as Record<string, unknown>;
+    const { data: requesterProfile } = await supabase.from("profiles").select("*").eq("id", requester.id).maybeSingle();
+    const rawRequesterAdminLevel = `${(requesterProfile as any)?.admin_level || ""}`.toLowerCase();
+    const requesterAdminLevel = rawRequesterAdminLevel === "owner" ? "super_admin" : rawRequesterAdminLevel;
+    const requesterCanUnblock = isOwnerIdentity({
+      id: requester.id,
+      email: requesterEmail,
+      phone: `${(requesterProfile as any)?.phone || requester.phone || requesterMetadata.phone || ""}`,
+      fullName: (requesterProfile as any)?.full_name || `${requesterMetadata.full_name || ""}`,
+      displayName: (requesterProfile as any)?.display_name || "",
+      adminLevel: `${(requesterProfile as any)?.admin_level || ""}`,
+    }) || requesterAdminLevel === "super_admin";
     if (!requesterCanUnblock) {
       return NextResponse.json({ error: "Only owner or super admin can restore blocked staff access." }, { status: 403 });
     }

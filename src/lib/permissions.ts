@@ -1,4 +1,4 @@
-import { isOwnerEmail } from "@/lib/securityConfig";
+import { isOwnerIdentity } from "@/lib/securityConfig";
 
 export const STAFF_PERMISSION_KEYS = [
   "view_patients",
@@ -14,6 +14,7 @@ export const STAFF_PERMISSION_KEYS = [
   "manage_staff",
   "manage_permissions",
   "delete_staff_accounts",
+  "delete_staff_chat",
   "access_audit_logs",
   "access_settings_security",
 ] as const;
@@ -26,6 +27,10 @@ export const STAFF_PERMISSIONS_SETTING_KEY = "staff_permissions";
 
 export type PermissionProfile = {
   email?: string | null;
+  id?: string | null;
+  full_name?: string | null;
+  display_name?: string | null;
+  phone?: string | null;
   admin_level?: string | null;
   role?: string | null;
   permissions?: unknown;
@@ -45,8 +50,9 @@ export const STAFF_PERMISSION_LABELS: Record<StaffPermissionKey, { es: string; e
   manage_staff: { es: "Gestionar personal", en: "Manage staff" },
   manage_permissions: { es: "Gestionar permisos", en: "Manage permissions" },
   delete_staff_accounts: { es: "Eliminar cuentas de usuario", en: "Delete user accounts" },
+  delete_staff_chat: { es: "Eliminar chats staff", en: "Delete staff chats" },
   access_audit_logs: { es: "Ver auditoria", en: "Access audit logs" },
-  access_settings_security: { es: "Ajustes y seguridad", en: "Settings and security" },
+  access_settings_security: { es: "Abrir centro admin", en: "Open admin center" },
 };
 
 export const LEGACY_ROLE_PERMISSION_DEFAULTS: Record<string, StaffPermissionKey[]> = {
@@ -109,13 +115,21 @@ export const parseStaffPermissionMap = (value: unknown): StaffPermissionMap => {
 
 export const permissionsForProfile = (profile: PermissionProfile | null | undefined, email = ""): Set<StaffPermissionKey> => {
   const resolvedEmail = email || `${profile?.email || ""}`;
-  if (isOwnerEmail(resolvedEmail)) return new Set(STAFF_PERMISSION_KEYS);
+  if (isOwnerIdentity({
+    id: profile?.id,
+    email: resolvedEmail,
+    phone: profile?.phone,
+    fullName: profile?.full_name,
+    displayName: profile?.display_name,
+    adminLevel: profile?.admin_level,
+  })) return new Set(STAFF_PERMISSION_KEYS);
   if (`${profile?.role || ""}`.toLowerCase() === "pending_staff") return new Set();
 
   const explicit = normalizePermissionList(profile?.permissions);
   if (hasExplicitPermissionList(profile?.permissions)) return new Set(explicit);
 
-  const level = `${profile?.admin_level || "none"}`.toLowerCase();
+  const rawLevel = `${profile?.admin_level || "none"}`.toLowerCase();
+  const level = rawLevel === "owner" ? "super_admin" : rawLevel;
   return new Set(LEGACY_ROLE_PERMISSION_DEFAULTS[level] || LEGACY_ROLE_PERMISSION_DEFAULTS.none);
 };
 

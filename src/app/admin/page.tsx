@@ -22,7 +22,7 @@ import {
   type RoomRecord,
   type StaffProfile,
 } from "@/lib/adminPortal";
-import { isOwnerEmail } from "@/lib/securityConfig";
+import { isDeveloperAccessEmail, isOwnerIdentity } from "@/lib/securityConfig";
 import {
   STAFF_PERMISSION_KEYS,
   STAFF_PERMISSIONS_SETTING_KEY,
@@ -48,19 +48,88 @@ const permissionDescriptions: Record<StaffPermissionKey, { es: string; en: strin
   manage_internal_notes: { es: "Puede crear notas y fotos internas del expediente.", en: "Can create internal record notes and photos." },
   manage_labels: { es: "Puede crear y asignar etiquetas de pacientes.", en: "Can create and assign patient labels." },
   manage_staff: { es: "Puede administrar equipo, teléfonos y solicitudes.", en: "Can manage staff, phones, and access requests." },
-  manage_permissions: { es: "Puede cambiar permisos de otros usuarios.", en: "Can change permissions for other users." },
+  manage_permissions: { es: "Puede cambiar permisos de otros usuarios, excepto derechos reservados al doctor.", en: "Can change other users' permissions except doctor-only rights." },
   delete_staff_accounts: { es: "Puede eliminar cuentas del equipo si el doctor le dio ese derecho.", en: "Can delete team accounts if the doctor granted that right." },
+  delete_staff_chat: { es: "Puede eliminar conversaciones internas staff a staff si el doctor se lo autorizó.", en: "Can delete internal staff-to-staff conversations if the doctor authorized it." },
   access_audit_logs: { es: "Puede revisar auditoria y eventos administrativos.", en: "Can review audit and admin events." },
-  access_settings_security: { es: "Puede entrar al centro admin y ajustes de seguridad.", en: "Can enter admin center and security settings." },
+  access_settings_security: { es: "Puede abrir Admin. No elimina usuarios ni cambia permisos por sí solo.", en: "Can open Admin. It does not delete users or change permissions by itself." },
+};
+
+const permissionDetails: Record<StaffPermissionKey, { es: string; en: string }> = {
+  view_patients: {
+    es: "Permite ver la lista de pacientes y abrir solamente los chats o expedientes donde el usuario esté asignado, salvo que también tenga permisos administrativos superiores.",
+    en: "Allows the user to see the patient list and open only the chats or records assigned to them, unless they also have higher administrative rights.",
+  },
+  create_patients: {
+    es: "Permite crear pacientes, procedimientos, salas y enlaces seguros nuevos. No da permiso automático para eliminar cuentas ni cambiar permisos.",
+    en: "Allows creating new patients, procedures, rooms, and secure links. It does not automatically allow deleting accounts or changing permissions.",
+  },
+  edit_patient_info: {
+    es: "Permite editar datos demográficos y clínicos del expediente del paciente. Úsalo solo para personal que de verdad deba corregir expedientes.",
+    en: "Allows editing demographic and clinical patient record details. Use it only for staff who truly need to correct records.",
+  },
+  archive_rooms: {
+    es: "Permite cancelar o archivar salas activas para sacarlas del flujo normal. No borra permanentemente al paciente.",
+    en: "Allows cancelling or archiving active rooms to remove them from normal workflow. It does not permanently delete the patient.",
+  },
+  restore_rooms: {
+    es: "Permite regresar salas archivadas o canceladas al flujo activo.",
+    en: "Allows restoring archived or cancelled rooms back to active workflow.",
+  },
+  view_clinical_history: {
+    es: "Permite ver formularios de Historia Clínica y PDFs enviados por pacientes. Es acceso sensible a información médica.",
+    en: "Allows viewing clinical history forms and PDFs submitted by patients. This is sensitive medical information access.",
+  },
+  view_upload_files: {
+    es: "Permite ver, descargar o compartir archivos visibles del paciente como fotos, videos, audio y documentos del chat.",
+    en: "Allows viewing, downloading, or sharing patient-visible files such as photos, videos, audio, and chat documents.",
+  },
+  view_internal_notes: {
+    es: "Permite ver notas y fotos internas del equipo en expedientes asignados. Estas notas no son para pacientes.",
+    en: "Allows viewing internal team notes and photos on assigned records. These notes are not patient-facing.",
+  },
+  manage_internal_notes: {
+    es: "Permite crear o modificar notas y fotos internas del expediente.",
+    en: "Allows creating or changing internal record notes and photos.",
+  },
+  manage_labels: {
+    es: "Permite crear y asignar etiquetas de seguimiento a pacientes.",
+    en: "Allows creating and assigning tracking labels to patients.",
+  },
+  manage_staff: {
+    es: "Permite administrar equipo, teléfonos, solicitudes pendientes e invitaciones operativas. No permite borrar cuentas sin el derecho separado de eliminar cuentas.",
+    en: "Allows managing staff, phones, pending requests, and operational invitations. It does not allow deleting accounts without the separate delete-account right.",
+  },
+  manage_permissions: {
+    es: "Permite cambiar permisos comunes de otros usuarios. Los derechos delicados reservados al doctor no se pueden otorgar si la cuenta no es la propietaria.",
+    en: "Allows changing common permissions for other users. Sensitive doctor-only rights cannot be granted by a non-owner account.",
+  },
+  delete_staff_accounts: {
+    es: "Permite eliminar cuentas del equipo. La cuenta propietaria de Miguel Fonseca está protegida por el programa y no se puede eliminar con este permiso.",
+    en: "Allows deleting team accounts. Miguel Fonseca's owner account is protected by the app and cannot be deleted with this permission.",
+  },
+  delete_staff_chat: {
+    es: "Permite borrar conversaciones internas staff a staff desde Admin. Úsalo solo para personal de máxima confianza porque elimina mensajes internos.",
+    en: "Allows deleting internal staff-to-staff conversations from Admin. Use it only for highly trusted staff because it removes internal messages.",
+  },
+  access_audit_logs: {
+    es: "Permite revisar auditoría y eventos administrativos para ver quién cambió datos o accesos.",
+    en: "Allows reviewing audit and administrative events to see who changed data or access.",
+  },
+  access_settings_security: {
+    es: "Permite entrar al centro Admin. Por sí solo no permite eliminar usuarios, borrar chats, cambiar permisos ni tocar la cuenta protegida del doctor.",
+    en: "Allows entering the Admin center. By itself, it does not allow deleting users, deleting chats, changing permissions, or touching the doctor's protected account.",
+  },
 };
 
 const permissionGroups: Array<{ id: string; es: string; en: string; permissions: StaffPermissionKey[] }> = [
   { id: "patients", es: "Pacientes y salas", en: "Patients and rooms", permissions: ["view_patients", "create_patients", "edit_patient_info", "archive_rooms", "restore_rooms"] },
   { id: "clinical", es: "Expediente clinico", en: "Clinical record", permissions: ["view_clinical_history", "view_upload_files", "view_internal_notes", "manage_internal_notes", "manage_labels"] },
-  { id: "admin", es: "Administracion y seguridad", en: "Administration and security", permissions: ["manage_staff", "manage_permissions", "delete_staff_accounts", "access_audit_logs", "access_settings_security"] },
+  { id: "admin", es: "Administracion y seguridad", en: "Administration and security", permissions: ["manage_staff", "manage_permissions", "delete_staff_accounts", "delete_staff_chat", "access_audit_logs", "access_settings_security"] },
 ];
 
 const deleteStaffAccountsPermission: StaffPermissionKey = "delete_staff_accounts";
+const doctorOnlyPermissions = new Set<StaffPermissionKey>(["delete_staff_accounts", "delete_staff_chat"]);
 
 const samePermissionList = (left: readonly StaffPermissionKey[], right: readonly StaffPermissionKey[]) =>
   STAFF_PERMISSION_KEYS.every((permission) => left.includes(permission) === right.includes(permission));
@@ -125,6 +194,7 @@ type AdminSectionId =
   | "solicitudes-pendientes"
   | "staff-to-staff"
   | "herramientas-expediente"
+  | "developer-access"
   | "invitar-personal"
   | "telefonos-sede"
   | "bloqueos";
@@ -156,7 +226,11 @@ export default function AdminPage() {
   const [staffEmailDrafts, setStaffEmailDrafts] = useState<Record<string, string>>({});
   const [resetBusyId, setResetBusyId] = useState("");
   const [deletingStaffId, setDeletingStaffId] = useState("");
+  const [deletingStaffChatKey, setDeletingStaffChatKey] = useState("");
   const [unblockBusyKey, setUnblockBusyKey] = useState("");
+  const [developerEmailDraft, setDeveloperEmailDraft] = useState("mrdiazsr@icloud.com");
+  const [developerNameDraft, setDeveloperNameDraft] = useState("Ray");
+  const [developerAccessBusy, setDeveloperAccessBusy] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const [activeAdminSection, setActiveAdminSection] = useState<AdminSectionId | "">("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -165,6 +239,7 @@ export default function AdminPage() {
   const [exportMenu, setExportMenu] = useState<{ type: "patient" | "staff"; id: string; title: string; body: string } | null>(null);
   const [expandedPendingStaffId, setExpandedPendingStaffId] = useState("");
   const [expandedStaffControlId, setExpandedStaffControlId] = useState("");
+  const [permissionHelp, setPermissionHelp] = useState<StaffPermissionKey | null>(null);
   const [pendingSignupDetails, setPendingSignupDetails] = useState<Record<string, PendingSignupDetail>>({});
   const [staffPermissionMap, setStaffPermissionMap] = useState<StaffPermissionMap>({});
   const [staffPermissionDrafts, setStaffPermissionDrafts] = useState<Record<string, StaffPermissionKey[]>>({});
@@ -177,7 +252,15 @@ export default function AdminPage() {
   const canManageAdmins = hasPermission(viewerPermissionProfile, viewerEmail, "manage_staff");
   const canManagePermissions = hasPermission(viewerPermissionProfile, viewerEmail, "manage_permissions");
   const canDeleteStaffAccounts = hasPermission(viewerPermissionProfile, viewerEmail, deleteStaffAccountsPermission);
-  const canManageOwner = isOwnerEmail(viewerEmail);
+  const canDeleteStaffChats = hasPermission(viewerPermissionProfile, viewerEmail, "delete_staff_chat");
+  const canManageOwner = isOwnerIdentity({
+    id: viewerId,
+    email: viewerEmail,
+    phone: viewerProfile?.phone,
+    fullName: viewerProfile?.full_name,
+    displayName: viewerProfile?.display_name,
+    adminLevel: viewerProfile?.admin_level,
+  });
   const canReviewAccessRequests = hasPermission(viewerPermissionProfile, viewerEmail, "manage_staff");
 
   const sanitizeEditablePermissions = (member: StaffProfile, requestedPermissions: StaffPermissionKey[]) => {
@@ -186,10 +269,11 @@ export default function AdminPage() {
 
     const existingProfile = { ...member, permissions: staffPermissionMap[member.id] ?? member.permissions };
     const existingPermissions = permissionsForProfile(existingProfile, member.email || "");
-    const withoutDoctorOnlyPermission = cleanPermissions.filter((permission) => permission !== deleteStaffAccountsPermission);
-    return existingPermissions.has(deleteStaffAccountsPermission)
-      ? [...withoutDoctorOnlyPermission, deleteStaffAccountsPermission]
-      : withoutDoctorOnlyPermission;
+    const withoutDoctorOnlyPermissions = cleanPermissions.filter((permission) => !doctorOnlyPermissions.has(permission));
+    doctorOnlyPermissions.forEach((permission) => {
+      if (existingPermissions.has(permission)) withoutDoctorOnlyPermissions.push(permission);
+    });
+    return withoutDoctorOnlyPermissions;
   };
 
   const officeText = (office: Office) => {
@@ -197,6 +281,7 @@ export default function AdminPage() {
     if (office === "Tijuana") return "📍 Tijuana";
     return isSpanish ? "📍 Sin sede" : "📍 No office";
   };
+  const staffOfficeText = (office?: string | null) => office || (isSpanish ? "Ambas sedes" : "Both offices");
 
   const parseSettingList = (value: unknown) => {
     if (typeof value !== "string") return [] as string[];
@@ -283,8 +368,10 @@ export default function AdminPage() {
   }, [allPatientCards, patientSearch]);
 
   const hasActiveSearch = patientSearch.trim().length > 0;
-  const visiblePatientCards = hasActiveSearch ? patientCards.slice(0, 12) : [];
-  const hiddenPatientCount = Math.max(0, patientCards.length - visiblePatientCards.length);
+  const activePatientCards = allPatientCards.filter((card) => card.recordStatus === "active");
+  const displayedPatientCards = hasActiveSearch ? patientCards : activePatientCards;
+  const visiblePatientCards = displayedPatientCards.slice(0, hasActiveSearch ? 12 : 50);
+  const hiddenPatientCount = Math.max(0, displayedPatientCards.length - visiblePatientCards.length);
   const inviteLink = typeof window !== "undefined" && inviteCode
     ? `${window.location.origin}/register?code=${encodeURIComponent(inviteCode)}`
     : "";
@@ -332,7 +419,7 @@ export default function AdminPage() {
       { label: isSpanish ? "Nombre enviado" : "Submitted name", value: member.full_name || member.display_name || (isSpanish ? "Sin nombre" : "No name") },
       { label: isSpanish ? "Correo" : "Email", value: visibleStaffEmail(member.email) || (isSpanish ? "No ingresó correo" : "No email entered") },
       { label: isSpanish ? "Teléfono" : "Phone", value: member.phone || (isSpanish ? "No ingresó teléfono" : "No phone entered") },
-      { label: isSpanish ? "Sede solicitada" : "Requested office", value: member.office_location || (isSpanish ? "Sin sede" : "No office") },
+      { label: isSpanish ? "Sede solicitada" : "Requested office", value: staffOfficeText(member.office_location) },
       { label: isSpanish ? "Método de registro" : "Signup method", value: pendingSignupMethod(member) },
       { label: isSpanish ? "Fecha de registro" : "Registered", value: pendingRegisteredAt(member) },
       { label: isSpanish ? "Dispositivo" : "Device", value: signupDetail.device || notRecorded },
@@ -414,6 +501,13 @@ export default function AdminPage() {
       code: "AR",
       label: isSpanish ? "Archivo" : "Archive",
       detail: isSpanish ? "Auditoría, archivo y papelera" : "Audit, archive, and trash",
+    },
+    {
+      id: "developer-access",
+      code: "DV",
+      label: isSpanish ? "Desarrollador" : "Developer",
+      detail: isSpanish ? "Acceso técnico temporal" : "Temporary technical access",
+      visible: canManageOwner,
     },
     {
       id: "invitar-personal",
@@ -595,7 +689,17 @@ export default function AdminPage() {
     setExpandedStaffControlId("");
     setViewerProfile(profile || null);
 
-    if (isOwnerEmail(email)) {
+    const bootProfile = profile as StaffProfile | null;
+    const viewerIsOwner = isOwnerIdentity({
+      id: user.id,
+      email,
+      phone: bootProfile?.phone || (user as any)?.phone || (user.user_metadata as any)?.phone,
+      fullName: bootProfile?.full_name || (user.user_metadata as any)?.full_name,
+      displayName: bootProfile?.display_name,
+      adminLevel: bootProfile?.admin_level,
+    });
+
+    if (viewerIsOwner) {
       const { error } = await supabase.from("profiles").update({ admin_level: "owner" }).eq("id", user.id);
       if (!error) {
         setViewerProfile((prev) => ({ ...(prev || { id: user.id }), admin_level: "owner" }));
@@ -668,13 +772,39 @@ export default function AdminPage() {
 
   const approvePendingStaff = async (member: StaffProfile) => {
     if (!canManageAdmins) return;
-    await updateStaffField(
-      member,
-      { role: "staff", admin_level: member.admin_level || "none" },
-      isSpanish
-        ? `${member.full_name || member.display_name || "Staff"} aprobado. Ahora solo verá salas asignadas hasta que le des más permisos.`
-        : `${member.full_name || member.display_name || "Staff"} approved. They will only see assigned rooms unless you grant more permissions.`
-    );
+    setSavingKey(`${member.id}-role-admin_level`);
+    setPageError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      const response = await fetch("/api/staff/approve", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ userId: member.id, lang }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPageError(payload?.error || (isSpanish ? "No pude aprobar esta cuenta." : "I could not approve this account."));
+        return;
+      }
+      setStaff((previous) => previous.map((item) => (item.id === member.id ? { ...item, role: "staff", admin_level: item.admin_level || "none" } : item)));
+      const noticeText = payload?.notification?.sent
+        ? (isSpanish ? " Aviso enviado por correo." : " Email notice sent.")
+        : "";
+      updateSuccess(
+        isSpanish
+          ? `${member.full_name || member.display_name || "Staff"} aprobado. Ahora solo verá salas asignadas hasta que le des más permisos.${noticeText}`
+          : `${member.full_name || member.display_name || "Staff"} approved. They will only see assigned rooms unless you grant more permissions.${noticeText}`,
+      );
+    } catch (error: any) {
+      setPageError(error?.message || (isSpanish ? "No pude aprobar esta cuenta." : "I could not approve this account."));
+      return;
+    } finally {
+      setSavingKey("");
+    }
     setPendingSignupDetails((previous) => {
       const next = { ...previous };
       delete next[member.id];
@@ -800,6 +930,85 @@ export default function AdminPage() {
     }
   };
 
+  const sendDeveloperAccess = async () => {
+    if (!canManageOwner || developerAccessBusy) return;
+    const email = developerEmailDraft.trim().toLowerCase();
+    const fullName = developerNameDraft.trim() || (isSpanish ? "Acceso desarrollador" : "Developer Access");
+    if (!validEmail(email)) {
+      setPageError(isSpanish ? "Escribe un correo válido para el desarrollador." : "Enter a valid developer email.");
+      return;
+    }
+
+    setDeveloperAccessBusy(true);
+    setPageError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      const response = await fetch("/api/staff/developer-access", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ email, fullName, lang }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPageError(payload?.error || (isSpanish ? "No pude crear el acceso de desarrollador." : "I could not create developer access."));
+        return;
+      }
+      await fetchData();
+      updateSuccess(isSpanish ? "Enlace de desarrollador enviado." : "Developer access link sent.");
+    } catch (error: any) {
+      setPageError(error?.message || (isSpanish ? "No pude crear el acceso de desarrollador." : "I could not create developer access."));
+    } finally {
+      setDeveloperAccessBusy(false);
+    }
+  };
+
+  const deleteStaffPrivateConversation = async (conversation: StaffPrivateConversation) => {
+    if (!canDeleteStaffChats || deletingStaffChatKey) return;
+    const confirmed = window.confirm(
+      isSpanish
+        ? `Eliminar la conversación interna "${conversation.title}" borrará estos mensajes staff a staff del portal. ¿Continuar?`
+        : `Deleting the internal conversation "${conversation.title}" will remove these staff-to-staff messages from the portal. Continue?`,
+    );
+    if (!confirmed) return;
+
+    setDeletingStaffChatKey(conversation.key);
+    setPageError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      const response = await fetch("/api/staff-private-messages/delete-conversation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ participantIds: conversation.participantIds }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPageError(payload?.error || (isSpanish ? "No pude eliminar este chat interno." : "I could not delete this internal chat."));
+        return;
+      }
+      const participantSet = new Set(conversation.participantIds);
+      setStaffPrivateMessages((previous) =>
+        previous.filter((message) => {
+          const senderId = message.sender_id || "";
+          const recipientId = privateRecipientId(message);
+          return !(participantSet.has(senderId) && participantSet.has(recipientId));
+        }),
+      );
+      updateSuccess(isSpanish ? "Chat interno eliminado." : "Internal staff chat deleted.");
+    } catch (error: any) {
+      setPageError(error?.message || (isSpanish ? "No pude eliminar este chat interno." : "I could not delete this internal chat."));
+    } finally {
+      setDeletingStaffChatKey("");
+    }
+  };
+
   const updateStaffPermissions = async (member: StaffProfile, nextPermissions: StaffPermissionKey[], success: string) => {
     const cleanPermissions = sanitizeEditablePermissions(member, nextPermissions);
     const nextMap = { ...staffPermissionMap, [member.id]: cleanPermissions };
@@ -883,10 +1092,21 @@ export default function AdminPage() {
 
   const deleteStaffMember = async (member: StaffProfile) => {
     const memberName = member.full_name || member.display_name || member.email || (isSpanish ? "este usuario" : "this user");
+    const isDeveloperMember =
+      isDeveloperAccessEmail(member.email) ||
+      `${member.role || ""}`.toLowerCase() === "developer";
     const confirmed = window.confirm(
-      isSpanish
-        ? `Eliminar a ${memberName} quitará su acceso al portal, lo sacará de los expedientes asignados y bloqueará su correo/teléfono para que no pueda volver a registrarse con la invitación actual. ¿Continuar?`
-        : `Deleting ${memberName} will remove portal access, detach them from assigned records, and block their email/phone from registering again with the current invite. Continue?`,
+      isDeveloperMember
+        ? (
+            isSpanish
+              ? `Eliminar a ${memberName} quitará su acceso de desarrollador al portal, pero NO bloqueará su correo ni rotará el código de invitación. El doctor podrá crear acceso de desarrollador otra vez cuando necesite soporte. ¿Continuar?`
+              : `Deleting ${memberName} will remove developer portal access, but will NOT block the email or rotate the invite code. The doctor can create developer access again when support is needed. Continue?`
+          )
+        : (
+            isSpanish
+              ? `Eliminar a ${memberName} quitará su acceso al portal, lo sacará de los expedientes asignados y bloqueará su correo/teléfono para que no pueda volver a registrarse con la invitación actual. ¿Continuar?`
+              : `Deleting ${memberName} will remove portal access, detach them from assigned records, and block their email/phone from registering again with the current invite. Continue?`
+          ),
     );
     if (!confirmed) return;
 
@@ -911,10 +1131,10 @@ export default function AdminPage() {
     }
 
     setStaff((previous) => previous.filter((item) => item.id !== member.id));
-    if (payload?.removedEmail) {
+    if (payload?.blockedAccess !== false && payload?.removedEmail) {
       setBlockedEmails((previous) => [...new Set([...previous, `${payload.removedEmail}`.toLowerCase()])].sort());
     }
-    if (payload?.removedPhone) {
+    if (payload?.blockedAccess !== false && payload?.removedPhone) {
       setBlockedPhones((previous) => [...new Set([...previous, `${payload.removedPhone}`])].sort());
     }
     if (payload?.newInviteCode) {
@@ -1566,9 +1786,10 @@ export default function AdminPage() {
         .admin-section-internal { order: 4; }
         .admin-side-team { order: 1; }
         .admin-side-invite { order: 2; }
-        .admin-side-phones { order: 3; }
-        .admin-side-tools { order: 4; }
-        .admin-side-blocks { order: 5; }
+        .admin-side-developer { order: 3; }
+        .admin-side-phones { order: 4; }
+        .admin-side-tools { order: 5; }
+        .admin-side-blocks { order: 6; }
         .hero-pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
         .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .hero-secondary-btn { min-height: 46px; padding: 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; }
@@ -1590,6 +1811,11 @@ export default function AdminPage() {
         .staff-controls summary { list-style: none; min-height: 44px; padding: 10px 12px; cursor: pointer; color: #075EA8; font-size: 15px; font-weight: 900; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .staff-controls summary::-webkit-details-marker { display: none; }
         .staff-controls-body { padding: 0 12px 12px; }
+        .staff-contact-settings-grid { display: grid; grid-template-columns: minmax(180px, 0.74fr) minmax(220px, 1fr) minmax(320px, 1.35fr); gap: 10px; align-items: start; }
+        .staff-contact-settings-grid .setting-group { min-width: 0; }
+        .staff-contact-settings-grid .mini-actions { flex-wrap: nowrap; align-items: stretch; }
+        .staff-contact-settings-grid .line-input { min-width: 0 !important; flex: 1 1 auto !important; }
+        .staff-contact-settings-grid .mini-btn { flex: 0 0 auto; white-space: nowrap; }
         .danger-inline-btn { flex-shrink: 0; min-height: 44px; padding: 8px 10px; border-radius: 999px; border: none; background: #FFF1F2; color: #E11D48; font-size: 15px; font-weight: 900; cursor: pointer; font-family: inherit; }
         .danger-inline-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg,#111827,#1D4ED8); color: white; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; flex-shrink: 0; overflow: hidden; }
@@ -1598,6 +1824,9 @@ export default function AdminPage() {
         .list-action-row strong { display: block; font-size: 16px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .list-action-row span span { display: block; margin-top: 3px; color: #64748B; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; line-height: 1.4; }
         .list-action-row:hover, .list-action-row:focus-visible { border-color: #BFDBFE; background: #EFF6FF; outline: none; }
+        .conversation-row { cursor: default; justify-content: space-between; }
+        .conversation-open-btn { min-width: 0; flex: 1; display: flex; align-items: center; gap: 12px; border: none; background: transparent; padding: 0; color: inherit; text-align: left; font-family: inherit; cursor: pointer; }
+        .conversation-open-btn:focus-visible { outline: 2px solid #93C5FD; outline-offset: 3px; border-radius: 12px; }
         .pending-staff-card { display: grid; gap: 12px; padding: 14px; border-radius: 16px; border: 1px solid #FED7AA; background: #FFF7ED; }
         .pending-staff-summary { display: flex; align-items: center; gap: 12px; min-width: 0; }
         .pending-staff-main { flex: 1; min-width: 0; }
@@ -1648,6 +1877,16 @@ export default function AdminPage() {
         .permission-row small { display: block; color: #64748B; font-size: 12px; line-height: 1.35; font-weight: 650; margin-top: 3px; }
         .permission-row:has(input:disabled) { cursor: not-allowed; opacity: 0.64; }
         .permission-locked { color: #64748B; font-size: 13px; font-weight: 750; line-height: 1.45; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: #F8FAFC; border: 1px dashed #D6E0EB; }
+        .permission-title-line { display: flex; align-items: center; gap: 7px; justify-content: space-between; }
+        .permission-title-line strong { min-width: 0; }
+        .permission-info-btn { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 999px; border: 1px solid #BFDBFE; background: #EFF6FF; color: #1D4ED8; font-size: 13px; font-weight: 950; font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+        .permission-info-btn:focus-visible { outline: 2px solid #93C5FD; outline-offset: 2px; }
+        .permission-help-overlay { position: fixed; inset: 0; z-index: 190; display: grid; place-items: center; padding: 18px; background: rgba(15,23,42,0.46); }
+        .permission-help-modal { width: min(520px, 100%); border-radius: 22px; background: white; padding: 22px; box-shadow: 0 28px 90px rgba(15,23,42,0.30); border: 1px solid #E6EEF7; }
+        .permission-help-kicker { color: #1D4ED8; font-size: 12px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 6px; }
+        .permission-help-title { color: #0F172A; font-size: 24px; font-weight: 950; line-height: 1.15; margin: 0 0 10px; }
+        .permission-help-copy { color: #334155; font-size: 15px; font-weight: 700; line-height: 1.6; margin: 0; }
+        .developer-card-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
         .admin-overview { display: grid; gap: 18px; }
         .overview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
         .overview-kicker { color: #1D4ED8; font-size: 13px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 4px; }
@@ -1660,6 +1899,8 @@ export default function AdminPage() {
         .overview-actions { display: flex; flex-wrap: wrap; gap: 9px; }
         @media (max-width: 980px) {
           .hero-grid, .workspace-grid, .grid-2, .grid-3, .permission-grid { grid-template-columns: 1fr; }
+          .staff-contact-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .staff-contact-settings-grid .setting-group:last-child { grid-column: 1 / -1; }
           .admin-layout { grid-template-columns: 236px minmax(0, 1fr); gap: 12px; }
           .admin-sidebar { padding: 12px; border-radius: 20px; }
           .sidebar-stat-card { grid-template-columns: 1fr; }
@@ -1702,6 +1943,13 @@ export default function AdminPage() {
           .patient-row, .staff-row { flex-direction: column; }
           .pending-staff-summary { align-items: flex-start; flex-direction: column; }
           .pending-detail-grid { grid-template-columns: 1fr; }
+          .conversation-row { align-items: stretch; flex-direction: column; }
+          .conversation-open-btn { width: 100%; }
+          .developer-card-grid { grid-template-columns: 1fr; }
+          .staff-contact-settings-grid { grid-template-columns: 1fr; }
+          .staff-contact-settings-grid .setting-group:last-child { grid-column: auto; }
+          .staff-contact-settings-grid .mini-actions { flex-wrap: wrap; }
+          .staff-contact-settings-grid .mini-btn { flex: 1 1 auto; }
           .toast-stack { right: 12px; left: 12px; width: auto; }
           .header-row { flex-direction: column; }
         }
@@ -1932,20 +2180,33 @@ export default function AdminPage() {
 	                  {staffPrivateConversations.length === 0 ? (
 	                    <p className="muted">{isSpanish ? "Todavía no hay conversaciones privadas staff a staff registradas en la app." : "No app-recorded private staff-to-staff conversations yet."}</p>
 	                  ) : (
-	                    staffPrivateConversations.map((conversation) => (
-	                      <button
-	                        key={`staff-chat-${conversation.key}`}
-	                        type="button"
-	                        className="list-action-row"
-	                        onClick={() => openStaffChatExportMenu(conversation)}
-	                      >
-	                        <span className="avatar small-avatar">{initials(conversation.title)}</span>
-	                        <span style={{ minWidth: 0, flex: 1 }}>
-	                          <strong>{conversation.title}</strong>
-	                          <span>{conversation.subtitle}</span>
-	                        </span>
-	                      </button>
-                    ))
+	                    staffPrivateConversations.map((conversation) => {
+                        const deleteBusy = deletingStaffChatKey === conversation.key;
+                        return (
+                          <div key={`staff-chat-${conversation.key}`} className="list-action-row conversation-row">
+                            <button type="button" className="conversation-open-btn" onClick={() => openStaffChatExportMenu(conversation)}>
+                              <span className="avatar small-avatar">{initials(conversation.title)}</span>
+                              <span style={{ minWidth: 0, flex: 1 }}>
+                                <strong>{conversation.title}</strong>
+                                <span>{conversation.subtitle}</span>
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="danger-inline-btn"
+                              disabled={!canDeleteStaffChats || deleteBusy}
+                              onClick={() => deleteStaffPrivateConversation(conversation)}
+                              title={
+                                canDeleteStaffChats
+                                  ? ""
+                                  : (isSpanish ? "El doctor debe dar el derecho de eliminar chats staff." : "The doctor must grant the delete staff chats right.")
+                              }
+                            >
+                              {deleteBusy ? (isSpanish ? "Eliminando..." : "Deleting...") : (isSpanish ? "Eliminar" : "Delete")}
+                            </button>
+                          </div>
+                        );
+                      })
                   )}
                 </div>
               </section>
@@ -2107,27 +2368,37 @@ export default function AdminPage() {
               </section>
               )}
 
-              {activeAdminSection === "buscar-paciente" && hasActiveSearch && (
+              {activeAdminSection === "buscar-paciente" && (
               <section className="card admin-section-results" id="expedientes">
               <div className="header-row" style={{ marginBottom: 0 }}>
                 <span className="result-count">
-                  {isSpanish ? `${patientCards.length} coincidencia(s)` : `${patientCards.length} match(es)`}
+                  {hasActiveSearch
+                    ? (isSpanish ? `${displayedPatientCards.length} coincidencia(s)` : `${displayedPatientCards.length} match(es)`)
+                    : (isSpanish ? `${displayedPatientCards.length} paciente(s) activo(s)` : `${displayedPatientCards.length} active patient(s)`)}
                 </span>
                 {renderSectionTopButton()}
               </div>
 
-              {patientCards.length === 0 ? (
+              {displayedPatientCards.length === 0 ? (
                 <div className="empty-state">
                   <div style={{ fontSize: 40, marginBottom: 8 }}>📁</div>
-                  <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>{isSpanish ? "No encontré expedientes con esa búsqueda" : "No records matched that search"}</p>
-                  <p className="muted">{isSpanish ? "Prueba con menos palabras o con otro dato del paciente." : "Try fewer words or a different patient detail."}</p>
+                  <p style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 4 }}>
+                    {hasActiveSearch
+                      ? (isSpanish ? "No encontré expedientes con esa búsqueda" : "No records matched that search")
+                      : (isSpanish ? "No hay pacientes activos para mostrar" : "No active patients to show")}
+                  </p>
+                  <p className="muted">
+                    {hasActiveSearch
+                      ? (isSpanish ? "Prueba con menos palabras o con otro dato del paciente." : "Try fewer words or a different patient detail.")
+                      : (isSpanish ? "El buscador sigue disponible arriba para encontrar archivo, papelera o coincidencias específicas." : "The search above is still available to find archive, trash, or specific matches.")}
+                  </p>
                 </div>
               ) : (
                 <>
                   {hiddenPatientCount > 0 && (
                     <div className="export-card" style={{ marginBottom: 12 }}>
                       <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "#1D4ED8" }}>
-                        {isSpanish ? `Mostrando ${visiblePatientCards.length} de ${patientCards.length} resultados.` : `Showing ${visiblePatientCards.length} of ${patientCards.length} results.`}
+                        {isSpanish ? `Mostrando ${visiblePatientCards.length} de ${displayedPatientCards.length} resultados.` : `Showing ${visiblePatientCards.length} of ${displayedPatientCards.length} results.`}
                       </p>
                       <p className="small-note" style={{ marginTop: 6 }}>
                         {isSpanish ? "Para ver menos resultados, agrega más detalle como teléfono, nombre completo o procedimiento." : "To narrow the list, add more detail like a phone number, full name, or procedure."}
@@ -2217,7 +2488,15 @@ export default function AdminPage() {
                     const rawMemberEmail = member.id === viewerId ? viewerEmail : member.email || "";
                     const visibleMemberEmail = rawMemberEmail.endsWith("@portal-staff.local") ? "" : rawMemberEmail;
                     const contactLine = [member.phone, visibleMemberEmail].filter(Boolean).join(" · ");
-                    const level = normalizeAdminLevel(member.admin_level, rawMemberEmail);
+                    const memberIsOwner = isOwnerIdentity({
+                      id: member.id,
+                      email: rawMemberEmail,
+                      phone: member.phone,
+                      fullName: member.full_name,
+                      displayName: member.display_name,
+                      adminLevel: member.admin_level,
+                    });
+                    const level = memberIsOwner ? "owner" : normalizeAdminLevel(member.admin_level, rawMemberEmail);
                     const canEditThisMember = canManageAdmins && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const isSelf = member.id === viewerId;
                     const canDeleteThisMember = canDeleteStaffAccounts && !isSelf && level !== "owner" && (canManageOwner || level !== "super_admin");
@@ -2262,8 +2541,8 @@ export default function AdminPage() {
                                   <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>
                                     {adminText(level)}
                                   </span>
-                                  <span className="meta-badge" style={{ color: member.office_location ? "#1D4ED8" : "#64748B", background: member.office_location ? "#EFF6FF" : "#F1F5F9" }}>
-                                    {member.office_location || (isSpanish ? "Sin sede" : "No office")}
+                                  <span className="meta-badge" style={{ color: member.office_location ? "#1D4ED8" : "#0E7490", background: member.office_location ? "#EFF6FF" : "#ECFEFF" }}>
+                                    {staffOfficeText(member.office_location)}
                                   </span>
                                   {member.role && (
                                     <span className="meta-badge" style={{ color: "#475569", background: "#F1F5F9" }}>
@@ -2315,119 +2594,121 @@ export default function AdminPage() {
                                       </div>
                                     </div>
                                   )}
-                                  <div className="setting-group">
-                                    <p className="group-label">{isSpanish ? "Consultorio asignado" : "Assigned office"}</p>
-                                    <p className="access-help">
-                                      {isSpanish
-                                        ? "El creador de pacientes usa esta sede para mostrar quién puede asignarse cuando eliges Guadalajara o Tijuana."
-                                        : "The patient creator uses this office to show who can be assigned when you choose Guadalajara or Tijuana."}
-                                    </p>
-                                    <div className="permission-toolbar">
-                                      {(["Guadalajara", "Tijuana"] as Office[]).map((office) => {
-                                        const selected = member.office_location === office;
-                                        return (
-                                          <button
-                                            key={`${member.id}-${office}`}
-                                            type="button"
-                                            className="mini-btn"
-                                            style={{
-                                              background: selected ? "#EFF6FF" : "#EFF3F8",
-                                              color: selected ? "#1D4ED8" : "#374151",
-                                              opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
-                                            }}
-                                            disabled={!canEditOfficeForMember || savingKey === officeKey}
-                                            onClick={() => updateStaffField(
-                                              member,
-                                              { office_location: office },
-                                              isSpanish ? `${member.full_name || "Staff"} asignado a ${office}.` : `${member.full_name || "Staff"} assigned to ${office}.`
-                                            )}
-                                          >
-                                            {office}
-                                          </button>
-                                        );
-                                      })}
-                                      <button
-                                        type="button"
-                                        className="mini-btn"
-                                        style={{
-                                          background: !member.office_location ? "#F1F5F9" : "#EFF3F8",
-                                          color: !member.office_location ? "#64748B" : "#374151",
-                                          opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
-                                        }}
-                                        disabled={!canEditOfficeForMember || savingKey === officeKey}
-                                        onClick={() => updateStaffField(
-                                          member,
-                                          { office_location: null },
-                                          isSpanish ? `${member.full_name || "Staff"} quedó sin sede asignada.` : `${member.full_name || "Staff"} has no assigned office.`
-                                        )}
-                                      >
-                                        {isSpanish ? "Sin sede" : "No office"}
-                                      </button>
+                                  <div className="staff-contact-settings-grid">
+                                    <div className="setting-group">
+                                      <p className="group-label">{isSpanish ? "Consultorio asignado" : "Assigned office"}</p>
+                                      <p className="access-help">
+                                        {isSpanish
+                                          ? "El creador de pacientes usa esta sede para mostrar quién puede asignarse."
+                                          : "The patient creator uses this office for staff assignment."}
+                                      </p>
+                                      <div className="permission-toolbar">
+                                        {(["Guadalajara", "Tijuana"] as Office[]).map((office) => {
+                                          const selected = member.office_location === office;
+                                          return (
+                                            <button
+                                              key={`${member.id}-${office}`}
+                                              type="button"
+                                              className="mini-btn"
+                                              style={{
+                                                background: selected ? "#EFF6FF" : "#EFF3F8",
+                                                color: selected ? "#1D4ED8" : "#374151",
+                                                opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
+                                              }}
+                                              disabled={!canEditOfficeForMember || savingKey === officeKey}
+                                              onClick={() => updateStaffField(
+                                                member,
+                                                { office_location: office },
+                                                isSpanish ? `${member.full_name || "Staff"} asignado a ${office}.` : `${member.full_name || "Staff"} assigned to ${office}.`
+                                              )}
+                                            >
+                                              {office}
+                                            </button>
+                                          );
+                                        })}
+                                        <button
+                                          type="button"
+                                          className="mini-btn"
+                                          style={{
+                                            background: !member.office_location ? "#ECFEFF" : "#EFF3F8",
+                                            color: !member.office_location ? "#0E7490" : "#374151",
+                                            opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
+                                          }}
+                                          disabled={!canEditOfficeForMember || savingKey === officeKey}
+                                          onClick={() => updateStaffField(
+                                            member,
+                                            { office_location: null },
+                                            isSpanish ? `${member.full_name || "Staff"} asignado a ambas sedes.` : `${member.full_name || "Staff"} assigned to both offices.`
+                                          )}
+                                        >
+                                          {isSpanish ? "Ambas sedes" : "Both offices"}
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="setting-group">
-                                    <p className="group-label">{isSpanish ? "Teléfono" : "Phone"}</p>
-                                    <div className="mini-actions" style={{ alignItems: "stretch" }}>
-                                      <input
-                                        className="line-input"
-                                        value={phoneDraft}
-                                        disabled={!canEditThisMember}
-                                        inputMode="tel"
-                                        autoComplete="tel"
-                                        onChange={(event) => setStaffPhoneDrafts((current) => ({ ...current, [member.id]: event.target.value }))}
-                                        placeholder="+52 664 123 4567"
-                                        style={{ minWidth: 180, flex: "1 1 220px", height: 42, padding: "0 12px", fontSize: 14 }}
-                                      />
-                                      <button
-                                        className="mini-btn"
-                                        disabled={!canEditThisMember || savingKey === phoneKey}
-                                        onClick={() => updateStaffField(
-                                          member,
-                                          { phone: cleanPhoneDraft || null },
-                                          isSpanish ? `Teléfono de ${member.full_name || "staff"} actualizado.` : `Phone for ${member.full_name || "staff"} updated.`
-                                        )}
-                                      >
-                                        {savingKey === phoneKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar teléfono" : "Save phone")}
-                                      </button>
+                                    <div className="setting-group">
+                                      <p className="group-label">{isSpanish ? "Teléfono" : "Phone"}</p>
+                                      <div className="mini-actions">
+                                        <input
+                                          className="line-input"
+                                          value={phoneDraft}
+                                          disabled={!canEditThisMember}
+                                          inputMode="tel"
+                                          autoComplete="tel"
+                                          onChange={(event) => setStaffPhoneDrafts((current) => ({ ...current, [member.id]: event.target.value }))}
+                                          placeholder="+52 664 123 4567"
+                                          style={{ minWidth: 180, flex: "1 1 220px", height: 42, padding: "0 12px", fontSize: 14 }}
+                                        />
+                                        <button
+                                          className="mini-btn"
+                                          disabled={!canEditThisMember || savingKey === phoneKey}
+                                          onClick={() => updateStaffField(
+                                            member,
+                                            { phone: cleanPhoneDraft || null },
+                                            isSpanish ? `Teléfono de ${member.full_name || "staff"} actualizado.` : `Phone for ${member.full_name || "staff"} updated.`
+                                          )}
+                                        >
+                                          {savingKey === phoneKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar teléfono" : "Save phone")}
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="setting-group">
-                                    <p className="group-label">{isSpanish ? "Correo y recuperación" : "Email and recovery"}</p>
-                                    <p className="access-help">
-                                      {isSpanish
-                                        ? "Guarda un correo real para recuperación. El botón envía un enlace seguro para restablecer contraseña."
-                                        : "Save a real email for recovery. The button sends a secure password reset link."}
-                                    </p>
-                                    <div className="mini-actions" style={{ alignItems: "stretch" }}>
-                                      <input
-                                        className="line-input"
-                                        value={emailDraft}
-                                        disabled={!canEditThisMember}
-                                        inputMode="email"
-                                        autoComplete="email"
-                                        onChange={(event) => setStaffEmailDrafts((current) => ({ ...current, [member.id]: event.target.value }))}
-                                        placeholder="staff@correo.com"
-                                        style={{ minWidth: 180, flex: "1 1 240px", height: 42, padding: "0 12px", fontSize: 14 }}
-                                      />
-                                      <button
-                                        className="mini-btn"
-                                        disabled={!canEditThisMember || savingKey === emailKey || (!!cleanEmailDraft && !validEmail(cleanEmailDraft))}
-                                        onClick={() => updateStaffField(
-                                          member,
-                                          { email: cleanEmailDraft || null },
-                                          isSpanish ? `Correo de ${member.full_name || "staff"} actualizado.` : `Email for ${member.full_name || "staff"} updated.`
-                                        )}
-                                      >
-                                        {savingKey === emailKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar correo" : "Save email")}
-                                      </button>
-                                      <button
-                                        className="mini-btn"
-                                        disabled={!canSendResetForMember || resetBusyId === member.id}
-                                        onClick={() => sendStaffPasswordReset(member)}
-                                        style={{ background: "#ECFEFF", color: "#0E7490" }}
-                                      >
-                                        {resetBusyId === member.id ? (isSpanish ? "Enviando..." : "Sending...") : (isSpanish ? "Enviar reset" : "Send reset")}
-                                      </button>
+                                    <div className="setting-group">
+                                      <p className="group-label">{isSpanish ? "Correo y recuperación" : "Email and recovery"}</p>
+                                      <p className="access-help">
+                                        {isSpanish
+                                          ? "Correo real para recuperación y reset seguro."
+                                          : "Real email for recovery and secure reset."}
+                                      </p>
+                                      <div className="mini-actions">
+                                        <input
+                                          className="line-input"
+                                          value={emailDraft}
+                                          disabled={!canEditThisMember}
+                                          inputMode="email"
+                                          autoComplete="email"
+                                          onChange={(event) => setStaffEmailDrafts((current) => ({ ...current, [member.id]: event.target.value }))}
+                                          placeholder="staff@correo.com"
+                                          style={{ minWidth: 180, flex: "1 1 240px", height: 42, padding: "0 12px", fontSize: 14 }}
+                                        />
+                                        <button
+                                          className="mini-btn"
+                                          disabled={!canEditThisMember || savingKey === emailKey || (!!cleanEmailDraft && !validEmail(cleanEmailDraft))}
+                                          onClick={() => updateStaffField(
+                                            member,
+                                            { email: cleanEmailDraft || null },
+                                            isSpanish ? `Correo de ${member.full_name || "staff"} actualizado.` : `Email for ${member.full_name || "staff"} updated.`
+                                          )}
+                                        >
+                                          {savingKey === emailKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar correo" : "Save email")}
+                                        </button>
+                                        <button
+                                          className="mini-btn"
+                                          disabled={!canSendResetForMember || resetBusyId === member.id}
+                                          onClick={() => sendStaffPasswordReset(member)}
+                                          style={{ background: "#ECFEFF", color: "#0E7490" }}
+                                        >
+                                          {resetBusyId === member.id ? (isSpanish ? "Enviando..." : "Sending...") : (isSpanish ? "Enviar reset" : "Send reset")}
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
 		                              <div className="setting-group">
@@ -2465,7 +2746,7 @@ export default function AdminPage() {
                                         onClick={() => {
                                           const next = canManageOwner
                                             ? [...STAFF_PERMISSION_KEYS]
-                                            : STAFF_PERMISSION_KEYS.filter((permission) => permission !== deleteStaffAccountsPermission);
+                                            : STAFF_PERMISSION_KEYS.filter((permission) => !doctorOnlyPermissions.has(permission));
                                           setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: sanitizeEditablePermissions(member, next) }));
                                         }}
                                       >
@@ -2505,7 +2786,7 @@ export default function AdminPage() {
                                           <div className="permission-list">
                                             {group.permissions.map((permission) => {
                                               const checked = draftPermissionSet.has(permission);
-                                              const isDoctorOnlyPermission = permission === deleteStaffAccountsPermission;
+                                              const isDoctorOnlyPermission = doctorOnlyPermissions.has(permission);
                                               const canEditThisPermission = canEditPermissionsForMember && (!isDoctorOnlyPermission || canEditDeleteStaffAccountsPermission);
                                               return (
                                                 <label key={`${member.id}-${permission}`} className={`permission-row ${checked ? "enabled" : ""}`}>
@@ -2521,7 +2802,21 @@ export default function AdminPage() {
                                                     }}
                                                   />
                                                   <span>
-                                                    <strong>{permissionLabel(permission, lang)}</strong>
+                                                    <span className="permission-title-line">
+                                                      <strong>{permissionLabel(permission, lang)}</strong>
+                                                      <button
+                                                        type="button"
+                                                        className="permission-info-btn"
+                                                        aria-label={isSpanish ? `Explicar ${permissionLabel(permission, lang)}` : `Explain ${permissionLabel(permission, lang)}`}
+                                                        onClick={(event) => {
+                                                          event.preventDefault();
+                                                          event.stopPropagation();
+                                                          setPermissionHelp(permission);
+                                                        }}
+                                                      >
+                                                        i
+                                                      </button>
+                                                    </span>
                                                     <small>{permissionDescriptions[permission][lang]}</small>
                                                   </span>
                                                 </label>
@@ -2661,6 +2956,67 @@ export default function AdminPage() {
               </section>
               )}
 
+              {canManageOwner && activeAdminSection === "developer-access" && (
+              <section className="card admin-side-developer" id="developer-access">
+                <div className="header-row">
+                  <div>
+                    <p className="card-title">{isSpanish ? "Acceso de desarrollador" : "Developer access"}</p>
+                    <p className="muted">
+                      {isSpanish
+                        ? "Solo la cuenta propietaria de Miguel puede enviar este enlace. El desarrollador recibe acceso completo temporal, pero no queda protegido como propietario."
+                        : "Only Miguel's owner account can send this link. The developer receives temporary full access, but is not protected as an owner."}
+                    </p>
+                  </div>
+                  {renderSectionTopButton()}
+                </div>
+                <div className="secure-invite">
+                  <p className="secure-invite-label">{isSpanish ? "Soporte técnico" : "Technical support"}</p>
+                  <p className="secure-invite-main">
+                    {isSpanish ? "Crear o restaurar acceso para Ray" : "Create or restore access for Ray"}
+                  </p>
+                  <p className="small-note" style={{ marginTop: 8 }}>
+                    {isSpanish
+                      ? "Cuando el doctor elimine esta cuenta desde Equipo, el portal quitará el acceso pero no bloqueará el correo ni rotará el código de invitación."
+                      : "When the doctor deletes this account from Team, the portal removes access but does not block the email or rotate the invitation code."}
+                  </p>
+                </div>
+                <div className="developer-card-grid">
+                  <div>
+                    <p className="group-label">{isSpanish ? "Nombre" : "Name"}</p>
+                    <input
+                      className="line-input"
+                      value={developerNameDraft}
+                      onChange={(event) => setDeveloperNameDraft(event.target.value)}
+                      placeholder={isSpanish ? "Nombre del desarrollador" : "Developer name"}
+                    />
+                  </div>
+                  <div>
+                    <p className="group-label">{isSpanish ? "Correo" : "Email"}</p>
+                    <input
+                      className="line-input"
+                      value={developerEmailDraft}
+                      onChange={(event) => setDeveloperEmailDraft(event.target.value)}
+                      inputMode="email"
+                      autoComplete="email"
+                      placeholder="mrdiazsr@icloud.com"
+                    />
+                  </div>
+                </div>
+                <div className="inline-actions" style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className="main-btn"
+                    disabled={developerAccessBusy || !validEmail(developerEmailDraft)}
+                    onClick={sendDeveloperAccess}
+                  >
+                    {developerAccessBusy
+                      ? (isSpanish ? "Enviando..." : "Sending...")
+                      : (isSpanish ? "Enviar acceso de desarrollador" : "Send developer access")}
+                  </button>
+                </div>
+              </section>
+              )}
+
               {activeAdminSection === "invitar-personal" && (
               <section className="card admin-side-invite" id="invitar-personal">
                 <div className="header-row">
@@ -2758,6 +3114,21 @@ export default function AdminPage() {
             </main>
           </div>
         </div>
+
+        {permissionHelp && (
+          <div className="permission-help-overlay" onClick={() => setPermissionHelp(null)}>
+            <div className="permission-help-modal" role="dialog" aria-modal="true" aria-labelledby="permission-help-title" onClick={(event) => event.stopPropagation()}>
+              <p className="permission-help-kicker">{isSpanish ? "Derecho del portal" : "Portal right"}</p>
+              <h2 id="permission-help-title" className="permission-help-title">{permissionLabel(permissionHelp, lang)}</h2>
+              <p className="permission-help-copy">{permissionDetails[permissionHelp][lang]}</p>
+              <div className="inline-actions" style={{ marginTop: 18 }}>
+                <button className="main-btn" type="button" onClick={() => setPermissionHelp(null)}>
+                  {isSpanish ? "Entendido" : "Got it"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {exportMenu && (
           <div className="export-overlay" onClick={() => setExportMenu(null)}>

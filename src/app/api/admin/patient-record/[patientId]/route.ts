@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { isOwnerEmail } from "@/lib/securityConfig";
+import { isOwnerIdentity } from "@/lib/securityConfig";
 import { hasPermission, normalizePermissionList } from "@/lib/permissions";
 import { CHAT_FILES_BUCKET, extractChatFilePath } from "@/lib/chatFileUrls";
 
@@ -12,13 +12,24 @@ const STAFF_PERMISSIONS_SETTING_KEY = "staff_permissions";
 const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || "missing-key");
 const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missing-key");
 
+const isTrueOwnerProfile = (profile: any, email: string) =>
+  isOwnerIdentity({
+    id: profile?.id,
+    email,
+    phone: profile?.phone,
+    fullName: profile?.full_name,
+    displayName: profile?.display_name,
+    adminLevel: profile?.admin_level,
+  });
+
 const canEditClinicalRecord = (profile: any, email: string) =>
-  isOwnerEmail(email) || (`${profile?.role || ""}`.toLowerCase() === "doctor" && hasPermission(profile, email, "edit_patient_info"));
+  isTrueOwnerProfile(profile, email) || (`${profile?.role || ""}`.toLowerCase() === "doctor" && hasPermission(profile, email, "edit_patient_info"));
 
 const canAccessAllPatientRooms = (profile: any, email: string) => {
-  const level = `${profile?.admin_level || ""}`.toLowerCase();
+  const rawLevel = `${profile?.admin_level || ""}`.toLowerCase();
+  const level = rawLevel === "owner" ? "super_admin" : rawLevel;
   const role = `${profile?.role || ""}`.toLowerCase();
-  return isOwnerEmail(email) || level === "owner" || level === "super_admin" || role === "doctor";
+  return isTrueOwnerProfile(profile, email) || level === "super_admin" || role === "doctor";
 };
 
 const visibleMessagesForProfile = (messages: any[], profile: any, email: string) => {

@@ -204,7 +204,8 @@ export const procedureStatusLabel = (status: string | null | undefined, lang: "e
 
 export const normalizeAdminLevel = (value: unknown, email = ""): AdminLevel => {
   if (isOwnerEmail(email)) return "owner";
-  if (value === "owner" || value === "super_admin" || value === "admin" || value === "none") return value;
+  if (value === "owner") return "super_admin";
+  if (value === "super_admin" || value === "admin" || value === "none") return value;
   return "none";
 };
 

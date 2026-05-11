@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 import { normalizePhone } from "@/lib/authIdentity";
-import { isOwnerEmail } from "@/lib/securityConfig";
+import { isOwnerEmail, isOwnerIdentity } from "@/lib/securityConfig";
 import {
   STAFF_PERMISSIONS_SETTING_KEY,
   hasPermission,
@@ -182,7 +182,16 @@ export async function POST(request: NextRequest) {
     const requesterPermissionProfile = typedRequesterProfile
       ? { ...typedRequesterProfile, permissions: permissionMap[requester.id] ?? typedRequesterProfile.permissions }
       : null;
-    const requesterCanDeny = isOwnerEmail(requesterEmail) || hasPermission(requesterPermissionProfile, requesterEmail, "delete_staff_accounts");
+    const requesterMetadata = (requester.user_metadata || {}) as Record<string, unknown>;
+    const requesterIsOwner = isOwnerIdentity({
+      id: requester.id,
+      email: requesterEmail,
+      phone: `${typedRequesterProfile?.phone || requester.phone || requesterMetadata.phone || ""}`,
+      fullName: typedRequesterProfile?.full_name || `${requesterMetadata.full_name || ""}`,
+      displayName: typedRequesterProfile?.display_name || "",
+      adminLevel: typedRequesterProfile?.admin_level,
+    });
+    const requesterCanDeny = requesterIsOwner || hasPermission(requesterPermissionProfile, requesterEmail, "delete_staff_accounts");
     if (!requesterCanDeny) {
       return NextResponse.json({ error: "Not allowed to deny and delete pending staff accounts." }, { status: 403 });
     }
@@ -199,9 +208,6 @@ export async function POST(request: NextRequest) {
     if (targetRole !== "pending_staff") {
       return NextResponse.json({ error: "This denial route only removes pending staff accounts." }, { status: 409 });
     }
-    if (targetAdminLevel === "owner") {
-      return NextResponse.json({ error: "Owner account is protected and cannot be denied." }, { status: 403 });
-    }
 
     const authUserRes = await supabase.auth.admin.getUserById(userId);
     if (authUserRes.error && !isUserNotFoundError(authUserRes.error)) {
@@ -216,7 +222,15 @@ export async function POST(request: NextRequest) {
       .find((email) => validEmail(email) && !isAliasEmail(email)) || "";
     const targetPhone = normalizePhone(`${targetProfile.phone || stringValue(targetMetadata.phone) || targetAuthUser?.phone || ""}`);
 
-    if ([profileEmail, realMetadataEmail, authEmail].some((email) => email && isOwnerEmail(email))) {
+    const targetIsOwner = isOwnerIdentity({
+      id: userId,
+      email: profileEmail || realMetadataEmail || authEmail,
+      phone: targetPhone,
+      fullName: targetProfile.full_name || stringValue(targetMetadata.full_name),
+      displayName: targetProfile.display_name || "",
+      adminLevel: targetAdminLevel,
+    });
+    if (targetIsOwner || [profileEmail, realMetadataEmail, authEmail].some((email) => email && isOwnerEmail(email))) {
       return NextResponse.json({ error: "Owner account is protected and cannot be denied." }, { status: 403 });
     }
 
