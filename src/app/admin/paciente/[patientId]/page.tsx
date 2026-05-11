@@ -8,6 +8,7 @@ import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/date
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone } from "@/lib/patientMeta";
 import { useAdminLang } from "@/lib/useAdminLang";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
+import { createSignedChatFileUrl } from "@/lib/chatFileUrls";
 import {
   PROCEDURE_STATUS_OPTIONS,
   buildExportHtml,
@@ -727,6 +728,7 @@ export default function AdminPatientRecordPage() {
     }
 
     const { data: publicUrl } = supabase.storage.from("chat-files").getPublicUrl(storagePath);
+    const signedUrl = await createSignedChatFileUrl(supabase, publicUrl.publicUrl);
     const { data, error } = await supabase
       .from("patients")
       .update({ profile_picture_url: publicUrl.publicUrl })
@@ -741,7 +743,7 @@ export default function AdminPatientRecordPage() {
       return;
     }
 
-    setPatient(data as PatientRecord);
+    setPatient({ ...(data as PatientRecord), profile_picture_url: signedUrl || publicUrl.publicUrl });
     await logAdminEvent({
       action: "patient_photo_updated",
       entityType: "patient",

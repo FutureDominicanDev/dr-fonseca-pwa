@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { supabase } from "@/lib/supabaseClient";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
+import { signMessageMediaUrls } from "@/lib/chatFileUrls";
 import {
   FormMessage,
   createClinicalHistoryPayload,
@@ -407,6 +408,23 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const clinicalPdfValuesStorageKey = `historia_clinica_values_${id}`;
   const clinicalPdfValuesStoragePath = `patients/${id}/historia-clinica-values.json`;
 
+  const patientRoomEndpoint = (resource?: string) => {
+    const params = new URLSearchParams({ roomId: id, roomToken: token });
+    if (resource) params.set("resource", resource);
+    return `/api/patient-room?${params.toString()}`;
+  };
+
+  const postPatientRoomAction = async (action: string, payload: Record<string, unknown> = {}) => {
+    const response = await fetch("/api/patient-room", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId: id, roomToken: token, action, ...payload }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || "Patient room request failed");
+    return data;
+  };
+
   const urlBase64ToUint8Array = (b64: string) => {
     const padding = "=".repeat((4 - (b64.length % 4)) % 4);
     const base64 = (b64 + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -538,10 +556,43 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       if (mounted) setCurrentUserId(data.user?.id || null);
     });
 
+    const loadPatientSnapshot = async (showLoading = false) => {
+      if (showLoading) {
+        setAccessReady(false);
+        setAccessDenied(false);
+        setRoomClosed(false);
+      }
+
+      try {
+        const response = await fetch(patientRoomEndpoint(), { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!mounted) return false;
+
+        if (!response.ok || !payload?.room) {
+          setAccessDenied(true);
+          setAccessReady(true);
+          return false;
+        }
+
+        setRoom(payload.room as RoomAccess);
+        setRoomClosed(Boolean(payload.roomClosed));
+        replaceMessagesIfChanged((payload.messages || []) as Message[]);
+        setAccessReady(true);
+        return true;
+      } catch {
+        if (!mounted) return false;
+        setAccessDenied(true);
+        setAccessReady(true);
+        return false;
+      }
+    };
+
     const validateRoom = async () => {
       setAccessReady(false);
       setAccessDenied(false);
       setRoomClosed(false);
+
+      if (viewerType === "patient") return loadPatientSnapshot(true);
 
       let roomQuery = await supabase
         .from("rooms")
@@ -586,16 +637,20 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     };
 
     const loadMessages = async () => {
-      let query = supabase
+      if (viewerType === "patient") {
+        await loadPatientSnapshot(false);
+        return;
+      }
+
+      const query = supabase
         .from("messages")
         .select("*")
         .eq("room_id", id);
 
-      if (viewerType === "patient") query = query.eq("is_internal", false);
-
       const { data } = await query.order("created_at", { ascending: true });
 
-      if (mounted) replaceMessagesIfChanged((data || []) as Message[]);
+      const signedData = await signMessageMediaUrls(supabase, (data || []) as Message[]);
+      if (mounted) replaceMessagesIfChanged(signedData as Message[]);
     };
 
     let pollTimer: number | null = null;
@@ -603,9 +658,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     validateRoom().then((allowed) => {
       if (!allowed) return;
-      loadMessages();
       if (viewerType === "patient") {
         pollTimer = window.setInterval(loadMessages, 3000);
+      } else {
+        loadMessages();
       }
     });
 
@@ -617,14 +673,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           {
             event: "INSERT",
             schema: "public",
-            table: "messages",
-            filter: `room_id=eq.${id}`,
-          },
-          ({ new: message }: { new: Message }) => {
+          table: "messages",
+          filter: `room_id=eq.${id}`,
+        },
+          async ({ new: message }: { new: Message }) => {
             if (message.is_internal) return;
+            const [signedMessage] = await signMessageMediaUrls(supabase, [message]);
             setMessages((current) => {
               if (current.some((item) => item.id === message.id)) return current;
-              return [...current, message];
+              return [...current, (signedMessage || message) as Message];
             });
           },
         )
@@ -633,12 +690,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           {
             event: "UPDATE",
             schema: "public",
-            table: "messages",
-            filter: `room_id=eq.${id}`,
-          },
-          ({ new: message }: { new: Message }) => {
+          table: "messages",
+          filter: `room_id=eq.${id}`,
+        },
+          async ({ new: message }: { new: Message }) => {
             if (message.is_internal) return;
-            setMessages((current) => current.map((item) => (item.id === message.id ? message : item)));
+            const [signedMessage] = await signMessageMediaUrls(supabase, [message]);
+            setMessages((current) => current.map((item) => (item.id === message.id ? ((signedMessage || message) as Message) : item)));
           },
         )
         .subscribe();
@@ -715,6 +773,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const logMessageAudit = async (timestamp: string) => {
+    if (viewerType === "patient") return;
     const { error } = await supabase.from("audit_logs").insert({
       user_id: currentUserId,
       action: "message_sent",
@@ -731,6 +790,25 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     shouldAutoScrollRef.current = true;
     setComposerText("");
     const createdAt = new Date().toISOString();
+
+    if (viewerType === "patient") {
+      try {
+        const result = await postPatientRoomAction("sendText", { content });
+        const data = result?.message as Message | undefined;
+        if (data) {
+          setMessages((current) => {
+            if (current.some((item) => item.id === data.id)) return current;
+            return [...current, data];
+          });
+          sendStaffPushNotification(content);
+        }
+      } catch (error) {
+        setComposerText(content);
+        console.error("patient message send failed", error);
+      }
+      return;
+    }
+
     const messageHash = await generateMessageHash(content, createdAt, currentUserId);
     const payload = {
       room_id: id,
@@ -780,6 +858,28 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const content = serializeFormMessage(payload);
     const existing = latestClinicalFormMessage;
 
+    if (viewerType === "patient") {
+      try {
+        const result = await postPatientRoomAction("saveClinicalForm", { content, existingMessageId: existing?.id || "" });
+        const data = result?.message as Message | undefined;
+        if (data) {
+          shouldAutoScrollRef.current = true;
+          setMessages((current) => (
+            existing?.id
+              ? current.map((message) => (message.id === existing.id ? data : message))
+              : current.some((item) => item.id === data.id) ? current : [...current, data]
+          ));
+          sendStaffPushNotification(existing?.id
+            ? (uiLang === "es" ? "Historia clínica actualizada" : "Medical history updated")
+            : (uiLang === "es" ? "Historia clínica enviada" : "Medical history submitted"),
+            "advanced_assigned");
+        }
+      } catch (error) {
+        console.error("patient clinical form save failed", error);
+      }
+      return;
+    }
+
     if (existing?.id) {
       const { data, error } = await supabase
         .from("messages")
@@ -818,6 +918,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   const deletePatientMessage = async (messageId: string) => {
     const deletedAt = new Date().toISOString();
+    if (viewerType === "patient") {
+      try {
+        const result = await postPatientRoomAction("deleteMessage", { messageId });
+        const nextDeletedAt = `${result?.deletedAt || deletedAt}`;
+        setDeleteMenuMessageId(null);
+        setMessages((current) => current.map((message) => (message.id === messageId ? { ...message, deleted_by_patient: true, deleted_at: nextDeletedAt } : message)));
+      } catch (error) {
+        console.error("patient message delete failed", error);
+      }
+      return;
+    }
+
     const { error } = await supabase
       .from("messages")
       .update({ deleted_by_patient: true, deleted_at: deletedAt })
@@ -838,6 +950,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setEditingMessageText("");
     setDeleteMenuMessageId(null);
     setMessages((current) => current.map((message) => (message.id === messageId ? { ...message, content: next } : message)));
+    if (viewerType === "patient") {
+      try {
+        const result = await postPatientRoomAction("updateMessage", { messageId, content: next });
+        const data = result?.message as Message | undefined;
+        if (data) setMessages((current) => current.map((message) => (message.id === messageId ? data : message)));
+      } catch (error) {
+        setMessages((current) => current.map((message) => (message.id === messageId ? editingMessage : message)));
+        console.error("patient message update failed", error);
+      }
+      return;
+    }
+
     const { error } = await supabase
       .from("messages")
       .update({ content: next })
@@ -880,10 +1004,76 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setMenuOpen(false);
   };
 
+  const uploadPatientFile = async (
+    file: File,
+    messageType: Message["message_type"],
+    displayFileName?: string,
+    existingMessageId?: string,
+  ) => {
+    const fileType = file.type || (messageType === "video" ? "video/mp4" : "application/octet-stream");
+    const uploadTicket = await postPatientRoomAction("createUpload", {
+      fileName: displayFileName || file.name || "upload.bin",
+      fileType,
+      messageType,
+    });
+    const uploadPath = `${uploadTicket?.path || ""}`;
+    const uploadToken = `${uploadTicket?.token || ""}`;
+    if (!uploadPath || !uploadToken) throw new Error("Missing upload token");
+
+    const { error: uploadError } = await supabase.storage.from("chat-files").uploadToSignedUrl(uploadPath, uploadToken, file, {
+      contentType: fileType,
+    });
+    if (uploadError) throw uploadError;
+
+    const attachResult = await postPatientRoomAction("attachUpload", {
+      path: uploadPath,
+      fileName: displayFileName || file.name,
+      fileType,
+      messageType,
+      existingMessageId: existingMessageId || "",
+    });
+    return {
+      message: attachResult?.message as Message | undefined,
+      url: `${attachResult?.url || ""}`,
+    };
+  };
+
   const uploadFile = async (file: File, overrideType?: Message["message_type"], overrideFileName?: string) => {
     if (accessDenied || roomClosed || !accessReady) return null;
 
     const timestamp = new Date().toISOString();
+    const messageType =
+      overrideType ||
+      (file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("video/")
+          ? "video"
+          : file.type.startsWith("audio/")
+          ? "audio"
+            : "file");
+
+    if (viewerType === "patient") {
+      try {
+        const { message, url } = await uploadPatientFile(file, messageType, overrideFileName);
+        if (message) {
+          shouldAutoScrollRef.current = true;
+          setMessages((current) => {
+            if (current.some((item) => item.id === message.id)) return current;
+            return [...current, message];
+          });
+          sendStaffPushNotification(message.message_type === "file" && overrideFileName === HISTORIA_CLINICA_FILE_NAME
+            ? (uiLang === "es" ? "Historia Clinica enviada" : "Historia Clinica submitted")
+            : file.name || (uiLang === "es" ? "Nuevo archivo" : "New file"),
+            message.message_type === "file" && overrideFileName === HISTORIA_CLINICA_FILE_NAME ? "advanced_assigned" : undefined);
+        }
+        return url || null;
+      } catch (error: any) {
+        console.error("patient file upload failed", error);
+        window.alert(`No pude guardar el archivo: ${error?.message || "Error"}`);
+        return null;
+      }
+    }
+
     const storageTimestamp = Date.now();
     const safeFileName = file.name || `${overrideType || "upload"}-${storageTimestamp}.${overrideType === "video" ? "mp4" : "bin"}`;
     const path = `patients/${id}/${storageTimestamp}-${safeFileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
@@ -898,15 +1088,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     const { data } = supabase.storage.from("chat-files").getPublicUrl(path);
     const url = data.publicUrl;
-    const messageType =
-      overrideType ||
-      (file.type.startsWith("image/")
-        ? "image"
-        : file.type.startsWith("video/")
-          ? "video"
-          : file.type.startsWith("audio/")
-            ? "audio"
-            : "file");
     const messageHash = await generateMessageHash(url, timestamp, currentUserId);
     const payload = {
       room_id: id,
@@ -941,9 +1122,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (message) {
       shouldAutoScrollRef.current = true;
       await logMessageAudit(timestamp);
+      const [signedMessage] = await signMessageMediaUrls(supabase, [message as Message]);
       setMessages((current) => {
         if (current.some((item) => item.id === message.id)) return current;
-        return [...current, message as Message];
+        return [...current, (signedMessage || message) as Message];
       });
       sendStaffPushNotification(message.message_type === "file" && overrideFileName === HISTORIA_CLINICA_FILE_NAME
         ? (uiLang === "es" ? "Historia Clinica enviada" : "Historia Clinica submitted")
@@ -962,12 +1144,23 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   };
 
   const loadStoredClinicalPdfValues = async () => {
+    if (viewerType === "patient") {
+      try {
+        const response = await fetch(patientRoomEndpoint("clinicalPdfValues"), { cache: "no-store" });
+        if (response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          const saved = normalizeClinicalPdfValues(payload?.values);
+          if (saved) return saved;
+        }
+      } catch {}
+    } else {
     const { data } = await supabase.storage.from("chat-files").download(clinicalPdfValuesStoragePath);
     if (data) {
       try {
         const saved = normalizeClinicalPdfValues(JSON.parse(await data.text()));
         if (saved) return saved;
       } catch {}
+    }
     }
 
     if (typeof window !== "undefined") {
@@ -985,6 +1178,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     }
     const body = JSON.stringify(values);
     const blob = new Blob([body], { type: "application/json" });
+    if (viewerType === "patient") {
+      try {
+        await postPatientRoomAction("saveClinicalPdfValues", { values });
+      } catch (error: any) {
+        console.warn("clinical history values backup failed", error?.message || error);
+      }
+      return;
+    }
+
     const { error } = await supabase.storage.from("chat-files").upload(clinicalPdfValuesStoragePath, blob, {
       contentType: "application/json",
       upsert: true,
@@ -994,6 +1196,29 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   const uploadClinicalHistoryPdf = async (file: File) => {
     if (accessDenied || roomClosed || !accessReady) return null;
+
+    if (viewerType === "patient") {
+      const notificationText = latestClinicalPdfMessage?.id
+        ? (uiLang === "es" ? "Historia Clinica actualizada" : "Historia Clinica updated")
+        : (uiLang === "es" ? "Historia Clinica enviada" : "Historia Clinica submitted");
+      try {
+        const { message, url } = await uploadPatientFile(file, "file", HISTORIA_CLINICA_FILE_NAME, latestClinicalPdfMessage?.id);
+        if (message) {
+          shouldAutoScrollRef.current = true;
+          setMessages((current) => (
+            latestClinicalPdfMessage?.id
+              ? current.map((item) => (item.id === latestClinicalPdfMessage.id ? message : item))
+              : current.some((item) => item.id === message.id) ? current : [...current, message]
+          ));
+          sendStaffPushNotification(notificationText, "advanced_assigned");
+        }
+        return url || null;
+      } catch (error: any) {
+        console.error("clinical history upload failed", error);
+        window.alert(`No pude guardar el formulario: ${error?.message || "Error"}`);
+        return null;
+      }
+    }
 
     const timestamp = new Date().toISOString();
     const storageTimestamp = Date.now();
@@ -1057,7 +1282,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       if (update.data) {
         shouldAutoScrollRef.current = true;
         await logMessageAudit(timestamp);
-        setMessages((current) => current.map((message) => (message.id === existing.id ? (update.data as Message) : message)));
+        const [signedMessage] = await signMessageMediaUrls(supabase, [update.data as Message]);
+        setMessages((current) => current.map((message) => (message.id === existing.id ? ((signedMessage || update.data) as Message) : message)));
       }
       return url;
     }
@@ -1079,7 +1305,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (insert.data) {
       shouldAutoScrollRef.current = true;
       await logMessageAudit(timestamp);
-      setMessages((current) => current.some((item) => item.id === insert.data.id) ? current : [...current, insert.data as Message]);
+      const [signedMessage] = await signMessageMediaUrls(supabase, [insert.data as Message]);
+      setMessages((current) => current.some((item) => item.id === insert.data.id) ? current : [...current, (signedMessage || insert.data) as Message]);
       sendStaffPushNotification(notificationText, "advanced_assigned");
     }
     return url;

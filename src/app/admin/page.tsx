@@ -35,6 +35,7 @@ import {
   type StaffPermissionMap,
   type StaffPermissionKey,
 } from "@/lib/permissions";
+import { createSignedChatFileUrl } from "@/lib/chatFileUrls";
 
 const permissionDescriptions: Record<StaffPermissionKey, { es: string; en: string }> = {
   view_patients: { es: "Puede ver la lista y abrir chats asignados.", en: "Can view the list and open assigned chats." },
@@ -447,8 +448,14 @@ export default function AdminPage() {
       staffPermissionsRes.error ? "No pude cargar permisos del equipo." : "",
     ].filter(Boolean);
 
-    setStaff((staffRes.data || []) as StaffProfile[]);
-    setPatients((patientsRes.data || []) as PatientRecord[]);
+    setStaff(await Promise.all(((staffRes.data || []) as StaffProfile[]).map(async (member) => ({
+      ...member,
+      avatar_url: await createSignedChatFileUrl(supabase, member.avatar_url),
+    }))));
+    setPatients(await Promise.all(((patientsRes.data || []) as PatientRecord[]).map(async (patient) => ({
+      ...patient,
+      profile_picture_url: await createSignedChatFileUrl(supabase, patient.profile_picture_url),
+    }))));
     setProcedures((proceduresRes.data || []) as ProcedureRecord[]);
     setRooms((roomsRes.data || []) as RoomRecord[]);
     setStaffPrivateMessages(staffPrivateMessagesRes.error ? [] : ((staffPrivateMessagesRes.data || []) as StaffPrivateMessage[]));

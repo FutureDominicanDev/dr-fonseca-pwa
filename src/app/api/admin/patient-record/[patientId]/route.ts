@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isOwnerEmail } from "@/lib/securityConfig";
 import { hasPermission, normalizePermissionList } from "@/lib/permissions";
+import { CHAT_FILES_BUCKET, extractChatFilePath } from "@/lib/chatFileUrls";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -47,6 +48,24 @@ const parseStaffPermissionMap = (value: unknown) => {
     return {};
   }
 };
+
+async function signedChatFileUrl(value?: string | null) {
+  const path = extractChatFilePath(value);
+  if (!path) return value || "";
+  const { data, error } = await adminClient.storage.from(CHAT_FILES_BUCKET).createSignedUrl(path, 3600);
+  if (error || !data?.signedUrl) return value || "";
+  return data.signedUrl;
+}
+
+async function signMessageMedia(message: any) {
+  const messageType = `${message?.message_type || ""}`;
+  if (!["image", "video", "audio", "file"].includes(messageType)) return message;
+  return {
+    ...message,
+    content: await signedChatFileUrl(message.content || message.file_url),
+    file_url: await signedChatFileUrl(message.file_url || message.content),
+  };
+}
 
 const profileWithStoredPermissions = async (profile: any, userId: string) => {
   const { data } = await adminClient.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle();
@@ -141,11 +160,17 @@ export async function GET(
     if (staffError) return NextResponse.json({ error: staffError.message }, { status: 500 });
 
     return NextResponse.json({
-      patient,
+      patient: {
+        ...patient,
+        profile_picture_url: await signedChatFileUrl(patient.profile_picture_url),
+      },
       procedures: procedures || [],
       rooms: visibleRooms || [],
-      messages: visibleMessages,
-      staffProfiles: staffProfiles || [],
+      messages: await Promise.all(visibleMessages.map(signMessageMedia)),
+      staffProfiles: await Promise.all((staffProfiles || []).map(async (profile: any) => ({
+        ...profile,
+        avatar_url: await signedChatFileUrl(profile.avatar_url),
+      }))),
     });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Unexpected admin record error." }, { status: 500 });

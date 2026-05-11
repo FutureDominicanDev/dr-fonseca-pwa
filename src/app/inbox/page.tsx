@@ -6,6 +6,7 @@ import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, 
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { isOwnerEmail } from "@/lib/securityConfig";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
+import { createSignedChatFileUrl, signMessageMediaUrls } from "@/lib/chatFileUrls";
 import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 
 type Lang = "es" | "en";
@@ -947,6 +948,17 @@ export default function InboxPage() {
   const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
   const [callOverlayOpen, setCallOverlayOpen] = useState(false);
+
+  const signChatFileUrl = useCallback((value?: string | null) => createSignedChatFileUrl(supabase, value), []);
+  const signChatMessages = useCallback((entries: any[]) => signMessageMediaUrls(supabase, entries || []), []);
+  const signPatientMedia = useCallback(async (patient: any) => ({
+    ...patient,
+    profile_picture_url: await signChatFileUrl(patient?.profile_picture_url),
+  }), [signChatFileUrl]);
+  const signStaffMedia = useCallback(async (member: any) => ({
+    ...member,
+    avatar_url: await signChatFileUrl(member?.avatar_url),
+  }), [signChatFileUrl]);
   const [activeCallUrl, setActiveCallUrl] = useState<string | null>(null);
   const [activeCallRoomName, setActiveCallRoomName] = useState<string | null>(null);
   const [callInviteFeedback, setCallInviteFeedback] = useState("");
@@ -2416,7 +2428,8 @@ export default function InboxPage() {
     const data = profileRes.data;
     const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
     if (data) {
-      const profileWithPermissions = { ...data, permissions: permissionMap[id] ?? data.permissions };
+      const signedAvatarUrl = await signChatFileUrl(data.avatar_url);
+      const profileWithPermissions = { ...data, avatar_url: signedAvatarUrl || data.avatar_url, permissions: permissionMap[id] ?? data.permissions };
       setUserProfile(profileWithPermissions);
       setDisplayNameEdit(data.full_name||data.display_name||"");
       setPhoneEdit(data.phone || "");
@@ -2623,7 +2636,7 @@ export default function InboxPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         const payload = await response.json().catch(() => ({}));
-        if (response.ok && Array.isArray(payload?.staff)) list = payload.staff as CareTeamMember[];
+        if (response.ok && Array.isArray(payload?.staff)) list = await Promise.all((payload.staff as CareTeamMember[]).map(signStaffMedia));
       } catch {
         // Fall back to the client-visible profile rows below.
       }
@@ -2635,7 +2648,7 @@ export default function InboxPage() {
         .select("id, full_name, display_name, role, office_location, avatar_url, phone")
         .neq("role", "pending_staff")
         .order("full_name", { ascending: true });
-      list = (data || []) as CareTeamMember[];
+      list = await Promise.all(((data || []) as CareTeamMember[]).map(signStaffMedia));
     }
 
     const fallback = userProfile?.id && userProfile?.role !== "pending_staff" ? [{
@@ -2672,7 +2685,7 @@ export default function InboxPage() {
       .select("id, full_name, display_name, role, office_location, avatar_url, phone")
       .in("id", memberIds);
 
-    setSelectedRoomTeam((profiles || []) as CareTeamMember[]);
+    setSelectedRoomTeam(await Promise.all(((profiles || []) as CareTeamMember[]).map(signStaffMedia)));
   };
 
   const saveQuickReplies = useCallback(async (replies: QuickReply[]) => {
@@ -2782,7 +2795,7 @@ export default function InboxPage() {
     if (!userProfile?.id) return;
     const fn = `profile-photos/${userProfile.id}/${Date.now()}-${file.name}`;
     const { error } = await supabase.storage.from("chat-files").upload(fn, file);
-    if (!error) { const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn); await supabase.from("profiles").update({ avatar_url: ud.publicUrl }).eq("id",userProfile.id); setUserProfile((p: any)=>({...p,avatar_url:ud.publicUrl})); }
+    if (!error) { const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn); const signedUrl = await signChatFileUrl(ud.publicUrl); await supabase.from("profiles").update({ avatar_url: ud.publicUrl }).eq("id",userProfile.id); setUserProfile((p: any)=>({...p,avatar_url:signedUrl || ud.publicUrl})); }
   };
 
   useEffect(()=>{ selectedRoomRef.current=selectedRoom; },[selectedRoom]);
@@ -2953,28 +2966,34 @@ export default function InboxPage() {
 
   useEffect(()=>{
     const ch = supabase.channel("rt-msgs")
-      .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},({new:m})=>{
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},async ({new:m})=>{
+        const signedMessage = (await signChatMessages([m]))[0] || m;
         if (m.sender_type==="patient") {
           setPatientTyping(false);
           if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
-          registerIncomingPatientMessage(m, { skipUnread: selectedRoomRef.current?.id===m.room_id && typeof document !== "undefined" && document.visibilityState === "visible" });
+          registerIncomingPatientMessage(signedMessage, { skipUnread: selectedRoomRef.current?.id===m.room_id && typeof document !== "undefined" && document.visibilityState === "visible" });
         }
         if (m.sender_type === "staff" && m.is_internal && m.sender_id && m.sender_id !== currentUserId) {
-          registerIncomingInternalNote(m);
+          registerIncomingInternalNote(signedMessage);
         }
         if (selectedRoomRef.current?.id===m.room_id) {
           setMessages(prev=>{
             const ti=prev.findIndex(x=>typeof x.id==="string"&&x.id.startsWith("temp-")&&x.content===m.content&&x.sender_type===m.sender_type);
-            if (ti!==-1){const u=[...prev];u[ti]=m;return u;}
+            if (ti!==-1){const u=[...prev];u[ti]=signedMessage;return u;}
             if (prev.some(x=>x.id===m.id)) return prev;
-            return [...prev,m];
+            return [...prev,signedMessage];
           });
         }
       })
-      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},({new:m})=>{ if (selectedRoomRef.current?.id===m.room_id) setMessages(p=>p.map(x=>x.id===m.id?m:x)); })
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},async ({new:m})=>{
+        if (selectedRoomRef.current?.id===m.room_id) {
+          const signedMessage = (await signChatMessages([m]))[0] || m;
+          setMessages(p=>p.map(x=>x.id===m.id?signedMessage:x));
+        }
+      })
       .subscribe();
     return ()=>{ supabase.removeChannel(ch); };
-  },[currentUserId, registerIncomingInternalNote, registerIncomingPatientMessage]);
+  },[currentUserId, registerIncomingInternalNote, registerIncomingPatientMessage, signChatMessages]);
 
   useEffect(() => {
     const activeRoomId = selectedRoomRef.current?.id;
@@ -3186,7 +3205,7 @@ export default function InboxPage() {
         pm[p.id].rooms.push(r);
       });
       visibleRoomIdsRef.current = visibleRoomIds;
-      const nextPatients = Object.values(pm);
+      const nextPatients = await Promise.all(Object.values(pm).map((patient: any) => signPatientMedia(patient)));
       setPatients(nextPatients);
       const activeSelectedRoomId = selectedRoomRef.current?.id;
       if (activeSelectedRoomId && !visibleRoomIds.has(activeSelectedRoomId)) {
@@ -3287,7 +3306,7 @@ export default function InboxPage() {
       return;
     }
     const { data } = await supabase.from("messages").select("*").eq("room_id",roomId).order("created_at",{ascending:true});
-    setMessages(data||[]);
+    setMessages(await signChatMessages(data || []));
   };
 
   const sendMessage = async (content?: string) => {
@@ -3581,6 +3600,7 @@ export default function InboxPage() {
       const { error: ue } = await supabase.storage.from("chat-files").upload(fn,file);
       if (ue){setSending(false);return;}
       const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn);
+      const signedUrl = await signChatFileUrl(ud.publicUrl);
       let mt="file";
       if (file.type.startsWith("image/")) mt="image";
       else if (file.type.startsWith("video/")) mt="video";
@@ -3588,9 +3608,12 @@ export default function InboxPage() {
       const prefix=cat==="medication"?"[MED] ":cat==="before_photo"?"[BEFORE] ":"";
       const displayFileName = cat==="medication" ? `${prefix}${folderLabel.trim() || file.name}` : `${prefix}${file.name}`;
       const tempId="temp-file-"+Date.now();
-      setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
+      setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:signedUrl || ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
       const { data: nm } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
-      if (nm) setMessages(p=>p.map(m=>m.id===tempId?nm:m));
+      if (nm) {
+        const [signedMessage] = await signChatMessages([nm]);
+        setMessages(p=>p.map(m=>m.id===tempId?signedMessage:m));
+      }
       else setMessages(p=>p.filter(m=>m.id!==tempId));
       if (mt === "image" || mt === "video") {
         await supabase.from("media_uploads").insert({
@@ -3749,12 +3772,13 @@ export default function InboxPage() {
     }
 
     const { data: publicUrl } = supabase.storage.from("chat-files").getPublicUrl(path);
+    const signedUrl = await signChatFileUrl(publicUrl.publicUrl);
     const displayFileName = `${STAFF_RECORD_PHOTO_PREFIX} ${file.name || (lang === "es" ? "Foto interna" : "Internal photo")}`;
     const tempId = "temp-staff-record-photo-" + Date.now();
     const tempMessage = {
       id: tempId,
       room_id: selectedRoom.id,
-      content: publicUrl.publicUrl,
+      content: signedUrl || publicUrl.publicUrl,
       message_type: "image",
       file_name: displayFileName,
       file_size: file.size,
@@ -3790,7 +3814,8 @@ export default function InboxPage() {
       setMessages((prev) => prev.filter((entry) => entry.id !== tempId));
       alert(error.message || (lang === "es" ? "No pude guardar la foto interna." : "I could not save the internal photo."));
     } else if (data) {
-      setMessages((prev) => prev.map((entry) => entry.id === tempId ? data : entry));
+      const [signedMessage] = await signChatMessages([data]);
+      setMessages((prev) => prev.map((entry) => entry.id === tempId ? signedMessage : entry));
       setMediaLibraryTab("internal");
       setShowMediaLibrary(true);
       sendPushNotification({
