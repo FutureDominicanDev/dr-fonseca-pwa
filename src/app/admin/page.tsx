@@ -1811,6 +1811,9 @@ export default function AdminPage() {
         .staff-controls summary { list-style: none; min-height: 44px; padding: 10px 12px; cursor: pointer; color: #075EA8; font-size: 15px; font-weight: 900; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .staff-controls summary::-webkit-details-marker { display: none; }
         .staff-controls-body { padding: 0 12px 12px; }
+        .staff-controls-close-btn { width: 100%; min-height: 44px; border: 1px solid #BFDBFE; border-radius: 12px; background: #EFF6FF; color: #075EA8; font-family: inherit; font-size: 14px; font-weight: 950; cursor: pointer; }
+        .staff-controls-close-btn.top { margin: 0 0 10px; }
+        .staff-controls-close-btn.bottom { margin: 12px 0 0; }
         .staff-contact-settings-grid { display: grid; grid-template-columns: minmax(180px, 0.74fr) minmax(220px, 1fr) minmax(320px, 1.35fr); gap: 10px; align-items: start; }
         .staff-contact-settings-grid .setting-group { min-width: 0; }
         .staff-contact-settings-grid .mini-actions { flex-wrap: nowrap; align-items: stretch; }
@@ -2574,6 +2577,13 @@ export default function AdminPage() {
 	                              <span>⌄</span>
 	                            </summary>
 		                            <div className="staff-controls-body">
+                                  <button
+                                    type="button"
+                                    className="staff-controls-close-btn top"
+                                    onClick={() => collapseStaffControls(member.id)}
+                                  >
+                                    {isSpanish ? "Cerrar opciones de staff" : "Close staff options"}
+                                  </button>
                                   {isPendingStaff && (
                                     <div className="setting-group" style={{ background: "#FFF7ED", borderColor: "#FED7AA" }}>
                                       <p className="group-label" style={{ color: "#9A3412" }}>{isSpanish ? "Aprobación pendiente" : "Pending approval"}</p>
@@ -2868,6 +2878,13 @@ export default function AdminPage() {
                                   )}
                                 </div>
                               </div>
+                              <button
+                                type="button"
+                                className="staff-controls-close-btn bottom"
+                                onClick={() => collapseStaffControls(member.id)}
+                              >
+                                {isSpanish ? "Cerrar opciones de staff" : "Close staff options"}
+                              </button>
                             </div>
                           </details>
                         </div>
