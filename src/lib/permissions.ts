@@ -71,7 +71,7 @@ export const LEGACY_ROLE_PERMISSION_DEFAULTS: Record<string, StaffPermissionKey[
     "manage_labels",
     "access_settings_security",
   ],
-  none: ["view_patients", "view_upload_files"],
+  none: ["view_patients", "view_upload_files", "manage_labels"],
 };
 
 export const permissionLabel = (key: StaffPermissionKey, lang: PermissionLang) =>
