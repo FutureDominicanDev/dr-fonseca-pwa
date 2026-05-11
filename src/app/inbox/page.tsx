@@ -5213,6 +5213,40 @@ export default function InboxPage() {
     );
   };
 
+  useEffect(() => {
+    if (userProfile?.role !== "pending_staff" || !currentUserId) return;
+    let cancelled = false;
+
+    const checkApproval = async () => {
+      const [profileRes, permissionsRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", currentUserId).maybeSingle(),
+        supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+      ]);
+      const profile = profileRes.data;
+      if (cancelled || !profile) return;
+
+      const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
+      const profileWithPermissions = { ...(profile as any), permissions: permissionMap[currentUserId] ?? (profile as any).permissions };
+      setUserProfile(profileWithPermissions);
+
+      if (`${profileWithPermissions.role || ""}`.toLowerCase() !== "pending_staff") {
+        setLoading(true);
+        await Promise.all([
+          fetchRooms(),
+          fetchAssignableStaff(),
+          fetchUserLabels(),
+        ]);
+      }
+    };
+
+    void checkApproval();
+    const interval = window.setInterval(() => void checkApproval(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [currentUserId, userProfile?.role]);
+
   if (userProfile?.role === "pending_staff") {
     const pendingName = userProfile.full_name || userProfile.display_name || (lang === "es" ? "Personal" : "Team member");
     const signOutPending = async () => {
@@ -5260,92 +5294,92 @@ export default function InboxPage() {
     ];
 
     return (
-      <div style={{minHeight:"100dvh",background:darkMode?"#0B141A":"#F2F7FB",color:textColor,fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",padding:"calc(18px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))",display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <div style={{width:"100%",maxWidth:780,background:darkMode?"#111B21":"#FFFFFF",border:`1px solid ${borderColor}`,borderRadius:22,overflow:"hidden",boxShadow:darkMode?"0 20px 60px rgba(0,0,0,0.28)":"0 20px 60px rgba(28,66,104,0.14)"}}>
-          <div style={{background:headerBg,padding:"22px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-            <img src="/fonseca_blue.png" alt="Dr. Miguel Fonseca" style={{height:78,width:"min(72%, 390px)",objectFit:"contain",objectPosition:"left center",display:"block"}}/>
+      <div style={{minHeight:"100dvh",background:darkMode?"#0B141A":"#F2F7FB",color:textColor,fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",padding:"calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto"}}>
+        <div style={{width:"100%",maxWidth:760,maxHeight:"calc(100dvh - 18px - env(safe-area-inset-top) - env(safe-area-inset-bottom))",background:darkMode?"#111B21":"#FFFFFF",border:`1px solid ${borderColor}`,borderRadius:20,overflowY:"auto",overflowX:"hidden",boxShadow:darkMode?"0 20px 60px rgba(0,0,0,0.28)":"0 20px 60px rgba(28,66,104,0.14)",scrollbarGutter:"stable"}}>
+          <div style={{background:headerBg,padding:"15px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+            <img src="/fonseca_blue.png" alt="Dr. Miguel Fonseca" style={{height:62,width:"min(72%, 340px)",objectFit:"contain",objectPosition:"left center",display:"block"}}/>
             <button
               type="button"
               className="admin-inline-btn staff-lang-btn"
               onClick={toggleStaffLanguage}
               title={lang === "es" ? "Cambiar a English" : "Switch to Español"}
               aria-label={lang === "es" ? "Cambiar idioma a English" : "Switch language to Español"}
-              style={{width:50,minWidth:50,height:50,minHeight:50,borderRadius:16,background:"rgba(8, 50, 76, 0.82)",border:"1px solid rgba(210, 235, 255, 0.54)",color:"#F8FBFF",fontSize:23,cursor:"pointer"}}
+              style={{width:44,minWidth:44,height:44,minHeight:44,borderRadius:14,background:"rgba(8, 50, 76, 0.82)",border:"1px solid rgba(210, 235, 255, 0.54)",color:"#F8FBFF",fontSize:21,cursor:"pointer"}}
             >
               {lang === "es" ? "🇲🇽" : "🇺🇸"}
             </button>
           </div>
-          <div style={{padding:"24px 20px 22px",display:"grid",gap:16}}>
+          <div style={{padding:"18px 18px 18px",display:"grid",gap:12}}>
             <div>
-              <p style={{margin:0,color:"#2563EB",fontSize:13,fontWeight:900,textTransform:"uppercase",letterSpacing:0.7,lineHeight:1.3}}>
+              <p style={{margin:0,color:"#2563EB",fontSize:12,fontWeight:900,textTransform:"uppercase",letterSpacing:0.7,lineHeight:1.3}}>
                 {lang === "es" ? "Acceso pendiente" : "Access pending"}
               </p>
-              <h1 style={{margin:"8px 0 8px",fontSize:28,lineHeight:1.12,color:textColor,fontWeight:950}}>
+              <h1 style={{margin:"6px 0 6px",fontSize:24,lineHeight:1.1,color:textColor,fontWeight:950}}>
                 {lang === "es" ? `Hola, ${pendingName}` : `Hi, ${pendingName}`}
               </h1>
-              <p style={{margin:0,color:subTextColor,fontSize:17,fontWeight:700,lineHeight:1.55}}>
+              <p style={{margin:0,color:subTextColor,fontSize:15,fontWeight:700,lineHeight:1.42}}>
                 {lang === "es"
                   ? "Tu cuenta ya fue creada, pero todavía no puede ver pacientes. El doctor o un administrador debe aprobar tu acceso primero."
                   : "Your account was created, but it cannot view patients yet. The doctor or an administrator must approve access first."}
               </p>
             </div>
-            <div style={{background:"#071B31",border:"1px solid rgba(96,165,250,0.36)",borderRadius:20,padding:16,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14,flexWrap:"wrap"}}>
+            <div style={{background:"#071B31",border:"1px solid rgba(96,165,250,0.36)",borderRadius:18,padding:12,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10,flexWrap:"wrap"}}>
                 <div>
-                  <p style={{margin:0,color:"#93C5FD",fontSize:13,fontWeight:900,textTransform:"uppercase",letterSpacing:0.7,lineHeight:1.3}}>
+                  <p style={{margin:0,color:"#93C5FD",fontSize:11,fontWeight:900,textTransform:"uppercase",letterSpacing:0.7,lineHeight:1.3}}>
                     {lang === "es" ? "Guía visual" : "Visual guide"}
                   </p>
-                  <p style={{margin:"5px 0 0",color:"#F8FAFC",fontSize:19,fontWeight:950,lineHeight:1.2}}>
+                  <p style={{margin:"4px 0 0",color:"#F8FAFC",fontSize:17,fontWeight:950,lineHeight:1.18}}>
                     {lang === "es" ? "Herramientas después de aprobación" : "Tools after approval"}
                   </p>
                 </div>
-                <span style={{border:"1px solid rgba(147,197,253,0.35)",background:"rgba(37,99,235,0.18)",color:"#DBEAFE",borderRadius:999,padding:"7px 10px",fontSize:12,fontWeight:900,lineHeight:1}}>
+                <span style={{border:"1px solid rgba(147,197,253,0.35)",background:"rgba(37,99,235,0.18)",color:"#DBEAFE",borderRadius:999,padding:"6px 9px",fontSize:11,fontWeight:900,lineHeight:1}}>
                   {lang === "es" ? "Paciente asignado solamente" : "Assigned patients only"}
                 </span>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(145px, 1fr))",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))",gap:8}}>
                 {staffGuideItems.map((item) => (
-                  <div key={item.kind} style={{border:"1px solid rgba(96,165,250,0.28)",background:"linear-gradient(180deg, rgba(15,47,83,0.92), rgba(8,31,56,0.92))",borderRadius:16,padding:13,minHeight:150,display:"grid",alignContent:"start",gap:9}}>
-                    <span style={{width:46,height:46,borderRadius:14,background:"rgba(37,99,235,0.20)",border:"1px solid rgba(96,165,250,0.42)",color:"#60A5FA",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 24px rgba(37,99,235,0.22)"}}>
+                  <div key={item.kind} style={{border:"1px solid rgba(96,165,250,0.28)",background:"linear-gradient(180deg, rgba(15,47,83,0.92), rgba(8,31,56,0.92))",borderRadius:14,padding:10,minHeight:118,display:"grid",alignContent:"start",gap:7}}>
+                    <span style={{width:38,height:38,borderRadius:12,background:"rgba(37,99,235,0.20)",border:"1px solid rgba(96,165,250,0.42)",color:"#60A5FA",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 18px rgba(37,99,235,0.20)"}}>
                       <PendingGuideIcon kind={item.kind} />
                     </span>
-                    <strong style={{color:"#F8FAFC",fontSize:15,fontWeight:950,lineHeight:1.18}}>{item.title}</strong>
-                    <span style={{color:"#CBD5E1",fontSize:13,fontWeight:650,lineHeight:1.38}}>{item.body}</span>
+                    <strong style={{color:"#F8FAFC",fontSize:13,fontWeight:950,lineHeight:1.14}}>{item.title}</strong>
+                    <span style={{color:"#CBD5E1",fontSize:11,fontWeight:650,lineHeight:1.28}}>{item.body}</span>
                   </div>
                 ))}
               </div>
-              <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid rgba(96,165,250,0.20)"}}>
-                <p style={{margin:"0 0 10px",color:"#DBEAFE",fontSize:15,fontWeight:950,lineHeight:1.2}}>
+              <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid rgba(96,165,250,0.20)"}}>
+                <p style={{margin:"0 0 8px",color:"#DBEAFE",fontSize:13,fontWeight:950,lineHeight:1.2}}>
                   {lang === "es" ? "Si el doctor te da permisos admin" : "If the doctor gives you admin access"}
                 </p>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:10}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:8}}>
                   {adminGuideItems.map((item) => (
-                    <div key={item.kind} style={{display:"grid",gridTemplateColumns:"42px 1fr",gap:10,alignItems:"start",border:"1px solid rgba(125,211,252,0.22)",background:"rgba(8,50,76,0.52)",borderRadius:15,padding:11}}>
-                      <span style={{width:42,height:42,borderRadius:13,background:"rgba(14,165,233,0.14)",border:"1px solid rgba(125,211,252,0.35)",color:"#7DD3FC",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <div key={item.kind} style={{display:"grid",gridTemplateColumns:"34px 1fr",gap:8,alignItems:"start",border:"1px solid rgba(125,211,252,0.22)",background:"rgba(8,50,76,0.52)",borderRadius:13,padding:9}}>
+                      <span style={{width:34,height:34,borderRadius:11,background:"rgba(14,165,233,0.14)",border:"1px solid rgba(125,211,252,0.35)",color:"#7DD3FC",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <PendingGuideIcon kind={item.kind} />
                       </span>
                       <span style={{minWidth:0}}>
-                        <strong style={{display:"block",color:"#F8FAFC",fontSize:14,fontWeight:950,lineHeight:1.2}}>{item.title}</strong>
-                        <span style={{display:"block",color:"#CBD5E1",fontSize:12,fontWeight:650,lineHeight:1.35,marginTop:3}}>{item.body}</span>
+                        <strong style={{display:"block",color:"#F8FAFC",fontSize:12,fontWeight:950,lineHeight:1.2}}>{item.title}</strong>
+                        <span style={{display:"block",color:"#CBD5E1",fontSize:11,fontWeight:650,lineHeight:1.25,marginTop:2}}>{item.body}</span>
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
-              <div style={{marginTop:14,display:"grid",gridTemplateColumns:"22px 1fr",gap:9,alignItems:"start"}}>
-                <span style={{width:22,height:22,borderRadius:999,background:"#2563EB",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900}}>✓</span>
-                <span style={{color:"#DBEAFE",fontSize:13,fontWeight:750,lineHeight:1.4}}>
+              <div style={{marginTop:10,display:"grid",gridTemplateColumns:"20px 1fr",gap:8,alignItems:"start"}}>
+                <span style={{width:20,height:20,borderRadius:999,background:"#2563EB",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900}}>✓</span>
+                <span style={{color:"#DBEAFE",fontSize:12,fontWeight:750,lineHeight:1.3}}>
                   {lang === "es"
                     ? "Los pacientes no reciben tu enlace staff; las salas asignadas aparecerán dentro de tu portal."
                     : "Patients do not receive your staff link; assigned rooms will appear inside your portal."}
                 </span>
               </div>
             </div>
-            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-              <button type="button" onClick={()=>window.location.reload()} style={{flex:"1 1 190px",minHeight:48,border:"none",borderRadius:14,background:"#2563EB",color:"#FFFFFF",fontFamily:"inherit",fontSize:16,fontWeight:900,cursor:"pointer"}}>
+            <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+              <button type="button" onClick={()=>window.location.reload()} style={{flex:"1 1 190px",minHeight:44,border:"none",borderRadius:13,background:"#2563EB",color:"#FFFFFF",fontFamily:"inherit",fontSize:15,fontWeight:900,cursor:"pointer"}}>
                 {lang === "es" ? "Revisar aprobación" : "Check approval"}
               </button>
-              <button type="button" onClick={signOutPending} style={{flex:"1 1 190px",minHeight:48,border:`1px solid ${borderColor}`,borderRadius:14,background:darkMode?"#1F2937":"#FFFFFF",color:textColor,fontFamily:"inherit",fontSize:16,fontWeight:850,cursor:"pointer"}}>
+              <button type="button" onClick={signOutPending} style={{flex:"1 1 190px",minHeight:44,border:`1px solid ${borderColor}`,borderRadius:13,background:darkMode?"#1F2937":"#FFFFFF",color:textColor,fontFamily:"inherit",fontSize:15,fontWeight:850,cursor:"pointer"}}>
                 {lang === "es" ? "Salir" : "Sign out"}
               </button>
             </div>
