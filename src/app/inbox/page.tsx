@@ -5294,8 +5294,8 @@ export default function InboxPage() {
     ];
 
     return (
-      <div style={{minHeight:"100dvh",background:darkMode?"#0B141A":"#F2F7FB",color:textColor,fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",padding:"calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto"}}>
-        <div style={{width:"100%",maxWidth:760,maxHeight:"calc(100dvh - 18px - env(safe-area-inset-top) - env(safe-area-inset-bottom))",background:darkMode?"#111B21":"#FFFFFF",border:`1px solid ${borderColor}`,borderRadius:20,overflowY:"auto",overflowX:"hidden",boxShadow:darkMode?"0 20px 60px rgba(0,0,0,0.28)":"0 20px 60px rgba(28,66,104,0.14)",scrollbarGutter:"stable"}}>
+      <div style={{position:"fixed",inset:0,height:"100dvh",background:darkMode?"#0B141A":"#F2F7FB",color:textColor,fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",padding:"calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",scrollbarGutter:"stable"}}>
+        <div style={{width:"100%",maxWidth:760,margin:"0 auto",background:darkMode?"#111B21":"#FFFFFF",border:`1px solid ${borderColor}`,borderRadius:20,overflow:"visible",boxShadow:darkMode?"0 20px 60px rgba(0,0,0,0.28)":"0 20px 60px rgba(28,66,104,0.14)"}}>
           <div style={{background:headerBg,padding:"15px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <img src="/fonseca_blue.png" alt="Dr. Miguel Fonseca" style={{height:62,width:"min(72%, 340px)",objectFit:"contain",objectPosition:"left center",display:"block"}}/>
             <button
@@ -5375,7 +5375,7 @@ export default function InboxPage() {
                 </span>
               </div>
             </div>
-            <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+            <div style={{position:"sticky",bottom:"calc(8px + env(safe-area-inset-bottom))",display:"flex",gap:9,flexWrap:"wrap",padding:"10px 0 0",marginTop:-2,background:darkMode?"linear-gradient(180deg, rgba(17,27,33,0), #111B21 28%)":"linear-gradient(180deg, rgba(255,255,255,0), #FFFFFF 28%)",zIndex:2}}>
               <button type="button" onClick={()=>window.location.reload()} style={{flex:"1 1 190px",minHeight:44,border:"none",borderRadius:13,background:"#2563EB",color:"#FFFFFF",fontFamily:"inherit",fontSize:15,fontWeight:900,cursor:"pointer"}}>
                 {lang === "es" ? "Revisar aprobación" : "Check approval"}
               </button>
