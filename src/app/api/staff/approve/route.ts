@@ -51,7 +51,7 @@ const sendApprovedEmail = async (params: { email: string; fullName: string; offi
   });
 
   const loginUrl = `${APP_URL}/login`;
-  const trainingUrl = `${APP_URL}/admin/ayuda`;
+  const trainingUrl = `${APP_URL}/training`;
   const officeText = params.officeLocation || "Ambas sedes";
 
   await transporter.sendMail({

@@ -56,6 +56,7 @@ export default function AdminHelpPage() {
           </div>
           <div className="topbar-actions">
             <button className="topbar-btn" onClick={() => goTo("/admin")}>← Volver al panel</button>
+            <button className="topbar-btn" onClick={() => goTo("/training")}>Entrenamiento</button>
             <button className="topbar-btn" onClick={() => goTo("/admin/auditoria")}>Auditoría</button>
             <button className="topbar-btn" onClick={() => goTo("/admin/papelera")}>Papelera</button>
             <button className="topbar-btn" onClick={() => goTo("/inbox")}>Ir al portal</button>
@@ -75,6 +76,7 @@ export default function AdminHelpPage() {
         {mobileMenuOpen && (
           <div className="menu-panel">
             <button className="topbar-btn" onClick={() => goTo("/admin")}>← Volver al panel</button>
+            <button className="topbar-btn" onClick={() => goTo("/training")}>Entrenamiento</button>
             <button className="topbar-btn" onClick={() => goTo("/admin/auditoria")}>Auditoría</button>
             <button className="topbar-btn" onClick={() => goTo("/admin/papelera")}>Papelera</button>
             <button className="topbar-btn" onClick={() => goTo("/inbox")}>Ir al portal</button>
@@ -89,6 +91,9 @@ export default function AdminHelpPage() {
               Esta pantalla está hecha para que puedas encontrar lo que necesitas sin pensar en temas técnicos.
               Aquí puedes buscar pacientes, abrir expedientes, compartir o imprimir registros, cambiar permisos del personal y enviar enlaces de invitación.
             </p>
+            <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button className="main-btn" type="button" onClick={() => goTo("/training")}>Abrir entrenamiento visual</button>
+            </div>
           </section>
 
           <div className="grid-2">

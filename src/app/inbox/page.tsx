@@ -249,6 +249,9 @@ const T = {
     invalidEmail: "El correo debe incluir un formato válido, por ejemplo nombre@correo.com.",
     invalidPhone: "El teléfono debe tener al menos 7 dígitos.",
     settings: "Ajustes", myProfile: "Mi Perfil",
+    trainingCenter: "Entrenamiento",
+    trainingHint: "Repasa el sistema con guías visuales, pasos tipo iPhone y narración opcional. No abre expedientes reales.",
+    openTraining: "Abrir entrenamiento",
     displayName: "Nombre a Mostrar",
     darkMode: "Modo Oscuro", fontSize: "Tamaño de Texto",
     language: "Idioma", spanish: "Español", english: "English",
@@ -440,6 +443,9 @@ const T = {
     invalidEmail: "Email must use a valid format, for example name@email.com.",
     invalidPhone: "Phone number must contain at least 7 digits.",
     settings: "Settings", myProfile: "My Profile",
+    trainingCenter: "Training",
+    trainingHint: "Refresh the system with visual guides, iPhone-style steps, and optional narration. It does not open real records.",
+    openTraining: "Open training",
     displayName: "Display Name",
     darkMode: "Dark Mode", fontSize: "Font Size",
     language: "Language", spanish: "Español", english: "English",
@@ -4680,6 +4686,17 @@ export default function InboxPage() {
           <button onClick={()=>setShowSettings(false)} style={{background:cardBg,border:"none",borderRadius:99,padding:"8px 16px",fontSize:15,fontWeight:700,cursor:"pointer",color:textColor,fontFamily:"inherit",minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
         <div style={{padding:"0 20px"}}>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8,lineHeight:1.35}}>{t.trainingCenter}</p>
+            <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginBottom:12}}>{t.trainingHint}</p>
+            <button
+              type="button"
+              onClick={() => { setShowSettings(false); window.location.href = "/training"; }}
+              style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#0B63CE",color:"white",fontSize:settingsBaseSize,fontWeight:900,cursor:"pointer",fontFamily:"inherit"}}
+            >
+              {t.openTraining}
+            </button>
+          </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Mi nombre":"My name"}</p>
             <label style={{display:"block",fontSize:settingsBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>{t.displayName}</label>

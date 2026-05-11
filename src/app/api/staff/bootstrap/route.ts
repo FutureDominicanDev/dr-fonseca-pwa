@@ -185,6 +185,7 @@ const sendWelcomeEmail = async (params: { fullName: string; email: string; role:
 
   const loginUrl = `${APP_URL}/login`;
   const resetUrl = `${APP_URL}/reset-password`;
+  const trainingUrl = `${APP_URL}/training`;
   const roleText = roleLabelEs(params.role);
   const officeText = params.officeLocation ? `<p style="margin:0 0 8px 0;">Sede asignada: <strong>${params.officeLocation}</strong></p>` : "";
 
@@ -209,6 +210,7 @@ const sendWelcomeEmail = async (params: { fullName: string; email: string; role:
             <ul style="margin:0 0 12px 18px;padding:0;line-height:1.7;color:#334155;">
               <li>Ingresa al sistema desde: <a href="${loginUrl}">${loginUrl}</a></li>
               <li>Si necesitas cambiar contraseña: <a href="${resetUrl}">${resetUrl}</a></li>
+              <li>Guía visual de entrenamiento: <a href="${trainingUrl}">${trainingUrl}</a></li>
               <li>Dentro de Inbox podrás responder pacientes, usar respuestas rápidas con <strong>/</strong> y enviar multimedia.</li>
             </ul>
             <p style="margin:12px 0 0 0;color:#475569;line-height:1.6;">Este correo es informativo de bienvenida.</p>
@@ -238,6 +240,7 @@ const sendStaffPendingEmail = async (params: { fullName: string; email: string; 
   });
 
   const loginUrl = `${APP_URL}/login`;
+  const trainingUrl = `${APP_URL}/training`;
   const officeText = params.officeLocation || "Ambas sedes";
 
   await transporter.sendMail({
@@ -259,11 +262,12 @@ const sendStaffPendingEmail = async (params: { fullName: string; email: string; 
             <p style="margin:18px 0 0;">
               <a href="${loginUrl}" style="display:inline-block;background:#0b63ce;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-weight:800;">Abrir portal</a>
             </p>
+            <p style="margin:14px 0 0;color:#64748b;line-height:1.6;">Guia visual del portal: ${trainingUrl}</p>
           </div>
         </div>
       </div>
     `,
-    text: `Solicitud recibida - Portal Medico Dr. Fonseca\n\n${params.fullName}, recibimos tu registro. Sede indicada: ${officeText}. Por seguridad, tu cuenta queda en espera hasta que sea aprobada. Portal: ${loginUrl}`,
+    text: `Solicitud recibida - Portal Medico Dr. Fonseca\n\n${params.fullName}, recibimos tu registro. Sede indicada: ${officeText}. Por seguridad, tu cuenta queda en espera hasta que sea aprobada. Portal: ${loginUrl}\nGuia: ${trainingUrl}`,
   });
 
   return { sent: true };
