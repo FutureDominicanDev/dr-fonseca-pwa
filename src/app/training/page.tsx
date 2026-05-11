@@ -389,6 +389,7 @@ export default function TrainingPage() {
     setPlaying(false);
     setSpeaking(false);
     window.speechSynthesis?.cancel();
+    window.setTimeout(() => document.getElementById("training-guide")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   };
   const previousStep = () => setStepIndex((current) => Math.max(0, current - 1));
   const nextStep = () => setStepIndex((current) => Math.min(totalSteps - 1, current + 1));
@@ -422,9 +423,9 @@ export default function TrainingPage() {
       <style>{`
         * { box-sizing: border-box; }
         body { background: #eef4fb; }
-        .training-shell { min-height: 100dvh; background: linear-gradient(180deg, #07385d 0%, #0b63ce 34%, #eef4fb 34%, #f8fafc 100%); color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .training-shell { height: 100dvh; min-height: -webkit-fill-available; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: linear-gradient(180deg, #07385d 0%, #0b63ce 34%, #eef4fb 34%, #f8fafc 100%); color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         .training-topbar { position: sticky; top: 0; z-index: 20; min-height: calc(82px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 12px; background: rgba(7, 56, 93, 0.94); backdrop-filter: blur(18px); border-bottom: 1px solid rgba(255,255,255,0.12); }
-        .training-logo { width: 224px; max-width: 42vw; height: auto; display: block; }
+        .training-logo { width: 224px; max-width: 42vw; height: auto; display: block; object-fit: contain; }
         .training-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
         .top-btn, .lang-btn, .control-btn, .module-btn { min-height: 44px; border: none; cursor: pointer; font-family: inherit; font-weight: 900; }
         .top-btn, .lang-btn { border-radius: 14px; background: #eff6ff; color: #0f172a; padding: 10px 14px; }
@@ -448,7 +449,7 @@ export default function TrainingPage() {
         .phone-screen { height: 100%; border-radius: 26px; background: linear-gradient(180deg, #eef6ff, #ffffff); overflow: hidden; position: relative; }
         .phone-status { height: 34px; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; color: #0f172a; font-size: 12px; font-weight: 900; }
         .phone-header { background: #07385d; color: white; padding: 18px 14px; text-align: center; }
-        .phone-header img { width: 178px; max-width: 82%; height: auto; display: block; margin: 0 auto; }
+        .phone-header img { width: 178px; max-width: 82%; height: auto; display: block; margin: 0 auto; object-fit: contain; }
         .phone-content { padding: 18px 16px; display: grid; gap: 12px; }
         .mock-card { border: 1px solid #dbeafe; background: white; border-radius: 8px; padding: 14px; box-shadow: 0 8px 20px rgba(15,23,42,.05); }
         .mock-title { margin: 0 0 8px; font-size: 20px; line-height: 1.1; font-weight: 950; }
@@ -474,7 +475,7 @@ export default function TrainingPage() {
           .training-layout, .guide-panel { grid-template-columns: 1fr; }
           .module-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .panel-title { grid-column: 1 / -1; }
-          .training-topbar { position: static; align-items: flex-start; flex-direction: column; }
+          .training-topbar { position: sticky; align-items: flex-start; flex-direction: column; }
           .training-actions { width: 100%; justify-content: flex-start; }
         }
         @media (max-width: 560px) {
@@ -489,7 +490,7 @@ export default function TrainingPage() {
 
       <main className="training-shell">
         <header className="training-topbar">
-          <Image className="training-logo" src="/fonseca_white.png" alt="Dr. Miguel Fonseca" width={2120} height={606} priority />
+          <Image className="training-logo" src="/fonseca_blue.png" alt="Dr. Miguel Fonseca" width={2120} height={606} priority />
           <div className="training-actions">
             <button className="lang-btn" type="button" onClick={() => setLang((current) => (current === "es" ? "en" : "es"))}>
               {lang === "es" ? "🇲🇽 ES" : "🇺🇸 EN"}
@@ -527,12 +528,12 @@ export default function TrainingPage() {
             </aside>
 
             <div>
-              <section className="guide-panel">
+              <section id="training-guide" className="guide-panel">
                 <div className="phone-frame" aria-hidden="true">
                   <div className="phone-screen">
                     <div className="phone-status"><span>9:41</span><span>5G 100%</span></div>
                     <div className="phone-header">
-                      <Image src="/fonseca_white.png" alt="" width={2120} height={606} />
+                      <Image src="/fonseca_blue.png" alt="" width={2120} height={606} />
                     </div>
                     <div className="phone-content">
                       <div className="mock-card">

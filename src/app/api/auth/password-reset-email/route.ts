@@ -19,6 +19,36 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missin
 });
 
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isAliasEmail = (email: string) => email.toLowerCase().endsWith("@portal-staff.local");
+
+async function resolveResetIdentity(email: string) {
+  const normalized = email.trim().toLowerCase();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, display_name")
+    .ilike("email", normalized)
+    .maybeSingle();
+
+  if (profile?.id) {
+    const { data: authUserData } = await supabase.auth.admin.getUserById(profile.id);
+    const authEmail = `${authUserData?.user?.email || ""}`.trim().toLowerCase();
+    if (validEmail(authEmail)) {
+      return {
+        profileId: profile.id,
+        authEmail,
+        destinationEmail: normalized,
+        staffName: profile.full_name || profile.display_name || "",
+      };
+    }
+  }
+
+  return {
+    profileId: null,
+    authEmail: normalized,
+    destinationEmail: normalized,
+    staffName: "",
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,15 +63,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid email." }, { status: 400 });
     }
 
+    const resetIdentity = await resolveResetIdentity(email);
     const redirectTo = `${APP_URL}/reset-password?lang=${lang}`;
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "recovery",
-      email,
+      email: resetIdentity.authEmail,
       options: { redirectTo },
     } as any);
 
     if (error) {
-      console.error("password reset link failed", error.message);
+      console.error("password reset link failed", error.message, { destinationEmail: resetIdentity.destinationEmail, authEmail: isAliasEmail(resetIdentity.authEmail) ? "alias" : resetIdentity.authEmail });
       return NextResponse.json({ ok: true });
     }
 
@@ -63,8 +94,8 @@ export async function POST(request: NextRequest) {
     const subject = lang === "en" ? "Reset your Dr. Fonseca Portal password" : "Restablece tu contraseña del Portal Dr. Fonseca";
     const title = lang === "en" ? "Reset your password" : "Restablece tu contraseña";
     const copy = lang === "en"
-      ? "We received a request to change your portal password. Use the secure button below to continue."
-      : "Recibimos una solicitud para cambiar tu contraseña del portal. Usa el botón seguro para continuar.";
+      ? `We received a request to change${resetIdentity.staffName ? ` ${resetIdentity.staffName}'s` : " your"} portal password. Use the secure button below to continue.`
+      : `Recibimos una solicitud para cambiar${resetIdentity.staffName ? ` la contraseña de ${resetIdentity.staffName}` : " tu contraseña"} del portal. Usa el botón seguro para continuar.`;
     const button = lang === "en" ? "Create new password" : "Crear nueva contraseña";
     const note = lang === "en"
       ? "If you did not request this, you can ignore this email."
@@ -72,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     await transporter.sendMail({
       from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
-      to: email,
+      to: resetIdentity.destinationEmail,
       subject,
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f3f6fb;padding:20px;">
@@ -97,6 +128,18 @@ export async function POST(request: NextRequest) {
       `,
       text: `${title}\n\n${copy}\n\n${actionLink}\n\n${note}`,
     });
+
+    await supabase.from("admin_audit_events").insert({
+      action: "password_reset_email_sent",
+      entity_type: "staff_profile",
+      entity_id: resetIdentity.profileId,
+      entity_name: resetIdentity.staffName || null,
+      actor_id: null,
+      actor_name: "Password reset request",
+      actor_email: resetIdentity.destinationEmail,
+      notes: `Password reset email sent to ${resetIdentity.destinationEmail}.`,
+      metadata: { destination_email: resetIdentity.destinationEmail, auth_email_is_alias: isAliasEmail(resetIdentity.authEmail) },
+    }).then(() => undefined);
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {

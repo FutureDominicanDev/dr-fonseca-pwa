@@ -191,6 +191,11 @@ const T = {
     prescriptionInstructionsPH: "Ej: Tomar una tableta cada 8 horas por 5 días.",
     prescriptionFile: "Archivo seleccionado",
     savePrescription: "Guardar en recetas",
+    openPrescription: "Abrir receta",
+    deletePrescription: "Eliminar receta",
+    deletePrescriptionConfirm: "¿Eliminar esta receta? La acción quedará registrada en auditoría.",
+    prescriptionDeleted: "Receta eliminada y registrada en auditoría.",
+    prescriptionDeleteFailed: "No pude eliminar la receta.",
     startVideoCall: "Iniciar videollamada",
     joinVideoCall: "Unirse a videollamada",
     videoCallInvite: "Invitación de videollamada",
@@ -385,6 +390,11 @@ const T = {
     prescriptionInstructionsPH: "e.g. Take one tablet every 8 hours for 5 days.",
     prescriptionFile: "Selected file",
     savePrescription: "Save to prescriptions",
+    openPrescription: "Open prescription",
+    deletePrescription: "Delete prescription",
+    deletePrescriptionConfirm: "Delete this prescription? The action will be recorded in the audit log.",
+    prescriptionDeleted: "Prescription deleted and recorded in the audit log.",
+    prescriptionDeleteFailed: "I could not delete the prescription.",
     startVideoCall: "Start video call",
     joinVideoCall: "Join video call",
     videoCallInvite: "Video call invite",
@@ -892,6 +902,7 @@ export default function InboxPage() {
   const [pendingPrescriptionFile, setPendingPrescriptionFile] = useState<File | null>(null);
   const [prescriptionLabel, setPrescriptionLabel] = useState("");
   const [prescriptionInstructions, setPrescriptionInstructions] = useState("");
+  const [deletingPrescriptionId, setDeletingPrescriptionId] = useState("");
   const [userProfile, setUserProfile] = useState<any>(null);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([
     { shortcut: "hola", message: "¡Hola! ¿Cómo se siente hoy?" },
@@ -1421,6 +1432,7 @@ export default function InboxPage() {
   const canViewClinicalHistoryForms = hasPermission(userProfile, currentUserEmail, "view_clinical_history") && (isOwnerEmail(currentUserEmail) || currentUserAssignedToSelectedRoom);
   const canCancelRestoreRoom = hasPermission(userProfile, currentUserEmail, "archive_rooms") || hasPermission(userProfile, currentUserEmail, "restore_rooms");
   const canManageLabels = hasPermission(userProfile, currentUserEmail, "manage_labels");
+  const canViewUploadFiles = hasPermission(userProfile, currentUserEmail, "view_upload_files");
   const selectedRoomCancelled = `${selectedRoom?.procedures?.status || ""}`.toLowerCase() === "cancelled" || `${selectedRoom?.procedures?.patients?.record_status || "active"}`.toLowerCase() !== "active";
   const canViewInternalNote = (entry: any) => {
     if (!canUseStaffRecord) return false;
@@ -3739,7 +3751,7 @@ export default function InboxPage() {
         });
       }
       if (cat === "medication") {
-        setMediaLibraryTab("docs");
+        setMediaLibraryTab("prescriptions");
         setShowMediaLibrary(true);
       }
     } catch(e){console.error(e);}
@@ -4297,6 +4309,40 @@ export default function InboxPage() {
       : roomMediaEntries.filter((entry) => !!parseFormMessage(entry.content))
     : [];
   const roomFileEntries = roomMediaEntries.filter((entry) => entry.message_type === "file" && !isPatientFolderEntry(entry) && !isClinicalHistoryFileEntry(entry));
+  const prescriptionDetails = (entry: any) => {
+    const clean = `${entry?.file_name || t.prescriptions}`.replace(/^\[MED\]\s*/i, "").trim();
+    const [title, ...instructions] = clean.split(/\n+/);
+    return {
+      title: title?.trim() || t.prescriptions,
+      instructions: instructions.join("\n").trim(),
+    };
+  };
+  const deletePrescriptionEntry = async (entry: any) => {
+    if (!selectedRoom?.id || !entry?.id || deletingPrescriptionId || selectedRoomCancelled) return;
+    if (!window.confirm(t.deletePrescriptionConfirm)) return;
+
+    setDeletingPrescriptionId(entry.id);
+    try {
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token || "";
+      const response = await fetch("/api/staff/prescription-delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ roomId: selectedRoom.id, messageId: entry.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || t.prescriptionDeleteFailed);
+      setMessages((current) => current.map((message) => message.id === entry.id ? { ...message, deleted_by_staff: true, deleted_at: payload?.deletedAt || new Date().toISOString() } : message));
+      alert(t.prescriptionDeleted);
+    } catch (error: any) {
+      alert(error?.message || t.prescriptionDeleteFailed);
+    } finally {
+      setDeletingPrescriptionId("");
+    }
+  };
   const formExportText = (entry: any) => {
     const payload = parseFormMessage(entry.content);
     if (!payload) return "";
@@ -5170,40 +5216,42 @@ export default function InboxPage() {
 
             <div style={{background:cardBg,borderRadius:18,padding:16}}>
               <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12,lineHeight:1.35}}>{lang==="es" ? "Equipo asignado" : "Assigned care team"}</p>
-              {selectedRoomTeam.length===0 ? (
-                <p style={{fontSize:uiBaseSize,color:subTextColor,lineHeight:1.45}}>{t.teamEmpty}</p>
-              ) : (
-                <div style={{display:"grid",gap:10}}>
-                  {selectedRoomTeam.map((member) => {
-                    const canContactStaff = member.id !== currentUserId;
-                    return (
-                    <button
-                      key={member.id}
-                      type="button"
-                      onClick={()=>openStaffContact(member)}
-                      onMouseDown={()=>startStaffContactPress(member)}
-                      onMouseUp={cancelStaffMessagePress}
-                      onMouseLeave={cancelStaffMessagePress}
-                      onTouchStart={()=>startStaffContactPress(member)}
-                      onTouchEnd={cancelStaffMessagePress}
-                      onContextMenu={(event)=>{ if (canContactStaff) { event.preventDefault(); openStaffContact(member); } }}
-                      disabled={!canContactStaff}
-                      aria-label={`${lang==="es" ? "Contactar a" : "Contact"} ${member.full_name || member.display_name || "Staff"}`}
-                      style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,textAlign:"left",fontFamily:"inherit",cursor:canContactStaff?"pointer":"default",opacity:canContactStaff?1:0.72}}
-                    >
-                      <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800}}>
-                        {member.avatar_url ? <img src={member.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(member.full_name || "S")}
-                      </div>
-                      <div style={{minWidth:0}}>
-	                        <div style={{fontSize:uiBaseSize,fontWeight:800,color:textColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{member.full_name || (lang==="es" ? "Sin nombre" : "No name")}</div>
-	                        <div style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{roleName(member.role)} · {member.office_location || "—"}</div>
-                      </div>
-                    </button>
-                  );})}
-                </div>
+              {!canManageCareTeam && (
+                selectedRoomTeam.length===0 ? (
+                  <p style={{fontSize:uiBaseSize,color:subTextColor,lineHeight:1.45}}>{t.teamEmpty}</p>
+                ) : (
+                  <div style={{display:"grid",gap:10}}>
+                    {selectedRoomTeam.map((member) => {
+                      const canContactStaff = member.id !== currentUserId;
+                      return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        onClick={()=>openStaffContact(member)}
+                        onMouseDown={()=>startStaffContactPress(member)}
+                        onMouseUp={cancelStaffMessagePress}
+                        onMouseLeave={cancelStaffMessagePress}
+                        onTouchStart={()=>startStaffContactPress(member)}
+                        onTouchEnd={cancelStaffMessagePress}
+                        onContextMenu={(event)=>{ if (canContactStaff) { event.preventDefault(); openStaffContact(member); } }}
+                        disabled={!canContactStaff}
+                        aria-label={`${lang==="es" ? "Contactar a" : "Contact"} ${member.full_name || member.display_name || "Staff"}`}
+                        style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,textAlign:"left",fontFamily:"inherit",cursor:canContactStaff?"pointer":"default",opacity:canContactStaff?1:0.72}}
+                      >
+                        <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontWeight:800}}>
+                          {member.avatar_url ? <img src={member.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : ini(member.full_name || "S")}
+                        </div>
+                        <div style={{minWidth:0}}>
+	                          <div style={{fontSize:uiBaseSize,fontWeight:800,color:textColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{member.full_name || (lang==="es" ? "Sin nombre" : "No name")}</div>
+	                          <div style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.35,overflowWrap:"anywhere"}}>{roleName(member.role)} · {member.office_location || "—"}</div>
+                        </div>
+                      </button>
+                    );})}
+                  </div>
+                )
               )}
               {canManageCareTeam && (
-                <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${borderColor}`}}>
+                <div>
 	                  <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10,lineHeight:1.35}}>{t.manageTeam}</p>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
 	                    <span style={{padding:"8px 12px",borderRadius:999,background:"white",border:`1px solid ${borderColor}`,fontSize:uiSmallSize,fontWeight:800,color:textColor,lineHeight:1.25}}>
@@ -6237,22 +6285,39 @@ export default function InboxPage() {
               <div style={{display:"grid",gap:10}}>
                 <div style={{fontSize:13,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.6}}>{t.prescriptions}</div>
                 {roomPrescriptionEntries.length===0 && <div style={{fontSize:14,color:subTextColor}}>{t.noPrescriptions}</div>}
-                {roomPrescriptionEntries.map((entry:any)=>(
-                  <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,textDecoration:"none",color:textColor}}>
-                    <span style={{fontSize:22}}>💊</span>
-                    {(() => {
-                      const clean = `${entry.file_name || t.prescriptions}`.replace(/^\[MED\]\s*/,"").trim();
-                      const [title, ...instructions] = clean.split(/\n+/);
-                      return (
+                {roomPrescriptionEntries.map((entry:any)=>{
+                  const details = prescriptionDetails(entry);
+                  const deleting = deletingPrescriptionId === entry.id;
+                  return (
+                    <div key={entry.id} style={{display:"grid",gridTemplateColumns:"auto minmax(0,1fr)",gap:10,padding:12,borderRadius:14,background:cardBg,border:`1px solid ${borderColor}`,color:textColor}}>
+                      <span style={{fontSize:22,lineHeight:"44px"}}>💊</span>
+                      <div style={{display:"grid",gap:8,minWidth:0}}>
                         <div style={{display:"grid",gap:3}}>
-                          <div style={{fontWeight:800,fontSize:14}}>{title || t.prescriptions}</div>
-                          {instructions.join("\n").trim() && <div style={{fontWeight:600,fontSize:12,color:subTextColor,lineHeight:1.35,whiteSpace:"pre-wrap"}}>{instructions.join("\n").trim()}</div>}
-                          <div style={{fontWeight:800,fontSize:12,color:subTextColor}}>{t.uploadedBy}: {mediaUploaderName(entry)}</div>
+                          <div style={{fontWeight:850,fontSize:14,overflowWrap:"anywhere"}}>{details.title}</div>
+                          {details.instructions && <div style={{fontWeight:600,fontSize:12,color:subTextColor,lineHeight:1.35,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{details.instructions}</div>}
+                          <div style={{fontWeight:800,fontSize:12,color:subTextColor,overflowWrap:"anywhere"}}>{t.uploadedBy}: {mediaUploaderName(entry)}</div>
                         </div>
-                      );
-                    })()}
-                  </a>
-                ))}
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                          <button
+                            type="button"
+                            onClick={()=>window.open(entry.content, "_blank", "noopener,noreferrer")}
+                            style={{minHeight:38,border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",padding:"0 12px",fontFamily:"inherit",fontSize:13,fontWeight:900,cursor:"pointer"}}
+                          >
+                            {t.openPrescription}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={()=>void deletePrescriptionEntry(entry)}
+                            disabled={deleting || !canViewUploadFiles || selectedRoomCancelled}
+                            style={{minHeight:38,border:"none",borderRadius:12,background:"#FEE2E2",color:"#B91C1C",padding:"0 12px",fontFamily:"inherit",fontSize:13,fontWeight:900,cursor:deleting || !canViewUploadFiles || selectedRoomCancelled ? "not-allowed" : "pointer",opacity:deleting || !canViewUploadFiles || selectedRoomCancelled ? 0.55 : 1}}
+                          >
+                            {deleting ? (lang==="es" ? "Eliminando..." : "Deleting...") : t.deletePrescription}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
             {mediaLibraryTab==="forms" && canViewClinicalHistoryForms && (

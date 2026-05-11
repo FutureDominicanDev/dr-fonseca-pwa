@@ -48,7 +48,9 @@ type RoomAccess = {
     office_location?: string | null;
     status?: string | null;
     patients?: {
+      id?: string | null;
       full_name?: string | null;
+      phone?: string | null;
       preferred_language?: string | null;
       record_status?: string | null;
     } | null;
@@ -329,6 +331,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState("");
+  const [patientPhoneEdit, setPatientPhoneEdit] = useState("");
+  const [patientPhoneSaving, setPatientPhoneSaving] = useState(false);
+  const [patientPhoneFeedback, setPatientPhoneFeedback] = useState("");
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
@@ -489,6 +494,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     return name || (uiLang === "es" ? "Paciente" : "Patient");
   }, [room, uiLang]);
 
+  const patientRecord = useCallback(() => {
+    const patient = room?.procedures?.patients as any;
+    return Array.isArray(patient) ? patient[0] : patient;
+  }, [room]);
+
+  const patientPhoneFromRoom = useCallback(() => `${patientRecord()?.phone || ""}`.trim(), [patientRecord]);
+
   const sendStaffPushNotification = useCallback((body: string, audience?: "advanced_assigned") => {
     if (!token || !body.trim()) return;
     fetch("/api/push", {
@@ -532,6 +544,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => {
     if (notificationPermission === "granted") subscribePatientToPush().catch(() => {});
   }, [notificationPermission, subscribePatientToPush]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    setPatientPhoneEdit(patientPhoneFromRoom());
+    setPatientPhoneFeedback("");
+  }, [patientPhoneFromRoom, settingsOpen]);
 
   useEffect(() => {
     const patient = room?.procedures?.patients;
@@ -598,7 +616,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
       let roomQuery = await supabase
         .from("rooms")
-        .select("id, patient_access_token, procedures(office_location, status, patients(full_name, preferred_language, record_status))")
+        .select("id, patient_access_token, procedures(office_location, status, patients(id, full_name, phone, preferred_language, record_status))")
         .eq("id", id)
         .single();
 
@@ -1543,6 +1561,16 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       delete: "Delete",
       deletedByUser: "This message was Deleted by user",
       darkMode: "Dark mode",
+      contactPhone: "Contact phone",
+      contactPhoneHint: "Add or update the number where the clinic can reach you. The doctor/admin team receives an alert when you save it.",
+      contactPhonePlaceholder: "Phone number",
+      savePhone: "Save phone",
+      savingPhone: "Saving...",
+      phoneSaved: "Phone saved. The doctor/admin team was alerted.",
+      phoneUnchanged: "This phone is already saved.",
+      invalidPhone: "Enter a valid phone number.",
+      phoneSaveFailed: "I could not save the phone number.",
+      phoneUpdateAlert: "Patient updated contact phone: {phone}",
       alerts: "Alerts",
       enableAlerts: "Enable alerts",
       enablingAlerts: "Enabling...",
@@ -1595,6 +1623,16 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       delete: "Eliminar",
       deletedByUser: "Este mensaje fue eliminado por el usuario",
       darkMode: "Modo oscuro",
+      contactPhone: "Teléfono de contacto",
+      contactPhoneHint: "Agrega o actualiza el número donde la clínica puede contactarte. El equipo doctor/admin recibe una alerta al guardarlo.",
+      contactPhonePlaceholder: "Número de teléfono",
+      savePhone: "Guardar teléfono",
+      savingPhone: "Guardando...",
+      phoneSaved: "Teléfono guardado. El equipo doctor/admin fue alertado.",
+      phoneUnchanged: "Este teléfono ya está guardado.",
+      invalidPhone: "Ingresa un número de teléfono válido.",
+      phoneSaveFailed: "No pude guardar el teléfono.",
+      phoneUpdateAlert: "Paciente actualizó su teléfono de contacto: {phone}",
       alerts: "Alertas",
       enableAlerts: "Activar alertas",
       enablingAlerts: "Activando...",
@@ -1610,6 +1648,64 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     },
   };
   const labels = translations[uiLang] || translations.en;
+  const updateRoomPatientPhone = (phone: string) => {
+    setRoom((current) => {
+      if (!current?.procedures) return current;
+      const updatePatient = (patient: any) => ({ ...(patient || {}), phone });
+      const procedures = current.procedures as any;
+      if (Array.isArray(procedures)) {
+        return {
+          ...current,
+          procedures: procedures.map((procedure, index) => index === 0
+            ? {
+                ...procedure,
+                patients: Array.isArray(procedure?.patients)
+                  ? procedure.patients.map((patient: any, patientIndex: number) => patientIndex === 0 ? updatePatient(patient) : patient)
+                  : updatePatient(procedure?.patients),
+              }
+            : procedure),
+        } as RoomAccess;
+      }
+      return {
+        ...current,
+        procedures: {
+          ...procedures,
+          patients: Array.isArray(procedures?.patients)
+            ? procedures.patients.map((patient: any, patientIndex: number) => patientIndex === 0 ? updatePatient(patient) : patient)
+            : updatePatient(procedures?.patients),
+        },
+      } as RoomAccess;
+    });
+  };
+  const savePatientPhone = async () => {
+    if (viewerType !== "patient" || patientPhoneSaving) return;
+    const raw = patientPhoneEdit.trim();
+    if (raw.replace(/\D/g, "").length < 7) {
+      setPatientPhoneFeedback(labels.invalidPhone);
+      return;
+    }
+    setPatientPhoneSaving(true);
+    setPatientPhoneFeedback("");
+    try {
+      const result = await postPatientRoomAction("updatePatientPhone", { phone: raw });
+      const nextPhone = `${result?.phone || raw}`.trim();
+      updateRoomPatientPhone(nextPhone);
+      setPatientPhoneEdit(nextPhone);
+      if (result?.message) {
+        setMessages((current) => current.some((message) => message.id === result.message.id) ? current : [...current, result.message as Message]);
+      }
+      if (result?.unchanged) {
+        setPatientPhoneFeedback(labels.phoneUnchanged);
+      } else {
+        setPatientPhoneFeedback(labels.phoneSaved);
+        sendStaffPushNotification(labels.phoneUpdateAlert.replace("{phone}", nextPhone), "advanced_assigned");
+      }
+    } catch (error: any) {
+      setPatientPhoneFeedback(error?.message || labels.phoneSaveFailed);
+    } finally {
+      setPatientPhoneSaving(false);
+    }
+  };
   const prescriptionMessages = messages.filter((message) => `${message.file_name || ""}`.startsWith("[MED]"));
   const newPrescriptionCount = prescriptionMessages.filter((message) => !lastPrescriptionSeenAt || `${message.created_at || ""}` > lastPrescriptionSeenAt).length;
   const openPrescriptions = () => {
@@ -2288,6 +2384,32 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 ))}
               </div>
             </div>
+            {viewerType === "patient" && (
+              <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
+                <div style={{ fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.contactPhone}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={patientPhoneEdit}
+                    onChange={(event) => setPatientPhoneEdit(event.target.value)}
+                    placeholder={labels.contactPhonePlaceholder}
+                    style={{ minWidth: 0, height: 48, border: "1px solid rgba(148,163,184,0.28)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 12px", fontSize: 16, fontWeight: 750, fontFamily: "inherit" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void savePatientPhone()}
+                    disabled={patientPhoneSaving || !patientPhoneEdit.trim()}
+                    style={{ minHeight: 48, border: "none", borderRadius: 14, background: "#DBEAFE", color: "#1D4ED8", padding: "0 12px", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", opacity: patientPhoneSaving || !patientPhoneEdit.trim() ? 0.55 : 1 }}
+                  >
+                    {patientPhoneSaving ? labels.savingPhone : labels.savePhone}
+                  </button>
+                </div>
+                <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 700, lineHeight: 1.45 }}>
+                  {patientPhoneFeedback || labels.contactPhoneHint}
+                </div>
+              </div>
+            )}
             <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
               <div style={{ fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.alerts}</div>
               {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (

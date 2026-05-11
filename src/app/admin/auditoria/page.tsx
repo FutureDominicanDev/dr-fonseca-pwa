@@ -46,6 +46,12 @@ export default function AdminAuditPage() {
       staff_admin_updated: "Permiso administrativo cambiado",
       staff_office_updated: "Sede del personal cambiada",
       staff_profile_deleted: "Perfil de personal eliminado",
+      staff_chat_deleted: "Chat staff eliminado",
+      prescription_deleted: "Receta eliminada",
+      patient_phone_self_updated: "Teléfono actualizado por paciente",
+      password_reset_email_sent: "Correo de recuperación enviado",
+      staff_password_reset_self_sent: "Recuperación propia enviada",
+      staff_password_reset_sent: "Recuperación de personal enviada",
       invite_code_updated: "Código de invitación actualizado",
     };
 
@@ -61,6 +67,12 @@ export default function AdminAuditPage() {
       staff_admin_updated: "Admin access changed",
       staff_office_updated: "Staff office changed",
       staff_profile_deleted: "Staff profile deleted",
+      staff_chat_deleted: "Staff chat deleted",
+      prescription_deleted: "Prescription deleted",
+      patient_phone_self_updated: "Phone updated by patient",
+      password_reset_email_sent: "Recovery email sent",
+      staff_password_reset_self_sent: "Own recovery email sent",
+      staff_password_reset_sent: "Staff recovery email sent",
       invite_code_updated: "Invitation code updated",
     };
 
@@ -76,8 +88,8 @@ export default function AdminAuditPage() {
     } as const)[value];
 
   const entityTypeBucket = (entityType?: string | null): AuditFilter => {
-    if (entityType === "patient" || entityType === "procedure") return "patient";
-    if (entityType === "staff_profile") return "staff";
+    if (entityType === "patient" || entityType === "procedure" || entityType === "prescription" || entityType === "room") return "patient";
+    if (entityType === "staff_profile" || entityType === "staff_private_messages") return "staff";
     return "system";
   };
 
