@@ -423,19 +423,20 @@ export default function TrainingPage() {
       <style>{`
         * { box-sizing: border-box; }
         body { background: #eef4fb; }
-        .training-shell { height: 100dvh; min-height: -webkit-fill-available; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: linear-gradient(180deg, #07385d 0%, #0b63ce 34%, #eef4fb 34%, #f8fafc 100%); color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .training-shell { height: 100dvh; min-height: -webkit-fill-available; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; background: #eef4fb; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         .training-topbar { position: sticky; top: 0; z-index: 20; min-height: calc(82px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 12px; background: rgba(7, 56, 93, 0.94); backdrop-filter: blur(18px); border-bottom: 1px solid rgba(255,255,255,0.12); }
         .training-logo { width: 224px; max-width: 42vw; height: auto; display: block; object-fit: contain; }
         .training-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
         .top-btn, .lang-btn, .control-btn, .module-btn { min-height: 44px; border: none; cursor: pointer; font-family: inherit; font-weight: 900; }
         .top-btn, .lang-btn { border-radius: 14px; background: #eff6ff; color: #0f172a; padding: 10px 14px; }
         .lang-btn { min-width: 92px; }
-        .training-body { width: min(1180px, 100%); margin: 0 auto; padding: 26px max(16px, env(safe-area-inset-right)) calc(44px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-        .training-hero { color: white; padding: 10px 0 26px; }
+        .training-body { width: 100%; margin: 0; padding: 0 0 calc(44px + env(safe-area-inset-bottom)); }
+        .training-hero { color: white; padding: 28px max(16px, env(safe-area-inset-right)) 42px max(16px, env(safe-area-inset-left)); background: linear-gradient(180deg, #0b63ce 0%, #0759b8 100%); box-shadow: inset 0 -1px 0 rgba(255,255,255,.16); }
+        .training-hero > * { width: min(1180px, 100%); margin-left: auto; margin-right: auto; }
         .kicker { font-size: 12px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; opacity: .78; margin: 0 0 8px; }
         .training-hero h1 { font-size: clamp(34px, 6vw, 68px); line-height: .98; letter-spacing: 0; margin: 0 0 12px; max-width: 920px; }
         .training-hero p { font-size: clamp(16px, 2.3vw, 21px); line-height: 1.5; margin: 0; max-width: 900px; color: rgba(255,255,255,.88); }
-        .training-layout { display: grid; grid-template-columns: minmax(250px, 330px) 1fr; gap: 18px; align-items: start; }
+        .training-layout { width: min(1180px, calc(100% - 32px)); margin: 24px auto 0; display: grid; grid-template-columns: minmax(250px, 330px) 1fr; gap: 18px; align-items: start; }
         .module-panel, .guide-panel, .note-band { background: rgba(255,255,255,.96); border: 1px solid #dbe7f7; border-radius: 8px; box-shadow: 0 14px 42px rgba(15,23,42,.08); }
         .module-panel { padding: 14px; display: grid; gap: 8px; }
         .panel-title { margin: 0 0 4px; font-size: 12px; font-weight: 950; color: #64748b; text-transform: uppercase; letter-spacing: .12em; }
