@@ -19,19 +19,39 @@ Official references checked:
   - `icon-192.png`
   - `icon-512.png`
   - `apple-touch-icon.png`
+- PWA manifest metadata includes a stable app id, root scope, Spanish-Mexico language hint, and Dr. Fonseca brand browser color.
 - Store asset generator:
   - `scripts/generate-store-assets.sh`
 - Generated store assets:
   - `assets/store/ios/icons/`
   - `assets/store/android/icons/`
+- Store submission packet:
+  - `store-submission/README.md`
+  - `store-submission/apple-review-notes.md`
+  - `store-submission/google-play-data-safety-draft.md`
+  - `store-submission/wrapper-plan.md`
+  - `store-submission/android-assetlinks.template.json`
 
-## Must-Have Features Before Submission
+## Default Store Identity
 
-- Native push notifications (APNs + FCM)
-- Native camera/microphone/file permissions
-- Deep links for patient room open
-- In-app call overlay flow
-- Privacy policy + terms links in app settings
+- App display name: `Dr. Fonseca Portal`
+- Suggested iOS bundle id: `com.drfonsecacirujanoplastico.portal`
+- Suggested Android package id: `com.drfonsecacirujanoplastico.portal`
+- Category: Medical
+- Support email: `support@elbanova.tech`
+- Privacy policy URL: `https://portal.drfonsecacirujanoplastico.com/privacy`
+- Support URL: `https://portal.drfonsecacirujanoplastico.com/support`
+- Account deletion URL: `https://portal.drfonsecacirujanoplastico.com/account-deletion`
+
+## Must-Have Verification Before Submission
+
+- Staff pending approval gate blocks patient data.
+- Regular staff only see assigned patient rooms and assigned media.
+- Doctor/owner keeps full system access and cannot be deleted by another admin.
+- Camera, microphone, file upload, audio playback, and signed media URLs work inside the wrapper.
+- Deep links for patient room open and password reset links are tested.
+- In-app call overlay flow works on real devices.
+- Privacy policy, support, training, and account deletion links open inside the wrapper.
 - Account deletion link inside the wrapper and in store metadata:
   - `https://portal.drfonsecacirujanoplastico.com/account-deletion`
 - Public support URL/email in store metadata:
@@ -48,7 +68,7 @@ Official references checked:
 - Apple: health/medical data must not be used for advertising, marketing, profiling, or unrelated analytics. Keep privacy labels aligned with patient contact details, health information, messages, photos/videos/audio/files, diagnostics/logs if collected, and identifiers/auth data.
 - Google Play: because staff can create accounts, the Play Console account deletion URL must point to the public deletion page. The privacy policy must explain retention for medical, legal, audit, security, and regulatory reasons.
 - Google Play: Data safety should disclose health info, personal info, photos/videos/audio/files, messages, app activity if logged, device/other IDs if push/auth providers use them, and security practices.
-- Android wrapper: TWA is acceptable for a strong PWA and keeps the web runtime close to Chrome. Capacitor is preferable if native push, camera/microphone handling, custom notification tone behavior, or deeper native controls are needed.
+- Android wrapper: TWA is the recommended first Android path because it keeps the web runtime close to Chrome. Capacitor is preferable if native push, camera/microphone handling, custom notification tone behavior, or deeper native controls are needed.
 - iOS wrapper: use Capacitor/WKWebView, not a bare web clipping. Test camera, microphone, file upload, push notification permission, keyboard/safe-area layout, password reset deep links, and patient room links in TestFlight before submission.
 - Public storage risk: the current app uses Supabase public URLs for uploaded media. The portal gates UI access, but public bucket URLs can remain reachable if copied. Before final medical-data launch, consider a signed-URL/private-bucket migration with approved Supabase policy changes.
 

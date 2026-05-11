@@ -2,10 +2,14 @@
   "name": "Dr. Fonseca | Portal Médico",
   "short_name": "Dr. Fonseca",
   "description": "Siluety Plastic Surgery - Patient Care Platform",
+  "id": "/",
   "start_url": "/login",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0B63CE",
   "theme_color": "#0B63CE",
+  "lang": "es-MX",
+  "dir": "ltr",
   "orientation": "portrait",
   "icons": [
     {
