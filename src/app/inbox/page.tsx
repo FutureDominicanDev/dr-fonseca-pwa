@@ -700,6 +700,30 @@ function PatientRoomToolsIcon() {
   );
 }
 
+function PendingGuideIcon({ kind }: { kind: "staff" | "room" | "labels" | "settings" | "create" | "admin" | "security" }) {
+  const commonProps = { width: 26, height: 26, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (kind === "staff") return <TopbarActionIcon kind="staff" />;
+  if (kind === "room") return <PatientRoomToolsIcon />;
+  if (kind === "labels") return <TopbarActionIcon kind="labels" />;
+  if (kind === "settings") return <TopbarActionIcon kind="settings" />;
+  if (kind === "admin") return <TopbarActionIcon kind="admin" />;
+  if (kind === "create") {
+    return (
+      <svg {...commonProps}>
+        <path d="M5 17.5 4.2 21l3.6-1a7.8 7.8 0 1 0-2.8-2.5Z" />
+        <path d="M12 8.2v7.6" />
+        <path d="M8.2 12h7.6" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...commonProps}>
+      <path d="M12 3.2 19 6v5.1c0 4.4-2.7 7.7-7 9.7-4.3-2-7-5.3-7-9.7V6l7-2.8Z" />
+      <path d="m8.7 12.1 2.1 2.1 4.6-5" />
+    </svg>
+  );
+}
+
 const CARE_TEAM_ROLE_ORDER = ["doctor", "enfermeria", "coordinacion", "post_quirofano", "staff"] as const;
 
 interface QREditorProps {
@@ -5195,12 +5219,51 @@ export default function InboxPage() {
       await supabase.auth.signOut();
       window.location.href = "/login";
     };
+    const staffGuideItems = [
+      {
+        kind: "room" as const,
+        title: lang === "es" ? "Salas asignadas" : "Assigned rooms",
+        body: lang === "es" ? "Solo verás los pacientes que el doctor o admin te asigne." : "You will only see patients assigned by the doctor or admin.",
+      },
+      {
+        kind: "staff" as const,
+        title: lang === "es" ? "Chat staff" : "Staff chat",
+        body: lang === "es" ? "Comunicación interna con el equipo dentro del portal." : "Internal team communication inside the portal.",
+      },
+      {
+        kind: "labels" as const,
+        title: lang === "es" ? "Etiquetas" : "Labels",
+        body: lang === "es" ? "Organiza pacientes con colores y filtros rápidos." : "Organize patients with colors and quick filters.",
+      },
+      {
+        kind: "settings" as const,
+        title: lang === "es" ? "Mi cuenta" : "My account",
+        body: lang === "es" ? "Idioma, teléfono, correo y recuperación de contraseña." : "Language, phone, email, and password recovery.",
+      },
+    ];
+    const adminGuideItems = [
+      {
+        kind: "create" as const,
+        title: lang === "es" ? "Crear paciente" : "Create patient",
+        body: lang === "es" ? "Abrir salas, elegir consultorio y asignar equipo." : "Open rooms, choose office, and assign care staff.",
+      },
+      {
+        kind: "admin" as const,
+        title: lang === "es" ? "Centro admin" : "Admin center",
+        body: lang === "es" ? "Equipo, solicitudes, auditoría, archivo y papelera." : "Team, requests, audit, archive, and trash.",
+      },
+      {
+        kind: "security" as const,
+        title: lang === "es" ? "Permisos" : "Permissions",
+        body: lang === "es" ? "El doctor decide exactamente qué derechos estarán activos." : "The doctor decides exactly which rights are active.",
+      },
+    ];
 
     return (
       <div style={{minHeight:"100dvh",background:darkMode?"#0B141A":"#F2F7FB",color:textColor,fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",padding:"calc(18px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))",display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <div style={{width:"100%",maxWidth:620,background:darkMode?"#111B21":"#FFFFFF",border:`1px solid ${borderColor}`,borderRadius:22,overflow:"hidden",boxShadow:darkMode?"0 20px 60px rgba(0,0,0,0.28)":"0 20px 60px rgba(28,66,104,0.14)"}}>
+        <div style={{width:"100%",maxWidth:780,background:darkMode?"#111B21":"#FFFFFF",border:`1px solid ${borderColor}`,borderRadius:22,overflow:"hidden",boxShadow:darkMode?"0 20px 60px rgba(0,0,0,0.28)":"0 20px 60px rgba(28,66,104,0.14)"}}>
           <div style={{background:headerBg,padding:"22px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-            <img src="/fonseca_white.png" alt="Dr. Miguel Fonseca" style={{height:70,width:"min(72%, 360px)",objectFit:"contain",objectPosition:"left center"}}/>
+            <img src="/fonseca_blue.png" alt="Dr. Miguel Fonseca" style={{height:78,width:"min(72%, 390px)",objectFit:"contain",objectPosition:"left center",display:"block"}}/>
             <button
               type="button"
               className="admin-inline-btn staff-lang-btn"
@@ -5226,22 +5289,56 @@ export default function InboxPage() {
                   : "Your account was created, but it cannot view patients yet. The doctor or an administrator must approve access first."}
               </p>
             </div>
-            <div style={{background:darkMode?"#0F172A":"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:18,padding:16}}>
-              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:900,color:darkMode?"#DBEAFE":"#1E3A8A"}}>
-                {lang === "es" ? "Qué podrás hacer después de la aprobación" : "What you can do after approval"}
-              </p>
-              <div style={{display:"grid",gap:10}}>
-                {[
-                  lang === "es" ? "Personal regular: verá únicamente los chats de pacientes que le asignen." : "Regular staff: will only see patient chats assigned to them.",
-                  lang === "es" ? "El consultorio elegido ayuda a mostrarte en Guadalajara o Tijuana cuando creen una sala." : "Your selected office helps show you under Guadalajara or Tijuana when a room is created.",
-                  lang === "es" ? "Si te dan permisos admin, verás secciones extra como equipo, permisos, auditoría o archivo." : "If you receive admin permissions, extra areas appear such as team, permissions, audit, or archive.",
-                  lang === "es" ? "Los pacientes no reciben tu enlace; las salas asignadas aparecen dentro de tu portal." : "Patients do not receive your staff link; assigned rooms appear inside your portal.",
-                ].map((item) => (
-                  <div key={item} style={{display:"grid",gridTemplateColumns:"22px 1fr",gap:9,alignItems:"start"}}>
-                    <span style={{width:22,height:22,borderRadius:999,background:"#2563EB",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900}}>✓</span>
-                    <span style={{color:darkMode?"#E5E7EB":"#1E293B",fontSize:15,fontWeight:750,lineHeight:1.45}}>{item}</span>
+            <div style={{background:"#071B31",border:"1px solid rgba(96,165,250,0.36)",borderRadius:20,padding:16,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08)"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14,flexWrap:"wrap"}}>
+                <div>
+                  <p style={{margin:0,color:"#93C5FD",fontSize:13,fontWeight:900,textTransform:"uppercase",letterSpacing:0.7,lineHeight:1.3}}>
+                    {lang === "es" ? "Guía visual" : "Visual guide"}
+                  </p>
+                  <p style={{margin:"5px 0 0",color:"#F8FAFC",fontSize:19,fontWeight:950,lineHeight:1.2}}>
+                    {lang === "es" ? "Herramientas después de aprobación" : "Tools after approval"}
+                  </p>
+                </div>
+                <span style={{border:"1px solid rgba(147,197,253,0.35)",background:"rgba(37,99,235,0.18)",color:"#DBEAFE",borderRadius:999,padding:"7px 10px",fontSize:12,fontWeight:900,lineHeight:1}}>
+                  {lang === "es" ? "Paciente asignado solamente" : "Assigned patients only"}
+                </span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(145px, 1fr))",gap:10}}>
+                {staffGuideItems.map((item) => (
+                  <div key={item.kind} style={{border:"1px solid rgba(96,165,250,0.28)",background:"linear-gradient(180deg, rgba(15,47,83,0.92), rgba(8,31,56,0.92))",borderRadius:16,padding:13,minHeight:150,display:"grid",alignContent:"start",gap:9}}>
+                    <span style={{width:46,height:46,borderRadius:14,background:"rgba(37,99,235,0.20)",border:"1px solid rgba(96,165,250,0.42)",color:"#60A5FA",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 24px rgba(37,99,235,0.22)"}}>
+                      <PendingGuideIcon kind={item.kind} />
+                    </span>
+                    <strong style={{color:"#F8FAFC",fontSize:15,fontWeight:950,lineHeight:1.18}}>{item.title}</strong>
+                    <span style={{color:"#CBD5E1",fontSize:13,fontWeight:650,lineHeight:1.38}}>{item.body}</span>
                   </div>
                 ))}
+              </div>
+              <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid rgba(96,165,250,0.20)"}}>
+                <p style={{margin:"0 0 10px",color:"#DBEAFE",fontSize:15,fontWeight:950,lineHeight:1.2}}>
+                  {lang === "es" ? "Si el doctor te da permisos admin" : "If the doctor gives you admin access"}
+                </p>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:10}}>
+                  {adminGuideItems.map((item) => (
+                    <div key={item.kind} style={{display:"grid",gridTemplateColumns:"42px 1fr",gap:10,alignItems:"start",border:"1px solid rgba(125,211,252,0.22)",background:"rgba(8,50,76,0.52)",borderRadius:15,padding:11}}>
+                      <span style={{width:42,height:42,borderRadius:13,background:"rgba(14,165,233,0.14)",border:"1px solid rgba(125,211,252,0.35)",color:"#7DD3FC",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <PendingGuideIcon kind={item.kind} />
+                      </span>
+                      <span style={{minWidth:0}}>
+                        <strong style={{display:"block",color:"#F8FAFC",fontSize:14,fontWeight:950,lineHeight:1.2}}>{item.title}</strong>
+                        <span style={{display:"block",color:"#CBD5E1",fontSize:12,fontWeight:650,lineHeight:1.35,marginTop:3}}>{item.body}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{marginTop:14,display:"grid",gridTemplateColumns:"22px 1fr",gap:9,alignItems:"start"}}>
+                <span style={{width:22,height:22,borderRadius:999,background:"#2563EB",color:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900}}>✓</span>
+                <span style={{color:"#DBEAFE",fontSize:13,fontWeight:750,lineHeight:1.4}}>
+                  {lang === "es"
+                    ? "Los pacientes no reciben tu enlace staff; las salas asignadas aparecerán dentro de tu portal."
+                    : "Patients do not receive your staff link; assigned rooms will appear inside your portal."}
+                </span>
               </div>
             </div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
