@@ -241,8 +241,8 @@ create policy "profiles update own or full access"
     public.has_full_patient_access()
     or (
       auth.uid() = id
-      and coalesce(lower(admin_level), 'none') = public.current_admin_level()
-      and coalesce(lower(role), '') = public.current_user_role()
+      and coalesce(lower(admin_level), 'none') = 'none'
+      and coalesce(lower(role), '') in ('staff', 'enfermeria', 'coordinacion', 'post_quirofano')
     )
   );
 
