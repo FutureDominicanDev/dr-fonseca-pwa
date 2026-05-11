@@ -1892,7 +1892,7 @@ export default function InboxPage() {
     }
   }, [ensureAudioContext]);
 
-  const describeIncomingMessage = useCallback((message: RoomMessageSummary) => {
+  const describeIncomingMessage = useCallback((message: RoomMessageSummary, translatedText = "") => {
     if (parseCallRequestMessage(message.content)) return t.incomingCallRequest;
     if (`${message.file_name || ""}`.startsWith("[FORM]")) {
       return lang==="es" ? "Historia Clinica enviada" : "Historia Clinica submitted";
@@ -1902,7 +1902,7 @@ export default function InboxPage() {
     if (message.message_type === "image") return lang==="es" ? "Nueva imagen" : "New image";
     if (message.message_type === "file") return lang==="es" ? "Nuevo archivo" : "New file";
     if (parseVideoCallMessage(message.content)) return t.videoCallInvite;
-    const text = `${message.content || ""}`.trim();
+    const text = `${translatedText || message.content || ""}`.trim();
     return text ? text.slice(0, 120) : lang==="es" ? "Nuevo mensaje" : "New message";
   }, [lang, t.incomingCallRequest, t.videoCallInvite]);
 
@@ -2279,6 +2279,55 @@ export default function InboxPage() {
       cancelled = true;
     };
   }, [autoTranslateIncoming, lang, messages, translationKey]);
+
+  useEffect(() => {
+    if (!autoTranslateIncoming) return;
+    const candidates = Object.values(latestRoomMessages).filter(
+      (entry) =>
+        entry?.message_type === "text" &&
+        !parseVideoCallMessage(entry?.content) &&
+        !parseCallRequestMessage(entry?.content) &&
+        `${entry?.content || ""}`.trim().length > 0 &&
+        entry?.id
+    );
+    if (!candidates.length) return;
+
+    let cancelled = false;
+    const run = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      for (const message of candidates) {
+        if (!message.id) continue;
+        const key = translationKey(message.id, lang);
+        if (translationCacheRef.current[key]) continue;
+        try {
+          const res = await fetch("/api/translate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            },
+            body: JSON.stringify({
+              text: message.content,
+              targetLang: lang,
+              sourceLang: "auto",
+            }),
+          });
+          const json = await res.json();
+          const translatedText = `${json?.translatedText || ""}`.trim();
+          if (!translatedText || cancelled) continue;
+          translationCacheRef.current[key] = translatedText;
+          setTranslatedIncoming((prev) => ({ ...prev, [key]: translatedText }));
+        } catch {
+          // Keep the original preview if translation is temporarily unavailable.
+        }
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [autoTranslateIncoming, lang, latestRoomMessages, translationKey]);
 
   // --- Web Push subscription for staff ---
   const urlBase64ToUint8Array = (b64: string) => {
@@ -4408,7 +4457,12 @@ export default function InboxPage() {
   const roomPreview = (room: { id?: string } | null | undefined) => {
     const roomId = room?.id || "";
     const latest = roomId ? latestRoomMessages[roomId] : undefined;
-    if (latest) return describeIncomingMessage(latest);
+    if (latest) {
+      const translatedPreview = latest.id && latest.message_type === "text"
+        ? translatedIncoming[translationKey(latest.id, lang)] || ""
+        : "";
+      return describeIncomingMessage(latest, translatedPreview);
+    }
     return lang === "es" ? "Sin mensajes recientes" : "No recent messages";
   };
   const roomPreviewTime = (room: { id?: string } | null | undefined) => {
