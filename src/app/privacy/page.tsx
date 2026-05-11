@@ -15,7 +15,7 @@ const content = {
       {
         title: "Responsable y contacto",
         body: [
-          "El Portal Medico Dr. Fonseca es desarrollado y mantenido por Elbanova LLC para apoyar la atencion de pacientes del Dr. Miguel Fonseca / Siluety Plastic Surgery.",
+          "El Dr. Miguel Fonseca / Siluety Plastic Surgery es responsable de los datos medicos y de pacientes tratados en el portal. Elbanova LLC actua como desarrollador y proveedor tecnico del Portal Medico Dr. Fonseca.",
           "Contacto de privacidad y soporte: support@elbanova.tech. Sitio del desarrollador: https://www.elbanova.tech. Sitio del doctor: https://drfonsecacirujanoplastico.com.",
         ],
       },
@@ -31,6 +31,13 @@ const content = {
         body: [
           "Usamos la informacion para operar el portal, autenticar usuarios, administrar salas de pacientes, enviar y recibir mensajes, manejar archivos clinicos, entregar notificaciones, brindar soporte, mantener seguridad y cumplir obligaciones legales o regulatorias.",
           "El portal no vende datos personales y no usa datos de pacientes para publicidad dirigida.",
+        ],
+      },
+      {
+        title: "Alcance medico",
+        body: [
+          "El portal es una herramienta de comunicacion y organizacion de expedientes. No diagnostica, trata, cura ni previene ninguna condicion medica por si mismo.",
+          "Las decisiones de atencion medica corresponden al doctor, la clinica y el paciente. En una emergencia medica se debe contactar a servicios de emergencia locales o a la clinica de inmediato.",
         ],
       },
       {
@@ -64,7 +71,7 @@ const content = {
       {
         title: "Controller and contact",
         body: [
-          "The Dr. Fonseca Medical Portal is developed and maintained by Elbanova LLC to support patient care for Dr. Miguel Fonseca / Siluety Plastic Surgery.",
+          "Dr. Miguel Fonseca / Siluety Plastic Surgery is responsible for the medical and patient data handled through the portal. Elbanova LLC acts as the developer and technical provider of the Dr. Fonseca Medical Portal.",
           "Privacy and support contact: support@elbanova.tech. Developer website: https://www.elbanova.tech. Doctor website: https://drfonsecacirujanoplastico.com.",
         ],
       },
@@ -80,6 +87,13 @@ const content = {
         body: [
           "We use information to operate the portal, authenticate users, manage patient rooms, send and receive messages, handle clinical files, deliver notifications, provide support, maintain security, and meet legal or regulatory obligations.",
           "The portal does not sell personal data and does not use patient data for targeted advertising.",
+        ],
+      },
+      {
+        title: "Medical scope",
+        body: [
+          "The portal is a communication and record-organization tool. It does not diagnose, treat, cure, or prevent any medical condition by itself.",
+          "Medical care decisions belong to the doctor, clinic, and patient. In a medical emergency, users should contact local emergency services or the clinic immediately.",
         ],
       },
       {
