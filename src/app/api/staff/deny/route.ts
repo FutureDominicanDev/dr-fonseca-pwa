@@ -182,9 +182,9 @@ export async function POST(request: NextRequest) {
     const requesterPermissionProfile = typedRequesterProfile
       ? { ...typedRequesterProfile, permissions: permissionMap[requester.id] ?? typedRequesterProfile.permissions }
       : null;
-    const requesterCanDeny = isOwnerEmail(requesterEmail) || hasPermission(requesterPermissionProfile, requesterEmail, "manage_staff");
+    const requesterCanDeny = isOwnerEmail(requesterEmail) || hasPermission(requesterPermissionProfile, requesterEmail, "delete_staff_accounts");
     if (!requesterCanDeny) {
-      return NextResponse.json({ error: "Not allowed to deny pending staff accounts." }, { status: 403 });
+      return NextResponse.json({ error: "Not allowed to deny and delete pending staff accounts." }, { status: 403 });
     }
 
     const { data: profileRow, error: profileError } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();

@@ -50,6 +50,7 @@ const permissionDescriptions: Record<StaffPermissionKey, { es: string; en: strin
   manage_labels: { es: "Puede crear y asignar etiquetas de pacientes.", en: "Can create and assign patient labels." },
   manage_staff: { es: "Puede administrar equipo, teléfonos y solicitudes.", en: "Can manage staff, phones, and access requests." },
   manage_permissions: { es: "Puede cambiar permisos de otros usuarios.", en: "Can change permissions for other users." },
+  delete_staff_accounts: { es: "Puede eliminar cuentas del equipo si el doctor le dio ese derecho.", en: "Can delete team accounts if the doctor granted that right." },
   access_audit_logs: { es: "Puede revisar auditoria y eventos administrativos.", en: "Can review audit and admin events." },
   access_settings_security: { es: "Puede entrar al centro admin y ajustes de seguridad.", en: "Can enter admin center and security settings." },
 };
@@ -57,8 +58,13 @@ const permissionDescriptions: Record<StaffPermissionKey, { es: string; en: strin
 const permissionGroups: Array<{ id: string; es: string; en: string; permissions: StaffPermissionKey[] }> = [
   { id: "patients", es: "Pacientes y salas", en: "Patients and rooms", permissions: ["view_patients", "create_patients", "edit_patient_info", "archive_rooms", "restore_rooms"] },
   { id: "clinical", es: "Expediente clinico", en: "Clinical record", permissions: ["view_clinical_history", "view_upload_files", "view_internal_notes", "manage_internal_notes", "manage_labels"] },
-  { id: "admin", es: "Administracion y seguridad", en: "Administration and security", permissions: ["manage_staff", "manage_permissions", "access_audit_logs", "access_settings_security"] },
+  { id: "admin", es: "Administracion y seguridad", en: "Administration and security", permissions: ["manage_staff", "manage_permissions", "delete_staff_accounts", "access_audit_logs", "access_settings_security"] },
 ];
+
+const deleteStaffAccountsPermission: StaffPermissionKey = "delete_staff_accounts";
+
+const samePermissionList = (left: readonly StaffPermissionKey[], right: readonly StaffPermissionKey[]) =>
+  STAFF_PERMISSION_KEYS.every((permission) => left.includes(permission) === right.includes(permission));
 
 type PatientCard = {
   patient: PatientRecord;
@@ -161,6 +167,7 @@ export default function AdminPage() {
   const [expandedPendingStaffId, setExpandedPendingStaffId] = useState("");
   const [pendingSignupDetails, setPendingSignupDetails] = useState<Record<string, PendingSignupDetail>>({});
   const [staffPermissionMap, setStaffPermissionMap] = useState<StaffPermissionMap>({});
+  const [staffPermissionDrafts, setStaffPermissionDrafts] = useState<Record<string, StaffPermissionKey[]>>({});
 
   const viewerPermissionProfile = viewerProfile
     ? { ...viewerProfile, permissions: staffPermissionMap[viewerProfile.id] ?? viewerProfile.permissions }
@@ -169,8 +176,21 @@ export default function AdminPage() {
   const canCreatePatients = hasPermission(viewerPermissionProfile, viewerEmail, "create_patients");
   const canManageAdmins = hasPermission(viewerPermissionProfile, viewerEmail, "manage_staff");
   const canManagePermissions = hasPermission(viewerPermissionProfile, viewerEmail, "manage_permissions");
+  const canDeleteStaffAccounts = hasPermission(viewerPermissionProfile, viewerEmail, deleteStaffAccountsPermission);
   const canManageOwner = isOwnerEmail(viewerEmail);
   const canReviewAccessRequests = hasPermission(viewerPermissionProfile, viewerEmail, "manage_staff");
+
+  const sanitizeEditablePermissions = (member: StaffProfile, requestedPermissions: StaffPermissionKey[]) => {
+    const cleanPermissions = STAFF_PERMISSION_KEYS.filter((permission) => requestedPermissions.includes(permission));
+    if (canManageOwner) return cleanPermissions;
+
+    const existingProfile = { ...member, permissions: staffPermissionMap[member.id] ?? member.permissions };
+    const existingPermissions = permissionsForProfile(existingProfile, member.email || "");
+    const withoutDoctorOnlyPermission = cleanPermissions.filter((permission) => permission !== deleteStaffAccountsPermission);
+    return existingPermissions.has(deleteStaffAccountsPermission)
+      ? [...withoutDoctorOnlyPermission, deleteStaffAccountsPermission]
+      : withoutDoctorOnlyPermission;
+  };
 
   const officeText = (office: Office) => {
     if (office === "Guadalajara") return "📍 Guadalajara";
@@ -542,6 +562,7 @@ export default function AdminPage() {
     setOfficePhoneGdl((gdlPhoneRes.data?.value as string) || "");
     setOfficePhoneTjn((tjnPhoneRes.data?.value as string) || "");
     setStaffPermissionMap(parseStaffPermissionMap(staffPermissionsRes.data?.value));
+    setStaffPermissionDrafts({});
 
     if (issues.length > 0) setPageError(issues.join(" "));
   };
@@ -569,6 +590,7 @@ export default function AdminPage() {
     ]);
     const loadedStaffPermissionMap = parseStaffPermissionMap(staffPermissionsRes.data?.value);
     setStaffPermissionMap(loadedStaffPermissionMap);
+    setStaffPermissionDrafts({});
     setViewerProfile(profile || null);
 
     if (isOwnerEmail(email)) {
@@ -654,7 +676,7 @@ export default function AdminPage() {
   };
 
   const denyPendingStaff = async (member: StaffProfile) => {
-    if (!canManageAdmins) return;
+    if (!canDeleteStaffAccounts) return;
     const memberName = member.full_name || member.display_name || visibleStaffEmail(member.email) || member.phone || (isSpanish ? "este usuario" : "this user");
     const confirmed = window.confirm(
       isSpanish
@@ -772,7 +794,7 @@ export default function AdminPage() {
   };
 
   const updateStaffPermissions = async (member: StaffProfile, nextPermissions: StaffPermissionKey[], success: string) => {
-    const cleanPermissions = STAFF_PERMISSION_KEYS.filter((permission) => nextPermissions.includes(permission));
+    const cleanPermissions = sanitizeEditablePermissions(member, nextPermissions);
     const nextMap = { ...staffPermissionMap, [member.id]: cleanPermissions };
     setSavingKey(`${member.id}-permissions`);
     const { error } = await supabase
@@ -789,6 +811,11 @@ export default function AdminPage() {
     }
 
     setStaffPermissionMap(nextMap);
+    setStaffPermissionDrafts((previous) => {
+      const next = { ...previous };
+      delete next[member.id];
+      return next;
+    });
     await logAdminEvent({
       action: "staff_permissions_updated",
       entityType: "staff_profile",
@@ -804,7 +831,7 @@ export default function AdminPage() {
   };
 
   const applyStaffAccessPreset = async (member: StaffProfile, level: AdminLevel, success: string) => {
-    const nextPermissions = permissionPresetForAdminLevel(level);
+    const nextPermissions = sanitizeEditablePermissions(member, permissionPresetForAdminLevel(level));
     const nextMap = { ...staffPermissionMap, [member.id]: nextPermissions };
     setSavingKey(`${member.id}-admin_level`);
     const [profileUpdate, permissionsUpdate] = await Promise.all([
@@ -826,6 +853,11 @@ export default function AdminPage() {
 
     setStaff((previous) => previous.map((item) => (item.id === member.id ? { ...item, admin_level: level } : item)));
     setStaffPermissionMap(nextMap);
+    setStaffPermissionDrafts((previous) => {
+      const next = { ...previous };
+      delete next[member.id];
+      return next;
+    });
     await logAdminEvent({
       action: "staff_permissions_preset_applied",
       entityType: "staff_profile",
@@ -1957,8 +1989,13 @@ export default function AdminPage() {
                                 <button
                                   type="button"
                                   className="mini-btn"
-                                  disabled={busy || denyBusy || !canManageAdmins}
+                                  disabled={busy || denyBusy || !canDeleteStaffAccounts}
                                   onClick={() => denyPendingStaff(member)}
+                                  title={
+                                    canDeleteStaffAccounts
+                                      ? ""
+                                      : (isSpanish ? "El doctor debe dar el derecho de eliminar cuentas." : "The doctor must grant the delete accounts right.")
+                                  }
                                   style={{ background: "#FEE2E2", color: "#B91C1C" }}
                                 >
                                   {denyBusy ? (isSpanish ? "Eliminando..." : "Deleting...") : (isSpanish ? "Denegar" : "Deny")}
@@ -2174,7 +2211,7 @@ export default function AdminPage() {
                     const level = normalizeAdminLevel(member.admin_level, rawMemberEmail);
                     const canEditThisMember = canManageAdmins && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const isSelf = member.id === viewerId;
-                    const canDeleteThisMember = canManageAdmins && !isSelf && level !== "owner" && (canManageOwner || level !== "super_admin");
+                    const canDeleteThisMember = canDeleteStaffAccounts && !isSelf && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const accessKey = `${member.id}-admin_level`;
                     const permissionsKey = `${member.id}-permissions`;
                     const officeKey = `${member.id}-office_location`;
@@ -2187,10 +2224,15 @@ export default function AdminPage() {
                     const deleteBusy = deletingStaffId === member.id;
                     const memberPermissionProfile = { ...member, permissions: staffPermissionMap[member.id] ?? member.permissions };
                     const memberPermissionSet = permissionsForProfile(memberPermissionProfile, rawMemberEmail);
+                    const savedPermissionList = STAFF_PERMISSION_KEYS.filter((permission) => memberPermissionSet.has(permission));
+                    const draftPermissionList = staffPermissionDrafts[member.id] ?? savedPermissionList;
+                    const draftPermissionSet = new Set(draftPermissionList);
+                    const draftPermissionsDirty = !samePermissionList(draftPermissionList, savedPermissionList);
                     const explicitPermissionCount = normalizePermissionList(memberPermissionProfile.permissions).length;
                     const canEditPermissionsForMember = canEditThisMember && canManagePermissions;
+                    const canEditDeleteStaffAccountsPermission = canEditPermissionsForMember && canManageOwner;
                     const canEditOfficeForMember = canManageAdmins && (canManageOwner || (level !== "owner" && level !== "super_admin"));
-                    const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => memberPermissionSet.has(permission)).length;
+                    const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => draftPermissionSet.has(permission)).length;
                     const isPendingStaff = `${member.role || ""}`.toLowerCase() === "pending_staff";
                     const canSendResetForMember = canManageAdmins && Boolean(visibleMemberEmail);
 
@@ -2401,6 +2443,34 @@ export default function AdminPage() {
                                           {isSpanish ? "Protegido" : "Protected"}
                                         </span>
                                       )}
+                                      <button
+                                        type="button"
+                                        className="mini-btn"
+                                        disabled={!canEditPermissionsForMember || savingKey === permissionsKey}
+                                        onClick={() => {
+                                          const next = canManageOwner
+                                            ? [...STAFF_PERMISSION_KEYS]
+                                            : STAFF_PERMISSION_KEYS.filter((permission) => permission !== deleteStaffAccountsPermission);
+                                          setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: sanitizeEditablePermissions(member, next) }));
+                                        }}
+                                      >
+                                        {isSpanish ? "Seleccionar todo" : "Select all"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="mini-btn"
+                                        disabled={!canEditPermissionsForMember || savingKey === permissionsKey || !draftPermissionsDirty}
+                                        onClick={() => updateStaffPermissions(
+                                          member,
+                                          draftPermissionList,
+                                          isSpanish
+                                            ? `Permisos de ${member.full_name || "staff"} guardados.`
+                                            : `Permissions for ${member.full_name || "staff"} saved.`
+                                        )}
+                                        style={{ background: draftPermissionsDirty ? "#DCFCE7" : "#EFF3F8", color: draftPermissionsDirty ? "#166534" : "#64748B" }}
+                                      >
+                                        {savingKey === permissionsKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar permisos" : "Save permissions")}
+                                      </button>
                                     </div>
                                     <div className="permission-grid">
                                       {permissionGroups.map((group) => (
@@ -2408,24 +2478,20 @@ export default function AdminPage() {
                                           <p className="permission-card-title">{isSpanish ? group.es : group.en}</p>
                                           <div className="permission-list">
                                             {group.permissions.map((permission) => {
-                                              const checked = memberPermissionSet.has(permission);
+                                              const checked = draftPermissionSet.has(permission);
+                                              const isDoctorOnlyPermission = permission === deleteStaffAccountsPermission;
+                                              const canEditThisPermission = canEditPermissionsForMember && (!isDoctorOnlyPermission || canEditDeleteStaffAccountsPermission);
                                               return (
                                                 <label key={`${member.id}-${permission}`} className={`permission-row ${checked ? "enabled" : ""}`}>
                                                   <input
                                                     type="checkbox"
                                                     checked={checked}
-                                                    disabled={!canEditPermissionsForMember || savingKey === permissionsKey}
+                                                    disabled={!canEditThisPermission || savingKey === permissionsKey}
                                                     onChange={(event) => {
                                                       const next = STAFF_PERMISSION_KEYS.filter((candidate) =>
-                                                        candidate === permission ? event.target.checked : memberPermissionSet.has(candidate)
+                                                        candidate === permission ? event.target.checked : draftPermissionSet.has(candidate)
                                                       );
-                                                      updateStaffPermissions(
-                                                        member,
-                                                        next,
-                                                        isSpanish
-                                                          ? `Permisos de ${member.full_name || "staff"} actualizados.`
-                                                          : `Permissions for ${member.full_name || "staff"} updated.`
-                                                      );
+                                                      setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: sanitizeEditablePermissions(member, next) }));
                                                     }}
                                                   />
                                                   <span>
@@ -2472,7 +2538,9 @@ export default function AdminPage() {
                                         ? (isSpanish ? "Cuenta actual" : "Current account")
                                         : level === "owner"
                                           ? (isSpanish ? "Protegido" : "Protected")
-                                          : (isSpanish ? "Solo super admin" : "Super admin only")}
+                                          : !canDeleteStaffAccounts
+                                            ? (isSpanish ? "Requiere permiso del doctor" : "Requires doctor permission")
+                                            : (isSpanish ? "Solo doctor para super admin" : "Doctor only for super admin")}
                                     </span>
                                   )}
                                 </div>

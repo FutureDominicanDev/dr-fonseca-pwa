@@ -13,6 +13,7 @@ export const STAFF_PERMISSION_KEYS = [
   "manage_labels",
   "manage_staff",
   "manage_permissions",
+  "delete_staff_accounts",
   "access_audit_logs",
   "access_settings_security",
 ] as const;
@@ -43,6 +44,7 @@ export const STAFF_PERMISSION_LABELS: Record<StaffPermissionKey, { es: string; e
   manage_labels: { es: "Gestionar etiquetas", en: "Manage labels" },
   manage_staff: { es: "Gestionar personal", en: "Manage staff" },
   manage_permissions: { es: "Gestionar permisos", en: "Manage permissions" },
+  delete_staff_accounts: { es: "Eliminar cuentas de usuario", en: "Delete user accounts" },
   access_audit_logs: { es: "Ver auditoria", en: "Access audit logs" },
   access_settings_security: { es: "Ajustes y seguridad", en: "Settings and security" },
 };

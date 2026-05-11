@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isOwnerEmail } from "@/lib/securityConfig";
+import {
+  STAFF_PERMISSIONS_SETTING_KEY,
+  hasPermission,
+  parseStaffPermissionMap,
+} from "@/lib/permissions";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -80,12 +85,19 @@ export async function POST(request: NextRequest) {
     }
 
     const requesterEmail = requester.email?.trim().toLowerCase() || "";
-    const { data: requesterProfile } = await supabase.from("profiles").select("admin_level").eq("id", requester.id).maybeSingle();
+    const [{ data: requesterProfile }, { data: permissionSetting }] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", requester.id).maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+    ]);
+    const permissionMap = parseStaffPermissionMap(permissionSetting?.value);
     const requesterAdminLevel = `${(requesterProfile as any)?.admin_level || ""}`.toLowerCase();
+    const requesterPermissionProfile = requesterProfile
+      ? { ...(requesterProfile as any), permissions: permissionMap[requester.id] ?? (requesterProfile as any).permissions }
+      : null;
     const requesterIsOwner = isOwnerEmail(requesterEmail) || requesterAdminLevel === "owner";
-    const requesterCanRevoke = requesterIsOwner || requesterAdminLevel === "super_admin";
+    const requesterCanRevoke = requesterIsOwner || hasPermission(requesterPermissionProfile, requesterEmail, "delete_staff_accounts");
     if (!requesterCanRevoke) {
-      return NextResponse.json({ error: "Only super admin can delete staff users." }, { status: 403 });
+      return NextResponse.json({ error: "Only the doctor/owner or a user with delete accounts permission can delete staff users." }, { status: 403 });
     }
 
     const body = await request.json().catch(() => ({}));
