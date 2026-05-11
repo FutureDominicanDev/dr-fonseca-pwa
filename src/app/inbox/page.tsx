@@ -2340,7 +2340,9 @@ export default function InboxPage() {
       } else if (permission === "denied") {
         setNotificationFeedback({
           tone: "error",
-          text: lang === "es" ? "Las notificaciones están bloqueadas en este navegador." : "Notifications are blocked in this browser.",
+          text: lang === "es"
+            ? "Safari está bloqueando las notificaciones para este sitio. Si estás en una ventana privada, abre el portal en una ventana normal o en la app instalada; si ya las bloqueaste, permite notificaciones para este sitio en ajustes de Safari."
+            : "Safari is blocking notifications for this site. If you are in a private window, open the portal in a normal window or the installed app; if you already blocked them, allow notifications for this site in Safari settings.",
         });
       } else {
         setNotificationFeedback({
@@ -6628,10 +6630,14 @@ export default function InboxPage() {
                 <button
                   type="button"
                   onClick={()=>void requestStaffNotifications()}
-                  disabled={notificationBusy}
-                  style={{marginTop:10,width:"100%",minHeight:40,border:"none",borderRadius:12,background:"#DBEAFE",color:"#1D4ED8",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer",opacity:notificationBusy?0.6:1}}
+                  disabled={notificationBusy || notificationPermission === "denied"}
+                  style={{marginTop:10,width:"100%",minHeight:40,border:"none",borderRadius:12,background:notificationPermission === "denied" ? "#F1F5F9" : "#DBEAFE",color:notificationPermission === "denied" ? "#64748B" : "#1D4ED8",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:notificationPermission === "denied" ? "not-allowed" : "pointer",opacity:notificationBusy?0.6:1}}
                 >
-                  {notificationBusy ? (lang==="es" ? "Activando..." : "Enabling...") : (lang==="es" ? "Activar alertas" : "Enable alerts")}
+                  {notificationPermission === "denied"
+                    ? (lang==="es" ? "Alertas bloqueadas" : "Alerts blocked")
+                    : notificationBusy
+                      ? (lang==="es" ? "Activando..." : "Enabling...")
+                      : (lang==="es" ? "Activar alertas" : "Enable alerts")}
                 </button>
               )}
               {userLabels.length > 0 && (

@@ -470,7 +470,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         await subscribePatientToPush();
         setNotificationFeedback(uiLang === "es" ? "Alertas activadas en este dispositivo." : "Alerts are enabled on this device.");
       } else if (permission === "denied") {
-        setNotificationFeedback(uiLang === "es" ? "Las alertas están bloqueadas en este dispositivo." : "Alerts are blocked on this device.");
+        setNotificationFeedback(uiLang === "es"
+          ? "Safari está bloqueando las alertas para este sitio. Si estás en una ventana privada, abre el portal en una ventana normal o en la app instalada; si ya las bloqueaste, permite notificaciones para este sitio en ajustes de Safari."
+          : "Safari is blocking alerts for this site. If you are in a private window, open the portal in a normal window or the installed app; if you already blocked them, allow notifications for this site in Safari settings.");
       } else {
         setNotificationFeedback(uiLang === "es" ? "Permiso pendiente." : "Permission is still pending.");
       }
