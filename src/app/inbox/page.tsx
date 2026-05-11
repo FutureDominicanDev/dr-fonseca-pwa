@@ -5375,7 +5375,7 @@ export default function InboxPage() {
                 </span>
               </div>
             </div>
-            <div style={{position:"sticky",bottom:"calc(8px + env(safe-area-inset-bottom))",display:"flex",gap:9,flexWrap:"wrap",padding:"10px 0 0",marginTop:-2,background:darkMode?"linear-gradient(180deg, rgba(17,27,33,0), #111B21 28%)":"linear-gradient(180deg, rgba(255,255,255,0), #FFFFFF 28%)",zIndex:2}}>
+            <div style={{display:"flex",gap:9,flexWrap:"wrap",padding:"4px 0 0"}}>
               <button type="button" onClick={()=>window.location.reload()} style={{flex:"1 1 190px",minHeight:44,border:"none",borderRadius:13,background:"#2563EB",color:"#FFFFFF",fontFamily:"inherit",fontSize:15,fontWeight:900,cursor:"pointer"}}>
                 {lang === "es" ? "Revisar aprobación" : "Check approval"}
               </button>
