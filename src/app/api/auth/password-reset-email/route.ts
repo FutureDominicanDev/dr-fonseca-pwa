@@ -42,12 +42,12 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("password reset link failed", error.message);
-      return NextResponse.json({ error: "Could not generate reset link." }, { status: 500 });
+      return NextResponse.json({ ok: true });
     }
 
     const actionLink = `${(data as any)?.properties?.action_link || ""}`.trim();
     if (!actionLink) {
-      return NextResponse.json({ error: "Reset link was empty." }, { status: 500 });
+      return NextResponse.json({ ok: true });
     }
 
     const transporter = nodemailer.createTransport({

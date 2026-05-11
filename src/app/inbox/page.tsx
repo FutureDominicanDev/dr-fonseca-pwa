@@ -2232,13 +2232,18 @@ export default function InboxPage() {
 
     let cancelled = false;
     const run = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
       for (const message of candidates) {
         const key = translationKey(message.id, lang);
         if (translationCacheRef.current[key]) continue;
         try {
           const res = await fetch("/api/translate", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            },
             body: JSON.stringify({
               text: message.content,
               targetLang: lang,

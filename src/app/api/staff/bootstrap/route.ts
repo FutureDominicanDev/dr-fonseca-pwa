@@ -23,6 +23,22 @@ const isMissingColumnError = (error: any) => {
   return message.includes("column") || message.includes("schema cache");
 };
 
+const parseEmails = (value: unknown): string[] => {
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[,\n;]/g)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+};
+
+const parsePhones = (value: unknown): string[] => {
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[,\n;]/g)
+    .map((entry) => normalizePhone(entry))
+    .filter(Boolean);
+};
+
 const roleLabelEs = (role: string) => {
   if (role === "doctor") return "Doctor";
   if (role === "pending_staff") return "Pendiente de aprobación";
@@ -172,6 +188,19 @@ export async function POST(request: NextRequest) {
     const currentInvite = `${inviteRes.data?.value || ""}`.trim().toUpperCase();
     if (inviteRes.error || !currentInvite || currentInvite !== inviteCode) {
       return NextResponse.json({ error: "Invalid invite code." }, { status: 403 });
+    }
+
+    const [{ data: blockedPhoneSetting }, { data: blockedEmailSetting }] = await Promise.all([
+      supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle(),
+    ]);
+    const blockedPhones = new Set(parsePhones(blockedPhoneSetting?.value));
+    const blockedEmails = new Set(parseEmails(blockedEmailSetting?.value));
+    if (phone && blockedPhones.has(phone)) {
+      return NextResponse.json({ error: "This phone number cannot register for staff access." }, { status: 403 });
+    }
+    if (email && blockedEmails.has(email)) {
+      return NextResponse.json({ error: "This email cannot register for staff access." }, { status: 403 });
     }
 
     const requesterEmail = `${requester.email || ""}`.trim().toLowerCase();

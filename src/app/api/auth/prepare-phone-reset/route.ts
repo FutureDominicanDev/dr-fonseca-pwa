@@ -56,9 +56,7 @@ export async function POST(request: NextRequest) {
     const authUser = await findAuthUserByPhone(phone);
     if (!userId && authUser?.id) userId = authUser.id;
 
-    if (!userId) {
-      return NextResponse.json({ error: "Phone not found." }, { status: 404 });
-    }
+    if (!userId) return NextResponse.json({ ok: true });
 
     const userMetadata = {
       ...(authUser?.user_metadata || {}),
@@ -73,7 +71,8 @@ export async function POST(request: NextRequest) {
     } as any);
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message || "Could not prepare phone reset." }, { status: 500 });
+      console.error("phone reset prepare failed", updateError.message);
+      return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ ok: true });

@@ -9,14 +9,6 @@ type Lang = "es" | "en";
 type OfficeLocation = "Guadalajara" | "Tijuana" | "Both" | null;
 type RegisterMethod = "phone" | "email";
 
-const parsePhones = (value: unknown): string[] => {
-  if (typeof value !== "string") return [];
-  return value
-    .split(/[,\n;]/g)
-    .map((entry) => entry.replace(/[^\d+]/g, "").trim())
-    .filter(Boolean);
-};
-
 const COPY = {
   es: {
     toggle: "English",
@@ -251,6 +243,28 @@ export default function RegisterPage() {
     setExistingAccountHint(false);
   };
 
+  const validateInvite = async (
+    code: string,
+    contact?: { phone?: string; email?: string },
+  ): Promise<{ valid: boolean; blockedPhone?: boolean; blockedEmail?: boolean; error?: string }> => {
+    const response = await fetch("/api/staff/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inviteCode: code.trim().toUpperCase(),
+        phone: contact?.phone || "",
+        email: contact?.email || "",
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return { valid: false, error: payload?.error || "verify_failed" };
+    return {
+      valid: Boolean(payload?.valid),
+      blockedPhone: Boolean(payload?.blockedPhone),
+      blockedEmail: Boolean(payload?.blockedEmail),
+    };
+  };
+
   const checkCode = async () => {
     if (!inviteCode.trim()) {
       setError(t.errors.inviteRequired);
@@ -261,15 +275,14 @@ export default function RegisterPage() {
     setError("");
     setExistingAccountHint(false);
 
-    const { data, error: err } = await supabase.from("app_settings").select("value").eq("key", "invite_code").single();
-
-    if (err || !data) {
+    const result = await validateInvite(inviteCode);
+    if (result.error) {
       setError(t.errors.verify);
       setLoading(false);
       return;
     }
 
-    if (data.value.trim().toUpperCase() !== inviteCode.trim().toUpperCase()) {
+    if (!result.valid) {
       setError(t.errors.wrongCode);
       setLoading(false);
       return;
@@ -311,10 +324,8 @@ export default function RegisterPage() {
       setLoading(true);
       setError("");
 
-      const { data, error: err } = await supabase.from("app_settings").select("value").eq("key", "invite_code").single();
-      const currentCode = (data?.value || "").trim().toUpperCase();
-
-      if (err || !currentCode) {
+      const result = await validateInvite(codeFromLink);
+      if (result.error) {
         setError(COPY[browserLang].errors.verify);
         setHasInviteLink(false);
         setLoading(false);
@@ -322,7 +333,7 @@ export default function RegisterPage() {
         return;
       }
 
-      if (currentCode !== codeFromLink) {
+      if (!result.valid) {
         setError(COPY[browserLang].errors.expired);
         setInviteCode("");
         setHasInviteLink(false);
@@ -424,18 +435,18 @@ export default function RegisterPage() {
       return;
     }
 
-    const [{ data: blockedPhoneSetting }, { data: blockedEmailSetting }] = await Promise.all([
-      supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle(),
-      supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle(),
-    ]);
-    const blockedPhones = new Set(parsePhones(blockedPhoneSetting?.value));
-    const blockedEmails = new Set(`${blockedEmailSetting?.value || ""}`.split(/[,\n;]/g).map((entry) => entry.trim().toLowerCase()).filter(Boolean));
-    if (normalizedPhone && blockedPhones.has(normalizedPhone)) {
+    const inviteStatus = await validateInvite(inviteCode, { phone: normalizedPhone, email: normalizedEmail });
+    if (inviteStatus.error || !inviteStatus.valid) {
+      setError(t.errors.wrongCode);
+      setLoading(false);
+      return;
+    }
+    if (inviteStatus.blockedPhone) {
       setError(t.errors.blockedPhone);
       setLoading(false);
       return;
     }
-    if (normalizedEmail && blockedEmails.has(normalizedEmail)) {
+    if (inviteStatus.blockedEmail) {
       setError(t.errors.blockedPhone);
       setLoading(false);
       return;

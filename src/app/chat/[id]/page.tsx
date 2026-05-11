@@ -685,7 +685,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: message.content, targetLang: uiLang, sourceLang: "auto" }),
+        body: JSON.stringify({ text: message.content, targetLang: uiLang, sourceLang: "auto", roomId: id, roomToken: token }),
         signal: controller.signal,
       })
         .then((response) => response.ok ? response.json() : null)

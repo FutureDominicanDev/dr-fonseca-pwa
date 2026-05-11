@@ -168,7 +168,6 @@ function PasswordVisibilityIcon({ hidden }: { hidden: boolean }) {
 }
 
 export default function LoginPage() {
-  const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://portal.drfonsecacirujanoplastico.com").replace(/\/+$/, "");
   const [lang, setLang] = useState<Lang>("es");
   const [view, setView] = useState<View>("login");
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
@@ -184,10 +183,9 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [registerLink, setRegisterLink] = useState("/register");
 
   const t = COPY[lang];
-  const registerTarget = withLang(registerLink, lang);
+  const registerTarget = withLang("/register", lang);
 
   const setLanguage = (next: Lang) => {
     setLang(next);
@@ -198,15 +196,6 @@ export default function LoginPage() {
   useEffect(() => {
     const browserLang = getBrowserLang();
     if (browserLang !== "es") window.setTimeout(() => setLang(browserLang), 0);
-  }, []);
-
-  useEffect(() => {
-    const loadRegisterLink = async () => {
-      const { data } = await supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle();
-      const code = `${data?.value || ""}`.trim().toUpperCase();
-      if (code) setRegisterLink(`/register?code=${encodeURIComponent(code)}`);
-    };
-    loadRegisterLink();
   }, []);
 
   const handleLogin = async () => {
