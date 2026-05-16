@@ -312,6 +312,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const viewerType = "patient" as "patient" | "staff";
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
+  const [staffTyping, setStaffTyping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
   const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
@@ -357,6 +358,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const chatScrollRef = useRef<HTMLElement | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
+  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const typingIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outgoingTypingRef = useRef(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
@@ -524,6 +529,38 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       }),
     }).catch(() => {});
   }, [id, patientDisplayName, token]);
+
+  const broadcastTypingState = useCallback((isTyping: boolean) => {
+    if (!typingChannelRef.current || !accessReady || accessDenied || roomClosed || !token) return;
+    outgoingTypingRef.current = isTyping;
+    typingChannelRef.current.send({
+      type: "broadcast",
+      event: "typing",
+      payload: {
+        roomId: id,
+        senderType: "patient",
+        name: patientDisplayName(),
+        isTyping,
+        sentAt: new Date().toISOString(),
+      },
+    }).catch(() => {});
+  }, [accessDenied, accessReady, id, patientDisplayName, roomClosed, token]);
+
+  const updatePatientTypingState = useCallback((nextValue: string) => {
+    if (!accessReady || accessDenied || roomClosed || !token) return;
+    const hasText = nextValue.trim().length > 0;
+    if (typingIdleTimeoutRef.current) clearTimeout(typingIdleTimeoutRef.current);
+
+    if (!hasText) {
+      if (outgoingTypingRef.current) broadcastTypingState(false);
+      return;
+    }
+
+    broadcastTypingState(true);
+    typingIdleTimeoutRef.current = setTimeout(() => {
+      broadcastTypingState(false);
+    }, 1400);
+  }, [accessDenied, accessReady, broadcastTypingState, roomClosed, token]);
 
   const changePatientLanguage = (nextLang: "es" | "en") => {
     setUiLang(nextLang);
@@ -777,8 +814,66 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }, [id, token, viewerType]);
 
   useEffect(() => {
+    if (!accessReady || accessDenied || roomClosed || !token) {
+      if (typingIdleTimeoutRef.current) clearTimeout(typingIdleTimeoutRef.current);
+      if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+      typingChannelRef.current = null;
+      outgoingTypingRef.current = false;
+      setStaffTyping(false);
+      return;
+    }
+
+    const channel = supabase
+      .channel(`chat-signals:${id}`, { config: { broadcast: { self: false } } })
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload?.senderType !== "staff") return;
+        if (payload?.roomId && payload.roomId !== id) return;
+        if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+
+        if (!payload?.isTyping) {
+          setStaffTyping(false);
+          return;
+        }
+
+        setStaffTyping(true);
+        remoteTypingTimeoutRef.current = setTimeout(() => {
+          setStaffTyping(false);
+        }, 2600);
+      });
+
+    typingChannelRef.current = channel;
+    channel.subscribe();
+
+    return () => {
+      if (typingIdleTimeoutRef.current) clearTimeout(typingIdleTimeoutRef.current);
+      if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+      if (outgoingTypingRef.current) {
+        channel.send({
+          type: "broadcast",
+          event: "typing",
+          payload: {
+            roomId: id,
+            senderType: "patient",
+            name: patientDisplayName(),
+            isTyping: false,
+            sentAt: new Date().toISOString(),
+          },
+        }).catch(() => {});
+      }
+      typingChannelRef.current = null;
+      outgoingTypingRef.current = false;
+      setStaffTyping(false);
+      supabase.removeChannel(channel);
+    };
+  }, [accessDenied, accessReady, id, patientDisplayName, roomClosed, token]);
+
+  useEffect(() => {
     if (shouldAutoScrollRef.current) scrollToLatest();
   }, [messages]);
+
+  useEffect(() => {
+    if (staffTyping && shouldAutoScrollRef.current) scrollToLatest();
+  }, [staffTyping]);
 
   const isLegacyRoomCreatedMessage = (message: Message) => {
     const normalized = `${message.content || ""}`.toLowerCase();
@@ -856,6 +951,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     shouldAutoScrollRef.current = true;
     setComposerText("");
+    updatePatientTypingState("");
     const createdAt = new Date().toISOString();
 
     if (viewerType === "patient") {
@@ -1630,6 +1726,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       textSize: "Text size",
       normal: "Normal",
       large: "Large",
+      careTeamTyping: "The care team is typing",
     },
     es: {
       messagePlaceholder: "Mensaje",
@@ -1692,6 +1789,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       textSize: "Tamaño de texto",
       normal: "Normal",
       large: "Grande",
+      careTeamTyping: "El equipo está escribiendo",
     },
   };
   const labels = translations[uiLang] || translations.en;
@@ -1922,10 +2020,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         input { transition: box-shadow 170ms ease, background-color 170ms ease; }
         input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
         .chat-composer:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
+        .typing-dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; vertical-align: middle; }
+        .typing-dots span { width: 5px; height: 5px; border-radius: 999px; background: currentColor; opacity: 0.42; animation: typingDot 1.15s ease-in-out infinite; }
+        .typing-dots span:nth-child(2) { animation-delay: 0.16s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.32s; }
         .staff-exit-link { position: absolute; right: max(12px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); min-height: 44px; display: flex; align-items: center; justify-content: center; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.20); background: rgba(255,255,255,0.12); color: #fff; text-decoration: none; font-size: 14px; font-weight: 850; font-family: inherit; }
         @media (max-width: 520px) { .staff-exit-link { right: max(8px, env(safe-area-inset-right)); padding: 0 11px; font-size: 13px; } }
         @keyframes messageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        @keyframes typingDot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-3px); opacity: 1; } }
         @keyframes micPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(153,27,27,0.42); } 50% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(153,27,27,0); } }
       `}</style>
       <header style={{ position: "relative", height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
@@ -2023,6 +2126,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           );
           });
         })()}
+        {staffTyping && (
+          <div aria-live="polite" style={{ display: "flex", justifyContent: "flex-start", margin: "6px 0 8px", paddingLeft: 2 }}>
+            <div style={{ maxWidth: "min(84%, 680px)", background: darkMode ? "#172033" : "#ffffff", color: darkMode ? "#DBEAFE" : "#075e54", border: `1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"}`, borderRadius: "6px 16px 16px 16px", padding: "9px 12px", boxShadow: "0 1px 2px rgba(15,23,42,0.10)", fontSize: patientTextSmall, fontWeight: 850, lineHeight: 1.35 }}>
+              {labels.careTeamTyping}
+              <span className="typing-dots" aria-hidden="true"><span /><span /><span /></span>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </section>
 
@@ -2065,8 +2176,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           onInput={(event) => {
             const next = event.currentTarget.textContent || "";
             setText(next);
+            updatePatientTypingState(next);
             setQuickRepliesOpen(next.startsWith("/"));
           }}
+          onBlur={() => updatePatientTypingState("")}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();

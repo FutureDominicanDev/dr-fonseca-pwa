@@ -83,7 +83,7 @@ const T = {
     patients: "Pacientes", search: "Buscar paciente...", noPatients: "Sin pacientes aún",
     noPatientsHint: "Toca + para crear el primero", online: "En línea",
     patientLabel: "Paciente",
-    typingSuffix: "está escribiendo...",
+    typingSuffix: "está escribiendo",
     typeMessage: "Escribe un mensaje o usa / para respuestas rápidas...",
     send: "Enviar", recording: "Grabando...", recordAudio: "Grabar audio",
     deleteMsg: "¿Eliminar este mensaje?", msgDeleted: "Mensaje eliminado",
@@ -282,7 +282,7 @@ const T = {
     patients: "Patients", search: "Search patient...", noPatients: "No patients yet",
     noPatientsHint: "Tap + to create the first one", online: "Online",
     patientLabel: "Patient",
-    typingSuffix: "is typing...",
+    typingSuffix: "is typing",
     typeMessage: "Type a message or use / for quick replies...",
     send: "Send", recording: "Recording...", recordAudio: "Record audio",
     deleteMsg: "Delete this message?", msgDeleted: "Message deleted",
@@ -5691,6 +5691,10 @@ export default function InboxPage() {
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
         .msg-input:empty::before { content: attr(data-placeholder); color: #AEAEB2; pointer-events: none; }
+        .typing-dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; vertical-align: middle; }
+        .typing-dots span { width: 5px; height: 5px; border-radius: 999px; background: currentColor; opacity: 0.42; animation: typingDot 1.15s ease-in-out infinite; }
+        .typing-dots span:nth-child(2) { animation-delay: 0.16s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.32s; }
         .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
         .plus-btn { position: relative; width: 38px; height: 38px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
@@ -5773,6 +5777,7 @@ export default function InboxPage() {
         .pbtn:disabled { opacity: 0.45; }
 	        .sbtn { width: 100%; min-height: 48px; padding: 13px; background: ${darkMode?cardBg:"#F5F8FC"}; border: 1px solid ${darkMode?"transparent":"#D9E4F2"}; border-radius: 14px; color: ${textColor}; font-size: var(--app-ui-font-size); font-weight: 750; cursor: pointer; font-family: inherit; margin-top: 8px; }
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
+        @keyframes typingDot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-3px); opacity: 1; } }
         @keyframes spin { to { transform: rotate(360deg); } }
 	        @media (max-width: 700px) {
           .topbar { height: calc(190px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
@@ -6973,6 +6978,7 @@ export default function InboxPage() {
                     {patientTyping && (
                       <div style={{fontSize:12,color:"#93C5FD",fontWeight:700,marginTop:4}}>
                         {(selectedRoom.procedures?.patients?.full_name || t.patientLabel)} {t.typingSuffix}
+                        <span className="typing-dots" aria-hidden="true"><span /><span /><span /></span>
                       </div>
                     )}
                   </div>

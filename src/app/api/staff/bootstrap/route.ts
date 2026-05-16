@@ -129,6 +129,11 @@ const sendPendingApprovalEmail = async (params: { fullName: string; email?: stri
   const officeText = params.officeLocation || "Sin sede";
   const signupDeviceText = params.signupContext?.device || "No registrado";
   const signupLocationText = params.signupContext?.location || "No registrada";
+  const safeAppUrl = escapeHtml(APP_URL);
+  const safeAdminUrl = escapeHtml(adminUrl);
+  const safeFullName = escapeHtml(params.fullName);
+  const safeContactText = escapeHtml(contactText);
+  const safeOfficeText = escapeHtml(officeText);
   const signupContextHtml = params.signupContext?.device || params.signupContext?.location
     ? `
             <p style="margin:0 0 8px 0;">Dispositivo detectado: <strong>${escapeHtml(signupDeviceText)}</strong></p>
@@ -147,18 +152,18 @@ const sendPendingApprovalEmail = async (params: { fullName: string; email?: stri
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f3f6fb;padding:20px;">
         <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
           <div style="background:#0b3a5b;padding:20px;text-align:center;">
-            <img src="${APP_URL}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
+            <img src="${safeAppUrl}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
             <div style="color:#dbeafe;letter-spacing:.08em;font-size:13px;font-weight:700;">PORTAL MÉDICO</div>
           </div>
           <div style="padding:22px;">
             <h1 style="margin:0 0 12px 0;font-size:25px;color:#0f172a;">Registro pendiente de aprobación</h1>
-            <p style="margin:0 0 10px 0;color:#334155;line-height:1.65;"><strong>${params.fullName}</strong> creó una cuenta de personal y está esperando aprobación.</p>
-            <p style="margin:0 0 8px 0;">Contacto: <strong>${contactText}</strong></p>
-            <p style="margin:0 0 18px 0;">Sede elegida: <strong>${officeText}</strong></p>
+            <p style="margin:0 0 10px 0;color:#334155;line-height:1.65;"><strong>${safeFullName}</strong> creó una cuenta de personal y está esperando aprobación.</p>
+            <p style="margin:0 0 8px 0;">Contacto: <strong>${safeContactText}</strong></p>
+            <p style="margin:0 0 18px 0;">Sede elegida: <strong>${safeOfficeText}</strong></p>
             ${signupContextHtml}
             <p style="margin:0 0 18px 0;color:#334155;line-height:1.65;">La cuenta no puede ver pacientes hasta que se apruebe desde Equipo o Solicitudes.</p>
             <p style="margin:0;">
-              <a href="${adminUrl}" style="display:inline-block;background:#0b63ce;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-weight:800;">Abrir centro de control</a>
+              <a href="${safeAdminUrl}" style="display:inline-block;background:#0b63ce;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-weight:800;">Abrir centro de control</a>
             </p>
           </div>
         </div>
@@ -187,7 +192,16 @@ const sendWelcomeEmail = async (params: { fullName: string; email: string; role:
   const resetUrl = `${APP_URL}/reset-password`;
   const trainingUrl = `${APP_URL}/training`;
   const roleText = roleLabelEs(params.role);
-  const officeText = params.officeLocation ? `<p style="margin:0 0 8px 0;">Sede asignada: <strong>${params.officeLocation}</strong></p>` : "";
+  const safeAppUrl = escapeHtml(APP_URL);
+  const safeLoginUrl = escapeHtml(loginUrl);
+  const safeResetUrl = escapeHtml(resetUrl);
+  const safeTrainingUrl = escapeHtml(trainingUrl);
+  const safeFullName = escapeHtml(params.fullName);
+  const safeEmail = escapeHtml(params.email);
+  const safeRoleText = escapeHtml(roleText);
+  const safeOfficeLocation = escapeHtml(params.officeLocation || "");
+  const officeText = params.officeLocation ? `<p style="margin:0 0 8px 0;">Sede asignada: <strong>${safeOfficeLocation}</strong></p>` : "";
+  const officePlain = params.officeLocation ? `\nSede asignada: ${params.officeLocation}` : "";
 
   await transporter.sendMail({
     from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
@@ -197,21 +211,22 @@ const sendWelcomeEmail = async (params: { fullName: string; email: string; role:
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f3f6fb;padding:20px;">
         <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
           <div style="background:#0b3a5b;padding:20px;text-align:center;">
-            <img src="${APP_URL}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
+            <img src="${safeAppUrl}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
             <div style="color:#dbeafe;letter-spacing:.08em;font-size:13px;font-weight:700;">PORTAL MÉDICO</div>
           </div>
           <div style="padding:22px;">
-            <h1 style="margin:0 0 12px 0;font-size:27px;color:#0f172a;">¡Bienvenido(a), ${params.fullName}!</h1>
+            <h1 style="margin:0 0 12px 0;font-size:27px;color:#0f172a;">¡Bienvenido(a), ${safeFullName}!</h1>
             <p style="margin:0 0 12px 0;color:#334155;line-height:1.65;">Tu registro quedó completado y ya formas parte del equipo de Dr. Fonseca.</p>
-            <p style="margin:0 0 8px 0;">Perfil: <strong>${roleText}</strong></p>
+            <p style="margin:0 0 8px 0;">Perfil: <strong>${safeRoleText}</strong></p>
             ${officeText}
-            <p style="margin:10px 0 0 0;">Usuario de acceso: <strong>${params.email}</strong></p>
+            <p style="margin:10px 0 0 0;">Usuario de acceso: <strong>${safeEmail}</strong></p>
             <h2 style="margin:18px 0 8px 0;font-size:18px;color:#0f172a;">Guía rápida</h2>
             <ul style="margin:0 0 12px 18px;padding:0;line-height:1.7;color:#334155;">
-              <li>Ingresa al sistema desde: <a href="${loginUrl}">${loginUrl}</a></li>
-              <li>Si necesitas cambiar contraseña: <a href="${resetUrl}">${resetUrl}</a></li>
-              <li>Guía visual de entrenamiento: <a href="${trainingUrl}">${trainingUrl}</a></li>
+              <li>Ingresa al sistema desde: <a href="${safeLoginUrl}">${safeLoginUrl}</a></li>
+              <li>Si necesitas cambiar contraseña: <a href="${safeResetUrl}">${safeResetUrl}</a></li>
+              <li>Guía visual de entrenamiento: <a href="${safeTrainingUrl}">${safeTrainingUrl}</a></li>
               <li>Dentro de Inbox podrás responder pacientes, usar respuestas rápidas con <strong>/</strong> y enviar multimedia.</li>
+              <li>Activa las alertas del dispositivo desde Inbox para recibir mensajes urgentes.</li>
             </ul>
             <p style="margin:12px 0 0 0;color:#475569;line-height:1.6;">Este correo es informativo de bienvenida.</p>
           </div>
@@ -221,6 +236,7 @@ const sendWelcomeEmail = async (params: { fullName: string; email: string; role:
         </div>
       </div>
     `,
+    text: `Bienvenido(a) al Portal Medico de Dr. Fonseca\n\nHola ${params.fullName}, tu registro quedo completado.\nPerfil: ${roleText}${officePlain}\nUsuario de acceso: ${params.email}\n\nPortal: ${loginUrl}\nCambiar contraseña: ${resetUrl}\nGuia visual: ${trainingUrl}\n\nActiva las alertas del dispositivo desde Inbox para recibir mensajes urgentes.`,
   });
 
   return { sent: true };
@@ -241,33 +257,45 @@ const sendStaffPendingEmail = async (params: { fullName: string; email: string; 
 
   const loginUrl = `${APP_URL}/login`;
   const trainingUrl = `${APP_URL}/training`;
+  const resetUrl = `${APP_URL}/reset-password`;
   const officeText = params.officeLocation || "Ambas sedes";
+  const safeAppUrl = escapeHtml(APP_URL);
+  const safeLoginUrl = escapeHtml(loginUrl);
+  const safeTrainingUrl = escapeHtml(trainingUrl);
+  const safeResetUrl = escapeHtml(resetUrl);
+  const safeFullName = escapeHtml(params.fullName);
+  const safeOfficeText = escapeHtml(officeText);
 
   await transporter.sendMail({
     from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
     to: params.email,
-    subject: "Solicitud recibida - Portal Medico Dr. Fonseca",
+    subject: "Registro recibido - Portal Medico Dr. Fonseca",
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f3f6fb;padding:20px;">
         <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
           <div style="background:#0b3a5b;padding:20px;text-align:center;">
-            <img src="${APP_URL}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
+            <img src="${safeAppUrl}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
             <div style="color:#dbeafe;letter-spacing:.08em;font-size:13px;font-weight:700;">PORTAL MEDICO</div>
           </div>
           <div style="padding:22px;">
-            <h1 style="margin:0 0 12px 0;font-size:25px;color:#0f172a;">Solicitud recibida</h1>
-            <p style="margin:0 0 12px 0;color:#334155;line-height:1.65;">Hola ${escapeHtml(params.fullName)}, recibimos tu registro para el Portal Medico de Dr. Fonseca.</p>
-            <p style="margin:0 0 8px 0;">Sede indicada: <strong>${escapeHtml(officeText)}</strong></p>
+            <h1 style="margin:0 0 12px 0;font-size:25px;color:#0f172a;">Registro recibido</h1>
+            <p style="margin:0 0 12px 0;color:#334155;line-height:1.65;">Hola ${safeFullName}, recibimos tu registro para el Portal Medico de Dr. Fonseca.</p>
+            <p style="margin:0 0 8px 0;">Sede indicada: <strong>${safeOfficeText}</strong></p>
             <p style="margin:12px 0 0 0;color:#334155;line-height:1.65;">Por seguridad, tu cuenta queda en espera hasta que el doctor o un administrador autorizado la apruebe. Mientras tanto no tienes acceso a expedientes de pacientes.</p>
-            <p style="margin:18px 0 0;">
-              <a href="${loginUrl}" style="display:inline-block;background:#0b63ce;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-weight:800;">Abrir portal</a>
-            </p>
-            <p style="margin:14px 0 0;color:#64748b;line-height:1.6;">Guia visual del portal: ${trainingUrl}</p>
+            <h2 style="margin:18px 0 8px 0;font-size:18px;color:#0f172a;">Mientras esperas aprobación</h2>
+            <ul style="margin:0 0 12px 18px;padding:0;line-height:1.7;color:#334155;">
+              <li>Cuando el acceso sea aprobado, recibirás otro correo de bienvenida.</li>
+              <li>Portal: <a href="${safeLoginUrl}">${safeLoginUrl}</a></li>
+              <li>Cambio de contraseña: <a href="${safeResetUrl}">${safeResetUrl}</a></li>
+              <li>Guia visual: <a href="${safeTrainingUrl}">${safeTrainingUrl}</a></li>
+              <li>Después de entrar, activa alertas en Inbox para recibir mensajes críticos del equipo y pacientes.</li>
+            </ul>
+            <p style="margin:12px 0 0;color:#64748b;line-height:1.6;">No compartas tus credenciales. Si no solicitaste este acceso, avisa al doctor o administrador.</p>
           </div>
         </div>
       </div>
     `,
-    text: `Solicitud recibida - Portal Medico Dr. Fonseca\n\n${params.fullName}, recibimos tu registro. Sede indicada: ${officeText}. Por seguridad, tu cuenta queda en espera hasta que sea aprobada. Portal: ${loginUrl}\nGuia: ${trainingUrl}`,
+    text: `Registro recibido - Portal Medico Dr. Fonseca\n\n${params.fullName}, recibimos tu registro. Sede indicada: ${officeText}. Por seguridad, tu cuenta queda en espera hasta que sea aprobada.\n\nPortal: ${loginUrl}\nCambio de contraseña: ${resetUrl}\nGuia: ${trainingUrl}\n\nDespues de entrar, activa alertas en Inbox para recibir mensajes criticos del equipo y pacientes.`,
   });
 
   return { sent: true };

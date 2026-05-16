@@ -19,6 +19,13 @@ const SMTP_FROM_EMAIL = process.env.SMTP_FROM_EMAIL || SMTP_USER;
 
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const isAliasEmail = (email: string) => email.toLowerCase().endsWith("@portal-staff.local");
+const escapeHtml = (value: unknown) =>
+  `${value || ""}`
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 export async function POST(request: NextRequest) {
   try {
@@ -96,6 +103,12 @@ export async function POST(request: NextRequest) {
     const note = lang === "en"
       ? "If you did not request this, contact the doctor or administrator."
       : "Si no solicitaste este cambio, contacta al doctor o administrador.";
+    const safeAppUrl = escapeHtml(APP_URL);
+    const safeActionLink = escapeHtml(actionLink);
+    const safeTitle = escapeHtml(title);
+    const safeCopy = escapeHtml(copy);
+    const safeButton = escapeHtml(button);
+    const safeNote = escapeHtml(note);
 
     await transporter.sendMail({
       from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
@@ -105,16 +118,16 @@ export async function POST(request: NextRequest) {
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f3f6fb;padding:20px;">
           <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
             <div style="background:#0b3a5b;padding:20px;text-align:center;">
-              <img src="${APP_URL}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
+              <img src="${safeAppUrl}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
               <div style="color:#dbeafe;letter-spacing:.08em;font-size:13px;font-weight:700;">PORTAL MEDICO</div>
             </div>
             <div style="padding:22px;">
-              <h1 style="margin:0 0 12px 0;font-size:27px;color:#0f172a;">${title}</h1>
-              <p style="margin:0 0 18px 0;color:#334155;line-height:1.65;">${copy}</p>
+              <h1 style="margin:0 0 12px 0;font-size:27px;color:#0f172a;">${safeTitle}</h1>
+              <p style="margin:0 0 18px 0;color:#334155;line-height:1.65;">${safeCopy}</p>
               <p style="margin:0 0 20px 0;">
-                <a href="${actionLink}" style="display:inline-block;background:#0b63ce;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-weight:800;">${button}</a>
+                <a href="${safeActionLink}" style="display:inline-block;background:#0b63ce;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-weight:800;">${safeButton}</a>
               </p>
-              <p style="margin:0;color:#64748b;line-height:1.6;">${note}</p>
+              <p style="margin:0;color:#64748b;line-height:1.6;">${safeNote}</p>
             </div>
           </div>
         </div>

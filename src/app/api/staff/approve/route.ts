@@ -52,33 +52,43 @@ const sendApprovedEmail = async (params: { email: string; fullName: string; offi
 
   const loginUrl = `${APP_URL}/login`;
   const trainingUrl = `${APP_URL}/training`;
+  const resetUrl = `${APP_URL}/reset-password`;
   const officeText = params.officeLocation || "Ambas sedes";
+  const safeAppUrl = escapeHtml(APP_URL);
+  const safeLoginUrl = escapeHtml(loginUrl);
+  const safeTrainingUrl = escapeHtml(trainingUrl);
+  const safeResetUrl = escapeHtml(resetUrl);
+  const safeFullName = escapeHtml(params.fullName);
+  const safeOfficeText = escapeHtml(officeText);
 
   await transporter.sendMail({
     from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
     to: params.email,
-    subject: "Acceso aprobado - Portal Medico Dr. Fonseca",
+    subject: "Bienvenido(a) - Acceso aprobado - Portal Medico Dr. Fonseca",
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f3f6fb;padding:20px;">
         <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
           <div style="background:#0b3a5b;padding:20px;text-align:center;">
-            <img src="${APP_URL}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
+            <img src="${safeAppUrl}/fonseca_white.png" alt="Dr. Miguel Fonseca" style="max-width:240px;width:100%;height:auto;display:block;margin:0 auto 8px;" />
             <div style="color:#dbeafe;letter-spacing:.08em;font-size:13px;font-weight:700;">PORTAL MEDICO</div>
           </div>
           <div style="padding:22px;">
-            <h1 style="margin:0 0 12px 0;font-size:25px;color:#0f172a;">Acceso aprobado</h1>
-            <p style="margin:0 0 12px 0;color:#334155;line-height:1.65;">Hola ${escapeHtml(params.fullName)}, tu acceso al Portal Medico de Dr. Fonseca fue aprobado.</p>
-            <p style="margin:0 0 8px 0;">Sede asignada: <strong>${escapeHtml(officeText)}</strong></p>
+            <h1 style="margin:0 0 12px 0;font-size:25px;color:#0f172a;">Bienvenido(a), acceso aprobado</h1>
+            <p style="margin:0 0 12px 0;color:#334155;line-height:1.65;">Hola ${safeFullName}, tu acceso al Portal Medico de Dr. Fonseca fue aprobado.</p>
+            <p style="margin:0 0 8px 0;">Sede asignada: <strong>${safeOfficeText}</strong></p>
             <p style="margin:12px 0 0 0;color:#334155;line-height:1.65;">Por seguridad, solo veras pacientes y salas asignadas, salvo que el doctor te otorgue permisos adicionales.</p>
-            <p style="margin:18px 0 0;">
-              <a href="${loginUrl}" style="display:inline-block;background:#0b63ce;color:#ffffff;text-decoration:none;border-radius:999px;padding:12px 18px;font-weight:800;">Entrar al portal</a>
-            </p>
-            <p style="margin:14px 0 0;color:#64748b;line-height:1.6;">Guia del portal: ${trainingUrl}</p>
+            <h2 style="margin:18px 0 8px 0;font-size:18px;color:#0f172a;">Guia rápida</h2>
+            <ul style="margin:0 0 12px 18px;padding:0;line-height:1.7;color:#334155;">
+              <li>Portal: <a href="${safeLoginUrl}">${safeLoginUrl}</a></li>
+              <li>Cambiar contraseña: <a href="${safeResetUrl}">${safeResetUrl}</a></li>
+              <li>Guia visual: <a href="${safeTrainingUrl}">${safeTrainingUrl}</a></li>
+              <li>Activa alertas desde Inbox para recibir mensajes de pacientes y del equipo cuando la app esté cerrada.</li>
+            </ul>
           </div>
         </div>
       </div>
     `,
-    text: `Acceso aprobado - Portal Medico Dr. Fonseca\n\n${params.fullName}, tu acceso fue aprobado. Sede: ${officeText}. Portal: ${loginUrl}\nGuia: ${trainingUrl}`,
+    text: `Bienvenido(a) - Acceso aprobado - Portal Medico Dr. Fonseca\n\n${params.fullName}, tu acceso fue aprobado. Sede: ${officeText}.\n\nPortal: ${loginUrl}\nCambiar contraseña: ${resetUrl}\nGuia: ${trainingUrl}\n\nActiva alertas desde Inbox para recibir mensajes de pacientes y del equipo cuando la app este cerrada.`,
   });
 
   return { sent: true };
