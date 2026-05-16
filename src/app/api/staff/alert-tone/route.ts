@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
     const toneMap = parseStaffAlertToneMap(setting?.value);
     const tone = toneMap[loaded.user.id] || null;
-    return NextResponse.json({ managed: Boolean(tone), tone });
+    return NextResponse.json({ tone });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Could not load alert tone." }, { status: 500 });
   }
@@ -67,14 +67,14 @@ export async function PATCH(request: NextRequest) {
     const loaded = await loadRequester(request);
     if ("error" in loaded) return NextResponse.json({ error: loaded.error }, { status: loaded.status });
     if (!adminClient) return NextResponse.json({ error: "Staff alert tones are not configured." }, { status: 503 });
-    if (!canManageStaffAlertTone(loaded.user, loaded.profile)) {
-      return NextResponse.json({ error: "Only the owner or a super admin can manage staff alert tones." }, { status: 403 });
-    }
-
     const body = await request.json().catch(() => ({}));
-    const staffId = `${body?.staffId || ""}`.trim();
+    const staffId = `${body?.staffId || loaded.user.id}`.trim();
     const tone = body?.tone === null || body?.tone === "" ? null : normalizeAlertTone(body?.tone, "classic");
     if (!staffId) return NextResponse.json({ error: "Missing staff member." }, { status: 400 });
+    const updatingSelf = staffId === loaded.user.id;
+    if (!updatingSelf && !canManageStaffAlertTone(loaded.user, loaded.profile)) {
+      return NextResponse.json({ error: "Only the owner or a super admin can update another staff member's alert tone." }, { status: 403 });
+    }
 
     const { data: targetProfile } = await adminClient.from("profiles").select("*").eq("id", staffId).maybeSingle();
     if (!targetProfile) return NextResponse.json({ error: "Staff member not found." }, { status: 404 });
@@ -94,7 +94,7 @@ export async function PATCH(request: NextRequest) {
       displayName: loaded.profile?.display_name,
       adminLevel: loaded.profile?.admin_level,
     });
-    if (targetIsOwner && !requesterIsOwner) {
+    if (!updatingSelf && targetIsOwner && !requesterIsOwner) {
       return NextResponse.json({ error: "Only the owner can manage the owner alert tone." }, { status: 403 });
     }
 

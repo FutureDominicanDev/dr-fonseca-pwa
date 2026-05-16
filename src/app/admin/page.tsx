@@ -214,6 +214,7 @@ type NotificationReadiness = {
   totals: {
     staffReady: number;
     staffTotal: number;
+    staffMuted?: number;
     patientRoomsReady: number;
     patientRoomsTotal: number;
     staffPushDevices: number;
@@ -1278,14 +1279,14 @@ export default function AdminPage() {
         actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
         actorEmail: viewerEmail,
         notes: tone
-          ? (isSpanish ? `Tono administrado: ${alertToneText(tone, true)}.` : `Managed tone: ${alertToneText(tone, false)}.`)
-          : (isSpanish ? "Tono administrado removido; el staff puede elegir." : "Managed tone removed; staff can choose."),
+          ? (isSpanish ? `Tono de alertas guardado: ${alertToneText(tone, true)}.` : `Saved alert tone: ${alertToneText(tone, false)}.`)
+          : (isSpanish ? "Tono de alertas guardado removido." : "Saved alert tone removed."),
         metadata: { alertTone: tone },
       });
       updateSuccess(
         tone
-          ? (isSpanish ? `${member.full_name || "Staff"} usará ${alertToneText(tone, true)}.` : `${member.full_name || "Staff"} will use ${alertToneText(tone, false)}.`)
-          : (isSpanish ? `${member.full_name || "Staff"} puede elegir su tono.` : `${member.full_name || "Staff"} can choose their tone.`),
+          ? (isSpanish ? `${member.full_name || "Staff"} ahora tiene ${alertToneText(tone, true)} guardado, y puede cambiarlo desde Ajustes.` : `${member.full_name || "Staff"} now has ${alertToneText(tone, false)} saved and can still change it in Settings.`)
+          : (isSpanish ? `${member.full_name || "Staff"} quedó sin tono guardado.` : `${member.full_name || "Staff"} now has no saved tone.`),
       );
     } catch (error: any) {
       setPageError(error?.message || (isSpanish ? "No pude guardar el tono de alertas." : "I could not save the alert tone."));
@@ -1884,6 +1885,7 @@ export default function AdminPage() {
   const staffAlertRows = notificationReadiness?.staff || [];
   const patientAlertRows = notificationReadiness?.patientRooms || [];
   const staffMissingAlerts = staffAlertRows.filter((member) => member.pushDevices === 0);
+  const staffMutedAlerts = staffAlertRows.filter((member) => member.alertTone === "off");
   const patientRoomsMissingAlerts = patientAlertRows.filter((room) => room.pushDevices === 0);
 
   if (!sessionChecked || loading) {
@@ -2623,6 +2625,12 @@ export default function AdminPage() {
                       <span>{isSpanish ? "Staff sin dispositivo push" : "Staff missing push device"}</span>
                     </div>
                   </button>
+                  <button type="button" className={`alert-readiness-tile ${staffMutedAlerts.length > 0 ? "warning" : ""}`} onClick={() => scrollToAlertPanel("alert-readiness-staff")}>
+                    <div>
+                      <strong>{notificationReadiness?.totals.staffMuted ?? staffMutedAlerts.length}</strong>
+                      <span>{isSpanish ? "Staff con alertas en silencio" : "Staff with alerts muted"}</span>
+                    </div>
+                  </button>
                   <button type="button" className="alert-readiness-tile" onClick={() => scrollToAlertPanel("alert-readiness-patients")}>
                     <div>
                       <strong>{notificationReadiness?.totals.patientRoomsReady ?? 0}/{notificationReadiness?.totals.patientRoomsTotal ?? 0}</strong>
@@ -2655,20 +2663,21 @@ export default function AdminPage() {
                       ) : (
                         staffAlertRows.map((member) => {
                           const missingPush = member.pushDevices === 0;
+                          const mutedAlerts = member.alertTone === "off";
                           return (
                             <button
                               key={`staff-alert-${member.id}`}
                               type="button"
-                              className={`alert-readiness-row ${missingPush ? "missing" : ""}`}
+                              className={`alert-readiness-row ${missingPush || mutedAlerts ? "missing" : ""}`}
                               onClick={() => openStaffFromAlertReadiness(member.id)}
                             >
-                              <span className="alert-ready-dot">{missingPush ? "NO" : "OK"}</span>
+                              <span className="alert-ready-dot">{missingPush ? "NO" : mutedAlerts ? "OFF" : "OK"}</span>
                               <span className="alert-readiness-copy">
                                 <strong>{member.name}</strong>
                                 <span>
                                   {[
                                     member.adminLevel || member.role || (isSpanish ? "Staff" : "Staff"),
-                                    member.alertTone ? alertToneText(member.alertTone, isSpanish) : (isSpanish ? "Elige staff" : "Staff choice"),
+                                    member.alertTone ? alertToneText(member.alertTone, isSpanish) : (isSpanish ? "Sin registro" : "No saved tone"),
                                     alertLastSeen(member.latestSubscriptionAt),
                                   ].filter(Boolean).join(" · ")}
                                 </span>
@@ -2924,7 +2933,7 @@ export default function AdminPage() {
                     const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => draftPermissionSet.has(permission)).length;
                     const isPendingStaff = `${member.role || ""}`.toLowerCase() === "pending_staff";
                     const canSendResetForMember = canManageAdmins && Boolean(visibleMemberEmail);
-                    const managedAlertTone = notificationReadiness?.staff.find((item) => item.id === member.id)?.alertTone || null;
+                    const savedAlertTone = notificationReadiness?.staff.find((item) => item.id === member.id)?.alertTone || null;
                     const alertToneSaving = savingKey === `${member.id}-alert-tone`;
 
                     return (
@@ -3128,11 +3137,11 @@ export default function AdminPage() {
                                   </div>
                                   {canManageAlertToneDefaults && (
                                     <div className="setting-group">
-                                      <p className="group-label">{isSpanish ? "Tono de alertas administrado" : "Managed alert tone"}</p>
+                                      <p className="group-label">{isSpanish ? "Tono actual de alertas" : "Current alert tone"}</p>
                                       <p className="access-help">
                                         {isSpanish
-                                          ? "El doctor o Super Admin puede fijar el tono que esta cuenta de staff usará al abrir el portal. Staff choice libera el control para que esa persona elija en Ajustes."
-                                          : "The doctor or Super Admin can set the tone this staff account uses when opening the portal. Staff choice releases control so that person can choose in Settings."}
+                                          ? "El doctor o Super Admin puede encender alertas de una cuenta en silencio o escoger un tono inicial. El staff siempre puede cambiarlo después desde Ajustes."
+                                          : "The doctor or Super Admin can turn alerts back on for a muted account or choose a starting tone. Staff can always change it later in Settings."}
                                       </p>
                                       <div className="permission-toolbar">
                                         <button
@@ -3141,12 +3150,12 @@ export default function AdminPage() {
                                           disabled={alertToneSaving}
                                           onClick={() => saveStaffAlertTone(member, null)}
                                           style={{
-                                            background: managedAlertTone ? "#EFF3F8" : "#ECFEFF",
-                                            color: managedAlertTone ? "#374151" : "#0E7490",
+                                            background: savedAlertTone ? "#EFF3F8" : "#ECFEFF",
+                                            color: savedAlertTone ? "#374151" : "#0E7490",
                                             opacity: alertToneSaving ? 0.55 : 1,
                                           }}
                                         >
-                                          {isSpanish ? "Elige staff" : "Staff choice"}
+                                          {isSpanish ? "Sin registro" : "No saved tone"}
                                         </button>
                                         {ALERT_TONE_OPTIONS.map((tone) => (
                                           <button
@@ -3156,8 +3165,8 @@ export default function AdminPage() {
                                             disabled={alertToneSaving}
                                             onClick={() => saveStaffAlertTone(member, tone)}
                                             style={{
-                                              background: managedAlertTone === tone ? "#EFF6FF" : "#EFF3F8",
-                                              color: managedAlertTone === tone ? "#1D4ED8" : "#374151",
+                                              background: savedAlertTone === tone ? "#EFF6FF" : "#EFF3F8",
+                                              color: savedAlertTone === tone ? "#1D4ED8" : "#374151",
                                               opacity: alertToneSaving ? 0.55 : 1,
                                             }}
                                           >

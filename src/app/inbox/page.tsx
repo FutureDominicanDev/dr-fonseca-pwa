@@ -996,7 +996,7 @@ export default function InboxPage() {
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   const [alertTone, setAlertTone] = useState<AlertTone>(() => readStaffAlertTone());
-  const [managedAlertTone, setManagedAlertTone] = useState<AlertTone | null>(null);
+  const [serverAlertTone, setServerAlertTone] = useState<AlertTone | null>(null);
   const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
   const [callOverlayOpen, setCallOverlayOpen] = useState(false);
@@ -1081,6 +1081,28 @@ export default function InboxPage() {
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
   const fmtShortDate = (ts?: string | null) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}); };
   const alertToneLabel = (tone: AlertTone) => alertToneText(tone, lang === "es");
+  const saveOwnAlertTone = useCallback(async (tone: AlertTone) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      if (!accessToken) return;
+      const response = await fetch("/api/staff/alert-tone", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ tone }),
+      });
+      if (response.ok) setServerAlertTone(tone);
+    } catch {
+      // Local alert preference still works if the server-side status cannot be saved.
+    }
+  }, []);
+  const chooseAlertTone = useCallback((tone: AlertTone) => {
+    setAlertTone(tone);
+    void saveOwnAlertTone(tone);
+  }, [saveOwnAlertTone]);
   const fmtChatDateLabel = (ts: string) => {
     if (!ts) return "";
     const date = new Date(ts);
@@ -2618,11 +2640,11 @@ export default function InboxPage() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) return;
-      const tone = payload?.managed ? normalizeAlertTone(payload?.tone, "classic") : null;
-      setManagedAlertTone(tone);
+      const tone = payload?.tone ? normalizeAlertTone(payload?.tone, "classic") : null;
+      setServerAlertTone(tone);
       if (tone) setAlertTone(tone);
     } catch {
-      // Staff can still use the locally saved tone if the managed setting is unavailable.
+      // Staff can still use the locally saved tone if the server-side status is unavailable.
     }
   };
 
@@ -5133,11 +5155,11 @@ export default function InboxPage() {
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>
               {lang==="es"?"Sonido de alertas":"Alert sound"}
             </p>
-            {managedAlertTone && (
+            {serverAlertTone && (
               <p style={{fontSize:settingsSmallSize,color:"#1D4ED8",fontWeight:750,lineHeight:1.45,marginBottom:10}}>
                 {lang==="es"
-                  ? `El doctor fijó este tono para tu cuenta: ${alertToneLabel(managedAlertTone)}.`
-                  : `The doctor set this tone for your account: ${alertToneLabel(managedAlertTone)}.`}
+                  ? `Tono guardado en tu cuenta: ${alertToneLabel(serverAlertTone)}. Puedes cambiarlo cuando quieras.`
+                  : `Saved tone on your account: ${alertToneLabel(serverAlertTone)}. You can change it any time.`}
               </p>
             )}
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))",gap:8,marginBottom:12}}>
@@ -5145,9 +5167,8 @@ export default function InboxPage() {
                 <button
                   key={tone}
                   type="button"
-                  onClick={()=>setAlertTone(tone)}
-                  disabled={Boolean(managedAlertTone)}
-                  style={{minHeight:46,borderRadius:12,border:alertTone===tone?"2px solid #007AFF":`2px solid ${borderColor}`,background:alertTone===tone?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:alertTone===tone?"#007AFF":textColor,fontWeight:850,cursor:managedAlertTone?"not-allowed":"pointer",fontFamily:"inherit",fontSize:settingsBaseSize,lineHeight:1.25,opacity:managedAlertTone && alertTone!==tone?0.55:1}}
+                  onClick={()=>chooseAlertTone(tone)}
+                  style={{minHeight:46,borderRadius:12,border:alertTone===tone?"2px solid #007AFF":`2px solid ${borderColor}`,background:alertTone===tone?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:alertTone===tone?"#007AFF":textColor,fontWeight:850,cursor:"pointer",fontFamily:"inherit",fontSize:settingsBaseSize,lineHeight:1.25}}
                 >
                   {alertToneLabel(tone)}
                 </button>

@@ -129,6 +129,7 @@ export async function GET(request: NextRequest) {
     });
 
     const staffReady = staff.filter((member) => member.pushDevices > 0).length;
+    const staffMuted = staff.filter((member) => member.alertTone === "off").length;
     const activePatientRooms = patientRooms.filter((room) => `${room.recordStatus || "active"}`.toLowerCase() === "active");
     const patientReady = activePatientRooms.filter((room) => room.pushDevices > 0).length;
 
@@ -138,6 +139,7 @@ export async function GET(request: NextRequest) {
       totals: {
         staffReady,
         staffTotal: staff.length,
+        staffMuted,
         patientRoomsReady: patientReady,
         patientRoomsTotal: activePatientRooms.length,
         staffPushDevices: staffSubscriptions.length,
