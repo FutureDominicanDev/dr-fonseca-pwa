@@ -26,8 +26,9 @@ Native plugin baseline now included in the repo:
 Required before Play upload:
 
 - Generate Android signing key.
-- Run `npm run native:add:android` once, then `npm run native:sync`.
-- Add Android notification sound assets for the named alert sounds.
+- Install JDK 21 and Android SDK platform/build-tools 36 on the release workstation.
+- Run `npm run native:sync`.
+- Android notification sound assets and status icon are now present in the native project.
 - Connect FCM credentials/server delivery for native token sends.
 - Verify the native shell opens without browser address bars.
 - Test login, icon legend, media upload, audio, camera, microphone, password reset, and patient room links on a real Android phone.
@@ -48,7 +49,8 @@ Required before App Store upload:
 
 - Apple Developer team selected.
 - Branded launch screen.
-- Native notification sound files added to the iOS project bundle.
+- Install the iOS 26.5 platform/simulator component in Xcode on this Mac, then run simulator and real-device smoke tests.
+- Native notification sound file is now added to the iOS project bundle.
 - APNs credentials/server delivery connected for native token sends.
 - WKWebView allows camera, microphone, file picker, audio playback, and secure links.
 - External links for privacy, support, account deletion, and the icon legend stay reachable.
@@ -66,4 +68,4 @@ Once Apple Developer and Google Play access, signing, final screenshots, and dem
 
 ## Native Push Decision
 
-Native push is now the selected path for store apps. The web app registers native push tokens when running inside Capacitor; final medical-grade delivery still requires APNs/FCM credentials, native sound files in each platform project, and real-device testing.
+Native push is now the selected path for store apps. The web app registers native push tokens when running inside Capacitor; final medical-grade delivery still requires APNs/FCM credentials, signed store builds, and real-device testing.

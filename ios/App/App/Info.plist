@@ -18,19 +18,42 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.drfonsecacirujanoplastico.portal</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>DrFonsecaPortal</string>
+				<string>drfonsecaportal</string>
+				<string>com.drfonsecacirujanoplastico.portal</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Dr. Fonseca Portal uses the camera so patients and staff can take secure clinical photos and join video calls inside the portal.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Dr. Fonseca Portal can use Face ID to help protect access to medical communications on this device.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Dr. Fonseca Portal uses the microphone for secure audio messages and video calls between patients and clinic staff.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Dr. Fonseca Portal can save clinical files or images when the user chooses to download them.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Dr. Fonseca Portal uses the photo library only when patients or staff choose media to upload into a secure portal conversation.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
-	<key>UIRequiredDeviceCapabilities</key>
+	<key>UIBackgroundModes</key>
 	<array>
-		<string>armv7</string>
+		<string>remote-notification</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

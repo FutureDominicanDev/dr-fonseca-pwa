@@ -81,7 +81,7 @@ export default function NativeAppBridge() {
             description: "Patient and staff communication alerts",
             importance: 5,
             visibility: 1,
-            sound: "critical-repeat.wav",
+            sound: "critical_repeat.wav",
             vibration: true,
           }).catch(() => {});
         }
@@ -104,7 +104,7 @@ export default function NativeAppBridge() {
               title: notification.title || "Dr. Fonseca Portal",
               body: notification.body || "New portal message",
               channelId: "critical_alerts",
-              sound: "critical-repeat.wav",
+              sound: "critical_repeat.wav",
               extra: notification.data || {},
             }],
           }).catch(() => {});
