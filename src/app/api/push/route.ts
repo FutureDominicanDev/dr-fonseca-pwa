@@ -22,6 +22,56 @@ const supabase = supabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_SERVIC
 const subscriptionEndpoint = (subscription: webpush.PushSubscription | Record<string, any> | null | undefined) =>
   typeof subscription?.endpoint === "string" ? subscription.endpoint : "";
 
+const MAX_TARGET_STAFF_IDS = 100;
+const isUuidLike = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+const normalizeUuidList = (value: unknown, excludeId = "") => {
+  if (!Array.isArray(value)) return [] as string[];
+  const exclude = `${excludeId || ""}`.trim().toLowerCase();
+  return Array.from(new Set(
+    value
+      .map((entry) => `${entry || ""}`.trim().toLowerCase())
+      .filter((entry) => entry && entry !== exclude && isUuidLike(entry))
+  )).slice(0, MAX_TARGET_STAFF_IDS);
+};
+
+const normalizeTargetStaffIds = (value: unknown, excludeId = "") => normalizeUuidList(value, excludeId);
+const normalizeStaffMessageIds = (value: unknown) => normalizeUuidList(value);
+
+async function resolveApprovedStaffIds(targetStaffIds: string[]) {
+  if (!supabase || targetStaffIds.length === 0) return [] as string[];
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, role")
+    .in("id", targetStaffIds);
+
+  const approved = new Set(
+    (data || [])
+      .filter((profile: any) => `${profile.role || ""}`.toLowerCase() !== "pending_staff")
+      .map((profile: any) => `${profile.id || ""}`.toLowerCase())
+  );
+  return targetStaffIds.filter((id) => approved.has(id));
+}
+
+async function resolveStaffMessageTargetIds(senderId: string, targetStaffIds: string[], staffMessageIds: string[]) {
+  if (!supabase || !senderId || targetStaffIds.length === 0 || staffMessageIds.length === 0) return [] as string[];
+  const { data, error } = await supabase
+    .from("staff_private_messages")
+    .select("id, recipient_id")
+    .eq("sender_id", senderId)
+    .in("id", staffMessageIds);
+
+  if (error) return [] as string[];
+  const requestedTargets = new Set(targetStaffIds);
+  const messageTargets = Array.from(new Set(
+    (data || [])
+      .map((message: any) => `${message.recipient_id || ""}`.toLowerCase())
+      .filter((recipientId) => requestedTargets.has(recipientId))
+  ));
+  return resolveApprovedStaffIds(messageTargets);
+}
+
 async function getAuthenticatedStaff(req: NextRequest) {
   if (!authClient || !supabase) return null;
   const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
@@ -185,6 +235,8 @@ export async function POST(req: NextRequest) {
 
     const staff = await getAuthenticatedStaff(req);
     const patientRoomAccess = !staff && userType === "staff" ? await getPatientRoomAccess(body) : null;
+    const requestedTargetStaffIds = staff ? normalizeTargetStaffIds(body?.targetStaffIds, staff.id) : [];
+    const requestedStaffMessageIds = staff ? normalizeStaffMessageIds(body?.staffMessageIds) : [];
     if (!staff && !patientRoomAccess) {
       return NextResponse.json({ error: "Missing or invalid notification sender." }, { status: 401 });
     }
@@ -195,11 +247,16 @@ export async function POST(req: NextRequest) {
       if (!allowed) return NextResponse.json({ error: "You do not have access to this patient room." }, { status: 403 });
     }
     if (userType === "staff" && staff) {
-      if (typeof roomId !== "string" || !roomId.trim()) {
+      if (requestedTargetStaffIds.length === 0 && (typeof roomId !== "string" || !roomId.trim())) {
         return NextResponse.json({ error: "roomId is required for staff room notifications." }, { status: 400 });
       }
-      const allowed = await canNotifyPatientRoom(staff.id, staff.adminLevel, staff.role, roomId.trim());
-      if (!allowed) return NextResponse.json({ error: "You do not have access to this patient room." }, { status: 403 });
+      if (requestedTargetStaffIds.length > 0 && requestedStaffMessageIds.length === 0) {
+        return NextResponse.json({ error: "staffMessageIds are required for direct staff notifications." }, { status: 400 });
+      }
+      if (typeof roomId === "string" && roomId.trim()) {
+        const allowed = await canNotifyPatientRoom(staff.id, staff.adminLevel, staff.role, roomId.trim());
+        if (!allowed) return NextResponse.json({ error: "You do not have access to this patient room." }, { status: 403 });
+      }
     }
 
     // Fetch matching push subscriptions
@@ -213,12 +270,19 @@ export async function POST(req: NextRequest) {
     const { data: rawSubs, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     let subs = rawSubs || [];
-    if (userType === "staff" && typeof roomId === "string" && roomId.trim()) {
+    if (userType === "staff" && requestedTargetStaffIds.length > 0) {
+      const targetSet = new Set(await resolveStaffMessageTargetIds(staff?.id || "", requestedTargetStaffIds, requestedStaffMessageIds));
+      subs = subs.filter((sub: any) => {
+        const staffId = `${sub?.subscription?.portalUserId || ""}`.toLowerCase();
+        return staffId && targetSet.has(staffId);
+      });
+    } else if (userType === "staff" && typeof roomId === "string" && roomId.trim()) {
       const { data: members } = await supabase
         .from("room_members")
         .select("user_id")
         .eq("room_id", roomId.trim());
       let targetStaffIds = Array.from(new Set((members || []).map((member: any) => `${member.user_id || ""}`).filter(Boolean)));
+      if (staff?.id) targetStaffIds = targetStaffIds.filter((id) => id !== staff.id);
 
       if (body?.audience === "advanced_assigned" && targetStaffIds.length > 0) {
         const { data: profiles } = await supabase

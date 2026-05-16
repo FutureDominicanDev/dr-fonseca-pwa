@@ -1210,7 +1210,20 @@ export default function InboxPage() {
       alert(lang === "es" ? "No pude guardar el mensaje privado. Falta configurar la tabla de mensajes privados staff a staff." : "I could not save the private message. The staff-to-staff private messages table is not configured yet.");
       return false;
     }
-    if (data) upsertStaffPrivateMessage(data as StaffPrivateMessage);
+    if (data) {
+      upsertStaffPrivateMessage(data as StaffPrivateMessage);
+      if (data.id) {
+        sendPushNotification({
+          userType: "staff",
+          targetStaffIds: [member.id],
+          staffMessageIds: [data.id],
+          title: lang === "es" ? "Mensaje privado del equipo" : "Private staff message",
+          body: `${senderName}: ${cleanContent}`.slice(0, 300),
+          url: "/inbox",
+          tag: `staff-private-${currentUserId}-${member.id}`,
+        });
+      }
+    }
     return true;
   };
 
@@ -1318,6 +1331,18 @@ export default function InboxPage() {
       return false;
     }
     (data || []).forEach((entry) => upsertStaffPrivateMessage(entry as StaffPrivateMessage));
+    const staffMessageIds = (data || []).map((entry) => entry.id).filter(Boolean);
+    if (staffMessageIds.length) {
+      sendPushNotification({
+        userType: "staff",
+        targetStaffIds: recipientIds,
+        staffMessageIds,
+        title: lang === "es" ? "Chat staff" : "Staff chat",
+        body: `${roomName}: ${cleanContent}`.slice(0, 300),
+        url: "/inbox",
+        tag: `staff-room-${roomId}`,
+      });
+    }
     return true;
   };
 
@@ -3755,6 +3780,14 @@ export default function InboxPage() {
         if (rows.length) {
           const { error: notificationError } = await supabase.from("media_notifications").insert(rows);
           if (notificationError) console.error("media_notifications insert failed", notificationError);
+          sendPushNotification({
+            roomId: selectedRoom.id,
+            userType: "staff",
+            title: patientName,
+            body: notificationMessage.slice(0, 300),
+            url: "/inbox",
+            tag: `media-${selectedRoom.id}`,
+          });
         }
       }
       if (nm && cat !== "before_photo") {

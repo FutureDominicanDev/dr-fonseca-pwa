@@ -79,6 +79,8 @@ self.addEventListener('push', function(event) {
     vibrate: [200, 100, 200],
     tag: data.tag || 'new-message',      // groups notifications by room
     renotify: true,                       // vibrate even if same tag
+    timestamp: Date.now(),
+    requireInteraction: data.requireInteraction === true,
     data: { url: safeAppUrl(data.url) },
   };
   event.waitUntil(self.registration.showNotification(title, options));
