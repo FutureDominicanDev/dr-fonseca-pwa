@@ -1992,7 +1992,7 @@ export default function AdminPage() {
             </select>
             <div className="topbar-actions">
               <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
-              <button className="topbar-btn" onClick={() => goTo("/training")}>{isSpanish ? "Entrenamiento" : "Training"}</button>
+              <button className="topbar-btn" onClick={() => goTo("/training")}>{isSpanish ? "Iconos" : "Icons"}</button>
               <button className="topbar-btn" onClick={() => goTo("/inbox")}>Portal</button>
             </div>
           </div>
@@ -2015,7 +2015,7 @@ export default function AdminPage() {
               <option value="en">🇺🇸 EN</option>
             </select>
             <button className="topbar-btn" onClick={() => goTo("/admin/ayuda")}>{isSpanish ? "Ayuda" : "Help"}</button>
-            <button className="topbar-btn" onClick={() => goTo("/training")}>{isSpanish ? "Entrenamiento" : "Training"}</button>
+            <button className="topbar-btn" onClick={() => goTo("/training")}>{isSpanish ? "Iconos" : "Icons"}</button>
             <button className="topbar-btn" onClick={() => goTo("/inbox")}>Portal</button>
           </div>
         )}

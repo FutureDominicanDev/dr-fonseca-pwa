@@ -3,19 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 import { isOwnerEmail } from "@/lib/securityConfig";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
+import { getAppUrl, getSmtpConfig } from "@/lib/emailConfig";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://portal.drfonsecacirujanoplastico.com").replace(/\/+$/, "");
-const SMTP_HOST = process.env.SMTP_HOST || "";
-const smtpPortValue = `${process.env.SMTP_PORT || ""}`.trim().replace(/^["']|["']$/g, "");
-const parsedSmtpPort = Number(smtpPortValue || "465");
-const SMTP_PORT = Number.isFinite(parsedSmtpPort) ? parsedSmtpPort : 465;
-const SMTP_USER = process.env.SMTP_USER || "";
-const SMTP_PASS = process.env.SMTP_PASS || "";
-const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || "Dr. Fonseca | Portal Medico";
-const SMTP_FROM_EMAIL = process.env.SMTP_FROM_EMAIL || SMTP_USER;
+const APP_URL = getAppUrl();
+const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME, SMTP_FROM_EMAIL } = getSmtpConfig("Dr. Fonseca | Portal Medico");
 
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const isAliasEmail = (email: string) => email.toLowerCase().endsWith("@portal-staff.local");

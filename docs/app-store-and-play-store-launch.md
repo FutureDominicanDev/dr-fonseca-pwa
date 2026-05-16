@@ -51,7 +51,7 @@ Official references checked:
 - Camera, microphone, file upload, audio playback, and signed media URLs work inside the wrapper.
 - Deep links for patient room open and password reset links are tested.
 - In-app call overlay flow works on real devices.
-- Privacy policy, support, training, and account deletion links open inside the wrapper.
+- Privacy policy, support, icon legend, and account deletion links open inside the wrapper.
 - Account deletion link inside the wrapper and in store metadata:
   - `https://portal.drfonsecacirujanoplastico.com/account-deletion`
 - Public support URL/email in store metadata:

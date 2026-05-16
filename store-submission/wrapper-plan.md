@@ -19,7 +19,7 @@ Required before Play upload:
 - Build TWA project with Bubblewrap or an equivalent TWA template.
 - Add the final SHA-256 certificate fingerprint to the portal's `/.well-known/assetlinks.json`.
 - Verify the TWA opens without a browser address bar.
-- Test login, training, media upload, audio, camera, microphone, password reset, and patient room links on a real Android phone.
+- Test login, icon legend, media upload, audio, camera, microphone, password reset, and patient room links on a real Android phone.
 
 ## iOS Preferred Path: Capacitor/WKWebView
 
@@ -38,7 +38,7 @@ Required before App Store upload:
 - Apple Developer team selected.
 - Branded launch screen.
 - WKWebView allows camera, microphone, file picker, audio playback, and secure links.
-- External links for privacy, support, account deletion, and training stay reachable.
+- External links for privacy, support, account deletion, and the icon legend stay reachable.
 - TestFlight pass on real iPhone.
 - App Review notes explain private clinic approval flow and provide synthetic demo access.
 
@@ -54,4 +54,3 @@ Once Apple Developer and Google Play access, signing, final screenshots, and dem
 ## Native Push Decision
 
 Keep PWA/web push for the first TWA if it passes real-device testing. If iOS or Android reviewers/users need more reliable notifications, add native push later with APNs/FCM in the wrapper. That is a separate implementation and test cycle.
-

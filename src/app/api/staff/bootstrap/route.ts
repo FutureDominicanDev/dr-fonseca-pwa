@@ -3,20 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 import { PRIMARY_OWNER_EMAIL, isOwnerIdentity } from "@/lib/securityConfig";
 import { normalizePhone } from "@/lib/authIdentity";
 import nodemailer from "nodemailer";
+import { getAppUrl, getSmtpConfig } from "@/lib/emailConfig";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missing-key");
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://portal.drfonsecacirujanoplastico.com").replace(/\/+$/, "");
-const SMTP_HOST = process.env.SMTP_HOST || "";
-const smtpPortValue = `${process.env.SMTP_PORT || ""}`.trim().replace(/^["']|["']$/g, "");
-const parsedSmtpPort = Number(smtpPortValue || "465");
-const SMTP_PORT = Number.isFinite(parsedSmtpPort) ? parsedSmtpPort : 465;
-const SMTP_USER = process.env.SMTP_USER || "";
-const SMTP_PASS = process.env.SMTP_PASS || "";
-const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || "Dr. Fonseca | Portal Médico";
-const SMTP_FROM_EMAIL = process.env.SMTP_FROM_EMAIL || SMTP_USER;
+const APP_URL = getAppUrl();
+const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME, SMTP_FROM_EMAIL } = getSmtpConfig("Dr. Fonseca | Portal Médico");
 
 type SignupContext = {
   device: string;
@@ -224,7 +218,7 @@ const sendWelcomeEmail = async (params: { fullName: string; email: string; role:
             <ul style="margin:0 0 12px 18px;padding:0;line-height:1.7;color:#334155;">
               <li>Ingresa al sistema desde: <a href="${safeLoginUrl}">${safeLoginUrl}</a></li>
               <li>Si necesitas cambiar contraseña: <a href="${safeResetUrl}">${safeResetUrl}</a></li>
-              <li>Guía visual de entrenamiento: <a href="${safeTrainingUrl}">${safeTrainingUrl}</a></li>
+              <li>Leyenda de iconos del portal: <a href="${safeTrainingUrl}">${safeTrainingUrl}</a></li>
               <li>Dentro de Inbox podrás responder pacientes, usar respuestas rápidas con <strong>/</strong> y enviar multimedia.</li>
               <li>Activa las alertas del dispositivo desde Inbox para recibir mensajes urgentes.</li>
             </ul>
@@ -236,7 +230,7 @@ const sendWelcomeEmail = async (params: { fullName: string; email: string; role:
         </div>
       </div>
     `,
-    text: `Bienvenido(a) al Portal Medico de Dr. Fonseca\n\nHola ${params.fullName}, tu registro quedo completado.\nPerfil: ${roleText}${officePlain}\nUsuario de acceso: ${params.email}\n\nPortal: ${loginUrl}\nCambiar contraseña: ${resetUrl}\nGuia visual: ${trainingUrl}\n\nActiva las alertas del dispositivo desde Inbox para recibir mensajes urgentes.`,
+    text: `Bienvenido(a) al Portal Medico de Dr. Fonseca\n\nHola ${params.fullName}, tu registro quedo completado.\nPerfil: ${roleText}${officePlain}\nUsuario de acceso: ${params.email}\n\nPortal: ${loginUrl}\nCambiar contraseña: ${resetUrl}\nLeyenda de iconos: ${trainingUrl}\n\nActiva las alertas del dispositivo desde Inbox para recibir mensajes urgentes.`,
   });
 
   return { sent: true };
@@ -287,7 +281,7 @@ const sendStaffPendingEmail = async (params: { fullName: string; email: string; 
               <li>Cuando el acceso sea aprobado, recibirás otro correo de bienvenida.</li>
               <li>Portal: <a href="${safeLoginUrl}">${safeLoginUrl}</a></li>
               <li>Cambio de contraseña: <a href="${safeResetUrl}">${safeResetUrl}</a></li>
-              <li>Guia visual: <a href="${safeTrainingUrl}">${safeTrainingUrl}</a></li>
+              <li>Leyenda de iconos: <a href="${safeTrainingUrl}">${safeTrainingUrl}</a></li>
               <li>Después de entrar, activa alertas en Inbox para recibir mensajes críticos del equipo y pacientes.</li>
             </ul>
             <p style="margin:12px 0 0;color:#64748b;line-height:1.6;">No compartas tus credenciales. Si no solicitaste este acceso, avisa al doctor o administrador.</p>
@@ -295,7 +289,7 @@ const sendStaffPendingEmail = async (params: { fullName: string; email: string; 
         </div>
       </div>
     `,
-    text: `Registro recibido - Portal Medico Dr. Fonseca\n\n${params.fullName}, recibimos tu registro. Sede indicada: ${officeText}. Por seguridad, tu cuenta queda en espera hasta que sea aprobada.\n\nPortal: ${loginUrl}\nCambio de contraseña: ${resetUrl}\nGuia: ${trainingUrl}\n\nDespues de entrar, activa alertas en Inbox para recibir mensajes criticos del equipo y pacientes.`,
+    text: `Registro recibido - Portal Medico Dr. Fonseca\n\n${params.fullName}, recibimos tu registro. Sede indicada: ${officeText}. Por seguridad, tu cuenta queda en espera hasta que sea aprobada.\n\nPortal: ${loginUrl}\nCambio de contraseña: ${resetUrl}\nLeyenda de iconos: ${trainingUrl}\n\nDespues de entrar, activa alertas en Inbox para recibir mensajes criticos del equipo y pacientes.`,
   });
 
   return { sent: true };

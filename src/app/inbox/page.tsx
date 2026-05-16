@@ -16,6 +16,7 @@ type MediaTab = "internal" | "media" | "audio" | "prescriptions" | "forms" | "do
 type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
 type InternalNoteVisibility = "team" | "private";
 type StaffFontSizeLevel = "small" | "medium" | "large";
+type AlertTone = "classic" | "soft" | "urgent" | "off";
 
 const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
 const MAX_PATIENT_LABELS = 20;
@@ -23,6 +24,7 @@ const LABEL_COLORS = ["#EF4444", "#F97316", "#F59E0B", "#10B981", "#14B8A6", "#3
 const STAFF_FONT_SIZE_STORAGE_KEY = "drf_staff_font_size_level";
 const STAFF_LANG_STORAGE_KEY = "drf_staff_ui_lang";
 const STAFF_RECORD_ALERTS_MUTED_KEY = "drf_staff_record_alerts_muted";
+const STAFF_ALERT_TONE_STORAGE_KEY = "drf_staff_alert_tone";
 const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
 
 const readStaffLang = (): Lang => {
@@ -46,6 +48,14 @@ const readStaffRecordAlertsMuted = () => {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(STAFF_RECORD_ALERTS_MUTED_KEY) === "1";
 };
+
+const readStaffAlertTone = (): AlertTone => {
+  if (typeof window === "undefined") return "classic";
+  const stored = window.localStorage.getItem(STAFF_ALERT_TONE_STORAGE_KEY);
+  return stored === "soft" || stored === "urgent" || stored === "off" ? stored : "classic";
+};
+
+const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "off"];
 
 const PHONE_COUNTRY_OPTIONS: PhoneCountryOption[] = [
   { code: "+52", label: "🇲🇽 +52 México" },
@@ -254,9 +264,9 @@ const T = {
     invalidEmail: "El correo debe incluir un formato válido, por ejemplo nombre@correo.com.",
     invalidPhone: "El teléfono debe tener al menos 7 dígitos.",
     settings: "Ajustes", myProfile: "Mi Perfil",
-    trainingCenter: "Entrenamiento",
-    trainingHint: "Repasa el sistema con guías visuales, pasos tipo iPhone y narración opcional. No abre expedientes reales.",
-    openTraining: "Abrir entrenamiento",
+    trainingCenter: "Leyenda de iconos",
+    trainingHint: "Referencia compacta para saber que hace cada icono del portal. No abre expedientes reales.",
+    openTraining: "Abrir leyenda",
     displayName: "Nombre a Mostrar",
     darkMode: "Modo Oscuro", fontSize: "Tamaño de Texto",
     language: "Idioma", spanish: "Español", english: "English",
@@ -453,9 +463,9 @@ const T = {
     invalidEmail: "Email must use a valid format, for example name@email.com.",
     invalidPhone: "Phone number must contain at least 7 digits.",
     settings: "Settings", myProfile: "My Profile",
-    trainingCenter: "Training",
-    trainingHint: "Refresh the system with visual guides, iPhone-style steps, and optional narration. It does not open real records.",
-    openTraining: "Open training",
+    trainingCenter: "Icon legend",
+    trainingHint: "Compact reference for what each portal icon does. It does not open real records.",
+    openTraining: "Open legend",
     displayName: "Display Name",
     darkMode: "Dark Mode", fontSize: "Font Size",
     language: "Language", spanish: "Español", english: "English",
@@ -969,6 +979,7 @@ export default function InboxPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
+  const [alertTone, setAlertTone] = useState<AlertTone>(() => readStaffAlertTone());
   const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
   const [callOverlayOpen, setCallOverlayOpen] = useState(false);
@@ -1043,6 +1054,12 @@ export default function InboxPage() {
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
   const fmtShortDate = (ts?: string | null) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}); };
+  const alertToneLabel = (tone: AlertTone) => ({
+    classic: lang === "es" ? "Portal" : "Portal",
+    soft: lang === "es" ? "Suave" : "Soft",
+    urgent: lang === "es" ? "Urgente" : "Urgent",
+    off: lang === "es" ? "Silencio" : "Silent",
+  }[tone]);
   const fmtChatDateLabel = (ts: string) => {
     if (!ts) return "";
     const date = new Date(ts);
@@ -1897,10 +1914,16 @@ export default function InboxPage() {
   }, [ensureAudioContext]);
 
   const playIncomingTone = useCallback(() => {
+    if (alertTone === "off") return;
     const context = ensureAudioContext();
     if (!context) return;
     const doPlay = () => {
       const startAt = context.currentTime;
+      const toneConfig = alertTone === "soft"
+        ? { master: 0.42, type: "sine" as OscillatorType, pulses: [[0, 659, 0.09], [0.2, 880, 0.1]] as const }
+        : alertTone === "urgent"
+          ? { master: 0.94, type: "square" as OscillatorType, pulses: [[0, 988, 0.17], [0.16, 988, 0.17], [0.34, 1568, 0.2], [0.52, 1568, 0.2]] as const }
+          : { master: 0.86, type: "square" as OscillatorType, pulses: [[0, 988, 0.16], [0.22, 1319, 0.18], [0.44, 1760, 0.2]] as const };
       const limiter = context.createDynamicsCompressor();
       limiter.threshold.setValueAtTime(-12, startAt);
       limiter.knee.setValueAtTime(8, startAt);
@@ -1909,7 +1932,7 @@ export default function InboxPage() {
       limiter.release.setValueAtTime(0.12, startAt);
 
       const masterGain = context.createGain();
-      masterGain.gain.setValueAtTime(0.86, startAt);
+      masterGain.gain.setValueAtTime(toneConfig.master, startAt);
       masterGain.connect(limiter);
       limiter.connect(context.destination);
 
@@ -1923,7 +1946,7 @@ export default function InboxPage() {
         pulseGain.connect(masterGain);
 
         const oscillator = context.createOscillator();
-        oscillator.type = "square";
+        oscillator.type = toneConfig.type;
         oscillator.frequency.setValueAtTime(frequency, pulseStart);
         oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.18, pulseEnd);
         oscillator.connect(pulseGain);
@@ -1939,16 +1962,14 @@ export default function InboxPage() {
         overtone.stop(pulseEnd + 0.02);
       };
 
-      playPulse(0, 988, 0.16);
-      playPulse(0.22, 1319, 0.18);
-      playPulse(0.44, 1760, 0.2);
+      toneConfig.pulses.forEach(([offset, frequency, peakGain]) => playPulse(offset, frequency, peakGain));
     };
     if (context.state === "suspended") {
       context.resume().then(doPlay).catch(() => {});
     } else {
       doPlay();
     }
-  }, [ensureAudioContext]);
+  }, [alertTone, ensureAudioContext]);
 
   const describeIncomingMessage = useCallback((message: RoomMessageSummary, translatedText = "") => {
     if (parseCallRequestMessage(message.content)) return t.incomingCallRequest;
@@ -2301,6 +2322,11 @@ export default function InboxPage() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(STAFF_RECORD_ALERTS_MUTED_KEY, staffRecordAlertsMuted ? "1" : "0");
   }, [staffRecordAlertsMuted]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STAFF_ALERT_TONE_STORAGE_KEY, alertTone);
+  }, [alertTone]);
 
   useEffect(() => {
     setTranslatedIncoming({});
@@ -4905,6 +4931,31 @@ export default function InboxPage() {
                 </button>
               ))}
             </div>
+          </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>
+              {lang==="es"?"Sonido de alertas":"Alert sound"}
+            </p>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+              {alertToneOptions.map((tone) => (
+                <button
+                  key={tone}
+                  type="button"
+                  onClick={()=>setAlertTone(tone)}
+                  style={{minHeight:46,borderRadius:12,border:alertTone===tone?"2px solid #007AFF":`2px solid ${borderColor}`,background:alertTone===tone?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:alertTone===tone?"#007AFF":textColor,fontWeight:850,cursor:"pointer",fontFamily:"inherit",fontSize:settingsBaseSize,lineHeight:1.25}}
+                >
+                  {alertToneLabel(tone)}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={playIncomingTone}
+              disabled={alertTone==="off"}
+              style={{width:"100%",minHeight:46,border:"none",borderRadius:14,background:alertTone==="off"?(darkMode?"#334155":"#E5E7EB"):"#EAF2FB",color:alertTone==="off"?(darkMode?"#94A3B8":"#64748B"):"#1D4ED8",fontFamily:"inherit",fontSize:settingsBaseSize,fontWeight:900,cursor:alertTone==="off"?"not-allowed":"pointer"}}
+            >
+              {lang==="es"?"Probar sonido":"Test sound"}
+            </button>
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8,lineHeight:1.35}}>{t.staffRecordAlerts}</p>

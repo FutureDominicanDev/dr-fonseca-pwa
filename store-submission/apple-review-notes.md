@@ -7,7 +7,7 @@ This is a private medical office portal for Dr. Miguel Fonseca / Siluety Plastic
 Provide Apple with one of these review paths before submission:
 
 - A temporary review staff account with no real patient data.
-- A training-only account that opens `/training` and a demo room with synthetic content.
+- A temporary review account that can open `/training`, the compact icon legend, without exposing real patient data.
 - Clear instructions that new staff registrations intentionally remain blocked until approved.
 
 ## Medical Scope
@@ -41,4 +41,3 @@ Do not mark data as used for third-party tracking. The portal should not sell pa
 - A thin website-only wrapper can be challenged under Apple's minimum functionality expectations. Use Capacitor/WKWebView with native permission handling, branded launch screen, review notes, and app-level navigation support.
 - Web push behavior differs from native push. If store reviewers expect push notifications, validate either installed-PWA web push or native APNs before submission.
 - File upload, camera, microphone, and password-reset deep links must be tested in TestFlight on real devices.
-

@@ -64,13 +64,22 @@ type RoomAccess = {
 };
 
 type PatientTextSize = "normal" | "large";
+type AlertTone = "classic" | "soft" | "urgent" | "off";
 
 const PATIENT_TEXT_SIZE_STORAGE_KEY = "drf_patient_text_size";
 const PATIENT_LANG_STORAGE_KEY = "drf_patient_ui_lang";
+const PATIENT_ALERT_TONE_STORAGE_KEY = "drf_patient_alert_tone";
+const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "off"];
 
 const readPatientTextSize = (): PatientTextSize => {
   if (typeof window === "undefined") return "large";
   return window.localStorage.getItem(PATIENT_TEXT_SIZE_STORAGE_KEY) === "normal" ? "normal" : "large";
+};
+
+const readPatientAlertTone = (): AlertTone => {
+  if (typeof window === "undefined") return "classic";
+  const stored = window.localStorage.getItem(PATIENT_ALERT_TONE_STORAGE_KEY);
+  return stored === "soft" || stored === "urgent" || stored === "off" ? stored : "classic";
 };
 
 const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
@@ -333,6 +342,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [editingReplyIndex, setEditingReplyIndex] = useState<number | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [textSize, setTextSize] = useState<PatientTextSize>(() => readPatientTextSize());
+  const [alertTone, setAlertTone] = useState<AlertTone>(() => readPatientAlertTone());
   const [recording, setRecording] = useState(false);
   const [uiLang, setUiLang] = useState<"es" | "en">(() => readPatientUiLang());
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
@@ -362,6 +372,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const typingIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outgoingTypingRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const patientLatestStaffMessageRef = useRef("");
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
@@ -593,6 +605,70 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    window.localStorage.setItem(PATIENT_ALERT_TONE_STORAGE_KEY, alertTone);
+  }, [alertTone]);
+
+  const alertToneLabel = (tone: AlertTone) => ({
+    classic: uiLang === "es" ? "Portal" : "Portal",
+    soft: uiLang === "es" ? "Suave" : "Soft",
+    urgent: uiLang === "es" ? "Urgente" : "Urgent",
+    off: uiLang === "es" ? "Silencio" : "Silent",
+  }[tone]);
+
+  const ensureAudioContext = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return null;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextCtor();
+    return audioContextRef.current;
+  }, []);
+
+  const playIncomingTone = useCallback(() => {
+    if (alertTone === "off") return;
+    const context = ensureAudioContext();
+    if (!context) return;
+    const doPlay = () => {
+      const startAt = context.currentTime;
+      const toneConfig = alertTone === "soft"
+        ? { master: 0.38, type: "sine" as OscillatorType, pulses: [[0, 659, 0.08], [0.2, 880, 0.09]] as const }
+        : alertTone === "urgent"
+          ? { master: 0.86, type: "square" as OscillatorType, pulses: [[0, 988, 0.15], [0.16, 988, 0.15], [0.34, 1568, 0.18], [0.52, 1568, 0.18]] as const }
+          : { master: 0.72, type: "square" as OscillatorType, pulses: [[0, 988, 0.13], [0.22, 1319, 0.15], [0.44, 1760, 0.17]] as const };
+
+      const masterGain = context.createGain();
+      masterGain.gain.setValueAtTime(toneConfig.master, startAt);
+      masterGain.connect(context.destination);
+
+      const playPulse = (offset: number, frequency: number, peakGain: number) => {
+        const pulseStart = startAt + offset;
+        const pulseEnd = pulseStart + 0.16;
+        const pulseGain = context.createGain();
+        pulseGain.gain.setValueAtTime(0.0001, pulseStart);
+        pulseGain.gain.exponentialRampToValueAtTime(peakGain, pulseStart + 0.014);
+        pulseGain.gain.exponentialRampToValueAtTime(0.0001, pulseEnd);
+        pulseGain.connect(masterGain);
+
+        const oscillator = context.createOscillator();
+        oscillator.type = toneConfig.type;
+        oscillator.frequency.setValueAtTime(frequency, pulseStart);
+        oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.16, pulseEnd);
+        oscillator.connect(pulseGain);
+        oscillator.start(pulseStart);
+        oscillator.stop(pulseEnd + 0.02);
+      };
+
+      toneConfig.pulses.forEach(([offset, frequency, peakGain]) => playPulse(offset, frequency, peakGain));
+    };
+
+    if (context.state === "suspended") {
+      context.resume().then(doPlay).catch(() => {});
+    } else {
+      doPlay();
+    }
+  }, [alertTone, ensureAudioContext]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
     if ("Notification" in window) {
       setNotificationPermission(Notification.permission);
@@ -656,7 +732,15 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
         setRoom(payload.room as RoomAccess);
         setRoomClosed(Boolean(payload.roomClosed));
-        replaceMessagesIfChanged((payload.messages || []) as Message[]);
+        const nextMessages = (payload.messages || []) as Message[];
+        const latestStaffMessage = [...nextMessages].reverse().find((message) => `${message.sender_type || ""}` === "staff" && !message.is_internal);
+        if (latestStaffMessage?.id) {
+          if (!showLoading && patientLatestStaffMessageRef.current && patientLatestStaffMessageRef.current !== latestStaffMessage.id) {
+            playIncomingTone();
+          }
+          patientLatestStaffMessageRef.current = latestStaffMessage.id;
+        }
+        replaceMessagesIfChanged(nextMessages);
         setAccessReady(true);
         return true;
       } catch {
@@ -828,7 +912,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       if (pollTimer) window.clearInterval(pollTimer);
       if (channel) supabase.removeChannel(channel);
     };
-  }, [id, token, viewerType]);
+  }, [id, playIncomingTone, token, viewerType]);
 
   useEffect(() => {
     if (!accessReady || accessDenied || roomClosed || !token) {
@@ -2599,6 +2683,26 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                   {notificationFeedback}
                 </div>
               )}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+                {alertToneOptions.map((tone) => (
+                  <button
+                    key={tone}
+                    type="button"
+                    onClick={() => setAlertTone(tone)}
+                    style={{ minHeight: 48, border: "none", borderRadius: 14, background: alertTone === tone ? "#075e54" : inputPanelBg, color: alertTone === tone ? "#fff" : textPrimary, fontSize: patientTextSmall, fontWeight: 850, fontFamily: "inherit" }}
+                  >
+                    {alertToneLabel(tone)}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={playIncomingTone}
+                disabled={alertTone === "off"}
+                style={{ minHeight: 48, border: "none", borderRadius: 14, background: alertTone === "off" ? inputPanelBg : "#DBEAFE", color: alertTone === "off" ? (darkMode ? "#94A3B8" : "#64748B") : "#1D4ED8", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit", opacity: alertTone === "off" ? 0.75 : 1 }}
+              >
+                {uiLang === "es" ? "Probar sonido" : "Test sound"}
+              </button>
             </div>
             <div style={{ fontSize: patientTextBase, lineHeight: 1.45, marginBottom: 10 }}>{labels.textSize}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>

@@ -7,18 +7,12 @@ import {
   hasPermission,
   parseStaffPermissionMap,
 } from "@/lib/permissions";
+import { getAppUrl, getSmtpConfig } from "@/lib/emailConfig";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://portal.drfonsecacirujanoplastico.com").replace(/\/+$/, "");
-const SMTP_HOST = process.env.SMTP_HOST || "";
-const smtpPortValue = `${process.env.SMTP_PORT || ""}`.trim().replace(/^["']|["']$/g, "");
-const parsedSmtpPort = Number(smtpPortValue || "465");
-const SMTP_PORT = Number.isFinite(parsedSmtpPort) ? parsedSmtpPort : 465;
-const SMTP_USER = process.env.SMTP_USER || "";
-const SMTP_PASS = process.env.SMTP_PASS || "";
-const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || "Dr. Fonseca | Portal Medico";
-const SMTP_FROM_EMAIL = process.env.SMTP_FROM_EMAIL || SMTP_USER;
+const APP_URL = getAppUrl();
+const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME, SMTP_FROM_EMAIL } = getSmtpConfig("Dr. Fonseca | Portal Medico");
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missing-key", {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -81,14 +75,14 @@ const sendApprovedEmail = async (params: { email: string; fullName: string; offi
             <ul style="margin:0 0 12px 18px;padding:0;line-height:1.7;color:#334155;">
               <li>Portal: <a href="${safeLoginUrl}">${safeLoginUrl}</a></li>
               <li>Cambiar contraseña: <a href="${safeResetUrl}">${safeResetUrl}</a></li>
-              <li>Guia visual: <a href="${safeTrainingUrl}">${safeTrainingUrl}</a></li>
+              <li>Leyenda de iconos: <a href="${safeTrainingUrl}">${safeTrainingUrl}</a></li>
               <li>Activa alertas desde Inbox para recibir mensajes de pacientes y del equipo cuando la app esté cerrada.</li>
             </ul>
           </div>
         </div>
       </div>
     `,
-    text: `Bienvenido(a) - Acceso aprobado - Portal Medico Dr. Fonseca\n\n${params.fullName}, tu acceso fue aprobado. Sede: ${officeText}.\n\nPortal: ${loginUrl}\nCambiar contraseña: ${resetUrl}\nGuia: ${trainingUrl}\n\nActiva alertas desde Inbox para recibir mensajes de pacientes y del equipo cuando la app este cerrada.`,
+    text: `Bienvenido(a) - Acceso aprobado - Portal Medico Dr. Fonseca\n\n${params.fullName}, tu acceso fue aprobado. Sede: ${officeText}.\n\nPortal: ${loginUrl}\nCambiar contraseña: ${resetUrl}\nLeyenda de iconos: ${trainingUrl}\n\nActiva alertas desde Inbox para recibir mensajes de pacientes y del equipo cuando la app este cerrada.`,
   });
 
   return { sent: true };
