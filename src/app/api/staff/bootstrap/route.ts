@@ -4,6 +4,13 @@ import { PRIMARY_OWNER_EMAIL, isOwnerIdentity } from "@/lib/securityConfig";
 import { normalizePhone } from "@/lib/authIdentity";
 import nodemailer from "nodemailer";
 import { getAppUrl, getSmtpConfig } from "@/lib/emailConfig";
+import {
+  STAFF_INVITE_CODES_SETTING_KEY,
+  findActiveStaffInviteCode,
+  markStaffInviteCodeUsed,
+  parseStaffInviteCodes,
+  serializeStaffInviteCodes,
+} from "@/lib/staffInviteCodes";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -331,9 +338,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Staff profile does not match the signed-in user." }, { status: 403 });
     }
 
-    const inviteRes = await supabase.from("app_settings").select("value").eq("key", "invite_code").single();
-    const currentInvite = `${inviteRes.data?.value || ""}`.trim().toUpperCase();
-    if (inviteRes.error || !currentInvite || currentInvite !== inviteCode) {
+    const [{ data: inviteData, error: inviteError }, { data: oneTimeInviteData, error: oneTimeInviteError }] = await Promise.all([
+      supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", STAFF_INVITE_CODES_SETTING_KEY).maybeSingle(),
+    ]);
+    const currentInvite = `${inviteData?.value || ""}`.trim().toUpperCase();
+    const inviteCodeRecords = parseStaffInviteCodes(oneTimeInviteData?.value);
+    const oneTimeInvite = findActiveStaffInviteCode(inviteCodeRecords, inviteCode);
+    const legacyInviteValid = Boolean(currentInvite && currentInvite === inviteCode);
+    if (inviteError || oneTimeInviteError || (!oneTimeInvite && !legacyInviteValid)) {
       return NextResponse.json({ error: "Invalid invite code." }, { status: 403 });
     }
 
@@ -453,6 +466,18 @@ export async function POST(request: NextRequest) {
           signup_captured_at: signupContext.capturedAt,
         },
       } as any);
+    }
+
+    if (oneTimeInvite) {
+      const usedInvite = markStaffInviteCodeUsed(inviteCodeRecords, inviteCode, userId);
+      if (usedInvite.matched) {
+        await supabase
+          .from("app_settings")
+          .upsert(
+            { key: STAFF_INVITE_CODES_SETTING_KEY, value: serializeStaffInviteCodes(usedInvite.records), updated_at: new Date().toISOString() },
+            { onConflict: "key" },
+          );
+      }
     }
 
     let welcomeEmail: { sent: boolean; reason?: string; error?: string } = { sent: false };

@@ -17,22 +17,15 @@ const COPY = {
     codeSubtitle: "Acceso privado para el equipo autorizado de Siluety Plastic Surgery.",
     inviteHeading: "Código de invitación",
     inviteCopy: "Ingresa el código del consultorio para empezar.",
-    inviteSecurityNote: "Después de verificarlo aparece el formulario completo con nombre, celular o correo, consultorio y contraseña. El dispositivo y la ubicación se guardan automáticamente para que el doctor revise la solicitud.",
+    inviteSecurityNote: "Este es un portal privado. Después de verificar el código, completa tu perfil; la cuenta queda pendiente hasta que el doctor o un administrador autorizado la apruebe.",
     inviteLabel: "Código de invitación",
     invitePlaceholder: "FONSECA-XXXXXX",
     verify: "Verificar código",
     verifying: "Verificando...",
     already: "¿Ya tienes cuenta?",
     login: "Inicia sesión",
-    processTitle: "Tan fácil como 1, 2, 3.",
-    step1: "Abre tu enlace",
-    step1Text: "El consultorio te comparte una invitación segura.",
-    step2: "Crea tu acceso",
-    step2Text: "Nombre, celular o correo, consultorio y contraseña.",
-    step3: "Entra al portal",
-    step3Text: "Verás las salas de pacientes que te asignen.",
     detailsTitle: "Crear acceso del personal",
-    detailsSubtitle: "Completa estos 3 pasos para entrar al portal.",
+    detailsSubtitle: "Completa tu perfil para solicitar acceso al portal.",
     formTitle: "Tu cuenta",
     formHelp: "Usa tu nombre y elige si entrarás con celular o correo.",
     nameLabel: "1. Nombre o nombre preferido",
@@ -96,22 +89,15 @@ const COPY = {
     codeSubtitle: "Private access for the authorized Siluety Plastic Surgery team.",
     inviteHeading: "Invitation code",
     inviteCopy: "Enter the office code to begin.",
-    inviteSecurityNote: "After the code is verified, the full form opens with name, phone or email, office, and password. Device and location are saved automatically so the doctor can review the request.",
+    inviteSecurityNote: "This is a private portal. After the code is verified, complete your profile; the account stays pending until the doctor or an authorized administrator approves it.",
     inviteLabel: "Invitation code",
     invitePlaceholder: "FONSECA-XXXXXX",
     verify: "Verify code",
     verifying: "Verifying...",
     already: "Already have an account?",
     login: "Sign in",
-    processTitle: "As easy as 1, 2, 3.",
-    step1: "Open your link",
-    step1Text: "The office sends you a secure invitation.",
-    step2: "Create access",
-    step2Text: "Name, phone or email, office, and password.",
-    step3: "Enter the portal",
-    step3Text: "You will see the patient rooms assigned to you.",
     detailsTitle: "Create staff access",
-    detailsSubtitle: "Complete these 3 steps to enter the portal.",
+    detailsSubtitle: "Complete your profile to request portal access.",
     formTitle: "Your account",
     formHelp: "Use your name and choose whether you will sign in with phone or email.",
     nameLabel: "1. Name or preferred name",
@@ -556,7 +542,7 @@ export default function RegisterPage() {
         .logo { width: min(300px, 74vw); height: auto; object-fit: contain; margin-bottom: 16px; }
         .title { margin: 0; color: #0E2D4A; font-size: clamp(28px, 7vw, 38px); line-height: 1.1; font-weight: 850; letter-spacing: 0; }
         .subtitle { margin: 10px auto 0; max-width: 600px; color: #52677d; font-size: 16px; line-height: 1.48; font-weight: 650; }
-        .layout { display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 18px; align-items: start; }
+        .layout { display: grid; grid-template-columns: minmax(0, 540px); gap: 18px; align-items: start; justify-content: center; }
         .panel {
           background: #FFFFFF;
           border: 1px solid rgba(92,132,170,0.18);
@@ -565,11 +551,6 @@ export default function RegisterPage() {
           padding: 26px;
         }
         .invite-panel { align-self: start; }
-        .visual-panel {
-          background:
-            linear-gradient(135deg, rgba(255,255,255,0.96), rgba(232,242,250,0.92)),
-            linear-gradient(120deg, rgba(37,103,162,0.12), rgba(255,255,255,0));
-        }
         .panel-title { margin: 0 0 8px; color: #10243b; font-size: 25px; line-height: 1.16; font-weight: 850; letter-spacing: 0; }
         .panel-copy { margin: 0 0 22px; color: #64748B; font-size: 15px; line-height: 1.5; font-weight: 650; }
         .security-note {
@@ -714,22 +695,6 @@ export default function RegisterPage() {
         }
         .login-link { margin: 17px 0 0; color: #52677d; text-align: center; font-size: 14px; font-weight: 650; }
         .login-link a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; color: #165D9C; font-weight: 850; text-decoration: none; }
-        .steps { display: grid; gap: 16px; margin-top: 20px; }
-        .step-row { display: grid; grid-template-columns: 40px 1fr; gap: 13px; align-items: start; }
-        .step-num {
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          background: #D9ECFA;
-          color: #1B6CA8;
-          display: grid;
-          place-items: center;
-          font-weight: 850;
-          font-size: 17px;
-          box-shadow: inset 0 0 0 1px rgba(27,108,168,0.18);
-        }
-        .step-row strong { display: block; color: #18344f; font-size: 16px; line-height: 1.24; margin-bottom: 4px; }
-        .step-row span { color: #60758a; font-size: 14px; line-height: 1.45; font-weight: 630; }
         .simple-card {
           width: 100%;
           max-width: 460px;
@@ -751,7 +716,6 @@ export default function RegisterPage() {
           .register-page { padding: calc(env(safe-area-inset-top) + 14px) 14px calc(env(safe-area-inset-bottom) + 26px); }
           .layout { grid-template-columns: 1fr; gap: 16px; }
           .invite-panel { order: 1; }
-          .visual-panel { order: 2; }
           .panel { padding: 22px; }
           .top-actions { min-height: 34px; }
           .brand { margin-top: 0; }
@@ -778,24 +742,6 @@ export default function RegisterPage() {
 
           {step === "code" ? (
             <div className="layout">
-              <section className="panel visual-panel" aria-label={t.processTitle}>
-                <h2 className="panel-title">{t.processTitle}</h2>
-                <div className="steps">
-                  <div className="step-row">
-                    <div className="step-num">1</div>
-                    <div><strong>{t.step1}</strong><span>{t.step1Text}</span></div>
-                  </div>
-                  <div className="step-row">
-                    <div className="step-num">2</div>
-                    <div><strong>{t.step2}</strong><span>{t.step2Text}</span></div>
-                  </div>
-                  <div className="step-row">
-                    <div className="step-num">3</div>
-                    <div><strong>{t.step3}</strong><span>{t.step3Text}</span></div>
-                  </div>
-                </div>
-              </section>
-
               <section className="panel invite-panel" aria-label={t.inviteHeading}>
                 <h2 className="panel-title">{t.inviteHeading}</h2>
                 <p className="panel-copy">{t.inviteCopy}</p>

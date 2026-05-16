@@ -215,6 +215,9 @@ export default function AdminPage() {
   const [rooms, setRooms] = useState<RoomRecord[]>([]);
   const [inviteCode, setInviteCode] = useState("");
   const [newInviteCode, setNewInviteCode] = useState("");
+  const [generatedInviteCode, setGeneratedInviteCode] = useState("");
+  const [generatedInviteExpiresAt, setGeneratedInviteExpiresAt] = useState("");
+  const [generatingInvite, setGeneratingInvite] = useState(false);
   const [blockedEmails, setBlockedEmails] = useState<string[]>([]);
   const [blockedPhones, setBlockedPhones] = useState<string[]>([]);
   const [officePhoneGdl, setOfficePhoneGdl] = useState("");
@@ -282,6 +285,9 @@ export default function AdminPage() {
     return isSpanish ? "📍 Sin sede" : "📍 No office";
   };
   const staffOfficeText = (office?: string | null) => office || (isSpanish ? "Ambas sedes" : "Both offices");
+  const memberHasDeveloperAccess = (member: StaffProfile, emailOverride?: string | null) =>
+    isDeveloperAccessEmail(emailOverride ?? member.email) ||
+    `${member.role || ""}`.toLowerCase() === "developer";
 
   const parseSettingList = (value: unknown) => {
     if (typeof value !== "string") return [] as string[];
@@ -372,14 +378,47 @@ export default function AdminPage() {
   const displayedPatientCards = hasActiveSearch ? patientCards : activePatientCards;
   const visiblePatientCards = displayedPatientCards.slice(0, hasActiveSearch ? 12 : 50);
   const hiddenPatientCount = Math.max(0, displayedPatientCards.length - visiblePatientCards.length);
-  const inviteLink = typeof window !== "undefined" && inviteCode
-    ? `${window.location.origin}/register?code=${encodeURIComponent(inviteCode)}`
-    : "";
+  const inviteLinkForCode = (code: string) =>
+    typeof window !== "undefined" && code
+      ? `${window.location.origin}/register?code=${encodeURIComponent(code)}`
+      : "";
+  const generatedInviteLink = inviteLinkForCode(generatedInviteCode);
+  const inviteMessageFor = (code: string, link: string) => isSpanish
+    ? [
+        "Invitación privada al Portal Médico del Dr. Fonseca",
+        "",
+        "CÓDIGO DE ACCESO:",
+        code,
+        "",
+        "Abre este enlace en tu teléfono:",
+        link,
+        "",
+        "Completa tu perfil. Por seguridad, la cuenta queda pendiente hasta que Dr. Fonseca o un administrador autorizado la apruebe.",
+      ].join("\n")
+    : [
+        "Private invitation to Dr. Fonseca's Medical Portal",
+        "",
+        "ACCESS CODE:",
+        code,
+        "",
+        "Open this link on your phone:",
+        link,
+        "",
+        "Complete your profile. For security, the account stays pending until Dr. Fonseca or an authorized administrator approves it.",
+      ].join("\n");
   const activePatientCount = patients.filter((patient) => normalizeRecordStatus(patient.record_status) === "active").length;
   const blockedAccessCount = blockedEmails.length + blockedPhones.length;
   const pendingStaffMembers = staff.filter((member) => `${member.role || ""}`.toLowerCase() === "pending_staff");
   const pendingTotalCount = pendingAccessRequests.length + pendingStaffMembers.length;
   const inviteCodePreview = inviteCode ? `${inviteCode.slice(0, Math.min(7, inviteCode.length))}••••` : "";
+  const generatedInviteExpiresText = generatedInviteExpiresAt
+    ? new Date(generatedInviteExpiresAt).toLocaleString(isSpanish ? "es-MX" : "en-US", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
   const staffById = useMemo(() => new Map(staff.map((member) => [member.id, member])), [staff]);
   const patientById = useMemo(() => new Map(patients.map((patient) => [patient.id, patient])), [patients]);
   const procedureById = useMemo(() => new Map(procedures.map((procedure) => [procedure.id, procedure])), [procedures]);
@@ -1110,11 +1149,9 @@ export default function AdminPage() {
 
   const deleteStaffMember = async (member: StaffProfile) => {
     const memberName = member.full_name || member.display_name || member.email || (isSpanish ? "este usuario" : "this user");
-    const isDeveloperMember =
-      isDeveloperAccessEmail(member.email) ||
-      `${member.role || ""}`.toLowerCase() === "developer";
+    const hasDeveloperAccess = memberHasDeveloperAccess(member);
     const confirmed = window.confirm(
-      isDeveloperMember
+      hasDeveloperAccess
         ? (
             isSpanish
               ? `Eliminar a ${memberName} quitará su acceso de desarrollador al portal, pero NO bloqueará su correo ni rotará el código de invitación. El doctor podrá crear acceso de desarrollador otra vez cuando necesite soporte. ¿Continuar?`
@@ -1286,41 +1323,78 @@ export default function AdminPage() {
     updateSuccess(isSpanish ? "Solicitud rechazada." : "Request rejected.");
   };
 
+  const createFreshInvite = async () => {
+    setPageError("");
+    setGeneratingInvite(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token || "";
+      if (!token) throw new Error(isSpanish ? "La sesión expiró. Inicia sesión otra vez." : "Session expired. Please sign in again.");
+
+      const response = await fetch("/api/staff/invite-code", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.code) {
+        throw new Error(payload?.error || (isSpanish ? "No pude crear la invitación." : "I could not create the invitation."));
+      }
+
+      const code = `${payload.code}`.trim().toUpperCase();
+      const expiresAt = `${payload.expiresAt || ""}`;
+      const link = inviteLinkForCode(code);
+      setGeneratedInviteCode(code);
+      setGeneratedInviteExpiresAt(expiresAt);
+      return { code, link, text: inviteMessageFor(code, link), expiresAt };
+    } catch (error: any) {
+      setPageError(error?.message || (isSpanish ? "No pude crear la invitación." : "I could not create the invitation."));
+      return null;
+    } finally {
+      setGeneratingInvite(false);
+    }
+  };
+
   const copyInviteLink = async () => {
-    if (!inviteLink) return;
-    await navigator.clipboard.writeText(inviteLink);
-    updateSuccess(isSpanish ? "Enlace de invitación copiado." : "Invitation link copied.");
+    const invite = await createFreshInvite();
+    if (!invite?.text) return;
+    await navigator.clipboard.writeText(invite.text);
+    updateSuccess(isSpanish ? "Invitación con código copiada." : "Invitation with code copied.");
   };
 
   const shareInviteLink = async () => {
-    if (!inviteLink) return;
+    const invite = await createFreshInvite();
+    if (!invite?.link) return;
     const nav = navigator as Navigator & { share?: (data?: ShareData) => Promise<void> };
-    const inviteText = isSpanish
-      ? `Invitación al portal médico privado del Dr. Fonseca: ${inviteLink}`
-      : `Invitation to Dr. Fonseca's private medical portal: ${inviteLink}`;
     if (typeof nav.share === "function") {
       try {
         await nav.share({
           title: isSpanish ? "Invitación al portal" : "Portal invitation",
-          text: inviteText,
-          url: inviteLink,
+          text: invite.text,
+          url: invite.link,
         });
-        updateSuccess(isSpanish ? "Se abrió el menú para compartir el enlace." : "The share menu opened for the invitation link.");
+        updateSuccess(isSpanish ? "Se abrió el menú para compartir la invitación." : "The share menu opened for the invitation.");
         return;
       } catch (error: any) {
         if (error?.name === "AbortError") return;
       }
     }
-    await copyInviteLink();
+    await navigator.clipboard.writeText(invite.text);
+    updateSuccess(isSpanish ? "Invitación con código copiada." : "Invitation with code copied.");
   };
 
-  const sendInviteText = () => {
-    if (!inviteLink) return;
-    const inviteText = isSpanish
-      ? `Invitación al portal médico privado del Dr. Fonseca: ${inviteLink}`
-      : `Invitation to Dr. Fonseca's private medical portal: ${inviteLink}`;
-    window.location.href = `sms:?&body=${encodeURIComponent(inviteText)}`;
+  const sendInviteText = async () => {
+    const invite = await createFreshInvite();
+    if (!invite?.text) return;
+    window.location.href = `sms:?&body=${encodeURIComponent(invite.text)}`;
     updateSuccess(isSpanish ? "Abrí Mensajes con la invitación lista." : "Messages opened with the invitation ready.");
+  };
+
+  const sendInviteEmail = async () => {
+    const invite = await createFreshInvite();
+    if (!invite?.text) return;
+    const subject = isSpanish ? "Invitación al Portal Médico Dr. Fonseca" : "Invitation to Dr. Fonseca Medical Portal";
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(invite.text)}`;
+    updateSuccess(isSpanish ? "Abrí el correo con la invitación lista." : "Email opened with the invitation ready.");
   };
 
   const openPatientExportMenu = (card: PatientCard) => {
@@ -1937,13 +2011,13 @@ export default function AdminPage() {
           .overview-grid { grid-template-columns: 1fr 1fr; }
         }
         @media (max-width: 560px) {
-          .admin-topbar { position: static; min-height: calc(84px + env(safe-area-inset-top)); padding-bottom: 14px; align-items: center; }
+          .admin-topbar { position: sticky; top: 0; z-index: 120; min-height: calc(84px + env(safe-area-inset-top)); padding-bottom: 14px; align-items: center; transform: translateZ(0); }
           .topbar-title { gap: 10px; }
           .admin-brand-logo { width: min(245px, 68vw); height: 62px; }
           .admin-title-copy { display: none; }
           .topbar-right { display: none; }
           .menu-btn { display: inline-flex; }
-          .menu-panel { display: grid; gap: 10px; background: rgba(15,23,42,0.98); border-top: 1px solid rgba(255,255,255,0.08); padding: 0 max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); }
+          .menu-panel { position: fixed; top: calc(84px + env(safe-area-inset-top)); left: 0; right: 0; z-index: 119; display: grid; gap: 10px; background: rgba(15,23,42,0.98); border-top: 1px solid rgba(255,255,255,0.08); padding: 12px max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); box-shadow: 0 18px 42px rgba(15,23,42,0.30); }
           .menu-panel .topbar-select,
           .menu-panel .topbar-btn { width: 100%; }
           .topbar-btn { text-align: center; padding: 12px 12px; font-size: 13px; }
@@ -2519,6 +2593,7 @@ export default function AdminPage() {
                       displayName: member.display_name,
                       adminLevel: member.admin_level,
                     });
+                    const isGlobalAccessMember = memberIsOwner || memberHasDeveloperAccess(member, rawMemberEmail);
                     const level = memberIsOwner ? "owner" : normalizeAdminLevel(member.admin_level, rawMemberEmail);
                     const canEditThisMember = canManageAdmins && level !== "owner" && (canManageOwner || level !== "super_admin");
                     const isSelf = member.id === viewerId;
@@ -2541,7 +2616,7 @@ export default function AdminPage() {
                     const draftPermissionsDirty = !samePermissionList(draftPermissionList, savedPermissionList);
                     const canEditPermissionsForMember = canEditThisMember && canManagePermissions;
                     const canEditDeleteStaffAccountsPermission = canEditPermissionsForMember && canManageOwner;
-                    const canEditOfficeForMember = canManageAdmins && (canManageOwner || (level !== "owner" && level !== "super_admin"));
+                    const canEditOfficeForMember = !isGlobalAccessMember && canManageAdmins && (canManageOwner || (level !== "owner" && level !== "super_admin"));
                     const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => draftPermissionSet.has(permission)).length;
                     const isPendingStaff = `${member.role || ""}`.toLowerCase() === "pending_staff";
                     const canSendResetForMember = canManageAdmins && Boolean(visibleMemberEmail);
@@ -2564,9 +2639,11 @@ export default function AdminPage() {
                                   <span className="meta-badge" style={{ color: adminColor(level), background: `${adminColor(level)}18` }}>
                                     {adminText(level)}
                                   </span>
-                                  <span className="meta-badge" style={{ color: member.office_location ? "#1D4ED8" : "#0E7490", background: member.office_location ? "#EFF6FF" : "#ECFEFF" }}>
-                                    {staffOfficeText(member.office_location)}
-                                  </span>
+                                  {!isGlobalAccessMember && (
+                                    <span className="meta-badge" style={{ color: member.office_location ? "#1D4ED8" : "#0E7490", background: member.office_location ? "#EFF6FF" : "#ECFEFF" }}>
+                                      {staffOfficeText(member.office_location)}
+                                    </span>
+                                  )}
                                   {member.role && (
                                     <span className="meta-badge" style={{ color: "#475569", background: "#F1F5F9" }}>
                                       {member.role}
@@ -2625,56 +2702,58 @@ export default function AdminPage() {
                                     </div>
                                   )}
                                   <div className="staff-contact-settings-grid">
-                                    <div className="setting-group">
-                                      <p className="group-label">{isSpanish ? "Consultorio asignado" : "Assigned office"}</p>
-                                      <p className="access-help">
-                                        {isSpanish
-                                          ? "El creador de pacientes usa esta sede para mostrar quién puede asignarse."
-                                          : "The patient creator uses this office for staff assignment."}
-                                      </p>
-                                      <div className="permission-toolbar">
-                                        {(["Guadalajara", "Tijuana"] as Office[]).map((office) => {
-                                          const selected = member.office_location === office;
-                                          return (
-                                            <button
-                                              key={`${member.id}-${office}`}
-                                              type="button"
-                                              className="mini-btn"
-                                              style={{
-                                                background: selected ? "#EFF6FF" : "#EFF3F8",
-                                                color: selected ? "#1D4ED8" : "#374151",
-                                                opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
-                                              }}
-                                              disabled={!canEditOfficeForMember || savingKey === officeKey}
-                                              onClick={() => updateStaffField(
-                                                member,
-                                                { office_location: office },
-                                                isSpanish ? `${member.full_name || "Staff"} asignado a ${office}.` : `${member.full_name || "Staff"} assigned to ${office}.`
-                                              )}
-                                            >
-                                              {office}
-                                            </button>
-                                          );
-                                        })}
-                                        <button
-                                          type="button"
-                                          className="mini-btn"
-                                          style={{
-                                            background: !member.office_location ? "#ECFEFF" : "#EFF3F8",
-                                            color: !member.office_location ? "#0E7490" : "#374151",
-                                            opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
-                                          }}
-                                          disabled={!canEditOfficeForMember || savingKey === officeKey}
-                                          onClick={() => updateStaffField(
-                                            member,
-                                            { office_location: null },
-                                            isSpanish ? `${member.full_name || "Staff"} asignado a ambas sedes.` : `${member.full_name || "Staff"} assigned to both offices.`
-                                          )}
-                                        >
-                                          {isSpanish ? "Ambas sedes" : "Both offices"}
-                                        </button>
+                                    {!isGlobalAccessMember && (
+                                      <div className="setting-group">
+                                        <p className="group-label">{isSpanish ? "Consultorio asignado" : "Assigned office"}</p>
+                                        <p className="access-help">
+                                          {isSpanish
+                                            ? "El creador de pacientes usa esta sede para mostrar quién puede asignarse."
+                                            : "The patient creator uses this office for staff assignment."}
+                                        </p>
+                                        <div className="permission-toolbar">
+                                          {(["Guadalajara", "Tijuana"] as Office[]).map((office) => {
+                                            const selected = member.office_location === office;
+                                            return (
+                                              <button
+                                                key={`${member.id}-${office}`}
+                                                type="button"
+                                                className="mini-btn"
+                                                style={{
+                                                  background: selected ? "#EFF6FF" : "#EFF3F8",
+                                                  color: selected ? "#1D4ED8" : "#374151",
+                                                  opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
+                                                }}
+                                                disabled={!canEditOfficeForMember || savingKey === officeKey}
+                                                onClick={() => updateStaffField(
+                                                  member,
+                                                  { office_location: office },
+                                                  isSpanish ? `${member.full_name || "Staff"} asignado a ${office}.` : `${member.full_name || "Staff"} assigned to ${office}.`
+                                                )}
+                                              >
+                                                {office}
+                                              </button>
+                                            );
+                                          })}
+                                          <button
+                                            type="button"
+                                            className="mini-btn"
+                                            style={{
+                                              background: !member.office_location ? "#ECFEFF" : "#EFF3F8",
+                                              color: !member.office_location ? "#0E7490" : "#374151",
+                                              opacity: !canEditOfficeForMember || savingKey === officeKey ? 0.55 : 1,
+                                            }}
+                                            disabled={!canEditOfficeForMember || savingKey === officeKey}
+                                            onClick={() => updateStaffField(
+                                              member,
+                                              { office_location: null },
+                                              isSpanish ? `${member.full_name || "Staff"} asignado a ambas sedes.` : `${member.full_name || "Staff"} assigned to both offices.`
+                                            )}
+                                          >
+                                            {isSpanish ? "Ambas sedes" : "Both offices"}
+                                          </button>
+                                        </div>
                                       </div>
-                                    </div>
+                                    )}
                                     <div className="setting-group">
                                       <p className="group-label">{isSpanish ? "Teléfono" : "Phone"}</p>
                                       <div className="mini-actions">
@@ -3059,7 +3138,11 @@ export default function AdminPage() {
                 <div className="header-row">
                   <div>
                     <p className="card-title">{isSpanish ? "Invitar personal" : "Invite team member"}</p>
-                    <p className="muted">{isSpanish ? "Envía este enlace a un nuevo integrante. El código ya va incluido para que el registro tenga menos pasos." : "Send this link to a new team member. The code is already included so registration has fewer steps."}</p>
+                    <p className="muted">
+                      {isSpanish
+                        ? "Cada invitación crea un código nuevo de un solo uso. La cuenta queda pendiente hasta aprobación manual."
+                        : "Each invitation creates a fresh one-time code. The account stays pending until manual approval."}
+                    </p>
                   </div>
                   {renderSectionTopButton()}
                 </div>
@@ -3067,35 +3150,53 @@ export default function AdminPage() {
                 <div className="secure-invite">
                   <p className="secure-invite-label">{isSpanish ? "Invitación segura" : "Secure invitation"}</p>
                   <p className="secure-invite-main">
-                    {inviteLink
-                      ? (isSpanish ? "Enlace listo para copiar" : "Invitation link ready to copy")
-                      : (isSpanish ? "Primero carga un código de invitación" : "Load an invitation code first")}
+                    {generatedInviteCode
+                      ? (isSpanish ? "Última invitación creada" : "Latest invitation created")
+                      : (isSpanish ? "Lista para generar" : "Ready to generate")}
                   </p>
                   <p className="secure-invite-code">
-                    {inviteCodePreview
-                      ? (isSpanish ? `Código activo: ${inviteCodePreview}` : `Active code: ${inviteCodePreview}`)
-                      : (isSpanish ? "Sin código activo" : "No active code")}
+                    {generatedInviteCode
+                      ? (isSpanish ? `Código creado: ${generatedInviteCode}` : `Created code: ${generatedInviteCode}`)
+                      : (isSpanish ? "El código aparecerá claro en el mensaje del destinatario." : "The code will be clear in the recipient message.")}
                   </p>
+                  {generatedInviteExpiresText && (
+                    <p className="small-note" style={{ marginTop: 6 }}>
+                      {isSpanish ? `Expira: ${generatedInviteExpiresText}` : `Expires: ${generatedInviteExpiresText}`}
+                    </p>
+                  )}
+                  {generatedInviteLink && (
+                    <p className="small-note" style={{ marginTop: 6, overflowWrap: "anywhere" }}>
+                      {generatedInviteLink}
+                    </p>
+                  )}
                   <p className="small-note" style={{ marginTop: 8 }}>
                     {isSpanish
-                      ? "Aunque alguien tenga el enlace, la cuenta queda en espera y no ve pacientes hasta que la apruebes desde Solicitudes o Equipo."
-                      : "Even if someone has the link, the account stays pending and cannot see patients until you approve it from Requests or Team."}
+                      ? "El mensaje incluye el código en una línea separada para que no se pierda. Aunque alguien tenga el enlace, no ve pacientes hasta que lo apruebes desde Solicitudes o Equipo."
+                      : "The message puts the code on its own line so it is not missed. Even with the link, the account cannot see patients until approved from Requests or Team."}
                   </p>
                   <div className="inline-actions" style={{ marginTop: 10 }}>
-                    <button className="main-btn" onClick={copyInviteLink} disabled={!inviteLink}>
-                      {isSpanish ? "Copiar enlace" : "Copy link"}
+                    <button className="main-btn" onClick={copyInviteLink} disabled={generatingInvite}>
+                      {generatingInvite ? (isSpanish ? "Generando..." : "Generating...") : (isSpanish ? "Copiar invitación" : "Copy invitation")}
                     </button>
-                    <button className="ghost-btn" onClick={sendInviteText} disabled={!inviteLink}>
+                    <button className="ghost-btn" onClick={sendInviteText} disabled={generatingInvite}>
                       SMS
                     </button>
-                    <button className="ghost-btn" onClick={shareInviteLink} disabled={!inviteLink}>
+                    <button className="ghost-btn" onClick={sendInviteEmail} disabled={generatingInvite}>
+                      Email
+                    </button>
+                    <button className="ghost-btn" onClick={shareInviteLink} disabled={generatingInvite}>
                       {isSpanish ? "Compartir" : "Share"}
                     </button>
                   </div>
                 </div>
 
                 <div style={{ display: "grid", gap: 10 }}>
-                  <p className="group-label" style={{ marginBottom: -2 }}>{isSpanish ? "Si quieres cambiar el código actual" : "If you want to change the current code"}</p>
+                  <p className="group-label" style={{ marginBottom: -2 }}>{isSpanish ? "Código manual de respaldo" : "Manual fallback code"}</p>
+                  <p className="small-note">
+                    {inviteCodePreview
+                      ? (isSpanish ? `Respaldo activo: ${inviteCodePreview}` : `Active fallback: ${inviteCodePreview}`)
+                      : (isSpanish ? "Sin respaldo manual activo" : "No active manual fallback")}
+                  </p>
                   <input
                     className="line-input"
                     value={newInviteCode}

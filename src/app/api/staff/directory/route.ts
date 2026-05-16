@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  STAFF_AVATAR_VISIBILITY_SETTING_KEY,
+  parseStaffAvatarVisibilityMap,
+  staffAvatarVisibleToStaff,
+} from "@/lib/staffAvatarVisibility";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -33,13 +38,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Staff approval is required before loading the directory." }, { status: 403 });
     }
 
-    const { data, error } = await adminClient
+    const [{ data, error }, { data: avatarVisibilitySetting }] = await Promise.all([
+      adminClient
       .from("profiles")
       .select("id, full_name, display_name, role, office_location, avatar_url, phone")
       .neq("role", "pending_staff")
-      .order("full_name", { ascending: true });
+      .order("full_name", { ascending: true }),
+      adminClient.from("app_settings").select("value").eq("key", STAFF_AVATAR_VISIBILITY_SETTING_KEY).maybeSingle(),
+    ]);
 
     if (error) return NextResponse.json({ error: error.message || "Could not load staff." }, { status: 500 });
+    const avatarVisibility = parseStaffAvatarVisibilityMap(avatarVisibilitySetting?.value);
 
     const { data: authUsersData } = await adminClient.auth.admin.listUsers();
     const emailById = new Map(
@@ -52,7 +61,8 @@ export async function GET(request: NextRequest) {
         full_name: member.full_name || member.display_name || "",
         role: member.role || "staff",
         office_location: member.office_location || null,
-        avatar_url: member.avatar_url || null,
+        avatar_url: staffAvatarVisibleToStaff(avatarVisibility, member.id) ? member.avatar_url || null : null,
+        show_avatar_to_staff: staffAvatarVisibleToStaff(avatarVisibility, member.id),
         phone: member.phone || null,
         email: emailById.get(member.id) || null,
       })),

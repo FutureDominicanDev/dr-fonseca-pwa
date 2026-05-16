@@ -7,6 +7,12 @@ import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { isOwnerEmail, isOwnerIdentity } from "@/lib/securityConfig";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
 import { createSignedChatFileUrl, signMessageMediaUrls, type SignedChatFileUrlCache } from "@/lib/chatFileUrls";
+import {
+  STAFF_AVATAR_VISIBILITY_SETTING_KEY,
+  parseStaffAvatarVisibilityMap,
+  staffAvatarVisibleToStaff,
+  type StaffAvatarVisibilityMap,
+} from "@/lib/staffAvatarVisibility";
 import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 
 type Lang = "es" | "en";
@@ -564,6 +570,7 @@ interface CareTeamMember {
   role?: string | null;
   office_location?: string | null;
   avatar_url?: string | null;
+  show_avatar_to_staff?: boolean | null;
   phone?: string | null;
   email?: string | null;
 }
@@ -890,6 +897,10 @@ export default function InboxPage() {
   const [profilePicFile, setProfilePicFile] = useState<File|null>(null);
   const [beforePhotosFiles, setBeforePhotosFiles] = useState<File[]>([]);
   const [staffDirectory, setStaffDirectory] = useState<CareTeamMember[]>([]);
+  const [staffAvatarVisibilityMap, setStaffAvatarVisibilityMap] = useState<StaffAvatarVisibilityMap>({});
+  const [showAvatarToStaff, setShowAvatarToStaff] = useState(true);
+  const [savingAvatarVisibility, setSavingAvatarVisibility] = useState(false);
+  const [savedAvatarVisibility, setSavedAvatarVisibility] = useState(false);
   const [selectedCareTeamIds, setSelectedCareTeamIds] = useState<string[]>([]);
   const [careTeamFilter, setCareTeamFilter] = useState<CareTeamFilter>("all");
   const [showPatientInfo, setShowPatientInfo] = useState(false);
@@ -992,10 +1003,19 @@ export default function InboxPage() {
     ...patient,
     profile_picture_url: await signChatFileUrl(patient?.profile_picture_url),
   }), [signChatFileUrl]);
-  const signStaffMedia = useCallback(async (member: any) => ({
-    ...member,
-    avatar_url: await signChatFileUrl(member?.avatar_url),
-  }), [signChatFileUrl]);
+  const signStaffMediaWithVisibility = useCallback(async (
+    member: any,
+    visibilityMap: StaffAvatarVisibilityMap = staffAvatarVisibilityMap,
+  ) => {
+    const visible = typeof member?.show_avatar_to_staff === "boolean"
+      ? member.show_avatar_to_staff
+      : staffAvatarVisibleToStaff(visibilityMap, member?.id);
+    return {
+      ...member,
+      avatar_url: visible ? await signChatFileUrl(member?.avatar_url) : null,
+      show_avatar_to_staff: visible,
+    };
+  }, [signChatFileUrl, staffAvatarVisibilityMap]);
   const [activeCallUrl, setActiveCallUrl] = useState<string | null>(null);
   const [activeCallRoomName, setActiveCallRoomName] = useState<string | null>(null);
   const [callInviteFeedback, setCallInviteFeedback] = useState("");
@@ -1167,6 +1187,7 @@ export default function InboxPage() {
         role: message.sender_role || "staff",
         office_location: message.sender_office || null,
         avatar_url: null,
+        show_avatar_to_staff: false,
         phone: null,
         email: null,
       }
@@ -1270,6 +1291,7 @@ export default function InboxPage() {
           role: "staff",
           office_location: null,
           avatar_url: null,
+          show_avatar_to_staff: false,
           phone: null,
           email: null,
         });
@@ -1282,7 +1304,8 @@ export default function InboxPage() {
         display_name: userProfile?.display_name || null,
         role: userProfile?.role || "staff",
         office_location: userProfile?.office_location || null,
-        avatar_url: userProfile?.avatar_url || null,
+        avatar_url: showAvatarToStaff ? userProfile?.avatar_url || null : null,
+        show_avatar_to_staff: showAvatarToStaff,
         phone: userProfile?.phone || null,
         email: userProfile?.email || currentUserEmail || null,
       });
@@ -1290,7 +1313,7 @@ export default function InboxPage() {
     return Array.from(map.values()).sort((a, b) =>
       `${a.full_name || a.display_name || ""}`.localeCompare(`${b.full_name || b.display_name || ""}`, lang === "es" ? "es" : "en")
     );
-  }, [currentUserEmail, currentUserId, lang, selectedRoomTeam, staffDirectory, staffPrivateMessages, userProfile]);
+  }, [currentUserEmail, currentUserId, lang, selectedRoomTeam, showAvatarToStaff, staffDirectory, staffPrivateMessages, userProfile]);
   const staffMemberById = useMemo(() => {
     const map = new Map<string, CareTeamMember>();
     allStaffMembersForChat.forEach((member) => member.id && map.set(member.id, member));
@@ -1562,6 +1585,7 @@ export default function InboxPage() {
           role: "staff",
           office_location: null,
           avatar_url: null,
+          show_avatar_to_staff: false,
           phone: null,
           email: null,
         };
@@ -2579,15 +2603,25 @@ export default function InboxPage() {
   }, [currentUserId, describeIncomingMessage, getRoomAlertedMessage, getRoomLastAlert, getRoomLastSeen, incomingMessageKey, playIncomingTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
 
   const fetchProfile = async (id: string) => {
-    const [profileRes, permissionsRes] = await Promise.all([
+    const [profileRes, permissionsRes, avatarVisibilityRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id",id).single(),
       supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", STAFF_AVATAR_VISIBILITY_SETTING_KEY).maybeSingle(),
     ]);
     const data = profileRes.data;
     const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
+    const avatarVisibility = parseStaffAvatarVisibilityMap(avatarVisibilityRes.data?.value);
+    const ownAvatarVisible = staffAvatarVisibleToStaff(avatarVisibility, id);
+    setStaffAvatarVisibilityMap(avatarVisibility);
+    setShowAvatarToStaff(ownAvatarVisible);
     if (data) {
       const signedAvatarUrl = await signChatFileUrl(data.avatar_url);
-      const profileWithPermissions = { ...data, avatar_url: signedAvatarUrl || data.avatar_url, permissions: permissionMap[id] ?? data.permissions };
+      const profileWithPermissions = {
+        ...data,
+        avatar_url: signedAvatarUrl || data.avatar_url,
+        show_avatar_to_staff: ownAvatarVisible,
+        permissions: permissionMap[id] ?? data.permissions,
+      };
       setUserProfile(profileWithPermissions);
       setDisplayNameEdit(data.full_name||data.display_name||"");
       setPhoneEdit(data.phone || "");
@@ -2787,6 +2821,14 @@ export default function InboxPage() {
     let list: CareTeamMember[] = [];
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token || "";
+    const { data: avatarVisibilitySetting } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", STAFF_AVATAR_VISIBILITY_SETTING_KEY)
+      .maybeSingle();
+    const avatarVisibility = parseStaffAvatarVisibilityMap(avatarVisibilitySetting?.value);
+    setStaffAvatarVisibilityMap(avatarVisibility);
+    if (currentUserId) setShowAvatarToStaff(staffAvatarVisibleToStaff(avatarVisibility, currentUserId));
 
     if (token) {
       try {
@@ -2794,7 +2836,9 @@ export default function InboxPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         const payload = await response.json().catch(() => ({}));
-        if (response.ok && Array.isArray(payload?.staff)) list = await Promise.all((payload.staff as CareTeamMember[]).map(signStaffMedia));
+        if (response.ok && Array.isArray(payload?.staff)) {
+          list = await Promise.all((payload.staff as CareTeamMember[]).map((member) => signStaffMediaWithVisibility(member, avatarVisibility)));
+        }
       } catch {
         // Fall back to the client-visible profile rows below.
       }
@@ -2806,16 +2850,18 @@ export default function InboxPage() {
         .select("id, full_name, display_name, role, office_location, avatar_url, phone")
         .neq("role", "pending_staff")
         .order("full_name", { ascending: true });
-      list = await Promise.all(((data || []) as CareTeamMember[]).map(signStaffMedia));
+      list = await Promise.all(((data || []) as CareTeamMember[]).map((member) => signStaffMediaWithVisibility(member, avatarVisibility)));
     }
 
+    const fallbackVisible = staffAvatarVisibleToStaff(avatarVisibility, userProfile?.id);
     const fallback = userProfile?.id && userProfile?.role !== "pending_staff" ? [{
       id: userProfile.id,
       full_name: userProfile.full_name || userProfile.display_name || "Staff",
       display_name: userProfile.display_name || null,
       role: userProfile.role || "staff",
       office_location: userProfile.office_location || null,
-      avatar_url: userProfile.avatar_url || null,
+      avatar_url: fallbackVisible ? userProfile.avatar_url || null : null,
+      show_avatar_to_staff: fallbackVisible,
       phone: userProfile.phone || null,
       email: userProfile.email || null,
     }] : [];
@@ -2827,6 +2873,14 @@ export default function InboxPage() {
   };
 
   const fetchSelectedRoomTeam = async (roomId: string) => {
+    const { data: avatarVisibilitySetting } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", STAFF_AVATAR_VISIBILITY_SETTING_KEY)
+      .maybeSingle();
+    const avatarVisibility = parseStaffAvatarVisibilityMap(avatarVisibilitySetting?.value);
+    setStaffAvatarVisibilityMap(avatarVisibility);
+
     const { data: members, error } = await supabase
       .from("room_members")
       .select("user_id")
@@ -2838,12 +2892,35 @@ export default function InboxPage() {
     }
 
     const memberIds = Array.from(new Set(members.map((entry: any) => entry.user_id).filter(Boolean)));
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token || "";
+    if (token) {
+      try {
+        const response = await fetch("/api/staff/directory", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && Array.isArray(payload?.staff)) {
+          const staffById = new Map((payload.staff as CareTeamMember[]).map((member) => [member.id, member]));
+          const sanitizedMembers = memberIds
+            .map((memberId) => staffById.get(memberId))
+            .filter(Boolean) as CareTeamMember[];
+          if (sanitizedMembers.length) {
+            setSelectedRoomTeam(await Promise.all(sanitizedMembers.map((member) => signStaffMediaWithVisibility(member, avatarVisibility))));
+            return;
+          }
+        }
+      } catch {
+        // Fall back to client-visible profile rows below.
+      }
+    }
+
     const { data: profiles } = await supabase
       .from("profiles")
       .select("id, full_name, display_name, role, office_location, avatar_url, phone")
       .in("id", memberIds);
 
-    setSelectedRoomTeam(await Promise.all(((profiles || []) as CareTeamMember[]).map(signStaffMedia)));
+    setSelectedRoomTeam(await Promise.all(((profiles || []) as CareTeamMember[]).map((member) => signStaffMediaWithVisibility(member, avatarVisibility))));
   };
 
   const saveQuickReplies = useCallback(async (replies: QuickReply[]) => {
@@ -2953,7 +3030,48 @@ export default function InboxPage() {
     if (!userProfile?.id) return;
     const fn = `profile-photos/${userProfile.id}/${Date.now()}-${file.name}`;
     const { error } = await supabase.storage.from("chat-files").upload(fn, file);
-    if (!error) { const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn); const signedUrl = await signChatFileUrl(ud.publicUrl); await supabase.from("profiles").update({ avatar_url: ud.publicUrl }).eq("id",userProfile.id); setUserProfile((p: any)=>({...p,avatar_url:signedUrl || ud.publicUrl})); }
+    if (!error) {
+      const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn);
+      const signedUrl = await signChatFileUrl(ud.publicUrl);
+      await supabase.from("profiles").update({ avatar_url: ud.publicUrl }).eq("id",userProfile.id);
+      const nextAvatarUrl = signedUrl || ud.publicUrl;
+      setUserProfile((p: any)=>({...p,avatar_url:nextAvatarUrl}));
+      setStaffDirectory((current)=>current.map((member)=>member.id === userProfile.id ? { ...member, avatar_url: showAvatarToStaff ? nextAvatarUrl : null } : member));
+      setSelectedRoomTeam((current)=>current.map((member)=>member.id === userProfile.id ? { ...member, avatar_url: showAvatarToStaff ? nextAvatarUrl : null } : member));
+    }
+  };
+
+  const saveStaffAvatarVisibility = async (visible: boolean) => {
+    if (!userProfile?.id || savingAvatarVisibility) return;
+    setSavingAvatarVisibility(true);
+    setSavedAvatarVisibility(false);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token || "";
+      if (!token) throw new Error(lang === "es" ? "La sesión expiró. Inicia sesión otra vez." : "Session expired. Please sign in again.");
+      const response = await fetch("/api/staff/avatar-visibility", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ visible }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || (lang === "es" ? "No pude guardar la visibilidad." : "I could not save visibility."));
+
+      setShowAvatarToStaff(visible);
+      setStaffAvatarVisibilityMap((current)=>({ ...current, [userProfile.id]: visible }));
+      const nextAvatarUrl = visible ? userProfile.avatar_url || null : null;
+      setStaffDirectory((current)=>current.map((member)=>member.id === userProfile.id ? { ...member, avatar_url: nextAvatarUrl, show_avatar_to_staff: visible } : member));
+      setSelectedRoomTeam((current)=>current.map((member)=>member.id === userProfile.id ? { ...member, avatar_url: nextAvatarUrl, show_avatar_to_staff: visible } : member));
+      setSavedAvatarVisibility(true);
+      setTimeout(()=>setSavedAvatarVisibility(false), 2000);
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude guardar la visibilidad de tu foto." : "I could not save your photo visibility."));
+    } finally {
+      setSavingAvatarVisibility(false);
+    }
   };
 
   useEffect(()=>{ selectedRoomRef.current=selectedRoom; },[selectedRoom]);
@@ -4861,6 +4979,60 @@ export default function InboxPage() {
             </button>
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
+            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>
+              {lang==="es"?"Foto del equipo":"Staff photo"}
+            </p>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+              <div style={{width:58,height:58,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:20,fontWeight:900,flexShrink:0}}>
+                {showAvatarToStaff && userProfile?.avatar_url
+                  ? <img src={userProfile.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} />
+                  : ini(userProfile?.full_name || userProfile?.display_name || "S")}
+              </div>
+              <div style={{minWidth:0}}>
+                <p style={{fontSize:settingsBaseSize,color:textColor,fontWeight:850,lineHeight:1.35}}>
+                  {showAvatarToStaff ? (lang==="es"?"Visible para staff":"Visible to staff") : (lang==="es"?"Oculta para staff":"Hidden from staff")}
+                </p>
+                <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginTop:3}}>
+                  {lang==="es"
+                    ? "Los pacientes no ven fotos del staff. Esta opción solo afecta chats internos del equipo."
+                    : "Patients do not see staff photos. This only affects internal staff chats."}
+                </p>
+              </div>
+            </div>
+            <input
+              ref={profilePicSettingsRef}
+              type="file"
+              accept="image/*"
+              style={{display:"none"}}
+              onChange={(event)=>{
+                const file = event.target.files?.[0];
+                if (file) uploadProfilePhoto(file);
+                event.currentTarget.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={()=>profilePicSettingsRef.current?.click()}
+              style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#2563EB",color:"white",fontSize:settingsBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}
+            >
+              {lang==="es"?"Subir o cambiar foto":"Upload or change photo"}
+            </button>
+            <button
+              type="button"
+              onClick={()=>saveStaffAvatarVisibility(!showAvatarToStaff)}
+              disabled={savingAvatarVisibility}
+              style={{width:"100%",height:48,border:"none",borderRadius:14,background:darkMode?"#334155":"#EAF2FB",color:darkMode?"#E5E7EB":"#1D4ED8",fontSize:settingsBaseSize,fontWeight:850,cursor:"pointer",fontFamily:"inherit",opacity:savingAvatarVisibility?0.55:1}}
+            >
+              {savingAvatarVisibility
+                ? (lang==="es"?"Guardando...":"Saving...")
+                : savedAvatarVisibility
+                  ? t.saved
+                  : showAvatarToStaff
+                    ? (lang==="es"?"Ocultar foto para staff":"Hide photo from staff")
+                    : (lang==="es"?"Mostrar foto al staff":"Show photo to staff")}
+            </button>
+          </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Teléfono / WhatsApp":"Phone / WhatsApp"}</p>
             <label style={{display:"block",fontSize:settingsBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>
               {lang==="es"?"Número para llamadas internas del equipo":"Number for internal team calls"}
@@ -5138,6 +5310,8 @@ export default function InboxPage() {
                 {activeRoom.messages.map((message) => {
                   const mine = message.sender_id === currentUserId;
                   const payload = parseStaffRoomPayload(message.content);
+                  const senderMember = staffMemberById.get(message.sender_id || "") || null;
+                  const senderInitial = ini(senderMember?.full_name || senderMember?.display_name || message.sender_name || "S");
                   const eventLabel = payload?.event && payload.event !== "message"
                     ? payload.text
                     : "";
@@ -5152,10 +5326,15 @@ export default function InboxPage() {
                   }
                   return (
                     <div key={payload?.messageId || message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
-                      <div style={{maxWidth:"86%",borderRadius:mine?"16px 16px 4px 16px":"16px 16px 16px 4px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"10px 12px",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}>
-                        {!mine && <p style={{fontSize:Math.max(uiSmallSize - 1, 12),fontWeight:900,opacity:0.82,marginBottom:4}}>{message.sender_name || (lang==="es"?"Personal":"Staff")}</p>}
-                        <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{payload?.text || ""}</p>
-                        <p style={{fontSize:Math.max(uiSmallSize - 1, 12),opacity:0.78,textAlign:"right",marginTop:5,fontWeight:700}}>{fmtTime(message.created_at || "")}</p>
+                      <div style={{maxWidth:"86%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:4}}>
+                        <div style={{width:28,height:28,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:12,fontWeight:900}}>
+                          {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : senderInitial}
+                        </div>
+                        <div style={{borderRadius:mine?"16px 16px 4px 16px":"16px 16px 16px 4px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"10px 12px",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}>
+                          {!mine && <p style={{fontSize:Math.max(uiSmallSize - 1, 12),fontWeight:900,opacity:0.82,marginBottom:4}}>{message.sender_name || (lang==="es"?"Personal":"Staff")}</p>}
+                          <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{payload?.text || ""}</p>
+                          <p style={{fontSize:Math.max(uiSmallSize - 1, 12),opacity:0.78,textAlign:"right",marginTop:5,fontWeight:700}}>{fmtTime(message.created_at || "")}</p>
+                        </div>
                       </div>
                     </div>
                   );
@@ -5191,11 +5370,18 @@ export default function InboxPage() {
               <div style={{display:"grid",gap:8,maxHeight:"45dvh",overflowY:"auto",padding:"12px",borderRadius:18,background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
                 {activeStaffPrivateConversation!.messages.map((message) => {
                   const mine = message.sender_id === currentUserId;
+                  const senderMember = staffMemberById.get(message.sender_id || "") || (mine ? staffMemberById.get(currentUserId) : activePeer);
+                  const senderInitial = ini(senderMember?.full_name || senderMember?.display_name || message.sender_name || "S");
                   return (
                     <div key={message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
-                      <div style={{maxWidth:"82%",borderRadius:mine?"16px 16px 4px 16px":"16px 16px 16px 4px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"10px 12px",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}>
-                        <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{message.content}</p>
-                        <p style={{fontSize:Math.max(uiSmallSize - 1, 12),opacity:0.78,textAlign:"right",marginTop:5,fontWeight:700}}>{fmtTime(message.created_at || "")}</p>
+                      <div style={{maxWidth:"82%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:4}}>
+                        <div style={{width:28,height:28,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:12,fontWeight:900}}>
+                          {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : senderInitial}
+                        </div>
+                        <div style={{borderRadius:mine?"16px 16px 4px 16px":"16px 16px 16px 4px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"10px 12px",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}>
+                          <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{message.content}</p>
+                          <p style={{fontSize:Math.max(uiSmallSize - 1, 12),opacity:0.78,textAlign:"right",marginTop:5,fontWeight:700}}>{fmtTime(message.created_at || "")}</p>
+                        </div>
                       </div>
                     </div>
                   );

@@ -1,6 +1,11 @@
 -- Dr. Fonseca PWA
 -- Future access requests, labels, media notifications, and audit logs.
 -- Ejecuta este archivo en Supabase SQL Editor cuando se apruebe activar estas funciones.
+--
+-- Owner safety:
+--   Dr. Miguel Fonseca / Siluety Plastic Surgery is the engraved owner identity.
+--   Ray (mrdiazsr@icloud.com) is developer/support access only. Do not edit this
+--   or any related SQL to promote Ray as owner or add Ray to owner bootstrap lists.
 
 create table if not exists public.staff_access_requests (
   id uuid primary key default gen_random_uuid(),

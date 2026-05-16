@@ -91,14 +91,14 @@ export default function TrainingPage() {
     <>
       <style>{`
         * { box-sizing: border-box; }
-        body { background: #eef4fb; }
-        .legend-shell { min-height: 100dvh; overflow-y: auto; overflow-x: hidden; background: #eef4fb; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background: #eef4fb; overflow-x: hidden; }
+        .legend-shell { min-height: 100svh; overflow-x: hidden; background: #eef4fb; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         .legend-topbar { position: sticky; top: 0; z-index: 20; min-height: calc(82px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 12px; background: rgba(7, 56, 93, 0.94); backdrop-filter: blur(18px); border-bottom: 1px solid rgba(255,255,255,0.12); }
         .legend-logo { width: 224px; max-width: 42vw; height: auto; display: block; object-fit: contain; }
         .legend-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
         .top-btn, .lang-btn { min-height: 44px; border: none; cursor: pointer; font-family: inherit; font-weight: 900; border-radius: 14px; background: #eff6ff; color: #0f172a; padding: 10px 14px; }
         .lang-btn { min-width: 92px; }
-        .legend-body { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 calc(48px + env(safe-area-inset-bottom)); }
+        .legend-body { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 calc(88px + env(safe-area-inset-bottom)); }
         .legend-head { margin-bottom: 22px; }
         .kicker { font-size: 12px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; color: #0b63ce; margin: 0 0 8px; }
         h1 { font-size: clamp(34px, 5.4vw, 58px); line-height: 1.02; margin: 0 0 12px; letter-spacing: 0; color: #082f49; }

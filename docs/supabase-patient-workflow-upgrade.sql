@@ -2,6 +2,11 @@
 -- Patient workflow upgrade:
 -- preferred language, time zone, allergies, medications
 -- This is safe to run after the previous admin/security scripts.
+--
+-- Owner safety:
+--   Dr. Miguel Fonseca / Siluety Plastic Surgery is the engraved owner identity.
+--   Ray (mrdiazsr@icloud.com) is developer/support access only. Do not edit this
+--   or any related SQL to promote Ray as owner or add Ray to owner bootstrap lists.
 
 alter table public.patients
   add column if not exists preferred_language text not null default 'es';

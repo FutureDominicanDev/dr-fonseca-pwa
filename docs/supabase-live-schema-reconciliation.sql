@@ -1,6 +1,11 @@
 -- Dr. Fonseca PWA
 -- Live schema reconciliation for current production app.
 -- Run this once in Supabase SQL Editor if schema checks show missing live columns/tables.
+--
+-- Owner safety:
+--   Dr. Miguel Fonseca / Siluety Plastic Surgery is the engraved owner identity.
+--   Ray (mrdiazsr@icloud.com) is developer/support access only. Do not edit this
+--   or any related SQL to promote Ray as owner or add Ray to owner bootstrap lists.
 
 alter table public.profiles
   add column if not exists avatar_url text;
