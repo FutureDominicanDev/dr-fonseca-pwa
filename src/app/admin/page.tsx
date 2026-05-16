@@ -35,6 +35,11 @@ import {
   type StaffPermissionKey,
 } from "@/lib/permissions";
 import { createSignedChatFileUrl } from "@/lib/chatFileUrls";
+import {
+  ALERT_TONE_OPTIONS,
+  alertToneText,
+  type AlertTone,
+} from "@/lib/alertToneSettings";
 
 const permissionDescriptions: Record<StaffPermissionKey, { es: string; en: string }> = {
   view_patients: { es: "Puede ver la lista y abrir chats asignados.", en: "Can view the list and open assigned chats." },
@@ -195,6 +200,7 @@ type NotificationReadiness = {
     adminLevel?: string | null;
     pushDevices: number;
     latestSubscriptionAt?: string | null;
+    alertTone?: AlertTone | null;
   }>;
   patientRooms: Array<{
     roomId: string;
@@ -295,6 +301,7 @@ export default function AdminPage() {
     displayName: viewerProfile?.display_name,
     adminLevel: viewerProfile?.admin_level,
   });
+  const canManageAlertToneDefaults = canManageOwner || normalizeAdminLevel(viewerProfile?.admin_level, viewerEmail) === "super_admin";
   const canReviewAlertReadiness = canManageOwner || hasPermission(viewerPermissionProfile, viewerEmail, "access_settings_security");
   const canReviewAccessRequests = hasPermission(viewerPermissionProfile, viewerEmail, "manage_staff");
 
@@ -640,6 +647,23 @@ export default function AdminPage() {
     window.setTimeout(() => {
       document.getElementById("admin-active-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
+  };
+
+  const scrollToAlertPanel = (panelId: "alert-readiness-staff" | "alert-readiness-patients") => {
+    document.getElementById(panelId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const openStaffFromAlertReadiness = (staffId: string) => {
+    setExpandedStaffControlId(staffId);
+    openAdminSection("equipo");
+  };
+
+  const openPatientRoomFromAlertReadiness = (patientId?: string | null) => {
+    if (patientId) {
+      window.location.href = `/admin/paciente/${patientId}`;
+      return;
+    }
+    openAdminSection("buscar-paciente");
   };
 
   const scrollAdminToTop = () => {
@@ -1217,6 +1241,57 @@ export default function AdminPage() {
     });
     updateSuccess(success);
     collapseStaffControls(member.id);
+  };
+
+  const saveStaffAlertTone = async (member: StaffProfile, tone: AlertTone | null) => {
+    if (!canManageAlertToneDefaults) return;
+    setSavingKey(`${member.id}-alert-tone`);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      const response = await fetch("/api/staff/alert-tone", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ staffId: member.id, tone }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPageError(payload?.error || (isSpanish ? "No pude guardar el tono de alertas." : "I could not save the alert tone."));
+        return;
+      }
+
+      setNotificationReadiness((current) => current
+        ? {
+          ...current,
+          staff: current.staff.map((item) => (item.id === member.id ? { ...item, alertTone: tone } : item)),
+        }
+        : current);
+      await logAdminEvent({
+        action: "staff_alert_tone_updated",
+        entityType: "staff_profile",
+        entityId: member.id,
+        entityName: member.full_name || member.display_name || "Personal",
+        actorId: viewerId,
+        actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
+        actorEmail: viewerEmail,
+        notes: tone
+          ? (isSpanish ? `Tono administrado: ${alertToneText(tone, true)}.` : `Managed tone: ${alertToneText(tone, false)}.`)
+          : (isSpanish ? "Tono administrado removido; el staff puede elegir." : "Managed tone removed; staff can choose."),
+        metadata: { alertTone: tone },
+      });
+      updateSuccess(
+        tone
+          ? (isSpanish ? `${member.full_name || "Staff"} usará ${alertToneText(tone, true)}.` : `${member.full_name || "Staff"} will use ${alertToneText(tone, false)}.`)
+          : (isSpanish ? `${member.full_name || "Staff"} puede elegir su tono.` : `${member.full_name || "Staff"} can choose their tone.`),
+      );
+    } catch (error: any) {
+      setPageError(error?.message || (isSpanish ? "No pude guardar el tono de alertas." : "I could not save the alert tone."));
+    } finally {
+      setSavingKey("");
+    }
   };
 
   const deleteStaffMember = async (member: StaffProfile) => {
@@ -2011,7 +2086,8 @@ export default function AdminPage() {
         .pending-detail-item small { display: block; color: #9A3412; font-size: 12px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 4px; line-height: 1.25; }
         .pending-detail-item span { display: block; color: #111827; font-size: 14px; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
         .alert-readiness-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
-        .alert-readiness-tile { min-height: 116px; border-radius: 18px; border: 1px solid #DCEBFA; background: #F8FBFF; padding: 15px; display: grid; align-content: space-between; }
+        .alert-readiness-tile { width: 100%; min-height: 116px; border-radius: 18px; border: 1px solid #DCEBFA; background: #F8FBFF; padding: 15px; display: grid; align-content: space-between; text-align: left; font-family: inherit; cursor: pointer; }
+        .alert-readiness-tile:hover, .alert-readiness-tile:focus-visible { border-color: #93C5FD; background: #EFF6FF; outline: none; }
         .alert-readiness-tile.warning { border-color: #FECACA; background: #FFF7F7; }
         .alert-readiness-tile strong { display: block; color: #0F172A; font-size: 28px; line-height: 1; font-weight: 950; }
         .alert-readiness-tile span { display: block; color: #64748B; font-size: 13px; line-height: 1.35; font-weight: 850; margin-top: 7px; }
@@ -2019,7 +2095,8 @@ export default function AdminPage() {
         .alert-readiness-panel { border-radius: 18px; border: 1px solid #E6EEF7; background: #FBFDFF; padding: 14px; min-width: 0; }
         .alert-readiness-panel h3 { margin: 0 0 10px; color: #0F172A; font-size: 17px; font-weight: 950; line-height: 1.2; }
         .alert-readiness-list { display: grid; gap: 8px; max-height: 460px; overflow-y: auto; padding-right: 2px; }
-        .alert-readiness-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px; border-radius: 14px; border: 1px solid #E7EEF7; background: white; }
+        .alert-readiness-row { width: 100%; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px; border-radius: 14px; border: 1px solid #E7EEF7; background: white; text-align: left; font-family: inherit; cursor: pointer; }
+        .alert-readiness-row:hover, .alert-readiness-row:focus-visible { border-color: #93C5FD; background: #EFF6FF; outline: none; }
         .alert-readiness-row.missing { border-color: #FECACA; background: #FFF7F7; }
         .alert-ready-dot { width: 42px; height: 42px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: #DCFCE7; color: #166534; font-size: 13px; font-weight: 950; }
         .alert-readiness-row.missing .alert-ready-dot { background: #FEE2E2; color: #B91C1C; }
@@ -2534,30 +2611,30 @@ export default function AdminPage() {
                 </div>
 
                 <div className="alert-readiness-grid">
-                  <div className="alert-readiness-tile">
+                  <button type="button" className="alert-readiness-tile" onClick={() => scrollToAlertPanel("alert-readiness-staff")}>
                     <div>
                       <strong>{notificationReadiness?.totals.staffReady ?? 0}/{notificationReadiness?.totals.staffTotal ?? 0}</strong>
                       <span>{isSpanish ? "Staff con push activo" : "Staff with push active"}</span>
                     </div>
-                  </div>
-                  <div className={`alert-readiness-tile ${staffMissingAlerts.length > 0 ? "warning" : ""}`}>
+                  </button>
+                  <button type="button" className={`alert-readiness-tile ${staffMissingAlerts.length > 0 ? "warning" : ""}`} onClick={() => scrollToAlertPanel("alert-readiness-staff")}>
                     <div>
                       <strong>{staffMissingAlerts.length}</strong>
                       <span>{isSpanish ? "Staff sin dispositivo push" : "Staff missing push device"}</span>
                     </div>
-                  </div>
-                  <div className="alert-readiness-tile">
+                  </button>
+                  <button type="button" className="alert-readiness-tile" onClick={() => scrollToAlertPanel("alert-readiness-patients")}>
                     <div>
                       <strong>{notificationReadiness?.totals.patientRoomsReady ?? 0}/{notificationReadiness?.totals.patientRoomsTotal ?? 0}</strong>
                       <span>{isSpanish ? "Salas de paciente con push" : "Patient rooms with push"}</span>
                     </div>
-                  </div>
-                  <div className={`alert-readiness-tile ${patientRoomsMissingAlerts.length > 0 ? "warning" : ""}`}>
+                  </button>
+                  <button type="button" className={`alert-readiness-tile ${patientRoomsMissingAlerts.length > 0 ? "warning" : ""}`} onClick={() => scrollToAlertPanel("alert-readiness-patients")}>
                     <div>
                       <strong>{patientRoomsMissingAlerts.length}</strong>
                       <span>{isSpanish ? "Salas sin push registrado" : "Rooms missing push registration"}</span>
                     </div>
-                  </div>
+                  </button>
                 </div>
 
                 <div className="export-card" style={{ marginBottom: 14 }}>
@@ -2570,7 +2647,7 @@ export default function AdminPage() {
                 </div>
 
                 <div className="alert-readiness-columns">
-                  <div className="alert-readiness-panel">
+                  <div className="alert-readiness-panel" id="alert-readiness-staff">
                     <h3>{isSpanish ? "Staff" : "Staff"}</h3>
                     <div className="alert-readiness-list">
                       {staffAlertRows.length === 0 ? (
@@ -2579,23 +2656,32 @@ export default function AdminPage() {
                         staffAlertRows.map((member) => {
                           const missingPush = member.pushDevices === 0;
                           return (
-                            <div key={`staff-alert-${member.id}`} className={`alert-readiness-row ${missingPush ? "missing" : ""}`}>
+                            <button
+                              key={`staff-alert-${member.id}`}
+                              type="button"
+                              className={`alert-readiness-row ${missingPush ? "missing" : ""}`}
+                              onClick={() => openStaffFromAlertReadiness(member.id)}
+                            >
                               <span className="alert-ready-dot">{missingPush ? "NO" : "OK"}</span>
                               <span className="alert-readiness-copy">
                                 <strong>{member.name}</strong>
                                 <span>
-                                  {[member.adminLevel || member.role || (isSpanish ? "Staff" : "Staff"), alertLastSeen(member.latestSubscriptionAt)].filter(Boolean).join(" · ")}
+                                  {[
+                                    member.adminLevel || member.role || (isSpanish ? "Staff" : "Staff"),
+                                    member.alertTone ? alertToneText(member.alertTone, isSpanish) : (isSpanish ? "Elige staff" : "Staff choice"),
+                                    alertLastSeen(member.latestSubscriptionAt),
+                                  ].filter(Boolean).join(" · ")}
                                 </span>
                               </span>
                               <span className="alert-device-count">{member.pushDevices}</span>
-                            </div>
+                            </button>
                           );
                         })
                       )}
                     </div>
                   </div>
 
-                  <div className="alert-readiness-panel">
+                  <div className="alert-readiness-panel" id="alert-readiness-patients">
                     <h3>{isSpanish ? "Pacientes activos" : "Active patients"}</h3>
                     <div className="alert-readiness-list">
                       {patientAlertRows.length === 0 ? (
@@ -2604,7 +2690,12 @@ export default function AdminPage() {
                         patientAlertRows.map((room) => {
                           const missingPush = room.pushDevices === 0;
                           return (
-                            <div key={`room-alert-${room.roomId}`} className={`alert-readiness-row ${missingPush ? "missing" : ""}`}>
+                            <button
+                              key={`room-alert-${room.roomId}`}
+                              type="button"
+                              className={`alert-readiness-row ${missingPush ? "missing" : ""}`}
+                              onClick={() => openPatientRoomFromAlertReadiness(room.patientId)}
+                            >
                               <span className="alert-ready-dot">{missingPush ? "NO" : "OK"}</span>
                               <span className="alert-readiness-copy">
                                 <strong>{room.patientName}</strong>
@@ -2613,7 +2704,7 @@ export default function AdminPage() {
                                 </span>
                               </span>
                               <span className="alert-device-count">{room.pushDevices}</span>
-                            </div>
+                            </button>
                           );
                         })
                       )}
@@ -2833,6 +2924,8 @@ export default function AdminPage() {
                     const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => draftPermissionSet.has(permission)).length;
                     const isPendingStaff = `${member.role || ""}`.toLowerCase() === "pending_staff";
                     const canSendResetForMember = canManageAdmins && Boolean(visibleMemberEmail);
+                    const managedAlertTone = notificationReadiness?.staff.find((item) => item.id === member.id)?.alertTone || null;
+                    const alertToneSaving = savingKey === `${member.id}-alert-tone`;
 
                     return (
                       <div key={member.id} className="staff-row compact">
@@ -3033,6 +3126,47 @@ export default function AdminPage() {
                                       </div>
                                     </div>
                                   </div>
+                                  {canManageAlertToneDefaults && (
+                                    <div className="setting-group">
+                                      <p className="group-label">{isSpanish ? "Tono de alertas administrado" : "Managed alert tone"}</p>
+                                      <p className="access-help">
+                                        {isSpanish
+                                          ? "El doctor o Super Admin puede fijar el tono que esta cuenta de staff usará al abrir el portal. Staff choice libera el control para que esa persona elija en Ajustes."
+                                          : "The doctor or Super Admin can set the tone this staff account uses when opening the portal. Staff choice releases control so that person can choose in Settings."}
+                                      </p>
+                                      <div className="permission-toolbar">
+                                        <button
+                                          type="button"
+                                          className="mini-btn"
+                                          disabled={alertToneSaving}
+                                          onClick={() => saveStaffAlertTone(member, null)}
+                                          style={{
+                                            background: managedAlertTone ? "#EFF3F8" : "#ECFEFF",
+                                            color: managedAlertTone ? "#374151" : "#0E7490",
+                                            opacity: alertToneSaving ? 0.55 : 1,
+                                          }}
+                                        >
+                                          {isSpanish ? "Elige staff" : "Staff choice"}
+                                        </button>
+                                        {ALERT_TONE_OPTIONS.map((tone) => (
+                                          <button
+                                            key={`${member.id}-alert-tone-${tone}`}
+                                            type="button"
+                                            className="mini-btn"
+                                            disabled={alertToneSaving}
+                                            onClick={() => saveStaffAlertTone(member, tone)}
+                                            style={{
+                                              background: managedAlertTone === tone ? "#EFF6FF" : "#EFF3F8",
+                                              color: managedAlertTone === tone ? "#1D4ED8" : "#374151",
+                                              opacity: alertToneSaving ? 0.55 : 1,
+                                            }}
+                                          >
+                                            {alertToneText(tone, isSpanish)}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
 		                              <div className="setting-group">
 		                                <p className="group-label">{isSpanish ? "Permisos del portal" : "Portal permissions"}</p>
                                     <p className="access-help">

@@ -6,6 +6,10 @@ import {
   hasPermission,
   parseStaffPermissionMap,
 } from "@/lib/permissions";
+import {
+  STAFF_ALERT_TONES_SETTING_KEY,
+  parseStaffAlertToneMap,
+} from "@/lib/alertToneSettings";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -62,7 +66,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not allowed to review alert readiness." }, { status: 403 });
     }
 
-    const [{ data: staffRows, error: staffError }, { data: roomRows, error: roomError }, { data: subscriptionRows, error: subscriptionError }] = await Promise.all([
+    const [{ data: staffRows, error: staffError }, { data: roomRows, error: roomError }, { data: subscriptionRows, error: subscriptionError }, { data: alertToneSetting }] = await Promise.all([
       adminClient.from("profiles").select("id, full_name, display_name, email, role, admin_level").order("full_name"),
       adminClient
         .from("rooms")
@@ -70,6 +74,7 @@ export async function GET(request: NextRequest) {
         .order("created_at", { ascending: false })
         .limit(1000),
       adminClient.from("push_subscriptions").select("*").limit(3000),
+      adminClient.from("app_settings").select("value").eq("key", STAFF_ALERT_TONES_SETTING_KEY).maybeSingle(),
     ]);
 
     if (staffError) return NextResponse.json({ error: staffError.message || "Could not load staff." }, { status: 500 });
@@ -77,6 +82,7 @@ export async function GET(request: NextRequest) {
     if (subscriptionError) return NextResponse.json({ error: subscriptionError.message || "Could not load push subscriptions." }, { status: 500 });
 
     const subscriptions = (subscriptionRows || []) as Array<Record<string, unknown>>;
+    const alertToneMap = parseStaffAlertToneMap(alertToneSetting?.value);
     const staffSubscriptions = subscriptions.filter((row) => row.user_type === "staff");
     const patientSubscriptions = subscriptions.filter((row) => row.user_type === "patient");
     const staffSubMap = new Map<string, Array<Record<string, unknown>>>();
@@ -103,6 +109,7 @@ export async function GET(request: NextRequest) {
           adminLevel: member.admin_level || null,
           pushDevices: memberSubscriptions.length,
           latestSubscriptionAt: newestIso(memberSubscriptions),
+          alertTone: alertToneMap[`${member.id || ""}`] || null,
         };
       });
 

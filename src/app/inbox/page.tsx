@@ -13,6 +13,12 @@ import {
   staffAvatarVisibleToStaff,
   type StaffAvatarVisibilityMap,
 } from "@/lib/staffAvatarVisibility";
+import {
+  ALERT_TONE_OPTIONS,
+  alertToneText,
+  normalizeAlertTone,
+  type AlertTone,
+} from "@/lib/alertToneSettings";
 import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 
 type Lang = "es" | "en";
@@ -22,7 +28,6 @@ type MediaTab = "internal" | "media" | "audio" | "prescriptions" | "forms" | "do
 type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
 type InternalNoteVisibility = "team" | "private";
 type StaffFontSizeLevel = "small" | "medium" | "large";
-type AlertTone = "classic" | "soft" | "urgent" | "critical" | "off";
 
 const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
 const MAX_PATIENT_LABELS = 20;
@@ -58,10 +63,10 @@ const readStaffRecordAlertsMuted = () => {
 const readStaffAlertTone = (): AlertTone => {
   if (typeof window === "undefined") return "classic";
   const stored = window.localStorage.getItem(STAFF_ALERT_TONE_STORAGE_KEY);
-  return stored === "soft" || stored === "urgent" || stored === "critical" || stored === "off" ? stored : "classic";
+  return normalizeAlertTone(stored, "classic");
 };
 
-const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "critical", "off"];
+const alertToneOptions = ALERT_TONE_OPTIONS;
 
 const PHONE_COUNTRY_OPTIONS: PhoneCountryOption[] = [
   { code: "+52", label: "🇲🇽 +52 México" },
@@ -991,6 +996,7 @@ export default function InboxPage() {
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   const [alertTone, setAlertTone] = useState<AlertTone>(() => readStaffAlertTone());
+  const [managedAlertTone, setManagedAlertTone] = useState<AlertTone | null>(null);
   const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
   const [callOverlayOpen, setCallOverlayOpen] = useState(false);
@@ -1074,13 +1080,7 @@ export default function InboxPage() {
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
   const fmtShortDate = (ts?: string | null) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}); };
-  const alertToneLabel = (tone: AlertTone) => ({
-    classic: lang === "es" ? "Portal" : "Portal",
-    soft: lang === "es" ? "Suave" : "Soft",
-    urgent: lang === "es" ? "Urgente" : "Urgent",
-    critical: lang === "es" ? "Crítico repetido" : "Critical repeat",
-    off: lang === "es" ? "Silencio" : "Silent",
-  }[tone]);
+  const alertToneLabel = (tone: AlertTone) => alertToneText(tone, lang === "es");
   const fmtChatDateLabel = (ts: string) => {
     if (!ts) return "";
     const date = new Date(ts);
@@ -2607,12 +2607,32 @@ export default function InboxPage() {
     }
   }, [currentUserId, describeIncomingMessage, getRoomAlertedMessage, getRoomLastAlert, getRoomLastSeen, incomingMessageKey, playIncomingTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
 
+  const fetchManagedAlertTone = async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      if (!accessToken) return;
+      const response = await fetch("/api/staff/alert-tone", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) return;
+      const tone = payload?.managed ? normalizeAlertTone(payload?.tone, "classic") : null;
+      setManagedAlertTone(tone);
+      if (tone) setAlertTone(tone);
+    } catch {
+      // Staff can still use the locally saved tone if the managed setting is unavailable.
+    }
+  };
+
   const fetchProfile = async (id: string) => {
     const [profileRes, permissionsRes, avatarVisibilityRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id",id).single(),
       supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", STAFF_AVATAR_VISIBILITY_SETTING_KEY).maybeSingle(),
     ]);
+    await fetchManagedAlertTone();
     const data = profileRes.data;
     const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
     const avatarVisibility = parseStaffAvatarVisibilityMap(avatarVisibilityRes.data?.value);
@@ -5113,13 +5133,21 @@ export default function InboxPage() {
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>
               {lang==="es"?"Sonido de alertas":"Alert sound"}
             </p>
+            {managedAlertTone && (
+              <p style={{fontSize:settingsSmallSize,color:"#1D4ED8",fontWeight:750,lineHeight:1.45,marginBottom:10}}>
+                {lang==="es"
+                  ? `El doctor fijó este tono para tu cuenta: ${alertToneLabel(managedAlertTone)}.`
+                  : `The doctor set this tone for your account: ${alertToneLabel(managedAlertTone)}.`}
+              </p>
+            )}
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))",gap:8,marginBottom:12}}>
               {alertToneOptions.map((tone) => (
                 <button
                   key={tone}
                   type="button"
                   onClick={()=>setAlertTone(tone)}
-                  style={{minHeight:46,borderRadius:12,border:alertTone===tone?"2px solid #007AFF":`2px solid ${borderColor}`,background:alertTone===tone?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:alertTone===tone?"#007AFF":textColor,fontWeight:850,cursor:"pointer",fontFamily:"inherit",fontSize:settingsBaseSize,lineHeight:1.25}}
+                  disabled={Boolean(managedAlertTone)}
+                  style={{minHeight:46,borderRadius:12,border:alertTone===tone?"2px solid #007AFF":`2px solid ${borderColor}`,background:alertTone===tone?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:alertTone===tone?"#007AFF":textColor,fontWeight:850,cursor:managedAlertTone?"not-allowed":"pointer",fontFamily:"inherit",fontSize:settingsBaseSize,lineHeight:1.25,opacity:managedAlertTone && alertTone!==tone?0.55:1}}
                 >
                   {alertToneLabel(tone)}
                 </button>
