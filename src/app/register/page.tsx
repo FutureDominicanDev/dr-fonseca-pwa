@@ -713,7 +713,7 @@ export default function RegisterPage() {
           padding: 0 12px;
         }
         .login-link { margin: 17px 0 0; color: #52677d; text-align: center; font-size: 14px; font-weight: 650; }
-        .login-link a { color: #165D9C; font-weight: 850; text-decoration: none; }
+        .login-link a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; color: #165D9C; font-weight: 850; text-decoration: none; }
         .steps { display: grid; gap: 16px; margin-top: 20px; }
         .step-row { display: grid; grid-template-columns: 40px 1fr; gap: 13px; align-items: start; }
         .step-num {
