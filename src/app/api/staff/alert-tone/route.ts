@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
   STAFF_ALERT_TONES_SETTING_KEY,
+  emptyStaffAlertTonePreference,
   normalizeAlertTone,
   parseStaffAlertToneMap,
   serializeStaffAlertToneMap,
   type AlertTone,
+  type AlertToneCategory,
+  type StaffAlertTonePreference,
 } from "@/lib/alertToneSettings";
 import { isOwnerIdentity } from "@/lib/securityConfig";
 
@@ -43,6 +46,10 @@ const canManageStaffAlertTone = (requester: { id: string; email?: string | null;
   return requesterIsOwner || `${profile?.admin_level || ""}`.toLowerCase() === "super_admin";
 };
 
+const isAlertToneCategory = (value: unknown): value is AlertToneCategory => value === "portal" || value === "staffChat";
+
+const isEmptyPreference = (preference: StaffAlertTonePreference) => !preference.portal && !preference.staffChat;
+
 export async function GET(request: NextRequest) {
   try {
     const loaded = await loadRequester(request);
@@ -55,8 +62,8 @@ export async function GET(request: NextRequest) {
       .eq("key", STAFF_ALERT_TONES_SETTING_KEY)
       .maybeSingle();
     const toneMap = parseStaffAlertToneMap(setting?.value);
-    const tone = toneMap[loaded.user.id] || null;
-    return NextResponse.json({ tone });
+    const tones = toneMap[loaded.user.id] || emptyStaffAlertTonePreference();
+    return NextResponse.json({ tone: tones.portal || tones.staffChat || null, tones });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Could not load alert tone." }, { status: 500 });
   }
@@ -69,7 +76,7 @@ export async function PATCH(request: NextRequest) {
     if (!adminClient) return NextResponse.json({ error: "Staff alert tones are not configured." }, { status: 503 });
     const body = await request.json().catch(() => ({}));
     const staffId = `${body?.staffId || loaded.user.id}`.trim();
-    const tone = body?.tone === null || body?.tone === "" ? null : normalizeAlertTone(body?.tone, "classic");
+    const toneType: AlertToneCategory | null = isAlertToneCategory(body?.toneType) ? body.toneType as AlertToneCategory : null;
     if (!staffId) return NextResponse.json({ error: "Missing staff member." }, { status: 400 });
     const updatingSelf = staffId === loaded.user.id;
     if (!updatingSelf && !canManageStaffAlertTone(loaded.user, loaded.profile)) {
@@ -104,10 +111,30 @@ export async function PATCH(request: NextRequest) {
       .eq("key", STAFF_ALERT_TONES_SETTING_KEY)
       .maybeSingle();
     const toneMap = parseStaffAlertToneMap(setting?.value);
-    if (tone) {
-      toneMap[staffId] = tone as AlertTone;
+    const currentPreference = toneMap[staffId] || emptyStaffAlertTonePreference();
+    const nextPreference = { ...currentPreference };
+    if (body?.tones && typeof body.tones === "object") {
+      const incoming = body.tones as Record<string, unknown>;
+      (["portal", "staffChat"] as AlertToneCategory[]).forEach((category) => {
+        if (!Object.prototype.hasOwnProperty.call(incoming, category)) return;
+        nextPreference[category] = incoming[category] === null || incoming[category] === "" ? null : normalizeAlertTone(incoming[category], "classic");
+      });
+    } else if (Object.prototype.hasOwnProperty.call(body || {}, "tone")) {
+      const nextTone = body?.tone === null || body?.tone === "" ? null : normalizeAlertTone(body?.tone, "classic");
+      if (toneType) {
+        nextPreference[toneType] = nextTone as AlertTone | null;
+      } else {
+        nextPreference.portal = nextTone as AlertTone | null;
+        nextPreference.staffChat = nextTone as AlertTone | null;
+      }
     } else {
+      return NextResponse.json({ error: "Missing alert tone." }, { status: 400 });
+    }
+
+    if (isEmptyPreference(nextPreference)) {
       delete toneMap[staffId];
+    } else {
+      toneMap[staffId] = nextPreference;
     }
 
     const { error: saveError } = await adminClient
@@ -118,7 +145,7 @@ export async function PATCH(request: NextRequest) {
       );
     if (saveError) return NextResponse.json({ error: saveError.message || "Could not save alert tone." }, { status: 500 });
 
-    return NextResponse.json({ ok: true, staffId, tone });
+    return NextResponse.json({ ok: true, staffId, tone: nextPreference.portal || nextPreference.staffChat || null, tones: nextPreference });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Could not save alert tone." }, { status: 500 });
   }

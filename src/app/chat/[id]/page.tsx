@@ -69,7 +69,7 @@ type AlertTone = "classic" | "soft" | "urgent" | "critical" | "off";
 const PATIENT_TEXT_SIZE_STORAGE_KEY = "drf_patient_text_size";
 const PATIENT_LANG_STORAGE_KEY = "drf_patient_ui_lang";
 const PATIENT_ALERT_TONE_STORAGE_KEY = "drf_patient_alert_tone";
-const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "critical", "off"];
+const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "critical"];
 
 const readPatientTextSize = (): PatientTextSize => {
   if (typeof window === "undefined") return "large";
@@ -79,7 +79,7 @@ const readPatientTextSize = (): PatientTextSize => {
 const readPatientAlertTone = (): AlertTone => {
   if (typeof window === "undefined") return "classic";
   const stored = window.localStorage.getItem(PATIENT_ALERT_TONE_STORAGE_KEY);
-  return stored === "soft" || stored === "urgent" || stored === "critical" || stored === "off" ? stored : "classic";
+  return stored === "soft" || stored === "urgent" || stored === "critical" ? stored : "classic";
 };
 
 const normalizeUiLang = (value?: string | null): "es" | "en" | null => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
@@ -38,7 +38,10 @@ import { createSignedChatFileUrl } from "@/lib/chatFileUrls";
 import {
   ALERT_TONE_OPTIONS,
   alertToneText,
+  emptyStaffAlertTonePreference,
   type AlertTone,
+  type AlertToneCategory,
+  type StaffAlertTonePreference,
 } from "@/lib/alertToneSettings";
 
 const permissionDescriptions: Record<StaffPermissionKey, { es: string; en: string }> = {
@@ -201,6 +204,7 @@ type NotificationReadiness = {
     pushDevices: number;
     latestSubscriptionAt?: string | null;
     alertTone?: AlertTone | null;
+    alertTones?: StaffAlertTonePreference;
   }>;
   patientRooms: Array<{
     roomId: string;
@@ -284,6 +288,7 @@ export default function AdminPage() {
   const [staffPermissionDrafts, setStaffPermissionDrafts] = useState<Record<string, StaffPermissionKey[]>>({});
   const [notificationReadiness, setNotificationReadiness] = useState<NotificationReadiness | null>(null);
   const [notificationReadinessLoading, setNotificationReadinessLoading] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const viewerPermissionProfile = viewerProfile
     ? { ...viewerProfile, permissions: staffPermissionMap[viewerProfile.id] ?? viewerProfile.permissions }
@@ -337,6 +342,64 @@ export default function AdminPage() {
       .filter(Boolean);
   };
   const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const alertToneCategoryText = (category: AlertToneCategory) =>
+    category === "portal"
+      ? (isSpanish ? "Portal y pacientes" : "Portal and patients")
+      : (isSpanish ? "Chat staff a staff" : "Staff-to-staff chat");
+  const memberAlertTones = (memberId: string): StaffAlertTonePreference => {
+    const entry = notificationReadiness?.staff.find((item) => item.id === memberId);
+    if (entry?.alertTones) return entry.alertTones;
+    if (entry?.alertTone) return { portal: entry.alertTone, staffChat: entry.alertTone };
+    return emptyStaffAlertTonePreference();
+  };
+  const playAdminAlertTone = (tone: AlertTone) => {
+    if (tone === "off") return;
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextCtor();
+    const context = audioContextRef.current;
+    const doPlay = () => {
+      const startAt = context.currentTime;
+      const toneConfig = tone === "soft"
+        ? { master: 0.42, type: "sine" as OscillatorType, repeatOffsets: [0], pulses: [[0, 659, 0.09], [0.2, 880, 0.1]] as const }
+        : tone === "urgent"
+          ? { master: 0.94, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.17], [0.16, 988, 0.17], [0.34, 1568, 0.2], [0.52, 1568, 0.2]] as const }
+          : tone === "critical"
+            ? { master: 0.98, type: "sawtooth" as OscillatorType, repeatOffsets: [0, 0.92, 1.84], pulses: [[0, 880, 0.22], [0.14, 1319, 0.24], [0.28, 1760, 0.26], [0.44, 2093, 0.24], [0.6, 1760, 0.22]] as const }
+            : { master: 0.86, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.16], [0.22, 1319, 0.18], [0.44, 1760, 0.2]] as const };
+      const limiter = context.createDynamicsCompressor();
+      limiter.threshold.setValueAtTime(-12, startAt);
+      limiter.knee.setValueAtTime(8, startAt);
+      limiter.ratio.setValueAtTime(12, startAt);
+      limiter.attack.setValueAtTime(0.002, startAt);
+      limiter.release.setValueAtTime(0.12, startAt);
+      const masterGain = context.createGain();
+      masterGain.gain.setValueAtTime(toneConfig.master, startAt);
+      masterGain.connect(limiter);
+      limiter.connect(context.destination);
+      const playPulse = (offset: number, frequency: number, peakGain: number) => {
+        const pulseStart = startAt + offset;
+        const pulseEnd = pulseStart + 0.18;
+        const pulseGain = context.createGain();
+        pulseGain.gain.setValueAtTime(0.0001, pulseStart);
+        pulseGain.gain.exponentialRampToValueAtTime(peakGain, pulseStart + 0.014);
+        pulseGain.gain.exponentialRampToValueAtTime(0.0001, pulseEnd);
+        pulseGain.connect(masterGain);
+        const oscillator = context.createOscillator();
+        oscillator.type = toneConfig.type;
+        oscillator.frequency.setValueAtTime(frequency, pulseStart);
+        oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.18, pulseEnd);
+        oscillator.connect(pulseGain);
+        oscillator.start(pulseStart);
+        oscillator.stop(pulseEnd + 0.02);
+      };
+      toneConfig.repeatOffsets.forEach((repeatOffset) => {
+        toneConfig.pulses.forEach(([offset, frequency, peakGain]) => playPulse(repeatOffset + offset, frequency, peakGain));
+      });
+    };
+    if (context.state === "suspended") context.resume().then(doPlay).catch(() => {});
+    else doPlay();
+  };
 
   const adminText = (level: AdminLevel) =>
     isSpanish
@@ -1244,9 +1307,9 @@ export default function AdminPage() {
     collapseStaffControls(member.id);
   };
 
-  const saveStaffAlertTone = async (member: StaffProfile, tone: AlertTone | null) => {
+  const saveStaffAlertTone = async (member: StaffProfile, category: AlertToneCategory, tone: AlertTone | null) => {
     if (!canManageAlertToneDefaults) return;
-    setSavingKey(`${member.id}-alert-tone`);
+    setSavingKey(`${member.id}-alert-tone-${category}`);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token || "";
@@ -1256,7 +1319,7 @@ export default function AdminPage() {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
-        body: JSON.stringify({ staffId: member.id, tone }),
+        body: JSON.stringify({ staffId: member.id, toneType: category, tone }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -1264,12 +1327,24 @@ export default function AdminPage() {
         return;
       }
 
-      setNotificationReadiness((current) => current
+      const savedTones = (payload?.tones && typeof payload.tones === "object")
         ? {
+          portal: payload.tones.portal || null,
+          staffChat: payload.tones.staffChat || null,
+        } as StaffAlertTonePreference
+        : { ...memberAlertTones(member.id), [category]: tone };
+      setNotificationReadiness((current) => {
+        if (!current) return current;
+        const nextStaff = current.staff.map((item) => (item.id === member.id ? { ...item, alertTone: savedTones.portal, alertTones: savedTones } : item));
+        return {
           ...current,
-          staff: current.staff.map((item) => (item.id === member.id ? { ...item, alertTone: tone } : item)),
-        }
-        : current);
+          staff: nextStaff,
+          totals: {
+            ...current.totals,
+            staffMuted: nextStaff.filter((item) => (item.alertTones?.portal || item.alertTone) === "off" || (item.alertTones?.staffChat || item.alertTone) === "off").length,
+          },
+        };
+      });
       await logAdminEvent({
         action: "staff_alert_tone_updated",
         entityType: "staff_profile",
@@ -1279,14 +1354,14 @@ export default function AdminPage() {
         actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
         actorEmail: viewerEmail,
         notes: tone
-          ? (isSpanish ? `Tono de alertas guardado: ${alertToneText(tone, true)}.` : `Saved alert tone: ${alertToneText(tone, false)}.`)
-          : (isSpanish ? "Tono de alertas guardado removido." : "Saved alert tone removed."),
-        metadata: { alertTone: tone },
+          ? (isSpanish ? `${alertToneCategoryText(category)}: ${alertToneText(tone, true)}.` : `${alertToneCategoryText(category)}: ${alertToneText(tone, false)}.`)
+          : (isSpanish ? `${alertToneCategoryText(category)} sin tono guardado.` : `${alertToneCategoryText(category)} saved tone removed.`),
+        metadata: { alertToneCategory: category, alertTone: tone },
       });
       updateSuccess(
         tone
-          ? (isSpanish ? `${member.full_name || "Staff"} ahora tiene ${alertToneText(tone, true)} guardado, y puede cambiarlo desde Ajustes.` : `${member.full_name || "Staff"} now has ${alertToneText(tone, false)} saved and can still change it in Settings.`)
-          : (isSpanish ? `${member.full_name || "Staff"} quedó sin tono guardado.` : `${member.full_name || "Staff"} now has no saved tone.`),
+          ? (isSpanish ? `${member.full_name || "Staff"}: ${alertToneCategoryText(category)} quedó en ${alertToneText(tone, true)}. El staff puede cambiarlo desde Ajustes.` : `${member.full_name || "Staff"}: ${alertToneCategoryText(category)} is now ${alertToneText(tone, false)}. Staff can still change it in Settings.`)
+          : (isSpanish ? `${member.full_name || "Staff"} quedó sin tono guardado para ${alertToneCategoryText(category)}.` : `${member.full_name || "Staff"} now has no saved tone for ${alertToneCategoryText(category)}.`),
       );
     } catch (error: any) {
       setPageError(error?.message || (isSpanish ? "No pude guardar el tono de alertas." : "I could not save the alert tone."));
@@ -1885,7 +1960,7 @@ export default function AdminPage() {
   const staffAlertRows = notificationReadiness?.staff || [];
   const patientAlertRows = notificationReadiness?.patientRooms || [];
   const staffMissingAlerts = staffAlertRows.filter((member) => member.pushDevices === 0);
-  const staffMutedAlerts = staffAlertRows.filter((member) => member.alertTone === "off");
+  const staffMutedAlerts = staffAlertRows.filter((member) => (member.alertTones?.portal || member.alertTone) === "off" || (member.alertTones?.staffChat || member.alertTone) === "off");
   const patientRoomsMissingAlerts = patientAlertRows.filter((room) => room.pushDevices === 0);
 
   if (!sessionChecked || loading) {
@@ -2097,7 +2172,7 @@ export default function AdminPage() {
         .alert-readiness-panel { border-radius: 18px; border: 1px solid #E6EEF7; background: #FBFDFF; padding: 14px; min-width: 0; }
         .alert-readiness-panel h3 { margin: 0 0 10px; color: #0F172A; font-size: 17px; font-weight: 950; line-height: 1.2; }
         .alert-readiness-list { display: grid; gap: 8px; max-height: 460px; overflow-y: auto; padding-right: 2px; }
-        .alert-readiness-row { width: 100%; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px; border-radius: 14px; border: 1px solid #E7EEF7; background: white; text-align: left; font-family: inherit; cursor: pointer; }
+        .alert-readiness-row { width: 100%; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px; border-radius: 14px; border: 1px solid #E7EEF7; background: white; text-align: left; font-family: inherit; }
         .alert-readiness-row:hover, .alert-readiness-row:focus-visible { border-color: #93C5FD; background: #EFF6FF; outline: none; }
         .alert-readiness-row.missing { border-color: #FECACA; background: #FFF7F7; }
         .alert-ready-dot { width: 42px; height: 42px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: #DCFCE7; color: #166534; font-size: 13px; font-weight: 950; }
@@ -2107,6 +2182,12 @@ export default function AdminPage() {
         .alert-readiness-copy span { display: block; margin-top: 3px; color: #64748B; font-size: 13px; font-weight: 750; line-height: 1.35; overflow-wrap: anywhere; }
         .alert-device-count { min-width: 34px; min-height: 30px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; padding: 0 9px; background: #EFF6FF; color: #1D4ED8; font-size: 13px; font-weight: 950; }
         .alert-readiness-row.missing .alert-device-count { background: #FEE2E2; color: #B91C1C; }
+        .alert-tone-admin-controls { grid-column: 1 / -1; display: grid; gap: 10px; padding-top: 4px; }
+        .alert-enable-btn { width: 100%; min-height: 48px; border: none; border-radius: 14px; background: #DC2626; color: white; font-size: 16px; font-weight: 950; font-family: inherit; cursor: pointer; }
+        .alert-enable-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+        .alert-tone-admin-group { border: 1px solid #E6EEF7; border-radius: 14px; background: #FBFDFF; padding: 10px; min-width: 0; }
+        .alert-tone-admin-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .alert-tone-admin-heading strong { color: #0F172A; font-size: 14px; font-weight: 950; line-height: 1.25; }
         .export-overlay { position: fixed; inset: 0; z-index: 170; display: grid; place-items: center; padding: 18px; background: rgba(15,23,42,0.42); }
         .export-modal { width: min(440px, 100%); border-radius: 22px; background: white; padding: 20px; box-shadow: 0 24px 80px rgba(15,23,42,0.28); }
         .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
@@ -2137,6 +2218,8 @@ export default function AdminPage() {
         .section-top-btn { min-height: 40px; padding: 9px 13px; border-radius: 999px; border: 1px solid #DBEAFE; background: #EFF6FF; color: #1D4ED8; font-size: 13px; font-weight: 900; font-family: inherit; cursor: pointer; white-space: nowrap; }
         .access-help { padding: 10px 12px; border-radius: 14px; background: #F8FAFC; border: 1px solid #E6EEF7; color: #64748B; font-size: 14px; line-height: 1.45; font-weight: 700; }
         .permission-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+        .permission-toolbar.compact { gap: 6px; margin-top: 8px; }
+        .permission-toolbar.compact .mini-btn { min-height: 40px; padding: 8px 10px; font-size: 13px; flex: 1 1 112px; }
         .permission-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
         .permission-card { border: 1px solid #E6EEF7; background: #FFFFFF; border-radius: 14px; padding: 12px; min-width: 0; }
         .permission-card-title { color: #075EA8; font-size: 14px; font-weight: 950; margin: 0 0 9px; line-height: 1.25; }
@@ -2649,8 +2732,8 @@ export default function AdminPage() {
                   <p className="secure-invite-label">{isSpanish ? "Punto crítico" : "Critical point"}</p>
                   <p className="secure-invite-code" style={{ color: "#334155" }}>
                     {isSpanish
-                      ? "El portal ahora tiene tono Crítico repetido para alertas dentro de la app. Para una app médica de tienda, el siguiente paso debe ser capa nativa con APNs/FCM, canales de sonido, biometría y escalación redundante."
-                      : "The portal now has a Critical repeat tone for in-app alerts. For a medical store app, the next step should be a native layer with APNs/FCM, sound channels, biometrics, and redundant escalation."}
+                      ? "El portal ya tiene tono Crítico repetido dentro de la app y el shell nativo queda preparado con plugins para push, notificaciones locales, biometría, almacenamiento seguro, deep links y ciclo de vida. La entrega APNs/FCM real se completa al conectar credenciales de Apple/Google."
+                      : "The portal has a Critical repeat in-app tone and the native shell is prepared with plugins for push, local notifications, biometrics, secure storage, deep links, and app lifecycle. Real APNs/FCM delivery is completed when Apple/Google credentials are connected."}
                   </p>
                 </div>
 
@@ -2663,13 +2746,18 @@ export default function AdminPage() {
                       ) : (
                         staffAlertRows.map((member) => {
                           const missingPush = member.pushDevices === 0;
-                          const mutedAlerts = member.alertTone === "off";
+                          const tones = member.alertTones || (member.alertTone ? { portal: member.alertTone, staffChat: member.alertTone } : emptyStaffAlertTonePreference());
+                          const mutedAlerts = tones.portal === "off" || tones.staffChat === "off";
+                          const staffMember = staffById.get(member.id) || ({ id: member.id, full_name: member.name, display_name: member.name } as StaffProfile);
+                          const toneButtonStyle = (selected: boolean, saving: boolean) => ({
+                            background: selected ? "#EFF6FF" : "#EFF3F8",
+                            color: selected ? "#1D4ED8" : "#374151",
+                            opacity: saving ? 0.55 : 1,
+                          });
                           return (
-                            <button
+                            <div
                               key={`staff-alert-${member.id}`}
-                              type="button"
                               className={`alert-readiness-row ${missingPush || mutedAlerts ? "missing" : ""}`}
-                              onClick={() => openStaffFromAlertReadiness(member.id)}
                             >
                               <span className="alert-ready-dot">{missingPush ? "NO" : mutedAlerts ? "OFF" : "OK"}</span>
                               <span className="alert-readiness-copy">
@@ -2677,13 +2765,74 @@ export default function AdminPage() {
                                 <span>
                                   {[
                                     member.adminLevel || member.role || (isSpanish ? "Staff" : "Staff"),
-                                    member.alertTone ? alertToneText(member.alertTone, isSpanish) : (isSpanish ? "Sin registro" : "No saved tone"),
+                                    `${isSpanish ? "Portal" : "Portal"}: ${tones.portal ? alertToneText(tones.portal, isSpanish) : (isSpanish ? "Sin registro" : "No saved tone")}`,
+                                    `${isSpanish ? "Staff" : "Staff"}: ${tones.staffChat ? alertToneText(tones.staffChat, isSpanish) : (isSpanish ? "Sin registro" : "No saved tone")}`,
                                     alertLastSeen(member.latestSubscriptionAt),
                                   ].filter(Boolean).join(" · ")}
                                 </span>
                               </span>
                               <span className="alert-device-count">{member.pushDevices}</span>
-                            </button>
+                              <div className="alert-tone-admin-controls">
+                                {mutedAlerts && canManageAlertToneDefaults && (
+                                  <button
+                                    type="button"
+                                    className="alert-enable-btn"
+                                    disabled={savingKey.startsWith(`${member.id}-alert-tone`)}
+                                    onClick={async () => {
+                                      if (tones.portal === "off") await saveStaffAlertTone(staffMember, "portal", "critical");
+                                      if (tones.staffChat === "off") await saveStaffAlertTone(staffMember, "staffChat", "critical");
+                                    }}
+                                  >
+                                    {isSpanish ? "Activar alertas" : "Enable alert"}
+                                  </button>
+                                )}
+                                {(["portal", "staffChat"] as AlertToneCategory[]).map((category) => {
+                                  const selectedTone = tones[category];
+                                  const saving = savingKey === `${member.id}-alert-tone-${category}`;
+                                  return (
+                                    <div key={`${member.id}-${category}`} className="alert-tone-admin-group">
+                                      <div className="alert-tone-admin-heading">
+                                        <strong>{alertToneCategoryText(category)}</strong>
+                                        <button
+                                          type="button"
+                                          className="mini-btn"
+                                          disabled={!selectedTone || selectedTone === "off"}
+                                          onClick={() => selectedTone && playAdminAlertTone(selectedTone)}
+                                        >
+                                          {isSpanish ? "Probar" : "Test"}
+                                        </button>
+                                      </div>
+                                      <div className="permission-toolbar compact">
+                                        <button
+                                          type="button"
+                                          className="mini-btn"
+                                          disabled={!canManageAlertToneDefaults || saving}
+                                          onClick={() => saveStaffAlertTone(staffMember, category, null)}
+                                          style={toneButtonStyle(!selectedTone, saving)}
+                                        >
+                                          {isSpanish ? "Sin registro" : "No saved"}
+                                        </button>
+                                        {ALERT_TONE_OPTIONS.map((tone) => (
+                                          <button
+                                            key={`${member.id}-${category}-${tone}`}
+                                            type="button"
+                                            className="mini-btn"
+                                            disabled={!canManageAlertToneDefaults || saving}
+                                            onClick={() => saveStaffAlertTone(staffMember, category, tone)}
+                                            style={toneButtonStyle(selectedTone === tone, saving)}
+                                          >
+                                            {alertToneText(tone, isSpanish)}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                <button type="button" className="mini-btn" onClick={() => openStaffFromAlertReadiness(member.id)}>
+                                  {isSpanish ? "Abrir controles" : "Open staff controls"}
+                                </button>
+                              </div>
+                            </div>
                           );
                         })
                       )}
@@ -2933,8 +3082,7 @@ export default function AdminPage() {
                     const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => draftPermissionSet.has(permission)).length;
                     const isPendingStaff = `${member.role || ""}`.toLowerCase() === "pending_staff";
                     const canSendResetForMember = canManageAdmins && Boolean(visibleMemberEmail);
-                    const savedAlertTone = notificationReadiness?.staff.find((item) => item.id === member.id)?.alertTone || null;
-                    const alertToneSaving = savingKey === `${member.id}-alert-tone`;
+                    const savedAlertTones = memberAlertTones(member.id);
 
                     return (
                       <div key={member.id} className="staff-row compact">
@@ -3140,40 +3288,59 @@ export default function AdminPage() {
                                       <p className="group-label">{isSpanish ? "Tono actual de alertas" : "Current alert tone"}</p>
                                       <p className="access-help">
                                         {isSpanish
-                                          ? "El doctor o Super Admin puede encender alertas de una cuenta en silencio o escoger un tono inicial. El staff siempre puede cambiarlo después desde Ajustes."
-                                          : "The doctor or Super Admin can turn alerts back on for a muted account or choose a starting tone. Staff can always change it later in Settings."}
+                                          ? "Aquí puedes ver o corregir el tono inicial por tipo de alerta. El staff siempre puede cambiarlo después desde Ajustes."
+                                          : "Review or correct the starting tone by alert type. Staff can always change it later in Settings."}
                                       </p>
-                                      <div className="permission-toolbar">
-                                        <button
-                                          type="button"
-                                          className="mini-btn"
-                                          disabled={alertToneSaving}
-                                          onClick={() => saveStaffAlertTone(member, null)}
-                                          style={{
-                                            background: savedAlertTone ? "#EFF3F8" : "#ECFEFF",
-                                            color: savedAlertTone ? "#374151" : "#0E7490",
-                                            opacity: alertToneSaving ? 0.55 : 1,
-                                          }}
-                                        >
-                                          {isSpanish ? "Sin registro" : "No saved tone"}
-                                        </button>
-                                        {ALERT_TONE_OPTIONS.map((tone) => (
-                                          <button
-                                            key={`${member.id}-alert-tone-${tone}`}
-                                            type="button"
-                                            className="mini-btn"
-                                            disabled={alertToneSaving}
-                                            onClick={() => saveStaffAlertTone(member, tone)}
-                                            style={{
-                                              background: savedAlertTone === tone ? "#EFF6FF" : "#EFF3F8",
-                                              color: savedAlertTone === tone ? "#1D4ED8" : "#374151",
-                                              opacity: alertToneSaving ? 0.55 : 1,
-                                            }}
-                                          >
-                                            {alertToneText(tone, isSpanish)}
-                                          </button>
-                                        ))}
-                                      </div>
+                                      {(["portal", "staffChat"] as AlertToneCategory[]).map((category) => {
+                                        const savedAlertTone = savedAlertTones[category];
+                                        const alertToneSaving = savingKey === `${member.id}-alert-tone-${category}`;
+                                        return (
+                                          <div key={`${member.id}-team-alert-${category}`} className="alert-tone-admin-group" style={{ marginTop: 10 }}>
+                                            <div className="alert-tone-admin-heading">
+                                              <strong>{alertToneCategoryText(category)}</strong>
+                                              <button
+                                                type="button"
+                                                className="mini-btn"
+                                                disabled={!savedAlertTone || savedAlertTone === "off"}
+                                                onClick={() => savedAlertTone && playAdminAlertTone(savedAlertTone)}
+                                              >
+                                                {isSpanish ? "Probar" : "Test"}
+                                              </button>
+                                            </div>
+                                            <div className="permission-toolbar compact">
+                                              <button
+                                                type="button"
+                                                className="mini-btn"
+                                                disabled={alertToneSaving}
+                                                onClick={() => saveStaffAlertTone(member, category, null)}
+                                                style={{
+                                                  background: savedAlertTone ? "#EFF3F8" : "#ECFEFF",
+                                                  color: savedAlertTone ? "#374151" : "#0E7490",
+                                                  opacity: alertToneSaving ? 0.55 : 1,
+                                                }}
+                                              >
+                                                {isSpanish ? "Sin registro" : "No saved"}
+                                              </button>
+                                              {ALERT_TONE_OPTIONS.map((tone) => (
+                                                <button
+                                                  key={`${member.id}-alert-tone-${category}-${tone}`}
+                                                  type="button"
+                                                  className="mini-btn"
+                                                  disabled={alertToneSaving}
+                                                  onClick={() => saveStaffAlertTone(member, category, tone)}
+                                                  style={{
+                                                    background: savedAlertTone === tone ? "#EFF6FF" : "#EFF3F8",
+                                                    color: savedAlertTone === tone ? "#1D4ED8" : "#374151",
+                                                    opacity: alertToneSaving ? 0.55 : 1,
+                                                  }}
+                                                >
+                                                  {alertToneText(tone, isSpanish)}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
 		                              <div className="setting-group">

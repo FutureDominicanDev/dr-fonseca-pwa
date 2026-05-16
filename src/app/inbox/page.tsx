@@ -15,9 +15,12 @@ import {
 } from "@/lib/staffAvatarVisibility";
 import {
   ALERT_TONE_OPTIONS,
+  emptyStaffAlertTonePreference,
   alertToneText,
   normalizeAlertTone,
   type AlertTone,
+  type AlertToneCategory,
+  type StaffAlertTonePreference,
 } from "@/lib/alertToneSettings";
 import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 
@@ -36,6 +39,7 @@ const STAFF_FONT_SIZE_STORAGE_KEY = "drf_staff_font_size_level";
 const STAFF_LANG_STORAGE_KEY = "drf_staff_ui_lang";
 const STAFF_RECORD_ALERTS_MUTED_KEY = "drf_staff_record_alerts_muted";
 const STAFF_ALERT_TONE_STORAGE_KEY = "drf_staff_alert_tone";
+const STAFF_CHAT_ALERT_TONE_STORAGE_KEY = "drf_staff_chat_alert_tone";
 const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
 
 const readStaffLang = (): Lang => {
@@ -60,10 +64,10 @@ const readStaffRecordAlertsMuted = () => {
   return window.localStorage.getItem(STAFF_RECORD_ALERTS_MUTED_KEY) === "1";
 };
 
-const readStaffAlertTone = (): AlertTone => {
+const readStaffAlertTone = (key = STAFF_ALERT_TONE_STORAGE_KEY, fallback: AlertTone = "classic"): AlertTone => {
   if (typeof window === "undefined") return "classic";
-  const stored = window.localStorage.getItem(STAFF_ALERT_TONE_STORAGE_KEY);
-  return normalizeAlertTone(stored, "classic");
+  const stored = window.localStorage.getItem(key);
+  return normalizeAlertTone(stored, fallback);
 };
 
 const alertToneOptions = ALERT_TONE_OPTIONS;
@@ -995,8 +999,9 @@ export default function InboxPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
-  const [alertTone, setAlertTone] = useState<AlertTone>(() => readStaffAlertTone());
-  const [serverAlertTone, setServerAlertTone] = useState<AlertTone | null>(null);
+  const [portalAlertTone, setPortalAlertTone] = useState<AlertTone>(() => readStaffAlertTone());
+  const [staffChatAlertTone, setStaffChatAlertTone] = useState<AlertTone>(() => readStaffAlertTone(STAFF_CHAT_ALERT_TONE_STORAGE_KEY, readStaffAlertTone()));
+  const [serverAlertTones, setServerAlertTones] = useState<StaffAlertTonePreference>(() => emptyStaffAlertTonePreference());
   const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
   const [callOverlayOpen, setCallOverlayOpen] = useState(false);
@@ -1081,7 +1086,7 @@ export default function InboxPage() {
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
   const fmtShortDate = (ts?: string | null) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}); };
   const alertToneLabel = (tone: AlertTone) => alertToneText(tone, lang === "es");
-  const saveOwnAlertTone = useCallback(async (tone: AlertTone) => {
+  const saveOwnAlertTone = useCallback(async (category: AlertToneCategory, tone: AlertTone) => {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token || "";
@@ -1092,16 +1097,17 @@ export default function InboxPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ tone }),
+        body: JSON.stringify({ toneType: category, tone }),
       });
-      if (response.ok) setServerAlertTone(tone);
+      if (response.ok) setServerAlertTones((current) => ({ ...current, [category]: tone }));
     } catch {
       // Local alert preference still works if the server-side status cannot be saved.
     }
   }, []);
-  const chooseAlertTone = useCallback((tone: AlertTone) => {
-    setAlertTone(tone);
-    void saveOwnAlertTone(tone);
+  const chooseAlertTone = useCallback((category: AlertToneCategory, tone: AlertTone) => {
+    if (category === "portal") setPortalAlertTone(tone);
+    else setStaffChatAlertTone(tone);
+    void saveOwnAlertTone(category, tone);
   }, [saveOwnAlertTone]);
   const fmtChatDateLabel = (ts: string) => {
     if (!ts) return "";
@@ -1960,17 +1966,17 @@ export default function InboxPage() {
     if (context?.state === "suspended") context.resume().catch(() => {});
   }, [ensureAudioContext]);
 
-  const playIncomingTone = useCallback(() => {
-    if (alertTone === "off") return;
+  const playAlertTone = useCallback((tone: AlertTone) => {
+    if (tone === "off") return;
     const context = ensureAudioContext();
     if (!context) return;
     const doPlay = () => {
       const startAt = context.currentTime;
-      const toneConfig = alertTone === "soft"
+      const toneConfig = tone === "soft"
         ? { master: 0.42, type: "sine" as OscillatorType, repeatOffsets: [0], pulses: [[0, 659, 0.09], [0.2, 880, 0.1]] as const }
-        : alertTone === "urgent"
+        : tone === "urgent"
           ? { master: 0.94, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.17], [0.16, 988, 0.17], [0.34, 1568, 0.2], [0.52, 1568, 0.2]] as const }
-          : alertTone === "critical"
+          : tone === "critical"
             ? { master: 0.98, type: "sawtooth" as OscillatorType, repeatOffsets: [0, 0.92, 1.84], pulses: [[0, 880, 0.22], [0.14, 1319, 0.24], [0.28, 1760, 0.26], [0.44, 2093, 0.24], [0.6, 1760, 0.22]] as const }
             : { master: 0.86, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.16], [0.22, 1319, 0.18], [0.44, 1760, 0.2]] as const };
       const limiter = context.createDynamicsCompressor();
@@ -2020,7 +2026,15 @@ export default function InboxPage() {
     } else {
       doPlay();
     }
-  }, [alertTone, ensureAudioContext]);
+  }, [ensureAudioContext]);
+
+  const playPortalAlertTone = useCallback(() => {
+    playAlertTone(portalAlertTone);
+  }, [playAlertTone, portalAlertTone]);
+
+  const playStaffChatAlertTone = useCallback(() => {
+    playAlertTone(staffChatAlertTone);
+  }, [playAlertTone, staffChatAlertTone]);
 
   const describeIncomingMessage = useCallback((message: RoomMessageSummary, translatedText = "") => {
     if (parseCallRequestMessage(message.content)) return t.incomingCallRequest;
@@ -2117,9 +2131,9 @@ export default function InboxPage() {
 
     setMediaUnreadCounts((current) => ({ ...current, [patientId]: (current[patientId] || 0) + 1 }));
     if (roomId) showToastAlert(roomId, patientName, toastBody);
-    playIncomingTone();
+    playPortalAlertTone();
     pushNotif(patientName, body);
-  }, [lang, patientIdForRoom, patients, playIncomingTone, pushNotif, roomPatientName, showToastAlert, t.patientLabel]);
+  }, [lang, patientIdForRoom, patients, playPortalAlertTone, pushNotif, roomPatientName, showToastAlert, t.patientLabel]);
 
   const fetchMediaNotificationCounts = useCallback(async () => {
     if (!currentUserId) return;
@@ -2212,7 +2226,7 @@ export default function InboxPage() {
     const title = roomPatientName(roomId);
     const body = describeIncomingMessage(message);
 
-    playIncomingTone();
+    playPortalAlertTone();
 
     if (!options?.skipUnread && (!isVisible || !isActiveRoom)) {
       setUnreadCounts((prev) => ({ ...prev, [roomId]: (prev[roomId] || 0) + 1 }));
@@ -2222,7 +2236,7 @@ export default function InboxPage() {
       showToastAlert(roomId, title, body);
       pushNotif(title, body);
     }
-  }, [describeIncomingMessage, getRoomAlertedMessage, incomingMessageKey, playIncomingTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
+  }, [describeIncomingMessage, getRoomAlertedMessage, incomingMessageKey, playPortalAlertTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
 
   const registerIncomingInternalNote = useCallback((message: any) => {
     const roomId = message.room_id;
@@ -2257,12 +2271,12 @@ export default function InboxPage() {
     setStaffRecordUnreadRooms((current) => ({ ...current, [roomId]: true }));
     if (staffRecordAlertsMuted) return;
 
-    playIncomingTone();
+    playPortalAlertTone();
     showToastAlert(roomId, title, body, isStaffPhoto ? "record" : "note");
     if (!isVisible || !isActiveRoom) {
       pushNotif(title, body);
     }
-  }, [currentUserId, getRoomAlertedMessage, incomingMessageKey, isSuperAdmin, lang, patients, playIncomingTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, showToastAlert, staffRecordAlertsMuted]);
+  }, [currentUserId, getRoomAlertedMessage, incomingMessageKey, isSuperAdmin, lang, patients, playPortalAlertTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, showToastAlert, staffRecordAlertsMuted]);
 
   const sendTypingSignal = useCallback((isTyping: boolean, roomId: string, name: string) => {
     supabase.auth.getSession().then(({ data }) => {
@@ -2376,8 +2390,13 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(STAFF_ALERT_TONE_STORAGE_KEY, alertTone);
-  }, [alertTone]);
+    window.localStorage.setItem(STAFF_ALERT_TONE_STORAGE_KEY, portalAlertTone);
+  }, [portalAlertTone]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STAFF_CHAT_ALERT_TONE_STORAGE_KEY, staffChatAlertTone);
+  }, [staffChatAlertTone]);
 
   useEffect(() => {
     setTranslatedIncoming({});
@@ -2620,14 +2639,14 @@ export default function InboxPage() {
       const lastAlertedMessage = getRoomAlertedMessage(roomId);
       if (latestMessageKey && latestMessageKey === lastAlertedMessage) continue;
       if (latestCreatedAt > lastSeen && latestCreatedAt > lastAlert) {
-        playIncomingTone();
+        playPortalAlertTone();
         showToastAlert(roomId, roomPatientName(roomId), describeIncomingMessage(latestMessage));
         pushNotif(roomPatientName(roomId), describeIncomingMessage(latestMessage));
         setRoomLastAlert(roomId, latestCreatedAt);
         if (latestMessageKey) setRoomAlertedMessage(roomId, latestMessageKey);
       }
     }
-  }, [currentUserId, describeIncomingMessage, getRoomAlertedMessage, getRoomLastAlert, getRoomLastSeen, incomingMessageKey, playIncomingTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
+  }, [currentUserId, describeIncomingMessage, getRoomAlertedMessage, getRoomLastAlert, getRoomLastSeen, incomingMessageKey, playPortalAlertTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
 
   const fetchManagedAlertTone = async () => {
     try {
@@ -2640,9 +2659,18 @@ export default function InboxPage() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) return;
-      const tone = payload?.tone ? normalizeAlertTone(payload?.tone, "classic") : null;
-      setServerAlertTone(tone);
-      if (tone) setAlertTone(tone);
+      const tones = payload?.tones && typeof payload.tones === "object"
+        ? {
+          portal: payload.tones.portal ? normalizeAlertTone(payload.tones.portal, "classic") : null,
+          staffChat: payload.tones.staffChat ? normalizeAlertTone(payload.tones.staffChat, "classic") : null,
+        }
+        : {
+          portal: payload?.tone ? normalizeAlertTone(payload?.tone, "classic") : null,
+          staffChat: payload?.tone ? normalizeAlertTone(payload?.tone, "classic") : null,
+        };
+      setServerAlertTones(tones);
+      if (tones.portal) setPortalAlertTone(tones.portal);
+      if (tones.staffChat) setStaffChatAlertTone(tones.staffChat);
     } catch {
       // Staff can still use the locally saved tone if the server-side status is unavailable.
     }
@@ -3219,7 +3247,7 @@ export default function InboxPage() {
           setStaffPrivateMessages((previous) => previous.map((entry) => entry.id === message.id ? { ...entry, read_at: readAt } : entry));
           supabase.from("staff_private_messages").update({ read_at: readAt }).eq("id", message.id).then(() => {});
         } else {
-          playIncomingTone();
+          playStaffChatAlertTone();
           setPrivateToast(message);
           pushNotif(
             roomPayload ? (lang === "es" ? "Chat staff" : "Staff chat") : (lang === "es" ? "Mensaje privado del equipo" : "Private staff message"),
@@ -3244,7 +3272,7 @@ export default function InboxPage() {
       window.clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [currentUserId, fetchStaffPrivateMessages, lang, markStaffPrivateConversationRead, playIncomingTone, pushNotif, upsertStaffPrivateMessage]);
+  }, [currentUserId, fetchStaffPrivateMessages, lang, markStaffPrivateConversationRead, playStaffChatAlertTone, pushNotif, upsertStaffPrivateMessage]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -5155,33 +5183,41 @@ export default function InboxPage() {
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>
               {lang==="es"?"Sonido de alertas":"Alert sound"}
             </p>
-            {serverAlertTone && (
+            {(serverAlertTones.portal || serverAlertTones.staffChat) && (
               <p style={{fontSize:settingsSmallSize,color:"#1D4ED8",fontWeight:750,lineHeight:1.45,marginBottom:10}}>
                 {lang==="es"
-                  ? `Tono guardado en tu cuenta: ${alertToneLabel(serverAlertTone)}. Puedes cambiarlo cuando quieras.`
-                  : `Saved tone on your account: ${alertToneLabel(serverAlertTone)}. You can change it any time.`}
+                  ? "Tonos guardados en tu cuenta. Puedes cambiarlos cuando quieras."
+                  : "Saved tones on your account. You can change them any time."}
               </p>
             )}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))",gap:8,marginBottom:12}}>
-              {alertToneOptions.map((tone) => (
+            {([
+              { category: "portal" as const, title: lang==="es" ? "Portal y pacientes" : "Portal and patient alerts", tone: portalAlertTone, test: playPortalAlertTone },
+              { category: "staffChat" as const, title: lang==="es" ? "Chat staff a staff" : "Staff-to-staff chat", tone: staffChatAlertTone, test: playStaffChatAlertTone },
+            ]).map((group) => (
+              <div key={group.category} style={{display:"grid",gap:8,marginTop:12}}>
+                <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:900,lineHeight:1.35,margin:0}}>{group.title}</p>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))",gap:8}}>
+                  {alertToneOptions.map((tone) => (
+                    <button
+                      key={`${group.category}-${tone}`}
+                      type="button"
+                      onClick={()=>chooseAlertTone(group.category, tone)}
+                      style={{minHeight:46,borderRadius:12,border:group.tone===tone?"2px solid #007AFF":`2px solid ${borderColor}`,background:group.tone===tone?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:group.tone===tone?"#007AFF":textColor,fontWeight:850,cursor:"pointer",fontFamily:"inherit",fontSize:settingsBaseSize,lineHeight:1.25}}
+                    >
+                      {alertToneLabel(tone)}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  key={tone}
                   type="button"
-                  onClick={()=>chooseAlertTone(tone)}
-                  style={{minHeight:46,borderRadius:12,border:alertTone===tone?"2px solid #007AFF":`2px solid ${borderColor}`,background:alertTone===tone?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:alertTone===tone?"#007AFF":textColor,fontWeight:850,cursor:"pointer",fontFamily:"inherit",fontSize:settingsBaseSize,lineHeight:1.25}}
+                  onClick={group.test}
+                  disabled={group.tone==="off"}
+                  style={{width:"100%",minHeight:46,border:"none",borderRadius:14,background:group.tone==="off"?(darkMode?"#334155":"#E5E7EB"):"#EAF2FB",color:group.tone==="off"?(darkMode?"#94A3B8":"#64748B"):"#1D4ED8",fontFamily:"inherit",fontSize:settingsBaseSize,fontWeight:900,cursor:group.tone==="off"?"not-allowed":"pointer"}}
                 >
-                  {alertToneLabel(tone)}
+                  {lang==="es"?"Probar sonido":"Test sound"}
                 </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={playIncomingTone}
-              disabled={alertTone==="off"}
-              style={{width:"100%",minHeight:46,border:"none",borderRadius:14,background:alertTone==="off"?(darkMode?"#334155":"#E5E7EB"):"#EAF2FB",color:alertTone==="off"?(darkMode?"#94A3B8":"#64748B"):"#1D4ED8",fontFamily:"inherit",fontSize:settingsBaseSize,fontWeight:900,cursor:alertTone==="off"?"not-allowed":"pointer"}}
-            >
-              {lang==="es"?"Probar sonido":"Test sound"}
-            </button>
+              </div>
+            ))}
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8,lineHeight:1.35}}>{t.staffRecordAlerts}</p>

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Dr. Fonseca Portal</string>
+    <string name="title_activity_main">Dr. Fonseca Portal</string>
+    <string name="package_name">com.drfonsecacirujanoplastico.portal</string>
+    <string name="custom_url_scheme">com.drfonsecacirujanoplastico.portal</string>
+</resources>

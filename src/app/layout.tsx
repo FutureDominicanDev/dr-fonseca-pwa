@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import AppUpdateWatcher from "./AppUpdateWatcher";
+import NativeAppBridge from "./NativeAppBridge";
 import NativeKeyboardTuning from "./NativeKeyboardTuning";
 import "./globals.css";
 
@@ -86,6 +87,7 @@ export default function RootLayout({
       </head>
       <body>
         <NativeKeyboardTuning />
+        <NativeAppBridge />
         <AppUpdateWatcher buildVersion={APP_BUILD_VERSION} />
         {children}
       </body>

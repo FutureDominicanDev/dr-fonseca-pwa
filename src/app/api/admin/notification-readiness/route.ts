@@ -8,6 +8,7 @@ import {
 } from "@/lib/permissions";
 import {
   STAFF_ALERT_TONES_SETTING_KEY,
+  emptyStaffAlertTonePreference,
   parseStaffAlertToneMap,
 } from "@/lib/alertToneSettings";
 
@@ -18,6 +19,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const configured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY);
 const authClient = configured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
 const adminClient = configured ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
+const NATIVE_PUSH_TOKENS_SETTING_KEY = "native_push_tokens";
 
 const subscriptionStaffId = (subscription: unknown) => {
   const value = subscription as Record<string, unknown> | null | undefined;
@@ -27,6 +29,26 @@ const subscriptionStaffId = (subscription: unknown) => {
 const newestIso = (rows: Array<Record<string, unknown>>) =>
   rows
     .map((row) => `${row.updated_at || row.created_at || ""}`)
+    .filter(Boolean)
+    .sort()
+    .reverse()[0] || null;
+
+type NativeTokenEntry = { token?: string; platform?: string; updatedAt?: string };
+type NativeTokenMap = { staff?: Record<string, NativeTokenEntry[]>; patientRooms?: Record<string, NativeTokenEntry[]> };
+
+const parseNativePushTokenMap = (value: unknown): NativeTokenMap => {
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value) as NativeTokenMap;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const newestNativeTokenIso = (rows: NativeTokenEntry[] = []) =>
+  rows
+    .map((row) => `${row.updatedAt || ""}`)
     .filter(Boolean)
     .sort()
     .reverse()[0] || null;
@@ -66,7 +88,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not allowed to review alert readiness." }, { status: 403 });
     }
 
-    const [{ data: staffRows, error: staffError }, { data: roomRows, error: roomError }, { data: subscriptionRows, error: subscriptionError }, { data: alertToneSetting }] = await Promise.all([
+    const [{ data: staffRows, error: staffError }, { data: roomRows, error: roomError }, { data: subscriptionRows, error: subscriptionError }, { data: alertToneSetting }, { data: nativeTokenSetting }] = await Promise.all([
       adminClient.from("profiles").select("id, full_name, display_name, email, role, admin_level").order("full_name"),
       adminClient
         .from("rooms")
@@ -75,6 +97,7 @@ export async function GET(request: NextRequest) {
         .limit(1000),
       adminClient.from("push_subscriptions").select("*").limit(3000),
       adminClient.from("app_settings").select("value").eq("key", STAFF_ALERT_TONES_SETTING_KEY).maybeSingle(),
+      adminClient.from("app_settings").select("value").eq("key", NATIVE_PUSH_TOKENS_SETTING_KEY).maybeSingle(),
     ]);
 
     if (staffError) return NextResponse.json({ error: staffError.message || "Could not load staff." }, { status: 500 });
@@ -83,6 +106,7 @@ export async function GET(request: NextRequest) {
 
     const subscriptions = (subscriptionRows || []) as Array<Record<string, unknown>>;
     const alertToneMap = parseStaffAlertToneMap(alertToneSetting?.value);
+    const nativeTokenMap = parseNativePushTokenMap(nativeTokenSetting?.value);
     const staffSubscriptions = subscriptions.filter((row) => row.user_type === "staff");
     const patientSubscriptions = subscriptions.filter((row) => row.user_type === "patient");
     const staffSubMap = new Map<string, Array<Record<string, unknown>>>();
@@ -102,14 +126,17 @@ export async function GET(request: NextRequest) {
       .filter((member) => `${member.role || ""}`.toLowerCase() !== "pending_staff")
       .map((member) => {
         const memberSubscriptions = staffSubMap.get(`${member.id || ""}`) || [];
+        const nativeTokens = nativeTokenMap.staff?.[`${member.id || ""}`] || [];
+        const latestSubscriptionAt = [newestIso(memberSubscriptions), newestNativeTokenIso(nativeTokens)].filter(Boolean).sort().reverse()[0] || null;
         return {
           id: member.id,
           name: member.full_name || member.display_name || member.email || "Staff",
           role: member.role || null,
           adminLevel: member.admin_level || null,
-          pushDevices: memberSubscriptions.length,
-          latestSubscriptionAt: newestIso(memberSubscriptions),
-          alertTone: alertToneMap[`${member.id || ""}`] || null,
+          pushDevices: memberSubscriptions.length + nativeTokens.length,
+          latestSubscriptionAt,
+          alertTone: (alertToneMap[`${member.id || ""}`] || emptyStaffAlertTonePreference()).portal || null,
+          alertTones: alertToneMap[`${member.id || ""}`] || emptyStaffAlertTonePreference(),
         };
       });
 
@@ -117,19 +144,21 @@ export async function GET(request: NextRequest) {
       const procedure = Array.isArray((room as any).procedures) ? (room as any).procedures[0] : (room as any).procedures;
       const patient = Array.isArray(procedure?.patients) ? procedure.patients[0] : procedure?.patients;
       const roomSubscriptions = patientSubMap.get(`${room.id || ""}`) || [];
+      const nativeTokens = nativeTokenMap.patientRooms?.[`${room.id || ""}`] || [];
+      const latestSubscriptionAt = [newestIso(roomSubscriptions), newestNativeTokenIso(nativeTokens)].filter(Boolean).sort().reverse()[0] || null;
       return {
         roomId: room.id,
         patientId: patient?.id || null,
         patientName: patient?.full_name || "Patient",
         procedureName: procedure?.procedure_name || null,
         recordStatus: patient?.record_status || null,
-        pushDevices: roomSubscriptions.length,
-        latestSubscriptionAt: newestIso(roomSubscriptions),
+        pushDevices: roomSubscriptions.length + nativeTokens.length,
+        latestSubscriptionAt,
       };
     });
 
     const staffReady = staff.filter((member) => member.pushDevices > 0).length;
-    const staffMuted = staff.filter((member) => member.alertTone === "off").length;
+    const staffMuted = staff.filter((member) => member.alertTones.portal === "off" || member.alertTones.staffChat === "off").length;
     const activePatientRooms = patientRooms.filter((room) => `${room.recordStatus || "active"}`.toLowerCase() === "active");
     const patientReady = activePatientRooms.filter((room) => room.pushDevices > 0).length;
 
@@ -142,8 +171,8 @@ export async function GET(request: NextRequest) {
         staffMuted,
         patientRoomsReady: patientReady,
         patientRoomsTotal: activePatientRooms.length,
-        staffPushDevices: staffSubscriptions.length,
-        patientPushDevices: patientSubscriptions.length,
+        staffPushDevices: staffSubscriptions.length + Object.values(nativeTokenMap.staff || {}).reduce((sum, tokens) => sum + tokens.length, 0),
+        patientPushDevices: patientSubscriptions.length + Object.values(nativeTokenMap.patientRooms || {}).reduce((sum, tokens) => sum + tokens.length, 0),
       },
     });
   } catch (error: any) {
