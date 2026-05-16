@@ -4,25 +4,68 @@ import { useEffect, useRef } from "react";
 
 const VERSION_URL = "/api/app-version";
 const CHECK_INTERVAL_MS = 30000;
+const CACHE_NAME_PATTERNS = [
+  /^dr-fonseca/i,
+  /^next-pwa/i,
+  /^workbox/i,
+];
 
-export default function AppUpdateWatcher() {
-  const currentVersionRef = useRef("");
+function samePathWithRefresh(version: string) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("app-refresh", version || `${Date.now()}`);
+  return url.href;
+}
+
+export default function AppUpdateWatcher({ buildVersion }: { buildVersion: string }) {
+  const currentVersionRef = useRef(buildVersion || "");
   const reloadingRef = useRef(false);
 
   useEffect(() => {
     let stopped = false;
     let timer: number | null = null;
+    let controllerReloaded = false;
+    const hadServiceWorkerController =
+      "serviceWorker" in navigator && Boolean(navigator.serviceWorker.controller);
+
+    const clearAppCaches = async () => {
+      if (!("caches" in window)) return;
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => CACHE_NAME_PATTERNS.some((pattern) => pattern.test(key)))
+          .map((key) => caches.delete(key).catch(() => false))
+      );
+    };
+
+    const registerServiceWorker = async () => {
+      if (!("serviceWorker" in navigator)) return;
+      const registration = await navigator.serviceWorker.register("/sw.js", {
+        updateViaCache: "none",
+      });
+      await registration.update().catch(() => undefined);
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+    };
 
     const hardReload = async () => {
       if (reloadingRef.current) return;
       reloadingRef.current = true;
       try {
+        await clearAppCaches();
         if ("serviceWorker" in navigator) {
           const registrations = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(registrations.map((registration) => registration.update().catch(() => undefined)));
+          await Promise.all(
+            registrations.map(async (registration) => {
+              await registration.update().catch(() => undefined);
+              if (registration.waiting) {
+                registration.waiting.postMessage({ type: "SKIP_WAITING" });
+              }
+            })
+          );
         }
       } finally {
-        window.location.reload();
+        window.location.replace(samePathWithRefresh(currentVersionRef.current));
       }
     };
 
@@ -41,6 +84,7 @@ export default function AppUpdateWatcher() {
           return;
         }
         if (currentVersionRef.current !== nextVersion && !stopped) {
+          currentVersionRef.current = nextVersion;
           await hardReload();
         }
       } catch {
@@ -48,6 +92,7 @@ export default function AppUpdateWatcher() {
       }
     };
 
+    registerServiceWorker().catch(() => undefined);
     checkVersion();
     timer = window.setInterval(checkVersion, CHECK_INTERVAL_MS);
 
@@ -55,6 +100,14 @@ export default function AppUpdateWatcher() {
       if (document.visibilityState === "visible") checkVersion();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
+    const onControllerChange = () => {
+      if (!hadServiceWorkerController || controllerReloaded || reloadingRef.current) return;
+      controllerReloaded = true;
+      window.location.replace(samePathWithRefresh(currentVersionRef.current));
+    };
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+    }
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.ready
@@ -75,8 +128,11 @@ export default function AppUpdateWatcher() {
       stopped = true;
       if (timer) window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+      }
     };
-  }, []);
+  }, [buildVersion]);
 
   return null;
 }

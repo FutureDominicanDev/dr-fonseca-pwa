@@ -6444,7 +6444,17 @@ export default function InboxPage() {
       {pendingPrescriptionFile && (
         <div className="modal-overlay" onClick={()=>{setPendingPrescriptionFile(null);setPrescriptionLabel("");setPrescriptionInstructions("");}}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520}}>
-            <p className="modal-title">{t.prescriptions}</p>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:20}}>
+              <p className="modal-title" style={{margin:0}}>{t.prescriptions}</p>
+              <button
+                type="button"
+                onClick={()=>{setPendingPrescriptionFile(null);setPrescriptionLabel("");setPrescriptionInstructions("");}}
+                aria-label={lang==="es" ? "Cerrar" : "Close"}
+                style={{width:42,height:42,minHeight:42,border:"none",borderRadius:999,background:cardBg,color:textColor,fontSize:22,fontWeight:900,cursor:"pointer",fontFamily:"inherit"}}
+              >
+                ×
+              </button>
+            </div>
             <label className="flabel">{t.prescriptionFile}</label>
             <div style={{padding:"13px 16px",border:`1px solid ${borderColor}`,borderRadius:14,background:cardBg,color:textColor,fontWeight:800,marginBottom:14,wordBreak:"break-word"}}>
               {pendingPrescriptionFile.name}

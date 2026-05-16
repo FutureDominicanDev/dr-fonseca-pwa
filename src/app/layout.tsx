@@ -5,6 +5,10 @@ import "./globals.css";
 
 const BRAND_BROWSER_COLOR = "#0B63CE";
 const FAVICON_VERSION = "20260511";
+const APP_BUILD_VERSION =
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.VERCEL_DEPLOYMENT_ID ||
+  "local-development";
 
 export const metadata: Metadata = {
   title: "Dr. Fonseca | Portal Médico",
@@ -60,13 +64,14 @@ export default function RootLayout({
         <meta name="theme-color" content={BRAND_BROWSER_COLOR} />
         <meta name="msapplication-TileColor" content={BRAND_BROWSER_COLOR} />
         <meta name="msapplication-navbutton-color" content={BRAND_BROWSER_COLOR} />
+        <meta name="app-version" content={APP_BUILD_VERSION} />
         <link rel="icon" href={`/favicon.ico?v=${FAVICON_VERSION}`} sizes="any" />
         <link rel="shortcut icon" href={`/favicon.ico?v=${FAVICON_VERSION}`} />
         <link rel="icon" type="image/png" sizes="16x16" href={`/favicon-16.png?v=${FAVICON_VERSION}`} />
         <link rel="icon" type="image/png" sizes="32x32" href={`/favicon-32.png?v=${FAVICON_VERSION}`} />
         <link rel="icon" type="image/png" sizes="48x48" href={`/favicon-48.png?v=${FAVICON_VERSION}`} />
         <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href={`/manifest.json?v=${APP_BUILD_VERSION}`} />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <style>{`
           *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -81,7 +86,7 @@ export default function RootLayout({
       </head>
       <body>
         <NativeKeyboardTuning />
-        <AppUpdateWatcher />
+        <AppUpdateWatcher buildVersion={APP_BUILD_VERSION} />
         {children}
       </body>
     </html>
