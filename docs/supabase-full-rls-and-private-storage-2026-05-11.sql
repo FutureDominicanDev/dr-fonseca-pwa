@@ -10,6 +10,11 @@
 --   - chat-files becomes private so copied public URLs stop working
 --
 -- Run after deploying the app version that serves patient-room APIs and signed media URLs.
+--
+-- Owner safety:
+--   Dr. Miguel Fonseca / Siluety Plastic Surgery is the engraved owner identity.
+--   Ray (mrdiazsr@icloud.com) is developer/support access only and must not be
+--   included in SQL owner bootstrap or owner allowlists.
 
 begin;
 
@@ -51,7 +56,6 @@ security definer
 set search_path = public
 as $$
   select public.current_user_email() in (
-    'mrdiazsr@icloud.com',
     'siluetybodyart@gmail.com',
     'miguelafr31@gmail.com'
   )

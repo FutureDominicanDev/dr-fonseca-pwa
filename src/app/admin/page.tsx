@@ -600,16 +600,34 @@ export default function AdminPage() {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (
+    accessProfile = viewerPermissionProfile,
+    accessEmail = viewerEmail,
+    accessUserId = viewerId,
+  ) => {
     setPageError("");
 
+    const accessIsOwner = isOwnerIdentity({
+      id: accessUserId,
+      email: accessEmail,
+      phone: accessProfile?.phone,
+      fullName: accessProfile?.full_name,
+      displayName: accessProfile?.display_name,
+      adminLevel: accessProfile?.admin_level,
+    });
+    const mayLoadPatients = hasPermission(accessProfile, accessEmail, "view_patients");
+    const mayLoadStaff = accessIsOwner || hasPermission(accessProfile, accessEmail, "manage_staff") || hasPermission(accessProfile, accessEmail, "create_patients");
+    const mayLoadStaffPrivateMessages = accessIsOwner || hasPermission(accessProfile, accessEmail, "delete_staff_chat");
+    const mayLoadAccessRequests = accessIsOwner || hasPermission(accessProfile, accessEmail, "manage_staff");
+    const emptyRows = Promise.resolve({ data: [], error: null });
+
     const [staffRes, patientsRes, proceduresRes, roomsRes, staffPrivateMessagesRes, accessRequestsRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes, staffPermissionsRes] = await Promise.all([
-      supabase.from("profiles").select("*").order("full_name"),
-      supabase.from("patients").select("*").order("full_name"),
-      supabase.from("procedures").select("*"),
-      supabase.from("rooms").select("*").order("created_at", { ascending: false }),
-      supabase.from("staff_private_messages").select("*").order("created_at", { ascending: false }).limit(500),
-      supabase.from("staff_access_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+      mayLoadStaff ? supabase.from("profiles").select("*").order("full_name") : emptyRows,
+      mayLoadPatients ? supabase.from("patients").select("*").order("full_name") : emptyRows,
+      mayLoadPatients ? supabase.from("procedures").select("*") : emptyRows,
+      mayLoadPatients ? supabase.from("rooms").select("*").order("created_at", { ascending: false }) : emptyRows,
+      mayLoadStaffPrivateMessages ? supabase.from("staff_private_messages").select("*").order("created_at", { ascending: false }).limit(500) : emptyRows,
+      mayLoadAccessRequests ? supabase.from("staff_access_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }) : emptyRows,
       supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_phones").maybeSingle(),
@@ -714,7 +732,7 @@ export default function AdminPage() {
       return;
     }
 
-    await fetchData();
+    await fetchData(computedProfile, email, user.id);
     setSessionChecked(true);
     setLoading(false);
   };

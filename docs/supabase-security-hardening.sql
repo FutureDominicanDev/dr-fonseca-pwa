@@ -9,6 +9,11 @@
 -- It intentionally does NOT harden public patient chat access yet.
 -- The patient chat still uses a guest link flow, so rooms/messages need a token-based redesign
 -- before we can safely lock those tables down without breaking patients.
+--
+-- Owner safety:
+--   Dr. Miguel Fonseca / Siluety Plastic Surgery is the engraved owner identity.
+--   Ray (mrdiazsr@icloud.com) is developer/support access only and must not be
+--   promoted or allowlisted as owner in SQL.
 
 -- 1) Helper functions
 create or replace function public.current_user_email()
@@ -59,7 +64,7 @@ security definer
 set search_path = public
 as $$
   select
-    public.current_user_email() = 'mrdiazsr@icloud.com'
+    public.current_user_email() in ('siluetybodyart@gmail.com', 'miguelafr31@gmail.com')
     or public.current_admin_level() in ('owner', 'super_admin', 'admin')
 $$;
 
@@ -105,7 +110,7 @@ create policy "profiles insert own row"
         and coalesce(role, 'staff') in ('doctor', 'enfermeria', 'coordinacion', 'post_quirofano', 'staff')
       )
       or (
-        public.current_user_email() = 'mrdiazsr@icloud.com'
+        public.current_user_email() in ('siluetybodyart@gmail.com', 'miguelafr31@gmail.com')
         and admin_level = 'owner'
         and coalesce(role, 'doctor') = 'doctor'
       )

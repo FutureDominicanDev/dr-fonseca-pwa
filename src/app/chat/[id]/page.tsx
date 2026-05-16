@@ -8,6 +8,12 @@ import { supabase } from "@/lib/supabaseClient";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { signMessageMediaUrls } from "@/lib/chatFileUrls";
 import {
+  STAFF_PERMISSIONS_SETTING_KEY,
+  hasPermission,
+  parseStaffPermissionMap,
+} from "@/lib/permissions";
+import { isOwnerIdentity } from "@/lib/securityConfig";
+import {
   FormMessage,
   createClinicalHistoryPayload,
   parseFormMessage,
@@ -303,7 +309,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const { id } = use(params);
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
-  const viewerType = searchParams.get("view") === "staff" ? "staff" : "patient";
+  const viewerType = "patient" as "patient" | "staff";
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -614,6 +620,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
       if (viewerType === "patient") return loadPatientSnapshot(true);
 
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const staffUser = authData?.user;
+      if (authError || !staffUser?.id) {
+        setAccessDenied(true);
+        setAccessReady(true);
+        return false;
+      }
+
       let roomQuery = await supabase
         .from("rooms")
         .select("id, patient_access_token, procedures(office_location, status, patients(id, full_name, phone, preferred_language, record_status))")
@@ -637,10 +651,43 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         return false;
       }
 
-      if (roomData.patient_access_token && roomData.patient_access_token !== token) {
+      const [{ data: staffProfile }, { data: permissionSetting }] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", staffUser.id).maybeSingle(),
+        supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+      ]);
+      const permissionMap = parseStaffPermissionMap(permissionSetting?.value);
+      const staffEmail = `${staffUser.email || ""}`.trim().toLowerCase();
+      const permissionProfile = staffProfile
+        ? { ...(staffProfile as any), permissions: permissionMap[staffUser.id] ?? (staffProfile as any).permissions }
+        : null;
+      const staffRole = `${(permissionProfile as any)?.role || ""}`.toLowerCase();
+      if (!permissionProfile?.id || staffRole === "pending_staff" || !hasPermission(permissionProfile, staffEmail, "view_patients")) {
         setAccessDenied(true);
         setAccessReady(true);
         return false;
+      }
+
+      const staffCanAccessAllRooms = isOwnerIdentity({
+        id: staffUser.id,
+        email: staffEmail,
+        phone: `${(permissionProfile as any)?.phone || staffUser.phone || (staffUser.user_metadata as any)?.phone || ""}`,
+        fullName: (permissionProfile as any)?.full_name || `${(staffUser.user_metadata as any)?.full_name || ""}`,
+        displayName: (permissionProfile as any)?.display_name || "",
+        adminLevel: `${(permissionProfile as any)?.admin_level || ""}`,
+      }) || `${(permissionProfile as any)?.admin_level || ""}`.toLowerCase() === "super_admin" || staffRole === "doctor";
+
+      if (!staffCanAccessAllRooms) {
+        const { data: membership, error: membershipError } = await supabase
+          .from("room_members")
+          .select("id")
+          .eq("room_id", id)
+          .eq("user_id", staffUser.id)
+          .maybeSingle();
+        if (membershipError || !membership?.id) {
+          setAccessDenied(true);
+          setAccessReady(true);
+          return false;
+        }
       }
 
       const procedure = Array.isArray(roomData.procedures) ? roomData.procedures[0] : roomData.procedures;

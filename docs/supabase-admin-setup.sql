@@ -1,6 +1,11 @@
 -- Dr. Fonseca PWA
 -- Configuracion inicial para panel admin, sedes del staff y trazabilidad de exportaciones.
 -- Ejecuta este archivo en Supabase SQL Editor.
+--
+-- Seguridad de propietario:
+--   Dr. Miguel Fonseca / Siluety Plastic Surgery es la identidad propietaria.
+--   Ray (mrdiazsr@icloud.com) es acceso de desarrollador/soporte solamente y no
+--   debe ser promovido por SQL como propietario.
 
 -- 1) Campos nuevos en profiles para permisos y sede del staff
 alter table public.profiles
@@ -111,13 +116,13 @@ create index if not exists admin_audit_events_created_at_idx on public.admin_aud
 create index if not exists admin_audit_events_patient_id_idx on public.admin_audit_events(patient_id);
 create index if not exists admin_audit_events_entity_type_idx on public.admin_audit_events(entity_type);
 
--- 7) Bootstrap owner actual del proyecto
+-- 7) Bootstrap owner actual del proyecto: Dr. Miguel Fonseca / Siluety Plastic Surgery
 update public.profiles
 set admin_level = 'owner'
 where id in (
   select id
   from auth.users
-  where lower(email) = 'mrdiazsr@icloud.com'
+  where lower(email) in ('siluetybodyart@gmail.com', 'miguelafr31@gmail.com')
 );
 
 -- 8) Normalizar valores vacios si ya existen usuarios y expedientes

@@ -1,15 +1,20 @@
 -- Dr. Fonseca PWA
 -- Launch reset / granular permissions proposal.
 -- Do NOT run this file until the doctor explicitly approves the reset plan.
+--
+-- Owner safety:
+--   Dr. Miguel Fonseca / Siluety Plastic Surgery is the engraved owner identity.
+--   Ray (mrdiazsr@icloud.com) is developer/support access only and must not be
+--   promoted by launch reset SQL.
 
 -- 1) Granular permissions column for staff profiles.
--- Code is backward compatible before this exists. After this is added, owner emails
--- still receive permanent full access in application code.
+-- Code is backward compatible before this exists. After this is added, the doctor's
+-- owner identities still receive permanent full access in application code.
 alter table public.profiles
   add column if not exists permissions jsonb not null default '[]'::jsonb;
 
 comment on column public.profiles.permissions is
-  'Explicit feature permissions for staff/admin users. Owner emails keep permanent full access in app code.';
+  'Explicit feature permissions for staff/admin users. Doctor owner identities keep permanent full access in app code.';
 
 create index if not exists profiles_permissions_idx
   on public.profiles using gin(permissions);
@@ -18,7 +23,6 @@ create index if not exists profiles_permissions_idx
 update public.profiles
 set admin_level = 'owner'
 where lower(coalesce(email, '')) in (
-  'mrdiazsr@icloud.com',
   'siluetybodyart@gmail.com',
   'miguelafr31@gmail.com'
 );

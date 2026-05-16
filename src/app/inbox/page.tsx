@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
-import { isOwnerEmail } from "@/lib/securityConfig";
+import { isOwnerEmail, isOwnerIdentity } from "@/lib/securityConfig";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
 import { createSignedChatFileUrl, signMessageMediaUrls, type SignedChatFileUrlCache } from "@/lib/chatFileUrls";
 import { FormMessage, parseFormMessage } from "@/components/FormMessage";
@@ -561,7 +561,14 @@ const isDefaultDoctorMember = (member: CareTeamMember) => {
   const email = `${member.email || ""}`.trim().toLowerCase();
   const role = `${member.role || ""}`.toLowerCase();
   const name = `${member.full_name || ""} ${member.display_name || ""}`.toLowerCase();
-  return isOwnerEmail(email) || (name.includes("fonseca") && (name.includes("miguel") || name.includes("dr") || role === "doctor"));
+  return isOwnerIdentity({
+    id: member.id,
+    email,
+    phone: member.phone,
+    fullName: member.full_name,
+    displayName: member.display_name,
+    adminLevel: null,
+  }) || (name.includes("fonseca") && (name.includes("miguel") || name.includes("dr") || role === "doctor"));
 };
 type StaffPrivateMessage = {
   id?: string;
@@ -1421,7 +1428,15 @@ export default function InboxPage() {
   };
   const matchesCareTeamOffice = (member: CareTeamMember, office: string) =>
     !member.office_location || member.office_location === office;
-  const isSuperAdmin = isOwnerEmail(currentUserEmail) || ["owner","super_admin"].includes((userProfile?.admin_level || "").toLowerCase());
+  const currentUserIsOwner = isOwnerIdentity({
+    id: currentUserId,
+    email: currentUserEmail,
+    phone: userProfile?.phone,
+    fullName: userProfile?.full_name,
+    displayName: userProfile?.display_name,
+    adminLevel: userProfile?.admin_level,
+  });
+  const isSuperAdmin = currentUserIsOwner || ["owner","super_admin"].includes((userProfile?.admin_level || "").toLowerCase());
   const canOpenAdmin = hasPermission(userProfile, currentUserEmail, "access_settings_security");
   const canManageCareTeam = hasPermission(userProfile, currentUserEmail, "manage_staff");
   const currentUserAssignedToSelectedRoom =
@@ -1429,7 +1444,7 @@ export default function InboxPage() {
     (!!selectedRoom?.created_by && selectedRoom.created_by === currentUserId ||
       selectedRoomTeam.some((member) => member.id === currentUserId));
   const canUseStaffRecord = hasPermission(userProfile, currentUserEmail, "view_internal_notes") && (isSuperAdmin || currentUserAssignedToSelectedRoom);
-  const canViewClinicalHistoryForms = hasPermission(userProfile, currentUserEmail, "view_clinical_history") && (isOwnerEmail(currentUserEmail) || currentUserAssignedToSelectedRoom);
+  const canViewClinicalHistoryForms = hasPermission(userProfile, currentUserEmail, "view_clinical_history") && (currentUserIsOwner || currentUserAssignedToSelectedRoom);
   const canCancelRestoreRoom = hasPermission(userProfile, currentUserEmail, "archive_rooms") || hasPermission(userProfile, currentUserEmail, "restore_rooms");
   const canManageLabels = hasPermission(userProfile, currentUserEmail, "manage_labels");
   const canViewUploadFiles = hasPermission(userProfile, currentUserEmail, "view_upload_files");
@@ -3224,7 +3239,14 @@ export default function InboxPage() {
       setLoading(false);
       return;
     }
-    const canSeeAllRooms = isOwnerEmail(viewerEmail) || viewerAdminLevel === "owner" || viewerRole === "doctor";
+    const canSeeAllRooms = isOwnerIdentity({
+      id: authUser.id,
+      email: viewerEmail,
+      phone: `${(profileWithPermissions as any)?.phone || authUser.phone || (authUser.user_metadata as any)?.phone || ""}`,
+      fullName: (profileWithPermissions as any)?.full_name || `${(authUser.user_metadata as any)?.full_name || ""}`,
+      displayName: (profileWithPermissions as any)?.display_name || "",
+      adminLevel: (profileWithPermissions as any)?.admin_level || "",
+    }) || viewerAdminLevel === "owner" || viewerRole === "doctor";
     canSeeAllRoomsRef.current = canSeeAllRooms;
 
     let restrictedRoomIds: string[] | null = null;
