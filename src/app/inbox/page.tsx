@@ -16,7 +16,7 @@ import {
 import {
   ALERT_TONE_OPTIONS,
   emptyStaffAlertTonePreference,
-  alertToneText,
+  alertToneTextForCategory,
   normalizeAlertTone,
   type AlertTone,
   type AlertToneCategory,
@@ -65,7 +65,7 @@ const readStaffRecordAlertsMuted = () => {
 };
 
 const readStaffAlertTone = (key = STAFF_ALERT_TONE_STORAGE_KEY, fallback: AlertTone = "classic"): AlertTone => {
-  if (typeof window === "undefined") return "classic";
+  if (typeof window === "undefined") return fallback;
   const stored = window.localStorage.getItem(key);
   return normalizeAlertTone(stored, fallback);
 };
@@ -1000,7 +1000,7 @@ export default function InboxPage() {
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   const [portalAlertTone, setPortalAlertTone] = useState<AlertTone>(() => readStaffAlertTone());
-  const [staffChatAlertTone, setStaffChatAlertTone] = useState<AlertTone>(() => readStaffAlertTone(STAFF_CHAT_ALERT_TONE_STORAGE_KEY, readStaffAlertTone()));
+  const [staffChatAlertTone, setStaffChatAlertTone] = useState<AlertTone>(() => readStaffAlertTone(STAFF_CHAT_ALERT_TONE_STORAGE_KEY, "urgent"));
   const [serverAlertTones, setServerAlertTones] = useState<StaffAlertTonePreference>(() => emptyStaffAlertTonePreference());
   const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
@@ -1085,7 +1085,7 @@ export default function InboxPage() {
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
   const fmtShortDate = (ts?: string | null) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}); };
-  const alertToneLabel = (tone: AlertTone) => alertToneText(tone, lang === "es");
+  const alertToneLabelForCategory = (tone: AlertTone, category: AlertToneCategory) => alertToneTextForCategory(tone, category, lang === "es");
   const saveOwnAlertTone = useCallback(async (category: AlertToneCategory, tone: AlertTone) => {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -1966,19 +1966,27 @@ export default function InboxPage() {
     if (context?.state === "suspended") context.resume().catch(() => {});
   }, [ensureAudioContext]);
 
-  const playAlertTone = useCallback((tone: AlertTone) => {
+  const playAlertTone = useCallback((tone: AlertTone, category: AlertToneCategory) => {
     if (tone === "off") return;
     const context = ensureAudioContext();
     if (!context) return;
     const doPlay = () => {
       const startAt = context.currentTime;
-      const toneConfig = tone === "soft"
-        ? { master: 0.42, type: "sine" as OscillatorType, repeatOffsets: [0], pulses: [[0, 659, 0.09], [0.2, 880, 0.1]] as const }
-        : tone === "urgent"
-          ? { master: 0.94, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.17], [0.16, 988, 0.17], [0.34, 1568, 0.2], [0.52, 1568, 0.2]] as const }
-          : tone === "critical"
-            ? { master: 0.98, type: "sawtooth" as OscillatorType, repeatOffsets: [0, 0.92, 1.84], pulses: [[0, 880, 0.22], [0.14, 1319, 0.24], [0.28, 1760, 0.26], [0.44, 2093, 0.24], [0.6, 1760, 0.22]] as const }
-            : { master: 0.86, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.16], [0.22, 1319, 0.18], [0.44, 1760, 0.2]] as const };
+      const toneConfig = category === "staffChat"
+        ? tone === "soft"
+          ? { master: 0.44, type: "triangle" as OscillatorType, repeatOffsets: [0], pulses: [[0, 523, 0.1], [0.28, 392, 0.11], [0.56, 523, 0.1]] as const }
+          : tone === "urgent"
+            ? { master: 0.94, type: "square" as OscillatorType, repeatOffsets: [0, 0.78], pulses: [[0, 698, 0.17], [0.18, 523, 0.17], [0.36, 698, 0.19]] as const }
+            : tone === "critical"
+              ? { master: 0.98, type: "square" as OscillatorType, repeatOffsets: [0, 0.7, 1.4], pulses: [[0, 587, 0.2], [0.16, 1175, 0.24], [0.32, 587, 0.2], [0.48, 1175, 0.24]] as const }
+              : { master: 0.84, type: "triangle" as OscillatorType, repeatOffsets: [0], pulses: [[0, 523, 0.14], [0.24, 392, 0.15], [0.48, 523, 0.16]] as const }
+        : tone === "soft"
+          ? { master: 0.42, type: "sine" as OscillatorType, repeatOffsets: [0], pulses: [[0, 659, 0.09], [0.2, 880, 0.1]] as const }
+          : tone === "urgent"
+            ? { master: 0.94, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.17], [0.16, 988, 0.17], [0.34, 1568, 0.2], [0.52, 1568, 0.2]] as const }
+            : tone === "critical"
+              ? { master: 0.98, type: "sawtooth" as OscillatorType, repeatOffsets: [0, 0.92, 1.84], pulses: [[0, 880, 0.22], [0.14, 1319, 0.24], [0.28, 1760, 0.26], [0.44, 2093, 0.24], [0.6, 1760, 0.22]] as const }
+              : { master: 0.86, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.16], [0.22, 1319, 0.18], [0.44, 1760, 0.2]] as const };
       const limiter = context.createDynamicsCompressor();
       limiter.threshold.setValueAtTime(-12, startAt);
       limiter.knee.setValueAtTime(8, startAt);
@@ -2029,11 +2037,11 @@ export default function InboxPage() {
   }, [ensureAudioContext]);
 
   const playPortalAlertTone = useCallback(() => {
-    playAlertTone(portalAlertTone);
+    playAlertTone(portalAlertTone, "portal");
   }, [playAlertTone, portalAlertTone]);
 
   const playStaffChatAlertTone = useCallback(() => {
-    playAlertTone(staffChatAlertTone);
+    playAlertTone(staffChatAlertTone, "staffChat");
   }, [playAlertTone, staffChatAlertTone]);
 
   const describeIncomingMessage = useCallback((message: RoomMessageSummary, translatedText = "") => {
@@ -5204,7 +5212,7 @@ export default function InboxPage() {
                       onClick={()=>chooseAlertTone(group.category, tone)}
                       style={{minHeight:46,borderRadius:12,border:group.tone===tone?"2px solid #007AFF":`2px solid ${borderColor}`,background:group.tone===tone?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:group.tone===tone?"#007AFF":textColor,fontWeight:850,cursor:"pointer",fontFamily:"inherit",fontSize:settingsBaseSize,lineHeight:1.25}}
                     >
-                      {alertToneLabel(tone)}
+                      {alertToneLabelForCategory(tone, group.category)}
                     </button>
                   ))}
                 </div>

@@ -54,3 +54,17 @@ export const alertToneText = (tone: AlertTone, isSpanish: boolean) => ({
   critical: isSpanish ? "Crítico repetido" : "Critical repeat",
   off: isSpanish ? "Silencio" : "Silent",
 }[tone]);
+
+export const alertToneTextForCategory = (tone: AlertTone, category: AlertToneCategory, isSpanish: boolean) => {
+  if (category === "staffChat") {
+    return {
+      classic: isSpanish ? "Chat" : "Chat",
+      soft: isSpanish ? "Chat suave" : "Soft chat",
+      urgent: isSpanish ? "Chat urgente" : "Urgent chat",
+      critical: isSpanish ? "Chat crítico" : "Critical chat",
+      off: isSpanish ? "Silencio" : "Silent",
+    }[tone];
+  }
+
+  return alertToneText(tone, isSpanish);
+};

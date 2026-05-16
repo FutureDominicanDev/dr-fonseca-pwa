@@ -37,7 +37,7 @@ import {
 import { createSignedChatFileUrl } from "@/lib/chatFileUrls";
 import {
   ALERT_TONE_OPTIONS,
-  alertToneText,
+  alertToneTextForCategory,
   emptyStaffAlertTonePreference,
   type AlertTone,
   type AlertToneCategory,
@@ -352,7 +352,7 @@ export default function AdminPage() {
     if (entry?.alertTone) return { portal: entry.alertTone, staffChat: entry.alertTone };
     return emptyStaffAlertTonePreference();
   };
-  const playAdminAlertTone = (tone: AlertTone) => {
+  const playAdminAlertTone = (tone: AlertTone, category: AlertToneCategory = "portal") => {
     if (tone === "off") return;
     const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextCtor) return;
@@ -360,13 +360,21 @@ export default function AdminPage() {
     const context = audioContextRef.current;
     const doPlay = () => {
       const startAt = context.currentTime;
-      const toneConfig = tone === "soft"
-        ? { master: 0.42, type: "sine" as OscillatorType, repeatOffsets: [0], pulses: [[0, 659, 0.09], [0.2, 880, 0.1]] as const }
-        : tone === "urgent"
-          ? { master: 0.94, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.17], [0.16, 988, 0.17], [0.34, 1568, 0.2], [0.52, 1568, 0.2]] as const }
-          : tone === "critical"
-            ? { master: 0.98, type: "sawtooth" as OscillatorType, repeatOffsets: [0, 0.92, 1.84], pulses: [[0, 880, 0.22], [0.14, 1319, 0.24], [0.28, 1760, 0.26], [0.44, 2093, 0.24], [0.6, 1760, 0.22]] as const }
-            : { master: 0.86, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.16], [0.22, 1319, 0.18], [0.44, 1760, 0.2]] as const };
+      const toneConfig = category === "staffChat"
+        ? tone === "soft"
+          ? { master: 0.44, type: "triangle" as OscillatorType, repeatOffsets: [0], pulses: [[0, 523, 0.1], [0.28, 392, 0.11], [0.56, 523, 0.1]] as const }
+          : tone === "urgent"
+            ? { master: 0.94, type: "square" as OscillatorType, repeatOffsets: [0, 0.78], pulses: [[0, 698, 0.17], [0.18, 523, 0.17], [0.36, 698, 0.19]] as const }
+            : tone === "critical"
+              ? { master: 0.98, type: "square" as OscillatorType, repeatOffsets: [0, 0.7, 1.4], pulses: [[0, 587, 0.2], [0.16, 1175, 0.24], [0.32, 587, 0.2], [0.48, 1175, 0.24]] as const }
+              : { master: 0.84, type: "triangle" as OscillatorType, repeatOffsets: [0], pulses: [[0, 523, 0.14], [0.24, 392, 0.15], [0.48, 523, 0.16]] as const }
+        : tone === "soft"
+          ? { master: 0.42, type: "sine" as OscillatorType, repeatOffsets: [0], pulses: [[0, 659, 0.09], [0.2, 880, 0.1]] as const }
+          : tone === "urgent"
+            ? { master: 0.94, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.17], [0.16, 988, 0.17], [0.34, 1568, 0.2], [0.52, 1568, 0.2]] as const }
+            : tone === "critical"
+              ? { master: 0.98, type: "sawtooth" as OscillatorType, repeatOffsets: [0, 0.92, 1.84], pulses: [[0, 880, 0.22], [0.14, 1319, 0.24], [0.28, 1760, 0.26], [0.44, 2093, 0.24], [0.6, 1760, 0.22]] as const }
+              : { master: 0.86, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.16], [0.22, 1319, 0.18], [0.44, 1760, 0.2]] as const };
       const limiter = context.createDynamicsCompressor();
       limiter.threshold.setValueAtTime(-12, startAt);
       limiter.knee.setValueAtTime(8, startAt);
@@ -1354,13 +1362,13 @@ export default function AdminPage() {
         actorName: viewerProfile?.full_name || viewerProfile?.display_name || viewerEmail,
         actorEmail: viewerEmail,
         notes: tone
-          ? (isSpanish ? `${alertToneCategoryText(category)}: ${alertToneText(tone, true)}.` : `${alertToneCategoryText(category)}: ${alertToneText(tone, false)}.`)
+          ? (isSpanish ? `${alertToneCategoryText(category)}: ${alertToneTextForCategory(tone, category, true)}.` : `${alertToneCategoryText(category)}: ${alertToneTextForCategory(tone, category, false)}.`)
           : (isSpanish ? `${alertToneCategoryText(category)} sin tono guardado.` : `${alertToneCategoryText(category)} saved tone removed.`),
         metadata: { alertToneCategory: category, alertTone: tone },
       });
       updateSuccess(
         tone
-          ? (isSpanish ? `${member.full_name || "Staff"}: ${alertToneCategoryText(category)} quedó en ${alertToneText(tone, true)}. El staff puede cambiarlo desde Ajustes.` : `${member.full_name || "Staff"}: ${alertToneCategoryText(category)} is now ${alertToneText(tone, false)}. Staff can still change it in Settings.`)
+          ? (isSpanish ? `${member.full_name || "Staff"}: ${alertToneCategoryText(category)} quedó en ${alertToneTextForCategory(tone, category, true)}. El staff puede cambiarlo desde Ajustes.` : `${member.full_name || "Staff"}: ${alertToneCategoryText(category)} is now ${alertToneTextForCategory(tone, category, false)}. Staff can still change it in Settings.`)
           : (isSpanish ? `${member.full_name || "Staff"} quedó sin tono guardado para ${alertToneCategoryText(category)}.` : `${member.full_name || "Staff"} now has no saved tone for ${alertToneCategoryText(category)}.`),
       );
     } catch (error: any) {
@@ -2765,8 +2773,8 @@ export default function AdminPage() {
                                 <span>
                                   {[
                                     member.adminLevel || member.role || (isSpanish ? "Staff" : "Staff"),
-                                    `${isSpanish ? "Portal" : "Portal"}: ${tones.portal ? alertToneText(tones.portal, isSpanish) : (isSpanish ? "Sin registro" : "No saved tone")}`,
-                                    `${isSpanish ? "Staff" : "Staff"}: ${tones.staffChat ? alertToneText(tones.staffChat, isSpanish) : (isSpanish ? "Sin registro" : "No saved tone")}`,
+                                    `${isSpanish ? "Portal" : "Portal"}: ${tones.portal ? alertToneTextForCategory(tones.portal, "portal", isSpanish) : (isSpanish ? "Sin registro" : "No saved tone")}`,
+                                    `${isSpanish ? "Staff" : "Staff"}: ${tones.staffChat ? alertToneTextForCategory(tones.staffChat, "staffChat", isSpanish) : (isSpanish ? "Sin registro" : "No saved tone")}`,
                                     alertLastSeen(member.latestSubscriptionAt),
                                   ].filter(Boolean).join(" · ")}
                                 </span>
@@ -2797,7 +2805,7 @@ export default function AdminPage() {
                                           type="button"
                                           className="mini-btn"
                                           disabled={!selectedTone || selectedTone === "off"}
-                                          onClick={() => selectedTone && playAdminAlertTone(selectedTone)}
+                                          onClick={() => selectedTone && playAdminAlertTone(selectedTone, category)}
                                         >
                                           {isSpanish ? "Probar" : "Test"}
                                         </button>
@@ -2821,7 +2829,7 @@ export default function AdminPage() {
                                             onClick={() => saveStaffAlertTone(staffMember, category, tone)}
                                             style={toneButtonStyle(selectedTone === tone, saving)}
                                           >
-                                            {alertToneText(tone, isSpanish)}
+                                            {alertToneTextForCategory(tone, category, isSpanish)}
                                           </button>
                                         ))}
                                       </div>
@@ -3302,7 +3310,7 @@ export default function AdminPage() {
                                                 type="button"
                                                 className="mini-btn"
                                                 disabled={!savedAlertTone || savedAlertTone === "off"}
-                                                onClick={() => savedAlertTone && playAdminAlertTone(savedAlertTone)}
+                                                onClick={() => savedAlertTone && playAdminAlertTone(savedAlertTone, category)}
                                               >
                                                 {isSpanish ? "Probar" : "Test"}
                                               </button>
@@ -3334,7 +3342,7 @@ export default function AdminPage() {
                                                     opacity: alertToneSaving ? 0.55 : 1,
                                                   }}
                                                 >
-                                                  {alertToneText(tone, isSpanish)}
+                                                  {alertToneTextForCategory(tone, category, isSpanish)}
                                                 </button>
                                               ))}
                                             </div>
