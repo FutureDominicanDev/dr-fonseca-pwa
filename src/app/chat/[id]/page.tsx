@@ -77,9 +77,9 @@ const readPatientTextSize = (): PatientTextSize => {
 };
 
 const readPatientAlertTone = (): AlertTone => {
-  if (typeof window === "undefined") return "classic";
+  if (typeof window === "undefined") return "urgent";
   const stored = window.localStorage.getItem(PATIENT_ALERT_TONE_STORAGE_KEY);
-  return stored === "soft" || stored === "urgent" || stored === "critical" ? stored : "classic";
+  return stored === "classic" || stored === "soft" || stored === "urgent" || stored === "critical" ? stored : "urgent";
 };
 
 const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
