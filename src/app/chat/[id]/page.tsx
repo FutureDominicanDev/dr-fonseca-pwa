@@ -2159,7 +2159,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           </div>
         )}
 
-        <button disabled={roomClosed} onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ position:"relative", width: 42, height: 42, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <button disabled={roomClosed} onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ position:"relative", width: 44, height: 44, minWidth: 44, minHeight: 44, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {menuOpen ? "×" : "+"}
           {newPrescriptionCount > 0 && <span style={{position:"absolute",right:0,top:0,width:12,height:12,borderRadius:"50%",background:"#DC2626",border:"2px solid #ededed"}} />}
         </button>
@@ -2208,7 +2208,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           <div style={{ width: "100%", maxWidth: 420, background: panelBg, color: textPrimary, borderRadius: 20, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.30)" }} onClick={(event)=>event.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
               <strong style={{ fontSize: patientTextBase, lineHeight: 1.35 }}>{labels.callSheetTitle}</strong>
-              <button onClick={() => setCallSheetOpen(false)} style={{ border: "none", background: inputPanelBg, color: textPrimary, borderRadius: 999, width: 42, height: 42, fontSize: 24, lineHeight: 1 }}>×</button>
+              <button onClick={() => setCallSheetOpen(false)} style={{ border: "none", background: inputPanelBg, color: textPrimary, borderRadius: 999, width: 44, height: 44, minWidth: 44, minHeight: 44, fontSize: 24, lineHeight: 1 }}>×</button>
             </div>
             <p style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#475569", fontWeight: 750, lineHeight: 1.5, marginBottom: 12 }}>
               {labels.callSheetCopy}
@@ -2620,8 +2620,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 }
 
 const roundButtonStyle: React.CSSProperties = {
-  width: 42,
-  height: 42,
+  width: 44,
+  height: 44,
+  minWidth: 44,
+  minHeight: 44,
   borderRadius: "50%",
   border: "none",
   background: "transparent",
