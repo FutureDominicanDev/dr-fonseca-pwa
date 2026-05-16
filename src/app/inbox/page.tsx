@@ -5628,10 +5628,10 @@ export default function InboxPage() {
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 12px 14px 10px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
         .sidebar-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-        .search-bar { width: min(100%, 540px); margin: 0 auto; display: flex; align-items: center; gap: 9px; min-height: 44px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#D5E4F2"}; border-radius: 14px; padding: 8px 12px; box-shadow: ${darkMode?"none":"0 5px 16px rgba(28,66,104,0.06)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+        .search-bar { width: min(100%, 540px); margin: 0 auto; display: flex; align-items: center; gap: 9px; min-height: 44px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.14)":"#D5E4F2"}; border-radius: 14px; padding: 0 12px; box-shadow: ${darkMode?"none":"0 5px 16px rgba(28,66,104,0.06)"}; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
         .search-bar:focus-within { border-color: #2563EB; box-shadow: ${darkMode?"0 0 0 3px rgba(37,99,235,0.22)":"0 0 0 3px rgba(37,99,235,0.12), 0 4px 14px rgba(15,23,42,0.08)"}; }
         .search-bar svg { stroke: ${darkMode?"#CBD5E1":"#64748B"}; }
-        .search-input { flex: 1; border: none; background: transparent; font-size: var(--app-ui-font-size); outline: none; color: ${textColor}; font-family: inherit; font-weight: 650; min-width: 0; min-height: 26px !important; }
+        .search-input { flex: 1; border: none; background: transparent; font-size: var(--app-ui-font-size); outline: none; color: ${textColor}; font-family: inherit; font-weight: 650; min-width: 0; min-height: 44px !important; }
         .search-input::placeholder { color: ${darkMode?"#94A3B8":"#7C8797"}; opacity: 1; font-weight: 650; }
         .label-filter-row { display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px 0; scrollbar-width: none; }
         .label-filter-row::-webkit-scrollbar { display: none; }
