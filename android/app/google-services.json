@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "37768272170",
+    "project_id": "dr-fonseca-portal",
+    "storage_bucket": "dr-fonseca-portal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:37768272170:android:6840409e78dd4b5b966653",
+        "android_client_info": {
+          "package_name": "com.drfonsecacirujanoplastico.portal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDj9TWlw_XXsbDeZSa_wJuozcL4dxKR97A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
