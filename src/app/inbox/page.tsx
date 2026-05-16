@@ -5679,7 +5679,7 @@ export default function InboxPage() {
         .date-sep { display: flex; justify-content: center; margin: 16px 0 12px; }
 	        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.92)":"rgba(255,255,255,0.96)"}; border-radius: 10px; padding: 6px 13px; font-size: var(--app-ui-small-size); color: ${darkMode?"#F8FAFC":"#111827"}; font-weight: 850; box-shadow: 0 1px 4px rgba(15,23,42,0.10); border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; }
         .chat-head { flex-shrink: 0; background: ${darkMode?"#111B21":"rgba(255,255,255,0.98)"}; padding: 9px max(14px, env(safe-area-inset-right)) 9px max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; z-index: 50; min-height: 62px; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.18)"}; box-shadow: ${darkMode?"none":"0 6px 18px rgba(28,66,104,0.08)"}; }
-        .back-btn { width: 38px; height: 38px; border-radius: 50%; background: ${darkMode?"#1F2C34":"#EAF3FF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: ${darkMode?"#DBEAFE":"#075EA8"}; font-size: 21px; font-weight: 850; transition: background 0.15s; }
+        .back-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: ${darkMode?"#1F2C34":"#EAF3FF"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; color: ${darkMode?"#DBEAFE":"#075EA8"}; font-size: 21px; font-weight: 850; transition: background 0.15s; }
         .back-btn:hover { background: ${darkMode?"#263846":"#DCEEFF"}; }
         .chat-av { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg,#123E5E,#2B78B7); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 850; color: white; flex-shrink: 0; overflow: hidden; box-shadow: 0 4px 14px rgba(16,52,83,0.18); }
         .chat-head-name { font-size: calc(var(--app-ui-font-size) + 2px); font-weight: 850; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -5697,16 +5697,16 @@ export default function InboxPage() {
         .typing-dots span:nth-child(3) { animation-delay: 0.32s; }
         .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
-        .plus-btn { position: relative; width: 38px; height: 38px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
+        .plus-btn { position: relative; width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
         .staff-record-dot { position: absolute; top: -2px; right: -2px; width: 11px; height: 11px; border-radius: 50%; background: #EF4444; border: 2px solid ${darkMode ? "#111B21" : "#F0F2F5"}; box-shadow: 0 2px 6px rgba(239,68,68,0.35); }
         .staff-menu-popup { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: calc(64px + env(safe-area-inset-bottom)); width: min(310px, calc(100vw - 32px)); background: white; border: 1px solid rgba(15,23,42,0.10); border-radius: 18px; overflow: hidden; box-shadow: 0 18px 45px rgba(15,23,42,0.22); z-index: 40; }
         .staff-menu-item { width: 100%; border: none; border-bottom: 1px solid rgba(15,23,42,0.08); background: white; color: #111827; padding: 18px 24px; text-align: left; cursor: pointer; font-family: inherit; font-size: 20px; font-weight: 900; }
         .staff-menu-item:last-child { border-bottom: none; }
-        .send-btn { width: 38px; height: 38px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
+        .send-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .phone-btn { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
+        .phone-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
         .phone-btn img { width: 30px; height: 30px; object-fit: contain; display: block; }
-        .mic-btn { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .mic-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .mic-btn img { width: 36px; height: 36px; object-fit: contain; display: block; }
         .slash-popup { position: fixed; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 45; pointer-events: none; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-height: min(42dvh, 260px); overflow-y: auto; padding: 0 0 8px; }
         .slash-item { width: fit-content; max-width: calc(100vw - 20px); border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(0,0,0,0.10)"}; background: ${darkMode?"#253244":"white"}; color: ${textColor}; border-radius: 12px; padding: 12px 14px; text-align: left; font-size: 16px; font-weight: 600; box-shadow: 0 8px 24px rgba(15,23,42,0.16); pointer-events: auto; cursor: pointer; font-family: inherit; }
@@ -5793,9 +5793,9 @@ export default function InboxPage() {
           .patient-list { padding-left: 10px; padding-right: 10px; }
           .chat-head { min-height: 62px; }
           .input-area { gap: 8px; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
-          .plus-btn { width: 42px; height: 42px; font-size: 28px; }
-          .icon-btn, .send-btn { width: 42px; height: 42px; font-size: 20px; }
-          .phone-btn, .mic-btn { width: 42px; height: 42px; }
+          .plus-btn { width: 44px; height: 44px; font-size: 28px; }
+          .icon-btn, .send-btn { width: 44px; height: 44px; font-size: 20px; }
+          .phone-btn, .mic-btn { width: 44px; height: 44px; }
           .phone-btn img { width: 30px; height: 30px; }
           .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
