@@ -187,11 +187,40 @@ type PendingSignupDetail = {
   capturedAt?: string | null;
 };
 
+type NotificationReadiness = {
+  staff: Array<{
+    id: string;
+    name: string;
+    role?: string | null;
+    adminLevel?: string | null;
+    pushDevices: number;
+    latestSubscriptionAt?: string | null;
+  }>;
+  patientRooms: Array<{
+    roomId: string;
+    patientId?: string | null;
+    patientName: string;
+    procedureName?: string | null;
+    recordStatus?: string | null;
+    pushDevices: number;
+    latestSubscriptionAt?: string | null;
+  }>;
+  totals: {
+    staffReady: number;
+    staffTotal: number;
+    patientRoomsReady: number;
+    patientRoomsTotal: number;
+    staffPushDevices: number;
+    patientPushDevices: number;
+  };
+};
+
 type AdminSectionId =
   | "buscar-paciente"
   | "crear-paciente"
   | "equipo"
   | "solicitudes-pendientes"
+  | "alertas"
   | "staff-to-staff"
   | "herramientas-expediente"
   | "developer-access"
@@ -246,6 +275,8 @@ export default function AdminPage() {
   const [pendingSignupDetails, setPendingSignupDetails] = useState<Record<string, PendingSignupDetail>>({});
   const [staffPermissionMap, setStaffPermissionMap] = useState<StaffPermissionMap>({});
   const [staffPermissionDrafts, setStaffPermissionDrafts] = useState<Record<string, StaffPermissionKey[]>>({});
+  const [notificationReadiness, setNotificationReadiness] = useState<NotificationReadiness | null>(null);
+  const [notificationReadinessLoading, setNotificationReadinessLoading] = useState(false);
 
   const viewerPermissionProfile = viewerProfile
     ? { ...viewerProfile, permissions: staffPermissionMap[viewerProfile.id] ?? viewerProfile.permissions }
@@ -264,6 +295,7 @@ export default function AdminPage() {
     displayName: viewerProfile?.display_name,
     adminLevel: viewerProfile?.admin_level,
   });
+  const canReviewAlertReadiness = canManageOwner || hasPermission(viewerPermissionProfile, viewerEmail, "access_settings_security");
   const canReviewAccessRequests = hasPermission(viewerPermissionProfile, viewerEmail, "manage_staff");
 
   const sanitizeEditablePermissions = (member: StaffProfile, requestedPermissions: StaffPermissionKey[]) => {
@@ -529,6 +561,16 @@ export default function AdminPage() {
       visible: canReviewAccessRequests,
     },
     {
+      id: "alertas",
+      code: "AL",
+      label: isSpanish ? "Alertas" : "Alerts",
+      detail: isSpanish ? "Estado de notificaciones" : "Notification readiness",
+      metric: notificationReadiness
+        ? `${notificationReadiness.totals.staffReady}/${notificationReadiness.totals.staffTotal}`
+        : "",
+      visible: canReviewAlertReadiness,
+    },
+    {
       id: "staff-to-staff",
       code: "CH",
       label: isSpanish ? "Chat staff" : "Staff chat",
@@ -639,6 +681,34 @@ export default function AdminPage() {
     }
   };
 
+  const loadNotificationReadiness = async (allowed: boolean) => {
+    if (!allowed) {
+      setNotificationReadiness(null);
+      return;
+    }
+
+    setNotificationReadinessLoading(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      if (!accessToken) return;
+      const response = await fetch("/api/admin/notification-readiness", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPageError(payload?.error || (isSpanish ? "No pude cargar el estado de alertas." : "I could not load alert readiness."));
+        return;
+      }
+      setNotificationReadiness(payload as NotificationReadiness);
+    } catch (error: any) {
+      setPageError(error?.message || (isSpanish ? "No pude cargar el estado de alertas." : "I could not load alert readiness."));
+    } finally {
+      setNotificationReadinessLoading(false);
+    }
+  };
+
   const fetchData = async (
     accessProfile = viewerPermissionProfile,
     accessEmail = viewerEmail,
@@ -658,6 +728,7 @@ export default function AdminPage() {
     const mayLoadStaff = accessIsOwner || hasPermission(accessProfile, accessEmail, "manage_staff") || hasPermission(accessProfile, accessEmail, "create_patients");
     const mayLoadStaffPrivateMessages = accessIsOwner || hasPermission(accessProfile, accessEmail, "delete_staff_chat");
     const mayLoadAccessRequests = accessIsOwner || hasPermission(accessProfile, accessEmail, "manage_staff");
+    const mayLoadNotificationReadiness = accessIsOwner || hasPermission(accessProfile, accessEmail, "access_settings_security");
     const emptyRows = Promise.resolve({ data: [], error: null });
 
     const [staffRes, patientsRes, proceduresRes, roomsRes, staffPrivateMessagesRes, accessRequestsRes, inviteRes, blockedEmailsRes, blockedPhonesRes, gdlPhoneRes, tjnPhoneRes, staffPermissionsRes] = await Promise.all([
@@ -715,6 +786,7 @@ export default function AdminPage() {
     setStaffPermissionMap(parseStaffPermissionMap(staffPermissionsRes.data?.value));
     setStaffPermissionDrafts({});
     setExpandedStaffControlId("");
+    await loadNotificationReadiness(mayLoadNotificationReadiness);
 
     if (issues.length > 0) setPageError(issues.join(" "));
   };
@@ -1732,6 +1804,13 @@ export default function AdminPage() {
     URL.revokeObjectURL(downloadUrl);
   };
 
+  const alertLastSeen = (value?: string | null) =>
+    value ? formatDate(value) : (isSpanish ? "Sin registro reciente" : "No recent registration");
+  const staffAlertRows = notificationReadiness?.staff || [];
+  const patientAlertRows = notificationReadiness?.patientRooms || [];
+  const staffMissingAlerts = staffAlertRows.filter((member) => member.pushDevices === 0);
+  const patientRoomsMissingAlerts = patientAlertRows.filter((room) => room.pushDevices === 0);
+
   if (!sessionChecked || loading) {
     return (
       <>
@@ -1931,6 +2010,24 @@ export default function AdminPage() {
         .pending-detail-item { min-width: 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.72); border: 1px solid #FFEDD5; }
         .pending-detail-item small { display: block; color: #9A3412; font-size: 12px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 4px; line-height: 1.25; }
         .pending-detail-item span { display: block; color: #111827; font-size: 14px; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
+        .alert-readiness-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+        .alert-readiness-tile { min-height: 116px; border-radius: 18px; border: 1px solid #DCEBFA; background: #F8FBFF; padding: 15px; display: grid; align-content: space-between; }
+        .alert-readiness-tile.warning { border-color: #FECACA; background: #FFF7F7; }
+        .alert-readiness-tile strong { display: block; color: #0F172A; font-size: 28px; line-height: 1; font-weight: 950; }
+        .alert-readiness-tile span { display: block; color: #64748B; font-size: 13px; line-height: 1.35; font-weight: 850; margin-top: 7px; }
+        .alert-readiness-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .alert-readiness-panel { border-radius: 18px; border: 1px solid #E6EEF7; background: #FBFDFF; padding: 14px; min-width: 0; }
+        .alert-readiness-panel h3 { margin: 0 0 10px; color: #0F172A; font-size: 17px; font-weight: 950; line-height: 1.2; }
+        .alert-readiness-list { display: grid; gap: 8px; max-height: 460px; overflow-y: auto; padding-right: 2px; }
+        .alert-readiness-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px; border-radius: 14px; border: 1px solid #E7EEF7; background: white; }
+        .alert-readiness-row.missing { border-color: #FECACA; background: #FFF7F7; }
+        .alert-ready-dot { width: 42px; height: 42px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: #DCFCE7; color: #166534; font-size: 13px; font-weight: 950; }
+        .alert-readiness-row.missing .alert-ready-dot { background: #FEE2E2; color: #B91C1C; }
+        .alert-readiness-copy { min-width: 0; }
+        .alert-readiness-copy strong { display: block; color: #0F172A; font-size: 15px; font-weight: 950; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .alert-readiness-copy span { display: block; margin-top: 3px; color: #64748B; font-size: 13px; font-weight: 750; line-height: 1.35; overflow-wrap: anywhere; }
+        .alert-device-count { min-width: 34px; min-height: 30px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; padding: 0 9px; background: #EFF6FF; color: #1D4ED8; font-size: 13px; font-weight: 950; }
+        .alert-readiness-row.missing .alert-device-count { background: #FEE2E2; color: #B91C1C; }
         .export-overlay { position: fixed; inset: 0; z-index: 170; display: grid; place-items: center; padding: 18px; background: rgba(15,23,42,0.42); }
         .export-modal { width: min(440px, 100%); border-radius: 22px; background: white; padding: 20px; box-shadow: 0 24px 80px rgba(15,23,42,0.28); }
         .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
@@ -1994,6 +2091,8 @@ export default function AdminPage() {
         .overview-actions { display: flex; flex-wrap: wrap; gap: 9px; }
         @media (max-width: 980px) {
           .hero-grid, .workspace-grid, .grid-2, .grid-3, .permission-grid { grid-template-columns: 1fr; }
+          .alert-readiness-grid { grid-template-columns: 1fr 1fr; }
+          .alert-readiness-columns { grid-template-columns: 1fr; }
           .staff-contact-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .staff-contact-settings-grid .setting-group:last-child { grid-column: 1 / -1; }
           .admin-layout { grid-template-columns: 236px minmax(0, 1fr); gap: 12px; }
@@ -2038,6 +2137,9 @@ export default function AdminPage() {
           .patient-row, .staff-row { flex-direction: column; }
           .pending-staff-summary { align-items: flex-start; flex-direction: column; }
           .pending-detail-grid { grid-template-columns: 1fr; }
+          .alert-readiness-grid { grid-template-columns: 1fr; }
+          .alert-readiness-row { grid-template-columns: 42px minmax(0, 1fr); }
+          .alert-device-count { justify-self: start; grid-column: 2; }
           .conversation-row { align-items: stretch; flex-direction: column; }
           .conversation-open-btn { width: 100%; }
           .developer-card-grid { grid-template-columns: 1fr; }
@@ -2408,6 +2510,117 @@ export default function AdminPage() {
                     )}
                   </div>
                 </section>
+              )}
+
+              {canReviewAlertReadiness && activeAdminSection === "alertas" && (
+              <section className="card" id="alertas">
+                <div className="header-row">
+                  <div>
+                    <p className="card-title">{isSpanish ? "Estado de alertas" : "Alert readiness"}</p>
+                    <p className="muted">
+                      {isSpanish
+                        ? "Revisa qué cuentas y salas tienen al menos un dispositivo registrado para push. Esto no sustituye los permisos del sistema operativo ni el modo No molestar."
+                        : "Review which accounts and rooms have at least one device registered for push. This does not override operating system permissions or Do Not Disturb."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => loadNotificationReadiness(canReviewAlertReadiness)}
+                    disabled={notificationReadinessLoading}
+                  >
+                    {notificationReadinessLoading ? (isSpanish ? "Actualizando..." : "Refreshing...") : (isSpanish ? "Actualizar" : "Refresh")}
+                  </button>
+                </div>
+
+                <div className="alert-readiness-grid">
+                  <div className="alert-readiness-tile">
+                    <div>
+                      <strong>{notificationReadiness?.totals.staffReady ?? 0}/{notificationReadiness?.totals.staffTotal ?? 0}</strong>
+                      <span>{isSpanish ? "Staff con push activo" : "Staff with push active"}</span>
+                    </div>
+                  </div>
+                  <div className={`alert-readiness-tile ${staffMissingAlerts.length > 0 ? "warning" : ""}`}>
+                    <div>
+                      <strong>{staffMissingAlerts.length}</strong>
+                      <span>{isSpanish ? "Staff sin dispositivo push" : "Staff missing push device"}</span>
+                    </div>
+                  </div>
+                  <div className="alert-readiness-tile">
+                    <div>
+                      <strong>{notificationReadiness?.totals.patientRoomsReady ?? 0}/{notificationReadiness?.totals.patientRoomsTotal ?? 0}</strong>
+                      <span>{isSpanish ? "Salas de paciente con push" : "Patient rooms with push"}</span>
+                    </div>
+                  </div>
+                  <div className={`alert-readiness-tile ${patientRoomsMissingAlerts.length > 0 ? "warning" : ""}`}>
+                    <div>
+                      <strong>{patientRoomsMissingAlerts.length}</strong>
+                      <span>{isSpanish ? "Salas sin push registrado" : "Rooms missing push registration"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="export-card" style={{ marginBottom: 14 }}>
+                  <p className="secure-invite-label">{isSpanish ? "Punto crítico" : "Critical point"}</p>
+                  <p className="secure-invite-code" style={{ color: "#334155" }}>
+                    {isSpanish
+                      ? "El portal ahora tiene tono Crítico repetido para alertas dentro de la app. Para una app médica de tienda, el siguiente paso debe ser capa nativa con APNs/FCM, canales de sonido, biometría y escalación redundante."
+                      : "The portal now has a Critical repeat tone for in-app alerts. For a medical store app, the next step should be a native layer with APNs/FCM, sound channels, biometrics, and redundant escalation."}
+                  </p>
+                </div>
+
+                <div className="alert-readiness-columns">
+                  <div className="alert-readiness-panel">
+                    <h3>{isSpanish ? "Staff" : "Staff"}</h3>
+                    <div className="alert-readiness-list">
+                      {staffAlertRows.length === 0 ? (
+                        <p className="muted">{isSpanish ? "Sin registros de staff para revisar." : "No staff records to review."}</p>
+                      ) : (
+                        staffAlertRows.map((member) => {
+                          const missingPush = member.pushDevices === 0;
+                          return (
+                            <div key={`staff-alert-${member.id}`} className={`alert-readiness-row ${missingPush ? "missing" : ""}`}>
+                              <span className="alert-ready-dot">{missingPush ? "NO" : "OK"}</span>
+                              <span className="alert-readiness-copy">
+                                <strong>{member.name}</strong>
+                                <span>
+                                  {[member.adminLevel || member.role || (isSpanish ? "Staff" : "Staff"), alertLastSeen(member.latestSubscriptionAt)].filter(Boolean).join(" · ")}
+                                </span>
+                              </span>
+                              <span className="alert-device-count">{member.pushDevices}</span>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="alert-readiness-panel">
+                    <h3>{isSpanish ? "Pacientes activos" : "Active patients"}</h3>
+                    <div className="alert-readiness-list">
+                      {patientAlertRows.length === 0 ? (
+                        <p className="muted">{isSpanish ? "Sin salas activas para revisar." : "No active rooms to review."}</p>
+                      ) : (
+                        patientAlertRows.map((room) => {
+                          const missingPush = room.pushDevices === 0;
+                          return (
+                            <div key={`room-alert-${room.roomId}`} className={`alert-readiness-row ${missingPush ? "missing" : ""}`}>
+                              <span className="alert-ready-dot">{missingPush ? "NO" : "OK"}</span>
+                              <span className="alert-readiness-copy">
+                                <strong>{room.patientName}</strong>
+                                <span>
+                                  {[room.procedureName || (isSpanish ? "Procedimiento" : "Procedure"), alertLastSeen(room.latestSubscriptionAt)].filter(Boolean).join(" · ")}
+                                </span>
+                              </span>
+                              <span className="alert-device-count">{room.pushDevices}</span>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </section>
               )}
 
               {activeAdminSection === "buscar-paciente" && (

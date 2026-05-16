@@ -22,7 +22,7 @@ type MediaTab = "internal" | "media" | "audio" | "prescriptions" | "forms" | "do
 type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
 type InternalNoteVisibility = "team" | "private";
 type StaffFontSizeLevel = "small" | "medium" | "large";
-type AlertTone = "classic" | "soft" | "urgent" | "off";
+type AlertTone = "classic" | "soft" | "urgent" | "critical" | "off";
 
 const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
 const MAX_PATIENT_LABELS = 20;
@@ -58,10 +58,10 @@ const readStaffRecordAlertsMuted = () => {
 const readStaffAlertTone = (): AlertTone => {
   if (typeof window === "undefined") return "classic";
   const stored = window.localStorage.getItem(STAFF_ALERT_TONE_STORAGE_KEY);
-  return stored === "soft" || stored === "urgent" || stored === "off" ? stored : "classic";
+  return stored === "soft" || stored === "urgent" || stored === "critical" || stored === "off" ? stored : "classic";
 };
 
-const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "off"];
+const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "critical", "off"];
 
 const PHONE_COUNTRY_OPTIONS: PhoneCountryOption[] = [
   { code: "+52", label: "🇲🇽 +52 México" },
@@ -1078,6 +1078,7 @@ export default function InboxPage() {
     classic: lang === "es" ? "Portal" : "Portal",
     soft: lang === "es" ? "Suave" : "Soft",
     urgent: lang === "es" ? "Urgente" : "Urgent",
+    critical: lang === "es" ? "Crítico repetido" : "Critical repeat",
     off: lang === "es" ? "Silencio" : "Silent",
   }[tone]);
   const fmtChatDateLabel = (ts: string) => {
@@ -1944,10 +1945,12 @@ export default function InboxPage() {
     const doPlay = () => {
       const startAt = context.currentTime;
       const toneConfig = alertTone === "soft"
-        ? { master: 0.42, type: "sine" as OscillatorType, pulses: [[0, 659, 0.09], [0.2, 880, 0.1]] as const }
+        ? { master: 0.42, type: "sine" as OscillatorType, repeatOffsets: [0], pulses: [[0, 659, 0.09], [0.2, 880, 0.1]] as const }
         : alertTone === "urgent"
-          ? { master: 0.94, type: "square" as OscillatorType, pulses: [[0, 988, 0.17], [0.16, 988, 0.17], [0.34, 1568, 0.2], [0.52, 1568, 0.2]] as const }
-          : { master: 0.86, type: "square" as OscillatorType, pulses: [[0, 988, 0.16], [0.22, 1319, 0.18], [0.44, 1760, 0.2]] as const };
+          ? { master: 0.94, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.17], [0.16, 988, 0.17], [0.34, 1568, 0.2], [0.52, 1568, 0.2]] as const }
+          : alertTone === "critical"
+            ? { master: 0.98, type: "sawtooth" as OscillatorType, repeatOffsets: [0, 0.92, 1.84], pulses: [[0, 880, 0.22], [0.14, 1319, 0.24], [0.28, 1760, 0.26], [0.44, 2093, 0.24], [0.6, 1760, 0.22]] as const }
+            : { master: 0.86, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.16], [0.22, 1319, 0.18], [0.44, 1760, 0.2]] as const };
       const limiter = context.createDynamicsCompressor();
       limiter.threshold.setValueAtTime(-12, startAt);
       limiter.knee.setValueAtTime(8, startAt);
@@ -1986,7 +1989,9 @@ export default function InboxPage() {
         overtone.stop(pulseEnd + 0.02);
       };
 
-      toneConfig.pulses.forEach(([offset, frequency, peakGain]) => playPulse(offset, frequency, peakGain));
+      toneConfig.repeatOffsets.forEach((repeatOffset) => {
+        toneConfig.pulses.forEach(([offset, frequency, peakGain]) => playPulse(repeatOffset + offset, frequency, peakGain));
+      });
     };
     if (context.state === "suspended") {
       context.resume().then(doPlay).catch(() => {});
@@ -5108,7 +5113,7 @@ export default function InboxPage() {
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>
               {lang==="es"?"Sonido de alertas":"Alert sound"}
             </p>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))",gap:8,marginBottom:12}}>
               {alertToneOptions.map((tone) => (
                 <button
                   key={tone}

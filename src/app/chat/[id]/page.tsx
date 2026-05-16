@@ -64,12 +64,12 @@ type RoomAccess = {
 };
 
 type PatientTextSize = "normal" | "large";
-type AlertTone = "classic" | "soft" | "urgent" | "off";
+type AlertTone = "classic" | "soft" | "urgent" | "critical" | "off";
 
 const PATIENT_TEXT_SIZE_STORAGE_KEY = "drf_patient_text_size";
 const PATIENT_LANG_STORAGE_KEY = "drf_patient_ui_lang";
 const PATIENT_ALERT_TONE_STORAGE_KEY = "drf_patient_alert_tone";
-const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "off"];
+const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "critical", "off"];
 
 const readPatientTextSize = (): PatientTextSize => {
   if (typeof window === "undefined") return "large";
@@ -79,7 +79,7 @@ const readPatientTextSize = (): PatientTextSize => {
 const readPatientAlertTone = (): AlertTone => {
   if (typeof window === "undefined") return "classic";
   const stored = window.localStorage.getItem(PATIENT_ALERT_TONE_STORAGE_KEY);
-  return stored === "soft" || stored === "urgent" || stored === "off" ? stored : "classic";
+  return stored === "soft" || stored === "urgent" || stored === "critical" || stored === "off" ? stored : "classic";
 };
 
 const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
@@ -612,6 +612,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     classic: uiLang === "es" ? "Portal" : "Portal",
     soft: uiLang === "es" ? "Suave" : "Soft",
     urgent: uiLang === "es" ? "Urgente" : "Urgent",
+    critical: uiLang === "es" ? "Crítico repetido" : "Critical repeat",
     off: uiLang === "es" ? "Silencio" : "Silent",
   }[tone]);
 
@@ -630,10 +631,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const doPlay = () => {
       const startAt = context.currentTime;
       const toneConfig = alertTone === "soft"
-        ? { master: 0.38, type: "sine" as OscillatorType, pulses: [[0, 659, 0.08], [0.2, 880, 0.09]] as const }
+        ? { master: 0.38, type: "sine" as OscillatorType, repeatOffsets: [0], pulses: [[0, 659, 0.08], [0.2, 880, 0.09]] as const }
         : alertTone === "urgent"
-          ? { master: 0.86, type: "square" as OscillatorType, pulses: [[0, 988, 0.15], [0.16, 988, 0.15], [0.34, 1568, 0.18], [0.52, 1568, 0.18]] as const }
-          : { master: 0.72, type: "square" as OscillatorType, pulses: [[0, 988, 0.13], [0.22, 1319, 0.15], [0.44, 1760, 0.17]] as const };
+          ? { master: 0.86, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.15], [0.16, 988, 0.15], [0.34, 1568, 0.18], [0.52, 1568, 0.18]] as const }
+          : alertTone === "critical"
+            ? { master: 0.95, type: "sawtooth" as OscillatorType, repeatOffsets: [0, 0.92, 1.84], pulses: [[0, 880, 0.2], [0.14, 1319, 0.22], [0.28, 1760, 0.24], [0.44, 2093, 0.22], [0.6, 1760, 0.2]] as const }
+            : { master: 0.72, type: "square" as OscillatorType, repeatOffsets: [0], pulses: [[0, 988, 0.13], [0.22, 1319, 0.15], [0.44, 1760, 0.17]] as const };
 
       const masterGain = context.createGain();
       masterGain.gain.setValueAtTime(toneConfig.master, startAt);
@@ -657,7 +660,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         oscillator.stop(pulseEnd + 0.02);
       };
 
-      toneConfig.pulses.forEach(([offset, frequency, peakGain]) => playPulse(offset, frequency, peakGain));
+      toneConfig.repeatOffsets.forEach((repeatOffset) => {
+        toneConfig.pulses.forEach(([offset, frequency, peakGain]) => playPulse(repeatOffset + offset, frequency, peakGain));
+      });
     };
 
     if (context.state === "suspended") {
@@ -2683,7 +2688,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                   {notificationFeedback}
                 </div>
               )}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(128px, 1fr))", gap: 10, marginTop: 4 }}>
                 {alertToneOptions.map((tone) => (
                   <button
                     key={tone}

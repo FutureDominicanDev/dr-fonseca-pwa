@@ -91,8 +91,8 @@ export default function TrainingPage() {
     <>
       <style>{`
         * { box-sizing: border-box; }
-        body { background: #eef4fb; overflow-x: hidden; }
-        .legend-shell { min-height: 100svh; overflow-x: hidden; background: #eef4fb; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background: #eef4fb; overflow: hidden; }
+        .legend-shell { height: 100dvh; min-height: 100dvh; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; background: #eef4fb; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         .legend-topbar { position: sticky; top: 0; z-index: 20; min-height: calc(82px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 12px; background: rgba(7, 56, 93, 0.94); backdrop-filter: blur(18px); border-bottom: 1px solid rgba(255,255,255,0.12); }
         .legend-logo { width: 224px; max-width: 42vw; height: auto; display: block; object-fit: contain; }
         .legend-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
