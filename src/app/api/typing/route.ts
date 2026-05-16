@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
       if (result !== "ok") {
         return NextResponse.json({ error: "Typing signal was not delivered." }, { status: 502 });
       }
+      await new Promise((resolve) => setTimeout(resolve, 200));
       return NextResponse.json({ ok: true });
     } finally {
       await supabase.removeChannel(channel).catch(() => {});
