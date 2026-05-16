@@ -6827,7 +6827,7 @@ export default function InboxPage() {
                   type="button"
                   onClick={()=>void requestStaffNotifications()}
                   disabled={notificationBusy || notificationPermission === "denied"}
-                  style={{marginTop:10,width:"100%",minHeight:40,border:"none",borderRadius:12,background:notificationPermission === "denied" ? "#F1F5F9" : "#DBEAFE",color:notificationPermission === "denied" ? "#64748B" : "#1D4ED8",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:notificationPermission === "denied" ? "not-allowed" : "pointer",opacity:notificationBusy?0.6:1}}
+                  style={{marginTop:10,width:"100%",minHeight:44,border:"none",borderRadius:12,background:notificationPermission === "denied" ? "#F1F5F9" : "#DBEAFE",color:notificationPermission === "denied" ? "#64748B" : "#1D4ED8",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:notificationPermission === "denied" ? "not-allowed" : "pointer",opacity:notificationBusy?0.6:1}}
                 >
                   {notificationPermission === "denied"
                     ? (lang==="es" ? "Alertas bloqueadas" : "Alerts blocked")
