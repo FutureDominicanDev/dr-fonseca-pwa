@@ -2192,10 +2192,30 @@ export default function InboxPage() {
     }
   }, [currentUserId, getRoomAlertedMessage, incomingMessageKey, isSuperAdmin, lang, patients, playIncomingTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, showToastAlert, staffRecordAlertsMuted]);
 
+  const sendTypingSignal = useCallback((isTyping: boolean, roomId: string, name: string) => {
+    supabase.auth.getSession().then(({ data }) => {
+      const accessToken = data.session?.access_token;
+      if (!accessToken) return;
+      fetch("/api/typing", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          roomId,
+          senderType: "staff",
+          name,
+          isTyping,
+        }),
+      }).catch(() => {});
+    }).catch(() => {});
+  }, []);
+
   const broadcastTypingState = useCallback((isTyping: boolean, roomId: string, name: string) => {
-    if (!typingChannelRef.current) return;
+    if (outgoingTypingRef.current === isTyping) return;
     outgoingTypingRef.current = isTyping;
-    typingChannelRef.current.send({
+    typingChannelRef.current?.send({
       type: "broadcast",
       event: "typing",
       payload: {
@@ -2206,7 +2226,8 @@ export default function InboxPage() {
         sentAt: new Date().toISOString(),
       },
     }).catch(() => {});
-  }, []);
+    sendTypingSignal(isTyping, roomId, name);
+  }, [sendTypingSignal]);
 
   const updateTypingState = useCallback((nextValue: string, roomId?: string) => {
     const activeRoomId = roomId || selectedRoom?.id;
@@ -2931,6 +2952,7 @@ export default function InboxPage() {
       if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
       setPatientTyping(false);
       typingChannelRef.current = null;
+      outgoingTypingRef.current = false;
       return;
     }
 
@@ -2971,6 +2993,7 @@ export default function InboxPage() {
         }).catch(() => {});
       }
       typingChannelRef.current = null;
+      outgoingTypingRef.current = false;
       setPatientTyping(false);
       supabase.removeChannel(channel);
     };

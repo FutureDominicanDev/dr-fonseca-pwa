@@ -530,10 +530,26 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     }).catch(() => {});
   }, [id, patientDisplayName, token]);
 
+  const sendTypingSignal = useCallback((isTyping: boolean) => {
+    if (!token) return;
+    fetch("/api/typing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roomId: id,
+        roomToken: token,
+        senderType: "patient",
+        name: patientDisplayName(),
+        isTyping,
+      }),
+    }).catch(() => {});
+  }, [id, patientDisplayName, token]);
+
   const broadcastTypingState = useCallback((isTyping: boolean) => {
-    if (!typingChannelRef.current || !accessReady || accessDenied || roomClosed || !token) return;
+    if (!accessReady || accessDenied || roomClosed || !token) return;
+    if (outgoingTypingRef.current === isTyping) return;
     outgoingTypingRef.current = isTyping;
-    typingChannelRef.current.send({
+    typingChannelRef.current?.send({
       type: "broadcast",
       event: "typing",
       payload: {
@@ -544,7 +560,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         sentAt: new Date().toISOString(),
       },
     }).catch(() => {});
-  }, [accessDenied, accessReady, id, patientDisplayName, roomClosed, token]);
+    sendTypingSignal(isTyping);
+  }, [accessDenied, accessReady, id, patientDisplayName, roomClosed, sendTypingSignal, token]);
 
   const updatePatientTypingState = useCallback((nextValue: string) => {
     if (!accessReady || accessDenied || roomClosed || !token) return;
