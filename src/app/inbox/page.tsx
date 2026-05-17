@@ -6096,6 +6096,7 @@ export default function InboxPage() {
       <style>{`
 	        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; max-width: 100%; }
 	        :root { --native-keyboard-overlay-height: 0px; }
+	        html.native-android { --native-keyboard-overlay-height: 0px !important; }
 	        html, body { height: 100%; font-size: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: hidden; }
 	        .shell { --app-ui-font-size: ${uiBaseSize}px; --app-ui-label-size: ${uiLabelSize}px; --app-ui-small-size: ${uiSmallSize}px; display: flex; flex-direction: column; height: auto; min-height: -webkit-fill-available; position: absolute; inset: 0; bottom: var(--native-keyboard-overlay-height, 0px); background: ${darkMode ? "#0B141A" : "#F2F7FB"}; overflow: hidden; max-width: 100vw; }
 	        .shell p, .shell label, .shell button, .shell input, .shell textarea, .shell select, .shell summary { overflow-wrap: anywhere; }
@@ -6163,7 +6164,7 @@ export default function InboxPage() {
         .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; transition: transform 0.25s ease; z-index: 20; }
         .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
         .main-area.hidden { transform: translateX(100%); pointer-events: none; }
-        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${darkMode ? "#0B141A" : "#F7FAFD"}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.040) 1px, transparent 1px)"}; background-size: 18px 18px; }
+        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${darkMode ? "#0B141A" : "#F7FAFD"}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.040) 1px, transparent 1px)"}; background-size: 18px 18px; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 16px 0 12px; }
 	        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.92)":"rgba(255,255,255,0.96)"}; border-radius: 10px; padding: 6px 13px; font-size: var(--app-ui-small-size); color: ${darkMode?"#F8FAFC":"#111827"}; font-weight: 850; box-shadow: 0 1px 4px rgba(15,23,42,0.10); border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; }
@@ -6204,7 +6205,7 @@ export default function InboxPage() {
 	        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px; width: min(560px, calc(100vw - 36px)); max-width: 100%; max-height: calc(100dvh - 36px); overflow-y: auto; overflow-x: hidden; padding: 24px; box-shadow: 0 18px 50px rgba(15,23,42,0.18); }
 	        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: min(560px, 100vw); position: fixed; top: 6vh; bottom: var(--native-keyboard-overlay-height, 0px); left: 50%; transform: translateX(-50%); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 24px max(18px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
         .staff-chat-sheet { display: flex; flex-direction: column; }
-        .staff-thread-list { min-height: 170px; max-height: min(45dvh, calc(100dvh - 330px - var(--native-keyboard-overlay-height, 0px))) !important; }
+        .staff-thread-list { min-height: 170px; max-height: min(45dvh, calc(100dvh - 330px - var(--native-keyboard-overlay-height, 0px))) !important; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
         .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; padding: 10px 0 calc(4px + env(safe-area-inset-bottom)); background: ${darkMode?sidebarBg:"#FFFFFF"}; }
         .staff-chat-composer .finput { margin-bottom: 0; min-height: 52px; max-height: 28dvh; resize: none !important; }
         .staff-chat-composer .pbtn { margin-top: 0; width: auto; min-width: 76px; min-height: 52px; padding: 0 16px; }

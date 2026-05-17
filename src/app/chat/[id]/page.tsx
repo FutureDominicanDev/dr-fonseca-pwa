@@ -2176,9 +2176,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       </header>
 
       <section
+        className="patient-chat-scroll"
         ref={chatScrollRef}
         onScroll={handleChatScroll}
-        style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))" }}
+        style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain", touchAction: "pan-y" }}
         onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}
       >
         {(() => {
