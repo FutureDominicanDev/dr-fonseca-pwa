@@ -3,6 +3,16 @@ apply plugin: 'com.android.application'
 android {
     namespace = "com.drfonsecacirujanoplastico.portal"
     compileSdk = rootProject.ext.compileSdkVersion
+
+    def releaseSigningFile = System.getenv("DRF_ANDROID_SIGNING_PROPERTIES") ?
+            file(System.getenv("DRF_ANDROID_SIGNING_PROPERTIES")) :
+            rootProject.file("../../private/android-signing/dr-fonseca-upload-key.properties")
+    def releaseSigning = new Properties()
+    def hasReleaseSigning = releaseSigningFile.exists()
+    if (hasReleaseSigning) {
+        releaseSigningFile.withInputStream { releaseSigning.load(it) }
+    }
+
     defaultConfig {
         applicationId "com.drfonsecacirujanoplastico.portal"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -16,8 +26,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseSigning['storeFile'])
+                storePassword releaseSigning['storePassword']
+                keyAlias releaseSigning['keyAlias']
+                keyPassword releaseSigning['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
