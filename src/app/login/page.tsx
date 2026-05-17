@@ -32,7 +32,8 @@ const COPY = {
     firstTime: "¿Tienes código del consultorio?",
     register: "Ingresar código",
     forgotTitle: "Recuperar contraseña",
-    forgotCopy: "Elige si tu cuenta usa correo o celular. Si usas celular, recibirás un código por SMS para cambiar tu contraseña.",
+    forgotCopy: "La recuperación segura se envía al correo guardado en tu cuenta. Si normalmente entras con celular, usa tu correo de recuperación o pide ayuda al administrador.",
+    recoveryEmailOnly: "La recuperación por SMS no está activa todavía. Usa correo para restablecer la contraseña.",
     emailLabel: "Correo electrónico",
     emailPlaceholder: "correo@ejemplo.com",
     sendReset: "Enviar enlace de recuperación",
@@ -64,12 +65,13 @@ const COPY = {
       loginRequired: "Por favor ingresa tu correo o celular y contraseña.",
       invalidEmail: "Por favor ingresa un correo electrónico válido.",
       badLogin: "Correo, celular o contraseña incorrectos.",
-      resetRequired: "Por favor ingresa tu correo electrónico.",
+      resetRequired: "Por favor ingresa tu correo de recuperación.",
       phoneRequired: "Por favor ingresa tu celular.",
       codeRequired: "Ingresa el código SMS y tu nueva contraseña.",
       passwordTooShort: "La contraseña debe tener mínimo 6 caracteres.",
       resetFailed: "No pude enviar el correo. Verifica el correo ingresado.",
       phoneResetFailed: "No pude enviar o validar el código SMS. Verifica el celular o la configuración SMS de Supabase.",
+      smsUnavailable: "La recuperación por SMS no está configurada. Usa correo o pide al administrador que envíe un enlace de recuperación.",
       updatePasswordFailed: "No pude cambiar la contraseña. Intenta de nuevo.",
     },
   },
@@ -95,7 +97,8 @@ const COPY = {
     firstTime: "Have a clinic code?",
     register: "Enter code",
     forgotTitle: "Recover password",
-    forgotCopy: "Choose whether your account uses email or phone. If you use phone, you will receive an SMS code to change your password.",
+    forgotCopy: "Secure recovery is sent to the email saved on your account. If you normally sign in with phone, use your recovery email or ask an administrator for help.",
+    recoveryEmailOnly: "SMS recovery is not active yet. Use email to reset the password.",
     emailLabel: "Email address",
     emailPlaceholder: "email@example.com",
     sendReset: "Send recovery link",
@@ -127,12 +130,13 @@ const COPY = {
       loginRequired: "Please enter your email or phone and password.",
       invalidEmail: "Please enter a valid email address.",
       badLogin: "Email, phone, or password is incorrect.",
-      resetRequired: "Please enter your email address.",
+      resetRequired: "Please enter your recovery email.",
       phoneRequired: "Please enter your phone number.",
       codeRequired: "Enter the SMS code and your new password.",
       passwordTooShort: "Password must be at least 6 characters.",
       resetFailed: "I could not send the email. Check the address entered.",
       phoneResetFailed: "I could not send or validate the SMS code. Check the phone number or Supabase SMS configuration.",
+      smsUnavailable: "SMS recovery is not configured. Use email or ask an administrator to send a recovery link.",
       updatePasswordFailed: "I could not change the password. Try again.",
     },
   },
@@ -150,6 +154,8 @@ const getBrowserLang = (): Lang => {
 };
 
 const withLang = (path: string, lang: Lang) => `${path}${path.includes("?") ? "&" : "?"}lang=${lang}`;
+
+const cleanPhoneInput = (value: string) => value.replace(/[^\d+\s().-]/g, "").replace(/\s{2,}/g, " ").slice(0, 24);
 
 function PasswordVisibilityIcon({ hidden }: { hidden: boolean }) {
   return hidden ? (
@@ -225,33 +231,8 @@ export default function LoginPage() {
 
   const handleReset = async () => {
     if (resetMethod === "phone") {
-      const phone = normalizeStaffPhone(resetPhone, resetPhoneCountryCode);
-      if (!phone) {
-        setError(t.errors.phoneRequired);
-        return;
-      }
-      setLoading(true);
-      setError("");
-      const prepareRes = await fetch("/api/auth/prepare-phone-reset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
-      });
-      if (!prepareRes.ok) {
-        setLoading(false);
-        setError(t.errors.phoneResetFailed);
-        return;
-      }
-      const { error: err } = await supabase.auth.signInWithOtp({
-        phone,
-        options: { shouldCreateUser: false },
-      } as any);
-      setLoading(false);
-      if (err) {
-        setError(t.errors.phoneResetFailed);
-        return;
-      }
-      setView("phoneReset");
+      setResetMethod("email");
+      setError(t.errors.smsUnavailable);
       return;
     }
 
@@ -315,7 +296,7 @@ export default function LoginPage() {
     setView(nextView);
     setError("");
     setLoading(false);
-    if (nextView === "forgot") setResetMethod(loginMethod);
+    if (nextView === "forgot") setResetMethod("email");
   };
 
   return (
@@ -393,6 +374,7 @@ export default function LoginPage() {
         .login-method { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 5px; border-radius: 16px; background: #EEF5FB; border: 1px solid #DCE8F3; margin-bottom: 14px; }
         .method-btn { min-height: 44px; border: none; border-radius: 12px; background: transparent; color: #426987; font-size: 15px; font-weight: 850; cursor: pointer; font-family: inherit; }
         .method-btn.active { background: #FFFFFF; color: #165D9C; box-shadow: 0 8px 20px rgba(32,86,132,0.12); }
+        .recovery-note { margin: -8px 0 16px; padding: 12px 14px; border-radius: 14px; background: #EFF6FF; border: 1px solid #BFDDF7; color: #165D9C; font-size: 14px; line-height: 1.42; font-weight: 750; }
         .phone-row { display: grid; grid-template-columns: minmax(92px, 112px) minmax(0, 1fr); gap: 10px; align-items: end; }
         .password-wrap { position: relative; }
         .password-input { padding-right: 58px; }
@@ -557,7 +539,7 @@ export default function LoginPage() {
                             type="tel"
                             placeholder={t.identifierPlaceholder}
                             value={identifier}
-                            onChange={(event) => setIdentifier(event.target.value)}
+                            onChange={(event) => setIdentifier(cleanPhoneInput(event.target.value))}
                             onKeyDown={(event) => { if (event.key === "Enter") handleLogin(); }}
                             autoComplete="tel"
                           />
@@ -618,13 +600,7 @@ export default function LoginPage() {
                   <h2 className="panel-title">{t.forgotTitle}</h2>
                   <p className="panel-copy">{t.forgotCopy}</p>
                   {error && <div className="error">Error: {error}</div>}
-                  <div className="field">
-                    <label className="field-label">{t.loginWith}</label>
-                    <div className="login-method" role="radiogroup" aria-label={t.loginWith}>
-                      <button type="button" className={`method-btn${resetMethod==="email" ? " active" : ""}`} onClick={()=>{setResetMethod("email");setError("");}}>{t.loginEmail}</button>
-                      <button type="button" className={`method-btn${resetMethod==="phone" ? " active" : ""}`} onClick={()=>{setResetMethod("phone");setError("");}}>{t.loginPhone}</button>
-                    </div>
-                  </div>
+                  <p className="recovery-note">{t.recoveryEmailOnly}</p>
                   {resetMethod === "phone" ? (
                     <div className="field phone-row">
                       <div>
@@ -639,7 +615,7 @@ export default function LoginPage() {
                       </div>
                       <div>
                         <label className="field-label" htmlFor="reset-phone">{t.identifier}</label>
-                        <input id="reset-phone" className="input" type="tel" placeholder={t.identifierPlaceholder} value={resetPhone} onChange={(event)=>setResetPhone(event.target.value)} onKeyDown={(event)=>{ if (event.key === "Enter") handleReset(); }} autoComplete="tel" />
+                        <input id="reset-phone" className="input" type="tel" placeholder={t.identifierPlaceholder} value={resetPhone} onChange={(event)=>setResetPhone(cleanPhoneInput(event.target.value))} onKeyDown={(event)=>{ if (event.key === "Enter") handleReset(); }} autoComplete="tel" />
                       </div>
                     </div>
                   ) : (
