@@ -29,6 +29,11 @@ where lower(coalesce(email, '')) in (
 
 -- 3) Read-only inventory queries to run before any launch reset.
 -- Save/export the result from Supabase before changing statuses.
+-- Approval-gated final cleanup reminder:
+--   When final QA is complete, the doctor may also want to clear/reset legacy
+--   admin_audit_events and audit_logs from the build/testing period. Do NOT
+--   run audit-history cleanup until the user explicitly approves that
+--   destructive reset.
 select 'patients' as table_name, count(*) from public.patients
 union all select 'procedures', count(*) from public.procedures
 union all select 'rooms', count(*) from public.rooms

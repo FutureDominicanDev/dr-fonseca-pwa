@@ -248,8 +248,9 @@ export default function LoginPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: resetEmail.trim(), lang }),
     });
+    const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(t.errors.resetFailed);
+      setError(payload?.error || t.errors.resetFailed);
       setLoading(false);
       return;
     }

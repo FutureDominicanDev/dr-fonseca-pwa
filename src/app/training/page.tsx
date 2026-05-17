@@ -4,8 +4,29 @@ import Image from "next/image";
 import { useState } from "react";
 
 type Lang = "es" | "en";
+type IconName =
+  | "plus"
+  | "search"
+  | "settings"
+  | "backTop"
+  | "send"
+  | "typing"
+  | "quickReplies"
+  | "alerts"
+  | "photo"
+  | "video"
+  | "audio"
+  | "document"
+  | "prescription"
+  | "call"
+  | "team"
+  | "staffChat"
+  | "label"
+  | "admin"
+  | "info"
+  | "trash";
 type LegendItem = {
-  icon: string;
+  icon: IconName;
   title: Record<Lang, string>;
   meaning: Record<Lang, string>;
 };
@@ -18,41 +39,41 @@ const groups: LegendGroup[] = [
   {
     title: { es: "Navegacion", en: "Navigation" },
     items: [
-      { icon: "+", title: { es: "Nuevo o adjuntar", en: "New or attach" }, meaning: { es: "Crear paciente o abrir opciones para enviar archivos.", en: "Create a patient or open file options." } },
-      { icon: "⌕", title: { es: "Buscar", en: "Search" }, meaning: { es: "Encontrar pacientes, chats, personal o expedientes.", en: "Find patients, chats, staff, or records." } },
-      { icon: "⚙", title: { es: "Ajustes", en: "Settings" }, meaning: { es: "Cambiar idioma, apariencia, datos de cuenta y alertas.", en: "Change language, appearance, account details, and alerts." } },
-      { icon: "↥", title: { es: "Subir", en: "Back to top" }, meaning: { es: "Volver al inicio de una lista larga.", en: "Return to the top of a long list." } },
+      { icon: "plus", title: { es: "Nuevo o adjuntar", en: "New or attach" }, meaning: { es: "Crear paciente o abrir opciones para enviar archivos.", en: "Create a patient or open file options." } },
+      { icon: "search", title: { es: "Buscar", en: "Search" }, meaning: { es: "Encontrar pacientes, chats, personal o expedientes.", en: "Find patients, chats, staff, or records." } },
+      { icon: "settings", title: { es: "Ajustes", en: "Settings" }, meaning: { es: "Cambiar idioma, apariencia, datos de cuenta y alertas.", en: "Change language, appearance, account details, and alerts." } },
+      { icon: "backTop", title: { es: "Subir", en: "Back to top" }, meaning: { es: "Volver al inicio de una lista larga.", en: "Return to the top of a long list." } },
     ],
   },
   {
     title: { es: "Mensajes", en: "Messages" },
     items: [
-      { icon: "↗", title: { es: "Enviar", en: "Send" }, meaning: { es: "Enviar texto, audio, archivo o respuesta rapida.", en: "Send text, audio, a file, or a quick reply." } },
-      { icon: "…", title: { es: "Escribiendo", en: "Typing" }, meaning: { es: "La otra persona esta redactando en tiempo real.", en: "The other person is typing in real time." } },
-      { icon: "/", title: { es: "Respuestas rapidas", en: "Quick replies" }, meaning: { es: "Abrir frases guardadas para responder mas rapido.", en: "Open saved phrases for faster replies." } },
-      { icon: "🔔", title: { es: "Alertas", en: "Alerts" }, meaning: { es: "Activar notificaciones del dispositivo para mensajes nuevos.", en: "Enable device notifications for new messages." } },
+      { icon: "send", title: { es: "Enviar", en: "Send" }, meaning: { es: "Enviar texto, audio, archivo o respuesta rapida.", en: "Send text, audio, a file, or a quick reply." } },
+      { icon: "typing", title: { es: "Escribiendo", en: "Typing" }, meaning: { es: "La otra persona esta redactando en tiempo real.", en: "The other person is typing in real time." } },
+      { icon: "quickReplies", title: { es: "Respuestas rapidas", en: "Quick replies" }, meaning: { es: "Abrir frases guardadas para responder mas rapido.", en: "Open saved phrases for faster replies." } },
+      { icon: "alerts", title: { es: "Alertas", en: "Alerts" }, meaning: { es: "Activar notificaciones del dispositivo para mensajes nuevos.", en: "Enable device notifications for new messages." } },
     ],
   },
   {
     title: { es: "Archivos y cuidado", en: "Files and care" },
     items: [
-      { icon: "📷", title: { es: "Foto", en: "Photo" }, meaning: { es: "Subir imagenes del paciente o del expediente interno.", en: "Upload patient or internal-record images." } },
-      { icon: "🎥", title: { es: "Video", en: "Video" }, meaning: { es: "Enviar video seguro dentro de la sala.", en: "Send secure video inside the room." } },
-      { icon: "🎙", title: { es: "Audio", en: "Audio" }, meaning: { es: "Grabar o escuchar una nota de voz.", en: "Record or listen to a voice note." } },
-      { icon: "▣", title: { es: "Documento", en: "Document" }, meaning: { es: "Abrir archivos, historia clinica o formularios.", en: "Open files, clinical history, or forms." } },
-      { icon: "Rx", title: { es: "Receta", en: "Prescription" }, meaning: { es: "Guardar o revisar medicamentos y documentos de receta.", en: "Save or review medication and prescription documents." } },
-      { icon: "☎", title: { es: "Llamar", en: "Call" }, meaning: { es: "Contactar al consultorio o a un integrante del equipo.", en: "Contact the clinic or a team member." } },
+      { icon: "photo", title: { es: "Foto", en: "Photo" }, meaning: { es: "Subir imagenes del paciente o del expediente interno.", en: "Upload patient or internal-record images." } },
+      { icon: "video", title: { es: "Video", en: "Video" }, meaning: { es: "Enviar video seguro dentro de la sala.", en: "Send secure video inside the room." } },
+      { icon: "audio", title: { es: "Audio", en: "Audio" }, meaning: { es: "Grabar o escuchar una nota de voz.", en: "Record or listen to a voice note." } },
+      { icon: "document", title: { es: "Documento", en: "Document" }, meaning: { es: "Abrir archivos, historia clinica o formularios.", en: "Open files, clinical history, or forms." } },
+      { icon: "prescription", title: { es: "Receta", en: "Prescription" }, meaning: { es: "Guardar o revisar medicamentos y documentos de receta.", en: "Save or review medication and prescription documents." } },
+      { icon: "call", title: { es: "Llamar", en: "Call" }, meaning: { es: "Contactar al consultorio o a un integrante del equipo.", en: "Contact the clinic or a team member." } },
     ],
   },
   {
     title: { es: "Equipo y seguridad", en: "Team and security" },
     items: [
-      { icon: "👥", title: { es: "Equipo", en: "Team" }, meaning: { es: "Ver o asignar personal a una sala.", en: "View or assign staff to a room." } },
-      { icon: "💬", title: { es: "Chat staff", en: "Staff chat" }, meaning: { es: "Coordinar internamente sin escribir al paciente.", en: "Coordinate internally without messaging the patient." } },
-      { icon: "🏷", title: { es: "Etiqueta", en: "Label" }, meaning: { es: "Marcar seguimiento, prioridad o estado de un paciente.", en: "Mark follow-up, priority, or patient status." } },
-      { icon: "🛡", title: { es: "Admin", en: "Admin" }, meaning: { es: "Aprobar personal, permisos, seguridad y auditoria.", en: "Approve staff, permissions, security, and audit." } },
-      { icon: "ⓘ", title: { es: "Informacion", en: "Information" }, meaning: { es: "Ver el alcance de un permiso o accion antes de usarlo.", en: "Review a permission or action before using it." } },
-      { icon: "🗑", title: { es: "Papelera", en: "Trash" }, meaning: { es: "Revisar archivo, restaurar o eliminar segun permiso.", en: "Review archive, restore, or delete when permitted." } },
+      { icon: "team", title: { es: "Equipo", en: "Team" }, meaning: { es: "Ver o asignar personal a una sala.", en: "View or assign staff to a room." } },
+      { icon: "staffChat", title: { es: "Chat staff", en: "Staff chat" }, meaning: { es: "Coordinar internamente sin escribir al paciente.", en: "Coordinate internally without messaging the patient." } },
+      { icon: "label", title: { es: "Etiqueta", en: "Label" }, meaning: { es: "Marcar seguimiento, prioridad o estado de un paciente.", en: "Mark follow-up, priority, or patient status." } },
+      { icon: "admin", title: { es: "Admin", en: "Admin" }, meaning: { es: "Aprobar personal, permisos, seguridad y auditoria.", en: "Approve staff, permissions, security, and audit." } },
+      { icon: "info", title: { es: "Informacion", en: "Information" }, meaning: { es: "Ver el alcance de un permiso o accion antes de usarlo.", en: "Review a permission or action before using it." } },
+      { icon: "trash", title: { es: "Papelera", en: "Trash" }, meaning: { es: "Revisar archivo, restaurar o eliminar segun permiso.", en: "Review archive, restore, or delete when permitted." } },
     ],
   },
 ];
@@ -79,6 +100,61 @@ const copy = {
     note: "If an icon is not visible on your account, that permission is usually not enabled or you are not inside an assigned room.",
   },
 };
+
+function PortalIcon({ name }: { name: IconName }) {
+  const common = {
+    width: 28,
+    height: 28,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2.35,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  switch (name) {
+    case "plus":
+      return <svg {...common}><path d="M12 5v14" /><path d="M5 12h14" /></svg>;
+    case "search":
+      return <svg {...common}><circle cx="11" cy="11" r="7" /><path d="m20 20-4.2-4.2" /></svg>;
+    case "settings":
+      return <svg {...common}><circle cx="12" cy="12" r="3.1" /><path d="M12 2.8v2" /><path d="M12 19.2v2" /><path d="m4.9 4.9 1.4 1.4" /><path d="m17.7 17.7 1.4 1.4" /><path d="M2.8 12h2" /><path d="M19.2 12h2" /><path d="m4.9 19.1 1.4-1.4" /><path d="m17.7 6.3 1.4-1.4" /></svg>;
+    case "backTop":
+      return <svg {...common}><path d="M12 19V5" /><path d="m6 11 6-6 6 6" /></svg>;
+    case "send":
+      return <svg {...common}><path d="M22 2 11 13" /><path d="m22 2-7 20-4-9-9-4 20-7Z" /></svg>;
+    case "typing":
+      return <svg {...common}><path d="M4 17h10l5 4v-4h1a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2Z" /><circle cx="8" cy="10.5" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="10.5" r="1" fill="currentColor" stroke="none" /><circle cx="16" cy="10.5" r="1" fill="currentColor" stroke="none" /></svg>;
+    case "quickReplies":
+      return <svg {...common}><path d="M7 20 17 4" /><path d="M4 8h6" /><path d="M14 16h6" /></svg>;
+    case "alerts":
+      return <svg {...common}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" /><path d="M10 21h4" /></svg>;
+    case "photo":
+      return <svg {...common}><rect x="3" y="5" width="18" height="15" rx="2" /><path d="m8 13 2.4-2.4a1.2 1.2 0 0 1 1.7 0L17 15.5" /><circle cx="16.5" cy="9.5" r="1.4" /></svg>;
+    case "video":
+      return <svg {...common}><rect x="3" y="6" width="13" height="12" rx="2" /><path d="m16 10 5-3v10l-5-3" /></svg>;
+    case "audio":
+      return <svg {...common}><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" /><path d="M19 11a7 7 0 0 1-14 0" /><path d="M12 18v3" /></svg>;
+    case "document":
+      return <svg {...common}><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v5h4" /><path d="M9.5 12h5" /><path d="M9.5 16h5" /></svg>;
+    case "prescription":
+      return <svg {...common}><path d="M6 20V4h7a4 4 0 0 1 0 8H6" /><path d="m12 12 6 8" /><path d="m18 12-6 8" /></svg>;
+    case "call":
+      return <svg {...common}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.4 19.4 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.4 2.1L8.1 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.6 1.9Z" /></svg>;
+    case "team":
+      return <svg {...common}><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" /><circle cx="9.5" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9" /><path d="M16 3.1a4 4 0 0 1 0 7.8" /></svg>;
+    case "staffChat":
+      return <svg {...common}><path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z" /><path d="M8 9h8" /><path d="M8 13h5" /></svg>;
+    case "label":
+      return <svg {...common}><path d="M20 13 11 22 2 13V3h10Z" /><circle cx="7.5" cy="8.5" r="1.5" /></svg>;
+    case "admin":
+      return <svg {...common}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-5" /></svg>;
+    case "info":
+      return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M12 11v6" /><path d="M12 7h.01" /></svg>;
+    case "trash":
+      return <svg {...common}><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="m6 6 1 15h10l1-15" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>;
+  }
+}
 
 export default function TrainingPage() {
   const [lang, setLang] = useState<Lang>("es");
@@ -160,7 +236,7 @@ export default function TrainingPage() {
                 <div className="legend-list">
                   {group.items.map((item) => (
                     <article className="legend-item" key={`${group.title.en}-${item.title.en}`}>
-                      <div className="icon-box" aria-hidden="true">{item.icon}</div>
+                      <div className="icon-box" aria-hidden="true"><PortalIcon name={item.icon} /></div>
                       <div>
                         <p className="item-title">{item.title[lang]}</p>
                         <p className="item-copy">{item.meaning[lang]}</p>

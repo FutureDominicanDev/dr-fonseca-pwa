@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAdminLang } from "@/lib/useAdminLang";
 import {
@@ -168,13 +168,28 @@ type StaffPrivateMessage = {
   created_at?: string | null;
 };
 
+type StaffRoomPayload = {
+  kind: "staff_room";
+  roomId: string;
+  roomName: string;
+  memberIds: string[];
+  text: string;
+  messageId: string;
+  createdBy?: string | null;
+  actorId?: string | null;
+  event?: "invite" | "message" | "accept" | "decline" | "leave";
+};
+
 type StaffPrivateConversation = {
   key: string;
+  kind: "private" | "room";
+  roomId?: string;
   participantIds: string[];
   title: string;
   subtitle: string;
   messages: StaffPrivateMessage[];
   latestAt: string;
+  latestText: string;
 };
 
 type StaffAccessRequest = {
@@ -239,6 +254,29 @@ type AdminSectionId =
   | "telefonos-sede"
   | "bloqueos";
 
+const STAFF_ROOM_PREFIX = "__DRF_STAFF_ROOM__:";
+const parseStaffRoomPayload = (content?: string | null): StaffRoomPayload | null => {
+  const value = `${content || ""}`;
+  if (!value.startsWith(STAFF_ROOM_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(value.slice(STAFF_ROOM_PREFIX.length));
+    if (parsed?.kind !== "staff_room" || !parsed.roomId) return null;
+    return {
+      kind: "staff_room",
+      roomId: `${parsed.roomId}`,
+      roomName: `${parsed.roomName || "Staff chat"}`,
+      memberIds: Array.isArray(parsed.memberIds) ? parsed.memberIds.map((id: unknown) => `${id}`).filter(Boolean) : [],
+      text: `${parsed.text || ""}`,
+      messageId: `${parsed.messageId || ""}`,
+      createdBy: parsed.createdBy || null,
+      actorId: parsed.actorId || null,
+      event: ["invite", "message", "accept", "decline", "leave"].includes(parsed.event) ? parsed.event : "message",
+    };
+  } catch {
+    return null;
+  }
+};
+
 export default function AdminPage() {
   const { lang, setLang, isSpanish } = useAdminLang();
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -275,6 +313,8 @@ export default function AdminPage() {
   const [developerNameDraft, setDeveloperNameDraft] = useState("Ray");
   const [developerAccessBusy, setDeveloperAccessBusy] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
+  const [staffChatSearch, setStaffChatSearch] = useState("");
+  const [activeStaffConversationKey, setActiveStaffConversationKey] = useState("");
   const [activeAdminSection, setActiveAdminSection] = useState<AdminSectionId | "">("");
   const [successMsg, setSuccessMsg] = useState("");
   const [pageError, setPageError] = useState("");
@@ -578,17 +618,75 @@ export default function AdminPage() {
   };
   const privateMessageText = (message: StaffPrivateMessage) => message.content || message.message || message.body || "";
   const privateRecipientId = (message: StaffPrivateMessage) => message.recipient_id || message.receiver_id || message.to_user_id || message.target_user_id || "";
+  const staffNameForId = useCallback((staffId?: string | null, fallback = "") => {
+    const member = staffById.get(`${staffId || ""}`);
+    return member?.full_name || member?.display_name || fallback || (isSpanish ? "Personal" : "Staff");
+  }, [isSpanish, staffById]);
+  const staffChatMessageText = useCallback((message: StaffPrivateMessage) => parseStaffRoomPayload(message.content)?.text || privateMessageText(message), []);
+  const staffChatSenderName = useCallback((message: StaffPrivateMessage) => {
+    const payload = parseStaffRoomPayload(message.content);
+    return staffNameForId(payload?.actorId || message.sender_id, message.sender_name || "");
+  }, [staffNameForId]);
+  const staffChatRecipientName = useCallback((message: StaffPrivateMessage) => staffNameForId(privateRecipientId(message), message.recipient_name || message.receiver_name || ""), [staffNameForId]);
+  const staffChatTime = useCallback((value?: string | null) => {
+    if (!value) return isSpanish ? "Sin fecha" : "No date";
+    return new Date(value).toLocaleString(isSpanish ? "es-MX" : "en-US", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [isSpanish]);
+  const staffRoomEventText = useCallback((event?: StaffRoomPayload["event"]) => {
+    if (event === "invite") return isSpanish ? "Invitación al chat" : "Chat invitation";
+    if (event === "accept") return isSpanish ? "Aceptó la invitación" : "Accepted the invitation";
+    if (event === "decline") return isSpanish ? "Rechazó la invitación" : "Declined the invitation";
+    if (event === "leave") return isSpanish ? "Salió del chat" : "Left the chat";
+    return "";
+  }, [isSpanish]);
   const staffPrivateConversations = useMemo<StaffPrivateConversation[]>(() => {
-    const conversations = new Map<string, StaffPrivateMessage[]>();
+    const privateConversations = new Map<string, StaffPrivateMessage[]>();
+    const roomConversations = new Map<string, {
+      roomId: string;
+      roomName: string;
+      memberIds: Set<string>;
+      messages: Map<string, StaffPrivateMessage>;
+    }>();
+
     staffPrivateMessages.forEach((message) => {
+      const payload = parseStaffRoomPayload(message.content);
+      if (payload) {
+        const key = `room:${payload.roomId}`;
+        const existing = roomConversations.get(key) || {
+          roomId: payload.roomId,
+          roomName: payload.roomName || (isSpanish ? "Chat staff" : "Staff chat"),
+          memberIds: new Set<string>(),
+          messages: new Map<string, StaffPrivateMessage>(),
+        };
+        [
+          ...payload.memberIds,
+          payload.createdBy,
+          payload.actorId,
+          message.sender_id,
+          privateRecipientId(message),
+        ]
+          .filter(Boolean)
+          .forEach((id) => existing.memberIds.add(`${id}`));
+        const messageKey = payload.messageId || message.id || `${message.created_at || ""}:${message.sender_id || ""}:${payload.text}`;
+        if (!existing.messages.has(messageKey)) existing.messages.set(messageKey, message);
+        roomConversations.set(key, existing);
+        return;
+      }
+
       const senderId = message.sender_id || "";
       const recipientId = privateRecipientId(message);
       if (!senderId || !recipientId) return;
       const key = [senderId, recipientId].sort().join(":");
-      conversations.set(key, [...(conversations.get(key) || []), message]);
+      privateConversations.set(key, [...(privateConversations.get(key) || []), message]);
     });
 
-    return Array.from(conversations.entries())
+    const privateRows = Array.from(privateConversations.entries())
       .map(([key, conversationMessages]) => {
         const participantIds = key.split(":");
         const participantNames = participantIds.map((participantId) => {
@@ -599,15 +697,66 @@ export default function AdminPage() {
         const latestMessage = sortedMessages[0];
         return {
           key,
+          kind: "private" as const,
           participantIds,
           title: participantNames.join(" + "),
           subtitle: `${participantNames.length} ${isSpanish ? "participantes" : "participants"} · ${conversationMessages.length} ${isSpanish ? "mensaje(s) internos" : "internal message(s)"}`,
           messages: sortedMessages,
           latestAt: latestMessage?.created_at || "",
+          latestText: staffChatMessageText(latestMessage || {}),
         };
-      })
-      .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
-  }, [isSpanish, staffById, staffPrivateMessages]);
+      });
+    const roomRows = Array.from(roomConversations.entries())
+      .map(([key, room]) => {
+        const messages = Array.from(room.messages.values()).sort((a, b) => `${b.created_at || ""}`.localeCompare(`${a.created_at || ""}`));
+        const latestMessage = messages[0];
+        const participantIds = Array.from(room.memberIds);
+        const participantNames = participantIds.map((participantId) => staffNameForId(participantId, participantId));
+        return {
+          key,
+          kind: "room" as const,
+          roomId: room.roomId,
+          participantIds,
+          title: room.roomName || (isSpanish ? "Chat staff" : "Staff chat"),
+          subtitle: `${participantNames.length} ${isSpanish ? "participantes" : "participants"} · ${messages.length} ${isSpanish ? "mensaje(s) internos" : "internal message(s)"}`,
+          messages,
+          latestAt: latestMessage?.created_at || "",
+          latestText: staffChatMessageText(latestMessage || {}),
+        };
+      });
+    return [...privateRows, ...roomRows].sort((a, b) => b.latestAt.localeCompare(a.latestAt));
+  }, [isSpanish, staffById, staffChatMessageText, staffNameForId, staffPrivateMessages]);
+
+  const normalizedStaffChatSearch = staffChatSearch.trim().toLowerCase();
+  const staffConversationSearchText = useCallback((conversation: StaffPrivateConversation) =>
+    [
+      conversation.title,
+      conversation.subtitle,
+      conversation.latestText,
+      ...conversation.participantIds.map((participantId) => staffNameForId(participantId, participantId)),
+      ...conversation.messages.flatMap((message) => [
+        staffChatMessageText(message),
+        staffChatSenderName(message),
+        staffChatRecipientName(message),
+        message.created_at || "",
+      ]),
+    ]
+      .join(" ")
+      .toLowerCase(), [staffChatMessageText, staffChatRecipientName, staffChatSenderName, staffNameForId]);
+  const filteredStaffPrivateConversations = useMemo(
+    () =>
+      normalizedStaffChatSearch
+        ? staffPrivateConversations.filter((conversation) => staffConversationSearchText(conversation).includes(normalizedStaffChatSearch))
+        : staffPrivateConversations,
+    [normalizedStaffChatSearch, staffConversationSearchText, staffPrivateConversations],
+  );
+  const selectedStaffConversation = useMemo(
+    () =>
+      filteredStaffPrivateConversations.find((conversation) => conversation.key === activeStaffConversationKey) ||
+      filteredStaffPrivateConversations[0] ||
+      null,
+    [activeStaffConversationKey, filteredStaffPrivateConversations],
+  );
 
   const adminNavItems = ([
     {
@@ -805,6 +954,24 @@ export default function AdminPage() {
     }
   };
 
+  const loadAllStaffPrivateMessages = async (allowed: boolean) => {
+    if (!allowed) return { data: [], error: null };
+    const rows: StaffPrivateMessage[] = [];
+    const pageSize = 1000;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabase
+        .from("staff_private_messages")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) return { data: rows, error };
+      const page = (data || []) as StaffPrivateMessage[];
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    return { data: rows, error: null };
+  };
+
   const fetchData = async (
     accessProfile = viewerPermissionProfile,
     accessEmail = viewerEmail,
@@ -832,7 +999,7 @@ export default function AdminPage() {
       mayLoadPatients ? supabase.from("patients").select("*").order("full_name") : emptyRows,
       mayLoadPatients ? supabase.from("procedures").select("*") : emptyRows,
       mayLoadPatients ? supabase.from("rooms").select("*").order("created_at", { ascending: false }) : emptyRows,
-      mayLoadStaffPrivateMessages ? supabase.from("staff_private_messages").select("*").order("created_at", { ascending: false }).limit(500) : emptyRows,
+      loadAllStaffPrivateMessages(mayLoadStaffPrivateMessages),
       mayLoadAccessRequests ? supabase.from("staff_access_requests").select("*").eq("status", "pending").order("created_at", { ascending: false }) : emptyRows,
       supabase.from("app_settings").select("value").eq("key", "invite_code").maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", "blocked_signup_emails").maybeSingle(),
@@ -1646,17 +1813,24 @@ export default function AdminPage() {
 
   const openStaffChatExportMenu = (conversation: StaffPrivateConversation) => {
     const recentMessages = conversation.messages
-      .slice(0, 50)
+      .slice()
+      .reverse()
       .map((message) => {
-        const sender = staffById.get(message.sender_id || "");
-        const recipient = staffById.get(privateRecipientId(message));
-        const senderName = sender?.full_name || sender?.display_name || message.sender_name || (isSpanish ? "Personal" : "Staff");
-        const recipientName = recipient?.full_name || recipient?.display_name || message.recipient_name || message.receiver_name || (isSpanish ? "Personal" : "Staff");
-        return `${message.created_at ? new Date(message.created_at).toLocaleString() : ""} - ${senderName} → ${recipientName}: ${privateMessageText(message) || "—"}`;
+        const payload = parseStaffRoomPayload(message.content);
+        const senderName = staffChatSenderName(message);
+        const recipientName = staffChatRecipientName(message);
+        const text = staffChatMessageText(message) || "—";
+        const eventLabel = staffRoomEventText(payload?.event);
+        if (conversation.kind === "room") {
+          return `${staffChatTime(message.created_at)} - ${senderName}${eventLabel ? ` (${eventLabel})` : ""}: ${text}`;
+        }
+        return `${staffChatTime(message.created_at)} - ${senderName} -> ${recipientName}: ${text}`;
       });
     const body = [
-      isSpanish ? `Conversación privada: ${conversation.title}` : `Private conversation: ${conversation.title}`,
-      `${isSpanish ? "Mensajes privados" : "Private messages"}: ${conversation.messages.length}`,
+      conversation.kind === "room"
+        ? (isSpanish ? `Chat staff: ${conversation.title}` : `Staff chat: ${conversation.title}`)
+        : (isSpanish ? `Conversación privada: ${conversation.title}` : `Private conversation: ${conversation.title}`),
+      `${isSpanish ? "Mensajes internos" : "Internal messages"}: ${conversation.messages.length}`,
       "",
       ...(recentMessages.length ? recentMessages : [isSpanish ? "Sin mensajes privados registrados." : "No private messages recorded."]),
     ].join("\n");
@@ -2161,6 +2335,28 @@ export default function AdminPage() {
         .conversation-row { cursor: default; justify-content: space-between; }
         .conversation-open-btn { min-width: 0; flex: 1; display: flex; align-items: center; gap: 12px; border: none; background: transparent; padding: 0; color: inherit; text-align: left; font-family: inherit; cursor: pointer; }
         .conversation-open-btn:focus-visible { outline: 2px solid #93C5FD; outline-offset: 3px; border-radius: 12px; }
+        .staff-chat-admin-layout { display: grid; grid-template-columns: minmax(280px, 0.42fr) minmax(0, 0.58fr); gap: 14px; align-items: start; }
+        .staff-chat-sidebar, .staff-chat-reader { min-width: 0; border: 1px solid #E6EEF7; border-radius: 18px; background: #FBFDFF; padding: 14px; }
+        .staff-chat-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-bottom: 10px; }
+        .staff-chat-list { display: grid; gap: 9px; max-height: 620px; overflow-y: auto; padding-right: 2px; }
+        .staff-chat-thread-card { width: 100%; display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 10px; align-items: center; padding: 11px; border-radius: 14px; border: 1px solid #E7EEF7; background: white; color: #111827; text-align: left; font-family: inherit; cursor: pointer; }
+        .staff-chat-thread-card:hover, .staff-chat-thread-card:focus-visible, .staff-chat-thread-card.active { border-color: #93C5FD; background: #EFF6FF; outline: none; }
+        .staff-chat-thread-title { display: flex; align-items: center; gap: 7px; min-width: 0; }
+        .staff-chat-thread-title strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 950; color: #0F172A; }
+        .staff-chat-kind { flex: 0 0 auto; padding: 3px 7px; border-radius: 999px; background: #DBEAFE; color: #1D4ED8; font-size: 11px; line-height: 1.25; font-weight: 950; text-transform: uppercase; letter-spacing: 0.03em; }
+        .staff-chat-thread-card p { margin: 4px 0 0; color: #64748B; font-size: 13px; font-weight: 750; line-height: 1.35; overflow-wrap: anywhere; }
+        .staff-chat-reader-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .staff-chat-reader-title { margin: 0; color: #0F172A; font-size: 20px; line-height: 1.18; font-weight: 950; overflow-wrap: anywhere; }
+        .staff-chat-message-list { display: grid; gap: 10px; max-height: 640px; overflow-y: auto; padding-right: 2px; }
+        .staff-chat-review-message { border: 1px solid #E6EEF7; border-radius: 16px; background: white; padding: 12px; }
+        .staff-chat-review-message.match { border-color: #FACC15; background: #FFFBEB; }
+        .staff-chat-message-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+        .staff-chat-message-meta strong { color: #0F172A; font-size: 14px; font-weight: 950; line-height: 1.25; overflow-wrap: anywhere; }
+        .staff-chat-message-meta span { flex: 0 0 auto; color: #64748B; font-size: 12px; font-weight: 800; }
+        .staff-chat-to-line, .staff-chat-event-line { margin: -2px 0 7px; color: #64748B; font-size: 12px; line-height: 1.35; font-weight: 850; }
+        .staff-chat-event-line { color: #1D4ED8; }
+        .staff-chat-message-body { margin: 0; color: #111827; font-size: 15px; line-height: 1.55; font-weight: 700; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .staff-chat-empty { padding: 28px 16px; text-align: center; border: 1px dashed #D6E0EB; border-radius: 16px; color: #64748B; font-size: 15px; font-weight: 750; line-height: 1.5; background: #F8FAFC; }
         .pending-staff-card { display: grid; gap: 12px; padding: 14px; border-radius: 16px; border: 1px solid #FED7AA; background: #FFF7ED; }
         .pending-staff-summary { display: flex; align-items: center; gap: 12px; min-width: 0; }
         .pending-staff-main { flex: 1; min-width: 0; }
@@ -2312,6 +2508,9 @@ export default function AdminPage() {
           .alert-device-count { justify-self: start; grid-column: 2; }
           .conversation-row { align-items: stretch; flex-direction: column; }
           .conversation-open-btn { width: 100%; }
+          .staff-chat-admin-layout { grid-template-columns: 1fr; }
+          .staff-chat-search-row { grid-template-columns: 1fr; }
+          .staff-chat-reader-head, .staff-chat-message-meta { flex-direction: column; align-items: flex-start; }
           .developer-card-grid { grid-template-columns: 1fr; }
           .staff-contact-settings-grid { grid-template-columns: 1fr; }
           .staff-contact-settings-grid .setting-group:last-child { grid-column: auto; }
@@ -2539,44 +2738,135 @@ export default function AdminPage() {
 	                    <p className="card-title">{isSpanish ? "Comunicación interna del equipo" : "Internal Team Communication"}</p>
 	                    <p className="muted">
 	                      {isSpanish
-	                        ? "Lista administrativa para revisar y exportar conversaciones privadas entre miembros del equipo."
-	                        : "Administrative list for reviewing and exporting private staff-to-staff conversations."}
+	                        ? "Lee conversaciones staff a staff, busca por palabra, frase o nombre, y exporta el historial cuando lo necesites."
+	                        : "Read staff-to-staff conversations, search by keyword, sentence, or staff name, and export history when needed."}
                     </p>
                   </div>
                   {renderSectionTopButton()}
                 </div>
-                <div style={{ display: "grid", gap: 10 }}>
-	                  {staffPrivateConversations.length === 0 ? (
-	                    <p className="muted">{isSpanish ? "Todavía no hay conversaciones privadas staff a staff registradas en la app." : "No app-recorded private staff-to-staff conversations yet."}</p>
-	                  ) : (
-	                    staffPrivateConversations.map((conversation) => {
-                        const deleteBusy = deletingStaffChatKey === conversation.key;
-                        return (
-                          <div key={`staff-chat-${conversation.key}`} className="list-action-row conversation-row">
-                            <button type="button" className="conversation-open-btn" onClick={() => openStaffChatExportMenu(conversation)}>
-                              <span className="avatar small-avatar">{initials(conversation.title)}</span>
-                              <span style={{ minWidth: 0, flex: 1 }}>
+                <div className="staff-chat-admin-layout">
+                  <div className="staff-chat-sidebar">
+                    <div className="staff-chat-search-row">
+                      <input
+                        className="line-input"
+                        value={staffChatSearch}
+                        onChange={(event) => setStaffChatSearch(event.target.value)}
+                        placeholder={isSpanish ? "Buscar palabra, frase o nombre..." : "Search keyword, phrase, or name..."}
+                      />
+                      {staffChatSearch.trim() && (
+                        <button className="ghost-btn" type="button" onClick={() => setStaffChatSearch("")}>
+                          {isSpanish ? "Limpiar" : "Clear"}
+                        </button>
+                      )}
+                    </div>
+                    <p className="small-note" style={{ marginTop: 0 }}>
+                      {normalizedStaffChatSearch
+                        ? (isSpanish
+                          ? `${filteredStaffPrivateConversations.length} de ${staffPrivateConversations.length} conversaciones coinciden.`
+                          : `${filteredStaffPrivateConversations.length} of ${staffPrivateConversations.length} conversations match.`)
+                        : (isSpanish
+                          ? `${staffPrivateConversations.length} conversaciones internas cargadas.`
+                          : `${staffPrivateConversations.length} internal conversations loaded.`)}
+                    </p>
+                    <div className="staff-chat-list">
+                      {filteredStaffPrivateConversations.length === 0 ? (
+                        <div className="staff-chat-empty">
+                          {staffPrivateConversations.length === 0
+                            ? (isSpanish ? "Todavía no hay conversaciones staff registradas en la app." : "No app-recorded staff conversations yet.")
+                            : (isSpanish ? "No encontré mensajes con esa búsqueda." : "No messages matched that search.")}
+                        </div>
+                      ) : (
+                        filteredStaffPrivateConversations.map((conversation) => (
+                          <button
+                            key={`staff-chat-${conversation.key}`}
+                            type="button"
+                            className={`staff-chat-thread-card ${selectedStaffConversation?.key === conversation.key ? "active" : ""}`}
+                            onClick={() => setActiveStaffConversationKey(conversation.key)}
+                          >
+                            <span className="avatar small-avatar">{initials(conversation.title)}</span>
+                            <span style={{ minWidth: 0 }}>
+                              <span className="staff-chat-thread-title">
                                 <strong>{conversation.title}</strong>
-                                <span>{conversation.subtitle}</span>
+                                <span className="staff-chat-kind">{conversation.kind === "room" ? (isSpanish ? "Grupo" : "Group") : (isSpanish ? "Privado" : "Private")}</span>
                               </span>
-                            </button>
-                            <button
-                              type="button"
-                              className="danger-inline-btn"
-                              disabled={!canDeleteStaffChats || deleteBusy}
-                              onClick={() => deleteStaffPrivateConversation(conversation)}
-                              title={
-                                canDeleteStaffChats
-                                  ? ""
-                                  : (isSpanish ? "El doctor debe dar el derecho de eliminar chats staff." : "The doctor must grant the delete staff chats right.")
-                              }
-                            >
-                              {deleteBusy ? (isSpanish ? "Eliminando..." : "Deleting...") : (isSpanish ? "Eliminar" : "Delete")}
-                            </button>
+                              <p>{conversation.subtitle}</p>
+                              {conversation.latestText && <p>{conversation.latestText.slice(0, 120)}</p>}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div className="staff-chat-reader">
+                    {selectedStaffConversation ? (
+                      <>
+                        <div className="staff-chat-reader-head">
+                          <div style={{ minWidth: 0 }}>
+                            <h3 className="staff-chat-reader-title">{selectedStaffConversation.title}</h3>
+                            <p className="small-note" style={{ margin: "5px 0 0" }}>
+                              {selectedStaffConversation.subtitle} · {isSpanish ? "Último" : "Latest"}: {staffChatTime(selectedStaffConversation.latestAt)}
+                            </p>
                           </div>
-                        );
-                      })
-                  )}
+                          <div className="inline-actions">
+                            <button className="ghost-btn" type="button" onClick={() => openStaffChatExportMenu(selectedStaffConversation)}>
+                              {isSpanish ? "Exportar" : "Export"}
+                            </button>
+                            {selectedStaffConversation.kind === "private" && (
+                              <button
+                                type="button"
+                                className="danger-inline-btn"
+                                disabled={!canDeleteStaffChats || deletingStaffChatKey === selectedStaffConversation.key}
+                                onClick={() => deleteStaffPrivateConversation(selectedStaffConversation)}
+                                title={
+                                  canDeleteStaffChats
+                                    ? ""
+                                    : (isSpanish ? "El doctor debe dar el derecho de eliminar chats staff." : "The doctor must grant the delete staff chats right.")
+                                }
+                              >
+                                {deletingStaffChatKey === selectedStaffConversation.key ? (isSpanish ? "Eliminando..." : "Deleting...") : (isSpanish ? "Eliminar" : "Delete")}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="staff-chat-message-list">
+                          {selectedStaffConversation.messages.slice().reverse().map((message, index) => {
+                            const payload = parseStaffRoomPayload(message.content);
+                            const text = staffChatMessageText(message);
+                            const sender = staffChatSenderName(message);
+                            const recipient = staffChatRecipientName(message);
+                            const eventLabel = staffRoomEventText(payload?.event);
+                            const matchesSearch = Boolean(
+                              normalizedStaffChatSearch &&
+                              [text, sender, recipient, eventLabel, message.created_at || ""]
+                                .join(" ")
+                                .toLowerCase()
+                                .includes(normalizedStaffChatSearch),
+                            );
+                            return (
+                              <article
+                                className={`staff-chat-review-message ${matchesSearch ? "match" : ""}`}
+                                key={message.id || `${selectedStaffConversation.key}-${message.created_at || index}`}
+                              >
+                                <div className="staff-chat-message-meta">
+                                  <strong>{sender}</strong>
+                                  <span>{staffChatTime(message.created_at)}</span>
+                                </div>
+                                {selectedStaffConversation.kind === "private" && (
+                                  <p className="staff-chat-to-line">{isSpanish ? "Para" : "To"}: {recipient}</p>
+                                )}
+                                {eventLabel && <p className="staff-chat-event-line">{eventLabel}</p>}
+                                <p className="staff-chat-message-body">{text || (isSpanish ? "Sin texto" : "No text")}</p>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="staff-chat-empty">
+                        {isSpanish ? "Selecciona una conversación para revisar el historial." : "Select a conversation to review the history."}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
               )}

@@ -63,6 +63,12 @@ export async function POST(request: NextRequest) {
     if (!validEmail(email)) {
       return NextResponse.json({ error: "Invalid email." }, { status: 400 });
     }
+    const accountNotFoundMessage = lang === "en"
+      ? "No active portal account was found for that recovery email."
+      : "No encontré una cuenta activa del portal con ese correo de recuperación.";
+    const resetLinkFailedMessage = lang === "en"
+      ? "I could not create the recovery link. Please ask an administrator to verify the account email."
+      : "No pude crear el enlace de recuperación. Pide al administrador verificar el correo de la cuenta.";
 
     const resetIdentity = await resolveResetIdentity(email);
     const redirectTo = `${APP_URL}/reset-password?lang=${lang}`;
@@ -74,12 +80,14 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("password reset link failed", error.message, { destinationEmail: resetIdentity.destinationEmail, authEmail: isAliasEmail(resetIdentity.authEmail) ? "alias" : resetIdentity.authEmail });
-      return NextResponse.json({ ok: true });
+      const notFound = /not\s+found|unable\s+to\s+find|no\s+user/i.test(error.message || "");
+      return NextResponse.json({ error: notFound ? accountNotFoundMessage : resetLinkFailedMessage }, { status: notFound ? 404 : 500 });
     }
 
     const actionLink = `${(data as any)?.properties?.action_link || ""}`.trim();
     if (!actionLink) {
-      return NextResponse.json({ ok: true });
+      console.error("password reset link missing action_link", { destinationEmail: resetIdentity.destinationEmail, authEmail: isAliasEmail(resetIdentity.authEmail) ? "alias" : resetIdentity.authEmail });
+      return NextResponse.json({ error: resetLinkFailedMessage }, { status: 500 });
     }
 
     const transporter = nodemailer.createTransport({
