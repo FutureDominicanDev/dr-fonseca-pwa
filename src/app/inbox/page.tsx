@@ -41,6 +41,11 @@ const STAFF_RECORD_ALERTS_MUTED_KEY = "drf_staff_record_alerts_muted";
 const STAFF_ALERT_TONE_STORAGE_KEY = "drf_staff_alert_tone";
 const STAFF_CHAT_ALERT_TONE_STORAGE_KEY = "drf_staff_chat_alert_tone";
 const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
+const DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
+
+type PortalNotificationSettingsPlugin = {
+  open(options: { channelId: string }): Promise<void>;
+};
 
 const readStaffLang = (): Lang => {
   if (typeof window === "undefined") return "es";
@@ -64,7 +69,7 @@ const readStaffRecordAlertsMuted = () => {
   return window.localStorage.getItem(STAFF_RECORD_ALERTS_MUTED_KEY) === "1";
 };
 
-const readStaffAlertTone = (key = STAFF_ALERT_TONE_STORAGE_KEY, fallback: AlertTone = "classic"): AlertTone => {
+const readStaffAlertTone = (key = STAFF_ALERT_TONE_STORAGE_KEY, fallback: AlertTone = "system"): AlertTone => {
   if (typeof window === "undefined") return fallback;
   const stored = window.localStorage.getItem(key);
   return normalizeAlertTone(stored, fallback);
@@ -1002,7 +1007,7 @@ export default function InboxPage() {
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
   const [portalAlertTone, setPortalAlertTone] = useState<AlertTone>(() => readStaffAlertTone());
-  const [staffChatAlertTone, setStaffChatAlertTone] = useState<AlertTone>(() => readStaffAlertTone(STAFF_CHAT_ALERT_TONE_STORAGE_KEY, "urgent"));
+  const [staffChatAlertTone, setStaffChatAlertTone] = useState<AlertTone>(() => readStaffAlertTone(STAFF_CHAT_ALERT_TONE_STORAGE_KEY, "system"));
   const [serverAlertTones, setServerAlertTones] = useState<StaffAlertTonePreference>(() => emptyStaffAlertTonePreference());
   const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
@@ -1111,6 +1116,38 @@ export default function InboxPage() {
     else setStaffChatAlertTone(tone);
     void saveOwnAlertTone(category, tone);
   }, [saveOwnAlertTone]);
+  const openDeviceNotificationSettings = useCallback(async () => {
+    try {
+      const { Capacitor, registerPlugin } = await import("@capacitor/core");
+      if (!Capacitor.isNativePlatform()) {
+        setNotificationFeedback({
+          tone: "info",
+          text: lang === "es"
+            ? "En navegador o PWA, el sonido lo controla el permiso de notificaciones del sistema."
+            : "In the browser or PWA, the system notification permission controls the sound.",
+        });
+        return;
+      }
+      if (Capacitor.getPlatform() !== "android") {
+        setNotificationFeedback({
+          tone: "info",
+          text: lang === "es"
+            ? "En iPhone, usa Ajustes de iOS para el sonido general de notificaciones. Apple no permite elegir la lista completa de tonos dentro de la app."
+            : "On iPhone, use iOS Settings for the general notification sound. Apple does not expose the full tone picker inside the app.",
+        });
+        return;
+      }
+      const PortalNotificationSettings = registerPlugin<PortalNotificationSettingsPlugin>("PortalNotificationSettings");
+      await PortalNotificationSettings.open({ channelId: DEVICE_ALERT_CHANNEL_ID });
+    } catch {
+      setNotificationFeedback({
+        tone: "error",
+        text: lang === "es"
+          ? "No pude abrir los ajustes del dispositivo desde esta pantalla."
+          : "I could not open device settings from this screen.",
+      });
+    }
+  }, [lang]);
   const fmtChatDateLabel = (ts: string) => {
     if (!ts) return "";
     const date = new Date(ts);
@@ -2004,7 +2041,7 @@ export default function InboxPage() {
   }, [ensureAudioContext]);
 
   const playAlertTone = useCallback((tone: AlertTone, category: AlertToneCategory) => {
-    if (tone === "off") return;
+    if (tone === "off" || tone === "system") return;
     const context = ensureAudioContext();
     if (!context) return;
     const doPlay = () => {
@@ -5262,6 +5299,11 @@ export default function InboxPage() {
                   : "Saved tones on your account. You can change them any time."}
               </p>
             )}
+            <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginBottom:10}}>
+              {lang==="es"
+                ? "Elige Sistema del dispositivo para usar el sonido de notificación configurado en el teléfono."
+                : "Choose Device default to use the notification sound configured on the phone."}
+            </p>
             {([
               { category: "portal" as const, title: lang==="es" ? "Portal y pacientes" : "Portal and patient alerts", tone: portalAlertTone, test: playPortalAlertTone },
               { category: "staffChat" as const, title: lang==="es" ? "Chat staff a staff" : "Staff-to-staff chat", tone: staffChatAlertTone, test: playStaffChatAlertTone },
@@ -5282,11 +5324,13 @@ export default function InboxPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={group.test}
+                  onClick={group.tone==="system" ? openDeviceNotificationSettings : group.test}
                   disabled={group.tone==="off"}
                   style={{width:"100%",minHeight:46,border:"none",borderRadius:14,background:group.tone==="off"?(darkMode?"#334155":"#E5E7EB"):"#EAF2FB",color:group.tone==="off"?(darkMode?"#94A3B8":"#64748B"):"#1D4ED8",fontFamily:"inherit",fontSize:settingsBaseSize,fontWeight:900,cursor:group.tone==="off"?"not-allowed":"pointer"}}
                 >
-                  {lang==="es"?"Probar sonido":"Test sound"}
+                  {group.tone==="system"
+                    ? (lang==="es" ? "Abrir ajustes del dispositivo" : "Open device settings")
+                    : (lang==="es"?"Probar sonido":"Test sound")}
                 </button>
               </div>
             ))}

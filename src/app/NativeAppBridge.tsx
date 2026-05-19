@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 const NATIVE_TOKEN_STORAGE_KEY = "drf_native_push_token";
 const NATIVE_PLATFORM_STORAGE_KEY = "drf_native_platform";
+const DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
 
 const patientRoomContext = () => {
   if (typeof window === "undefined") return null;
@@ -74,16 +75,21 @@ export default function NativeAppBridge() {
           await BiometricAuth.checkBiometry().catch(() => {});
         }
 
-        if (platform === "android" && (LocalNotifications as any).createChannel) {
-          await (LocalNotifications as any).createChannel({
-            id: "critical_alerts",
-            name: "Critical medical alerts",
-            description: "Patient and staff communication alerts",
+        if (platform === "android") {
+          const deviceAlertChannel = {
+            id: DEVICE_ALERT_CHANNEL_ID,
+            name: "Portal alerts",
+            description: "Patient and staff communication alerts using the device notification sound",
             importance: 5,
             visibility: 1,
-            sound: "critical_repeat.wav",
             vibration: true,
-          }).catch(() => {});
+          };
+          if ((LocalNotifications as any).createChannel) {
+            await (LocalNotifications as any).createChannel(deviceAlertChannel).catch(() => {});
+          }
+          if ((PushNotifications as any).createChannel) {
+            await (PushNotifications as any).createChannel(deviceAlertChannel).catch(() => {});
+          }
         }
 
         await LocalNotifications.requestPermissions().catch(() => {});
@@ -103,8 +109,7 @@ export default function NativeAppBridge() {
               id: Date.now() % 2147483647,
               title: notification.title || "Dr. Fonseca Portal",
               body: notification.body || "New portal message",
-              channelId: "critical_alerts",
-              sound: "critical_repeat.wav",
+              channelId: DEVICE_ALERT_CHANNEL_ID,
               extra: notification.data || {},
             }],
           }).catch(() => {});

@@ -32,7 +32,6 @@ const config: CapacitorConfig = {
     LocalNotifications: {
       smallIcon: "ic_stat_drf",
       iconColor: "#0B63CE",
-      sound: "critical_repeat.wav",
     },
   },
 };

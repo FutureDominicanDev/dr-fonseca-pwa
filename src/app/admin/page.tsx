@@ -254,6 +254,124 @@ type AdminSectionId =
   | "telefonos-sede"
   | "bloqueos";
 
+type AdminNavIconName =
+  | "patients"
+  | "create"
+  | "team"
+  | "requests"
+  | "alerts"
+  | "chat"
+  | "archive"
+  | "developer"
+  | "invite"
+  | "phone"
+  | "blocked";
+
+const adminNavIconSvgProps = {
+  width: 22,
+  height: 22,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2.2,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  "aria-hidden": true,
+  focusable: "false",
+} as const;
+
+function AdminNavIcon({ name }: { name: AdminNavIconName }) {
+  switch (name) {
+    case "patients":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <circle cx="12" cy="7" r="4" />
+          <path d="M5 21a7 7 0 0 1 14 0" />
+        </svg>
+      );
+    case "create":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <circle cx="9" cy="7" r="4" />
+          <path d="M3 21a6 6 0 0 1 12 0" />
+          <path d="M19 8v6" />
+          <path d="M22 11h-6" />
+        </svg>
+      );
+    case "team":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <circle cx="9" cy="8" r="3" />
+          <path d="M3 21v-1a6 6 0 0 1 12 0v1" />
+          <path d="M16 5.5a3 3 0 0 1 0 5" />
+          <path d="M21 21v-1a5 5 0 0 0-4-4.9" />
+        </svg>
+      );
+    case "requests":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <rect x="5" y="4" width="14" height="17" rx="2" />
+          <path d="M9 4h6" />
+          <path d="m9 13 2 2 4-5" />
+        </svg>
+      );
+    case "alerts":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" />
+          <path d="M10 21h4" />
+        </svg>
+      );
+    case "chat":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+          <path d="M8 9h8" />
+          <path d="M8 13h5" />
+        </svg>
+      );
+    case "archive":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8" />
+          <path d="M3 8h18" />
+          <path d="M5 3h14l2 5H3z" />
+          <path d="M10 13h4" />
+        </svg>
+      );
+    case "developer":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <path d="m8 9-4 3 4 3" />
+          <path d="m16 9 4 3-4 3" />
+          <path d="m14 5-4 14" />
+        </svg>
+      );
+    case "invite":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <path d="M22 2 11 13" />
+          <path d="m22 2-7 20-4-9-9-4 20-7z" />
+        </svg>
+      );
+    case "phone":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.32 1.78.59 2.63a2 2 0 0 1-.45 2.11L8 9.71a16 16 0 0 0 6.29 6.29l1.25-1.25a2 2 0 0 1 2.11-.45c.85.27 1.73.47 2.63.59A2 2 0 0 1 22 16.92z" />
+        </svg>
+      );
+    case "blocked":
+      return (
+        <svg {...adminNavIconSvgProps}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="m5.6 5.6 12.8 12.8" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 const STAFF_ROOM_PREFIX = "__DRF_STAFF_ROOM__:";
 const parseStaffRoomPayload = (content?: string | null): StaffRoomPayload | null => {
   const value = `${content || ""}`;
@@ -393,7 +511,7 @@ export default function AdminPage() {
     return emptyStaffAlertTonePreference();
   };
   const playAdminAlertTone = (tone: AlertTone, category: AlertToneCategory = "portal") => {
-    if (tone === "off") return;
+    if (tone === "off" || tone === "system") return;
     const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextCtor) return;
     if (!audioContextRef.current) audioContextRef.current = new AudioContextCtor();
@@ -761,28 +879,28 @@ export default function AdminPage() {
   const adminNavItems = ([
     {
       id: "buscar-paciente",
-      code: "PT",
+      icon: "patients",
       label: isSpanish ? "Pacientes" : "Patients",
       detail: isSpanish ? "Buscar y abrir expedientes" : "Search and open records",
       metric: `${activePatientCount}`,
     },
     {
       id: "crear-paciente",
-      code: "CP",
+      icon: "create",
       label: isSpanish ? "Crear paciente" : "Create patient",
       detail: isSpanish ? "Abrir sala y enlace seguro" : "Open room and secure link",
       visible: canCreatePatients,
     },
     {
       id: "equipo",
-      code: "EQ",
+      icon: "team",
       label: isSpanish ? "Equipo" : "Team",
       detail: isSpanish ? "Usuarios, teléfonos y permisos" : "Users, phones, and rights",
       metric: `${staff.length}`,
     },
     {
       id: "solicitudes-pendientes",
-      code: "AC",
+      icon: "requests",
       label: isSpanish ? "Solicitudes" : "Requests",
       detail: isSpanish ? "Aprobación de staff y salas" : "Staff and room approval",
       metric: `${pendingTotalCount}`,
@@ -790,7 +908,7 @@ export default function AdminPage() {
     },
     {
       id: "alertas",
-      code: "AL",
+      icon: "alerts",
       label: isSpanish ? "Alertas" : "Alerts",
       detail: isSpanish ? "Estado de notificaciones" : "Notification readiness",
       metric: notificationReadiness
@@ -800,46 +918,46 @@ export default function AdminPage() {
     },
     {
       id: "staff-to-staff",
-      code: "CH",
+      icon: "chat",
       label: isSpanish ? "Chat staff" : "Staff chat",
       detail: isSpanish ? "Conversaciones internas" : "Internal conversations",
       metric: `${staffPrivateConversations.length}`,
     },
     {
       id: "herramientas-expediente",
-      code: "AR",
+      icon: "archive",
       label: isSpanish ? "Archivo" : "Archive",
       detail: isSpanish ? "Auditoría, archivo y papelera" : "Audit, archive, and trash",
     },
     {
       id: "developer-access",
-      code: "DV",
+      icon: "developer",
       label: isSpanish ? "Desarrollador" : "Developer",
       detail: isSpanish ? "Acceso técnico temporal" : "Temporary technical access",
       visible: canManageOwner,
     },
     {
       id: "invitar-personal",
-      code: "IN",
+      icon: "invite",
       label: isSpanish ? "Invitar" : "Invite",
       detail: isSpanish ? "Alta segura de personal" : "Secure staff onboarding",
     },
     {
       id: "telefonos-sede",
-      code: "TL",
+      icon: "phone",
       label: isSpanish ? "Teléfonos" : "Phones",
       detail: isSpanish ? "Números por consultorio" : "Office numbers",
     },
     {
       id: "bloqueos",
-      code: "BL",
+      icon: "blocked",
       label: isSpanish ? "Bloqueos" : "Blocked",
       detail: isSpanish ? "Correos y teléfonos bloqueados" : "Blocked emails and phones",
       metric: `${blockedAccessCount}`,
     },
   ] satisfies Array<{
     id: AdminSectionId;
-    code: string;
+    icon: AdminNavIconName;
     label: string;
     detail: string;
     metric?: string;
@@ -2230,7 +2348,8 @@ export default function AdminPage() {
         .sidebar-btn { width: 100%; min-height: 58px; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; border-radius: 16px; border: 1px solid transparent; background: transparent; color: #334155; padding: 9px; text-align: left; cursor: pointer; font-family: inherit; }
         .sidebar-btn:hover, .sidebar-btn:focus-visible { background: #F8FBFF; border-color: #D7E7FA; outline: none; }
         .sidebar-btn.active { background: #EFF6FF; border-color: #BFDBFE; box-shadow: 0 10px 26px rgba(29,78,216,0.10); color: #0F172A; }
-        .nav-icon { width: 38px; height: 38px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; background: #EEF2F7; color: #475569; font-size: 11px; font-weight: 950; letter-spacing: 0.04em; }
+        .nav-icon { width: 38px; height: 38px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; background: #EEF2F7; color: #475569; }
+        .nav-icon svg { width: 21px; height: 21px; display: block; }
         .sidebar-btn.active .nav-icon { background: #1D4ED8; color: white; }
         .nav-copy { min-width: 0; }
         .nav-copy strong { display: block; color: inherit; font-size: 14px; font-weight: 950; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2300,7 +2419,7 @@ export default function AdminPage() {
         .hero-secondary-btn { min-height: 46px; padding: 12px 14px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; }
         .main-btn { min-height: 48px; padding: 14px 16px; border-radius: 14px; border: none; background: #007AFF; color: white; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; }
         .main-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-        .ghost-btn { min-height: 48px; padding: 14px 16px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; }
+        .ghost-btn { min-height: 48px; padding: 14px 16px; border-radius: 14px; border: none; background: #EFF3F8; color: #111827; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit; white-space: nowrap; }
         .line-input { width: 100%; padding: 14px 16px; background: #F3F4F6; border: 1px solid transparent; border-radius: 14px; font-size: 16px; font-family: inherit; color: #111827; outline: none; font-weight: 600; }
         .line-input:focus { border-color: rgba(0,122,255,0.5); background: white; }
         .grid-2 { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start; }
@@ -2347,15 +2466,18 @@ export default function AdminPage() {
         .staff-chat-thread-card p { margin: 4px 0 0; color: #64748B; font-size: 13px; font-weight: 750; line-height: 1.35; overflow-wrap: anywhere; }
         .staff-chat-reader-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
         .staff-chat-reader-title { margin: 0; color: #0F172A; font-size: 20px; line-height: 1.18; font-weight: 950; overflow-wrap: anywhere; }
-        .staff-chat-message-list { display: grid; gap: 10px; max-height: 640px; overflow-y: auto; padding-right: 2px; }
-        .staff-chat-review-message { border: 1px solid #E6EEF7; border-radius: 16px; background: white; padding: 12px; }
+        .staff-chat-reader-head .inline-actions { flex: 0 0 auto; align-items: flex-start; }
+        .staff-chat-reader-head .ghost-btn { min-width: 112px; }
+        .staff-chat-message-list { display: grid; gap: 0; max-height: 430px; overflow-y: auto; border: 1px solid #E6EEF7; border-radius: 16px; background: white; padding: 0; }
+        .staff-chat-review-message { display: grid; grid-template-columns: minmax(112px, 0.24fr) minmax(0, 1fr); column-gap: 12px; align-items: start; border: 0; border-bottom: 1px solid #E6EEF7; border-radius: 0; background: white; padding: 9px 12px; }
+        .staff-chat-review-message:last-child { border-bottom: none; }
         .staff-chat-review-message.match { border-color: #FACC15; background: #FFFBEB; }
-        .staff-chat-message-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
-        .staff-chat-message-meta strong { color: #0F172A; font-size: 14px; font-weight: 950; line-height: 1.25; overflow-wrap: anywhere; }
-        .staff-chat-message-meta span { flex: 0 0 auto; color: #64748B; font-size: 12px; font-weight: 800; }
-        .staff-chat-to-line, .staff-chat-event-line { margin: -2px 0 7px; color: #64748B; font-size: 12px; line-height: 1.35; font-weight: 850; }
+        .staff-chat-message-meta { display: grid; align-content: start; gap: 3px; margin-bottom: 0; }
+        .staff-chat-message-meta strong { color: #0F172A; font-size: 13px; font-weight: 950; line-height: 1.2; overflow-wrap: anywhere; }
+        .staff-chat-message-meta span { color: #64748B; font-size: 11px; line-height: 1.25; font-weight: 800; }
+        .staff-chat-to-line, .staff-chat-event-line { grid-column: 2; margin: 0 0 3px; color: #64748B; font-size: 11px; line-height: 1.3; font-weight: 850; }
         .staff-chat-event-line { color: #1D4ED8; }
-        .staff-chat-message-body { margin: 0; color: #111827; font-size: 15px; line-height: 1.55; font-weight: 700; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .staff-chat-message-body { grid-column: 2; margin: 0; color: #111827; font-size: 14px; line-height: 1.4; font-weight: 750; white-space: pre-wrap; overflow-wrap: anywhere; }
         .staff-chat-empty { padding: 28px 16px; text-align: center; border: 1px dashed #D6E0EB; border-radius: 16px; color: #64748B; font-size: 15px; font-weight: 750; line-height: 1.5; background: #F8FAFC; }
         .pending-staff-card { display: grid; gap: 12px; padding: 14px; border-radius: 16px; border: 1px solid #FED7AA; background: #FFF7ED; }
         .pending-staff-summary { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -2510,7 +2632,11 @@ export default function AdminPage() {
           .conversation-open-btn { width: 100%; }
           .staff-chat-admin-layout { grid-template-columns: 1fr; }
           .staff-chat-search-row { grid-template-columns: 1fr; }
-          .staff-chat-reader-head, .staff-chat-message-meta { flex-direction: column; align-items: flex-start; }
+          .staff-chat-reader-head { flex-direction: column; align-items: flex-start; }
+          .staff-chat-reader-head .inline-actions { width: 100%; }
+          .staff-chat-reader-head .ghost-btn { min-width: 0; flex: 1 1 112px; }
+          .staff-chat-review-message { grid-template-columns: 1fr; row-gap: 4px; }
+          .staff-chat-to-line, .staff-chat-event-line, .staff-chat-message-body { grid-column: auto; }
           .developer-card-grid { grid-template-columns: 1fr; }
           .staff-contact-settings-grid { grid-template-columns: 1fr; }
           .staff-contact-settings-grid .setting-group:last-child { grid-column: auto; }
@@ -2594,7 +2720,7 @@ export default function AdminPage() {
                     className={`sidebar-btn ${activeAdminSection === item.id ? "active" : ""}`}
                     onClick={() => openAdminSection(item.id)}
                   >
-                    <span className="nav-icon">{item.code}</span>
+                    <span className="nav-icon" aria-hidden="true"><AdminNavIcon name={item.icon} /></span>
                     <span className="nav-copy">
                       <strong>{item.label}</strong>
                       <span>{item.detail}</span>
@@ -3030,8 +3156,8 @@ export default function AdminPage() {
                   <p className="secure-invite-label">{isSpanish ? "Punto crítico" : "Critical point"}</p>
                   <p className="secure-invite-code" style={{ color: "#334155" }}>
                     {isSpanish
-                      ? "El portal ya tiene tono Crítico repetido dentro de la app y el shell nativo queda preparado con plugins para push, notificaciones locales, biometría, almacenamiento seguro, deep links y ciclo de vida. La entrega APNs/FCM real se completa al conectar credenciales de Apple/Google."
-                      : "The portal has a Critical repeat in-app tone and the native shell is prepared with plugins for push, local notifications, biometrics, secure storage, deep links, and app lifecycle. Real APNs/FCM delivery is completed when Apple/Google credentials are connected."}
+                      ? "El portal puede usar Sistema del dispositivo para que Android/Samsung controle el sonido desde la categoría de notificaciones. Los tonos internos siguen disponibles solo si el staff los elige."
+                      : "The portal can use Device default so Android/Samsung controls the sound from the notification category. Internal tones remain available only if staff choose them."}
                   </p>
                 </div>
 
@@ -3077,8 +3203,8 @@ export default function AdminPage() {
                                     className="alert-enable-btn"
                                     disabled={savingKey.startsWith(`${member.id}-alert-tone`)}
                                     onClick={async () => {
-                                      if (tones.portal === "off") await saveStaffAlertTone(staffMember, "portal", "critical");
-                                      if (tones.staffChat === "off") await saveStaffAlertTone(staffMember, "staffChat", "critical");
+                                      if (tones.portal === "off") await saveStaffAlertTone(staffMember, "portal", "system");
+                                      if (tones.staffChat === "off") await saveStaffAlertTone(staffMember, "staffChat", "system");
                                     }}
                                   >
                                     {isSpanish ? "Activar alertas" : "Enable alert"}
@@ -3094,7 +3220,7 @@ export default function AdminPage() {
                                         <button
                                           type="button"
                                           className="mini-btn"
-                                          disabled={!selectedTone || selectedTone === "off"}
+                                          disabled={!selectedTone || selectedTone === "off" || selectedTone === "system"}
                                           onClick={() => selectedTone && playAdminAlertTone(selectedTone, category)}
                                         >
                                           {isSpanish ? "Probar" : "Test"}
@@ -3599,7 +3725,7 @@ export default function AdminPage() {
                                               <button
                                                 type="button"
                                                 className="mini-btn"
-                                                disabled={!savedAlertTone || savedAlertTone === "off"}
+                                                disabled={!savedAlertTone || savedAlertTone === "off" || savedAlertTone === "system"}
                                                 onClick={() => savedAlertTone && playAdminAlertTone(savedAlertTone, category)}
                                               >
                                                 {isSpanish ? "Probar" : "Test"}

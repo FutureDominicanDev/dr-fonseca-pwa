@@ -64,12 +64,17 @@ type RoomAccess = {
 };
 
 type PatientTextSize = "normal" | "large";
-type AlertTone = "classic" | "soft" | "urgent" | "critical" | "off";
+type AlertTone = "system" | "classic" | "soft" | "urgent" | "critical" | "off";
 
 const PATIENT_TEXT_SIZE_STORAGE_KEY = "drf_patient_text_size";
 const PATIENT_LANG_STORAGE_KEY = "drf_patient_ui_lang";
 const PATIENT_ALERT_TONE_STORAGE_KEY = "drf_patient_alert_tone";
-const alertToneOptions: AlertTone[] = ["classic", "soft", "urgent", "critical"];
+const DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
+const alertToneOptions: AlertTone[] = ["system", "classic", "soft", "urgent", "critical"];
+
+type PortalNotificationSettingsPlugin = {
+  open(options: { channelId: string }): Promise<void>;
+};
 
 const readPatientTextSize = (): PatientTextSize => {
   if (typeof window === "undefined") return "large";
@@ -77,9 +82,9 @@ const readPatientTextSize = (): PatientTextSize => {
 };
 
 const readPatientAlertTone = (): AlertTone => {
-  if (typeof window === "undefined") return "urgent";
+  if (typeof window === "undefined") return "system";
   const stored = window.localStorage.getItem(PATIENT_ALERT_TONE_STORAGE_KEY);
-  return stored === "classic" || stored === "soft" || stored === "urgent" || stored === "critical" ? stored : "urgent";
+  return stored === "system" || stored === "classic" || stored === "soft" || stored === "urgent" || stored === "critical" || stored === "off" ? stored : "system";
 };
 
 const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
@@ -511,6 +516,30 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     }
   }, [subscribePatientToPush, uiLang]);
 
+  const openDeviceNotificationSettings = useCallback(async () => {
+    try {
+      const { Capacitor, registerPlugin } = await import("@capacitor/core");
+      if (!Capacitor.isNativePlatform()) {
+        setNotificationFeedback(uiLang === "es"
+          ? "En navegador o PWA, el sonido lo controla el permiso de notificaciones del sistema."
+          : "In the browser or PWA, the system notification permission controls the sound.");
+        return;
+      }
+      if (Capacitor.getPlatform() !== "android") {
+        setNotificationFeedback(uiLang === "es"
+          ? "En iPhone, usa Ajustes de iOS para el sonido general de notificaciones. Apple no permite elegir la lista completa de tonos dentro de la app."
+          : "On iPhone, use iOS Settings for the general notification sound. Apple does not expose the full tone picker inside the app.");
+        return;
+      }
+      const PortalNotificationSettings = registerPlugin<PortalNotificationSettingsPlugin>("PortalNotificationSettings");
+      await PortalNotificationSettings.open({ channelId: DEVICE_ALERT_CHANNEL_ID });
+    } catch {
+      setNotificationFeedback(uiLang === "es"
+        ? "No pude abrir los ajustes del dispositivo desde esta pantalla."
+        : "I could not open device settings from this screen.");
+    }
+  }, [uiLang]);
+
   const patientDisplayName = useCallback(() => {
     const patient = room?.procedures?.patients as any;
     const name = Array.isArray(patient) ? patient[0]?.full_name : patient?.full_name;
@@ -609,6 +638,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }, [alertTone]);
 
   const alertToneLabel = (tone: AlertTone) => ({
+    system: uiLang === "es" ? "Sistema del dispositivo" : "Device default",
     classic: uiLang === "es" ? "Portal" : "Portal",
     soft: uiLang === "es" ? "Suave" : "Soft",
     urgent: uiLang === "es" ? "Urgente" : "Urgent",
@@ -625,7 +655,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }, []);
 
   const playIncomingTone = useCallback(() => {
-    if (alertTone === "off") return;
+    if (alertTone === "off" || alertTone === "system") return;
     const context = ensureAudioContext();
     if (!context) return;
     const doPlay = () => {
@@ -2689,6 +2719,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                   {notificationFeedback}
                 </div>
               )}
+              <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 700, lineHeight: 1.45 }}>
+                {uiLang === "es"
+                  ? "Sistema del dispositivo usa el sonido de notificación configurado en el teléfono."
+                  : "Device default uses the notification sound configured on the phone."}
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(128px, 1fr))", gap: 10, marginTop: 4 }}>
                 {alertToneOptions.map((tone) => (
                   <button
@@ -2703,11 +2738,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               </div>
               <button
                 type="button"
-                onClick={playIncomingTone}
+                onClick={alertTone === "system" ? openDeviceNotificationSettings : playIncomingTone}
                 disabled={alertTone === "off"}
                 style={{ minHeight: 48, border: "none", borderRadius: 14, background: alertTone === "off" ? inputPanelBg : "#DBEAFE", color: alertTone === "off" ? (darkMode ? "#94A3B8" : "#64748B") : "#1D4ED8", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit", opacity: alertTone === "off" ? 0.75 : 1 }}
               >
-                {uiLang === "es" ? "Probar sonido" : "Test sound"}
+                {alertTone === "system"
+                  ? (uiLang === "es" ? "Abrir ajustes del dispositivo" : "Open device settings")
+                  : (uiLang === "es" ? "Probar sonido" : "Test sound")}
               </button>
             </div>
             <div style={{ fontSize: patientTextBase, lineHeight: 1.45, marginBottom: 10 }}>{labels.textSize}</div>
