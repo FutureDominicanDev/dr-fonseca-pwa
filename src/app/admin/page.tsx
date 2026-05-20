@@ -1877,27 +1877,6 @@ export default function AdminPage() {
     updateSuccess(isSpanish ? "Invitación con código copiada." : "Invitation with code copied.");
   };
 
-  const shareInviteLink = async () => {
-    const invite = await createFreshInvite();
-    if (!invite?.link) return;
-    const nav = navigator as Navigator & { share?: (data?: ShareData) => Promise<void> };
-    if (typeof nav.share === "function") {
-      try {
-        await nav.share({
-          title: isSpanish ? "Invitación al portal" : "Portal invitation",
-          text: invite.text,
-          url: invite.link,
-        });
-        updateSuccess(isSpanish ? "Se abrió el menú para compartir la invitación." : "The share menu opened for the invitation.");
-        return;
-      } catch (error: any) {
-        if (error?.name === "AbortError") return;
-      }
-    }
-    await navigator.clipboard.writeText(invite.text);
-    updateSuccess(isSpanish ? "Invitación con código copiada." : "Invitation with code copied.");
-  };
-
   const sendInviteText = async () => {
     const invite = await createFreshInvite();
     if (!invite?.text) return;
@@ -4130,9 +4109,6 @@ export default function AdminPage() {
                     </button>
                     <button className="ghost-btn" onClick={sendInviteEmail} disabled={generatingInvite}>
                       Email
-                    </button>
-                    <button className="ghost-btn" onClick={shareInviteLink} disabled={generatingInvite}>
-                      {isSpanish ? "Compartir" : "Share"}
                     </button>
                   </div>
                 </div>

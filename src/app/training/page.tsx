@@ -17,7 +17,6 @@ type IconName =
   | "video"
   | "audio"
   | "document"
-  | "prescription"
   | "call"
   | "team"
   | "staffChat"
@@ -61,7 +60,6 @@ const groups: LegendGroup[] = [
       { icon: "video", title: { es: "Video", en: "Video" }, meaning: { es: "Enviar video seguro dentro de la sala.", en: "Send secure video inside the room." } },
       { icon: "audio", title: { es: "Audio", en: "Audio" }, meaning: { es: "Grabar o escuchar una nota de voz.", en: "Record or listen to a voice note." } },
       { icon: "document", title: { es: "Documento", en: "Document" }, meaning: { es: "Abrir archivos, historia clinica o formularios.", en: "Open files, clinical history, or forms." } },
-      { icon: "prescription", title: { es: "Receta", en: "Prescription" }, meaning: { es: "Guardar o revisar medicamentos y documentos de receta.", en: "Save or review medication and prescription documents." } },
       { icon: "call", title: { es: "Llamar", en: "Call" }, meaning: { es: "Contactar al consultorio o a un integrante del equipo.", en: "Contact the clinic or a team member." } },
     ],
   },
@@ -137,8 +135,6 @@ function PortalIcon({ name }: { name: IconName }) {
       return <svg {...common}><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" /><path d="M19 11a7 7 0 0 1-14 0" /><path d="M12 18v3" /></svg>;
     case "document":
       return <svg {...common}><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v5h4" /><path d="M9.5 12h5" /><path d="M9.5 16h5" /></svg>;
-    case "prescription":
-      return <svg {...common}><path d="M6 20V4h7a4 4 0 0 1 0 8H6" /><path d="m12 12 6 8" /><path d="m18 12-6 8" /></svg>;
     case "call":
       return <svg {...common}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.4 19.4 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.4 2.1L8.1 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.6 1.9Z" /></svg>;
     case "team":

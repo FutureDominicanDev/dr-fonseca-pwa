@@ -531,6 +531,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           : "On iPhone, use iOS Settings for the general notification sound. Apple does not expose the full tone picker inside the app.");
         return;
       }
+      setNotificationFeedback("");
       const PortalNotificationSettings = registerPlugin<PortalNotificationSettingsPlugin>("PortalNotificationSettings");
       await PortalNotificationSettings.open({ channelId: DEVICE_ALERT_CHANNEL_ID });
     } catch {
