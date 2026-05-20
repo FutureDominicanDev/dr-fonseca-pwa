@@ -11,8 +11,27 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const APP_URL = getAppUrl();
 const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME, SMTP_FROM_EMAIL } = getSmtpConfig("Dr. Fonseca | Portal Medico");
 
+type MailResult = {
+  messageId?: unknown;
+  accepted?: unknown;
+  rejected?: unknown;
+  pending?: unknown;
+  response?: unknown;
+};
+
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const isAliasEmail = (email: string) => email.toLowerCase().endsWith("@portal-staff.local");
+const emailDomain = (email: string) => {
+  const at = email.lastIndexOf("@");
+  return at >= 0 ? email.slice(at + 1).toLowerCase() : "";
+};
+const summarizeMailResult = (info: MailResult) => ({
+  message_id: `${info?.messageId || ""}`,
+  accepted_count: Array.isArray(info?.accepted) ? info.accepted.length : 0,
+  rejected_count: Array.isArray(info?.rejected) ? info.rejected.length : 0,
+  pending_count: Array.isArray(info?.pending) ? info.pending.length : 0,
+  response: `${info?.response || ""}`.slice(0, 180),
+});
 const escapeHtml = (value: unknown) =>
   `${value || ""}`
     .replace(/&/g, "&amp;")
@@ -75,7 +94,14 @@ export async function POST(request: NextRequest) {
       email: authEmail,
       options: { redirectTo },
     } as any);
-    if (linkError) return NextResponse.json({ error: "Could not generate reset link." }, { status: 500 });
+    if (linkError) {
+      console.error("staff password reset link failed", linkError.message, {
+        targetUserId,
+        destination_domain: emailDomain(destinationEmail),
+        auth_email_is_alias: isAliasEmail(authEmail),
+      });
+      return NextResponse.json({ error: "Could not generate reset link." }, { status: 500 });
+    }
 
     const actionLink = `${(linkData as any)?.properties?.action_link || ""}`.trim();
     if (!actionLink) return NextResponse.json({ error: "Reset link was empty." }, { status: 500 });
@@ -104,7 +130,7 @@ export async function POST(request: NextRequest) {
     const safeButton = escapeHtml(button);
     const safeNote = escapeHtml(note);
 
-    await transporter.sendMail({
+    const mailInfo = await transporter.sendMail({
       from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
       to: destinationEmail,
       subject,
@@ -128,6 +154,13 @@ export async function POST(request: NextRequest) {
       `,
       text: `${title}\n\n${copy}\n\n${actionLink}\n\n${note}`,
     });
+    const mailSummary = summarizeMailResult(mailInfo);
+    console.info("staff password reset email accepted by smtp", {
+      targetUserId,
+      destination_domain: emailDomain(destinationEmail),
+      auth_email_is_alias: isAliasEmail(authEmail),
+      ...mailSummary,
+    });
 
     try {
       await adminClient.from("admin_audit_events").insert({
@@ -139,7 +172,7 @@ export async function POST(request: NextRequest) {
         actor_name: (requesterProfile as any)?.full_name || (requesterProfile as any)?.display_name || requesterEmail,
         actor_email: requesterEmail,
         notes: `Password reset link sent to ${destinationEmail}.`,
-        metadata: { destination_email: destinationEmail, auth_email: authEmail },
+        metadata: { destination_email: destinationEmail, auth_email_is_alias: isAliasEmail(authEmail), smtp: mailSummary },
       });
     } catch {
       // Best-effort audit trail; the reset link should still be delivered.
@@ -147,6 +180,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, destinationEmail });
   } catch (error: any) {
+    console.error("staff password reset email error", error?.message || error);
     return NextResponse.json({ error: error?.message || "Could not send staff password reset." }, { status: 500 });
   }
 }

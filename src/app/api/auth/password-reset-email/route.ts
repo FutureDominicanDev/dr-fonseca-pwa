@@ -12,8 +12,27 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missin
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+type MailResult = {
+  messageId?: unknown;
+  accepted?: unknown;
+  rejected?: unknown;
+  pending?: unknown;
+  response?: unknown;
+};
+
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const isAliasEmail = (email: string) => email.toLowerCase().endsWith("@portal-staff.local");
+const emailDomain = (email: string) => {
+  const at = email.lastIndexOf("@");
+  return at >= 0 ? email.slice(at + 1).toLowerCase() : "";
+};
+const summarizeMailResult = (info: MailResult) => ({
+  message_id: `${info?.messageId || ""}`,
+  accepted_count: Array.isArray(info?.accepted) ? info.accepted.length : 0,
+  rejected_count: Array.isArray(info?.rejected) ? info.rejected.length : 0,
+  pending_count: Array.isArray(info?.pending) ? info.pending.length : 0,
+  response: `${info?.response || ""}`.slice(0, 180),
+});
 const escapeHtml = (value: unknown) =>
   `${value || ""}`
     .replace(/&/g, "&amp;")
@@ -116,7 +135,7 @@ export async function POST(request: NextRequest) {
     const safeButton = escapeHtml(button);
     const safeNote = escapeHtml(note);
 
-    await transporter.sendMail({
+    const mailInfo = await transporter.sendMail({
       from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
       to: resetIdentity.destinationEmail,
       subject,
@@ -143,6 +162,13 @@ export async function POST(request: NextRequest) {
       `,
       text: `${title}\n\n${copy}\n\n${actionLink}\n\n${note}`,
     });
+    const mailSummary = summarizeMailResult(mailInfo);
+    console.info("password reset email accepted by smtp", {
+      profileId: resetIdentity.profileId,
+      destination_domain: emailDomain(resetIdentity.destinationEmail),
+      auth_email_is_alias: isAliasEmail(resetIdentity.authEmail),
+      ...mailSummary,
+    });
 
     await supabase.from("admin_audit_events").insert({
       action: "password_reset_email_sent",
@@ -153,7 +179,7 @@ export async function POST(request: NextRequest) {
       actor_name: "Password reset request",
       actor_email: resetIdentity.destinationEmail,
       notes: `Password reset email sent to ${resetIdentity.destinationEmail}.`,
-      metadata: { destination_email: resetIdentity.destinationEmail, auth_email_is_alias: isAliasEmail(resetIdentity.authEmail) },
+      metadata: { destination_email: resetIdentity.destinationEmail, auth_email_is_alias: isAliasEmail(resetIdentity.authEmail), smtp: mailSummary },
     }).then(() => undefined);
 
     return NextResponse.json({ ok: true });
