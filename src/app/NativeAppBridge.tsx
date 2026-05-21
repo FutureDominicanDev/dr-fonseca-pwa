@@ -74,8 +74,9 @@ export default function NativeAppBridge() {
 
         const ScreenOrientation = (screenOrientation as ScreenOrientationModule).ScreenOrientation;
         if (platform === "android" && ScreenOrientation?.lock) {
-          await ScreenOrientation.lock({ orientation: "portrait-primary" }).catch(async () => {
-            await ScreenOrientation.lock({ orientation: "portrait" }).catch(() => {});
+          const lockOrientation = ScreenOrientation.lock.bind(ScreenOrientation);
+          await lockOrientation({ orientation: "portrait-primary" }).catch(async () => {
+            await lockOrientation({ orientation: "portrait" }).catch(() => {});
           });
         }
 
