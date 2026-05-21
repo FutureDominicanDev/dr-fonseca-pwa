@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { Capacitor } from "@capacitor/core";
+import { ScreenOrientation } from "@capacitor/screen-orientation";
 
 const PHONE_SMALLEST_SIDE_MAX = 700;
 const LANDSCAPE_QUERY = "(orientation: landscape)";
@@ -29,9 +31,9 @@ const screenAngle = () => {
 
 const rotationForCurrentLandscape = () => {
   const normalized = ((screenAngle() % 360) + 360) % 360;
-  if (normalized === 270) return "-90deg";
+  if (normalized === 270) return "90deg";
   if (normalized === 180) return "180deg";
-  return "90deg";
+  return "-90deg";
 };
 
 export default function OrientationLock() {
@@ -56,6 +58,13 @@ export default function OrientationLock() {
 
     const lockPortrait = async () => {
       if (cancelled || !isPhoneSizedScreen()) return;
+      if (Capacitor.isNativePlatform()) {
+        try {
+          await ScreenOrientation.lock({ orientation: "portrait" });
+          return;
+        } catch {}
+      }
+
       const orientation = window.screen?.orientation as LockableOrientation | undefined;
       if (!orientation?.lock) return;
 
