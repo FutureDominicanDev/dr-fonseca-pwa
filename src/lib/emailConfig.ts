@@ -4,6 +4,27 @@ const cleanEnv = (value?: string | null) => `${value || ""}`.trim().replace(/^["
 
 export const getAppUrl = () => (cleanEnv(process.env.NEXT_PUBLIC_APP_URL) || DEFAULT_APP_URL).replace(/\/+$/, "");
 
+type RecoveryLinkData = {
+  properties?: {
+    action_link?: unknown;
+    hashed_token?: unknown;
+  } | null;
+} | null | undefined;
+
+export const getRecoveryActionLink = (linkData: RecoveryLinkData, lang: "es" | "en", appUrl = getAppUrl()) => {
+  const properties = linkData?.properties || {};
+  const hashedToken = `${properties.hashed_token || ""}`.trim();
+  const actionLink = `${properties.action_link || ""}`.trim();
+  if (!hashedToken) return actionLink;
+
+  const params = new URLSearchParams({
+    lang,
+    token_hash: hashedToken,
+    type: "recovery",
+  });
+  return `${appUrl}/reset-password?${params.toString()}`;
+};
+
 export const getSmtpConfig = (defaultFromName: string) => {
   const SMTP_HOST = cleanEnv(process.env.SMTP_HOST);
   const smtpPortValue = cleanEnv(process.env.SMTP_PORT);

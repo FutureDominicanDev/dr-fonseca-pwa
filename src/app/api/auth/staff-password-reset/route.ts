@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 import { isOwnerEmail } from "@/lib/securityConfig";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
-import { getAppUrl, getSmtpConfig } from "@/lib/emailConfig";
+import { getAppUrl, getRecoveryActionLink, getSmtpConfig } from "@/lib/emailConfig";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -32,6 +32,7 @@ const summarizeMailResult = (info: MailResult) => ({
   pending_count: Array.isArray(info?.pending) ? info.pending.length : 0,
   response: `${info?.response || ""}`.slice(0, 180),
 });
+const mailWasAccepted = (summary: ReturnType<typeof summarizeMailResult>) => summary.accepted_count > 0 && summary.rejected_count === 0;
 const escapeHtml = (value: unknown) =>
   `${value || ""}`
     .replace(/&/g, "&amp;")
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Could not generate reset link." }, { status: 500 });
     }
 
-    const actionLink = `${(linkData as any)?.properties?.action_link || ""}`.trim();
+    const actionLink = getRecoveryActionLink(linkData, lang, APP_URL);
     if (!actionLink) return NextResponse.json({ error: "Reset link was empty." }, { status: 500 });
 
     const transporter = nodemailer.createTransport({
@@ -132,8 +133,14 @@ export async function POST(request: NextRequest) {
 
     const mailInfo = await transporter.sendMail({
       from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
+      envelope: { from: SMTP_FROM_EMAIL, to: destinationEmail },
       to: destinationEmail,
+      replyTo: SMTP_FROM_EMAIL,
       subject,
+      headers: {
+        "Auto-Submitted": "auto-generated",
+        "X-Auto-Response-Suppress": "All",
+      },
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f3f6fb;padding:20px;">
           <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
@@ -155,6 +162,15 @@ export async function POST(request: NextRequest) {
       text: `${title}\n\n${copy}\n\n${actionLink}\n\n${note}`,
     });
     const mailSummary = summarizeMailResult(mailInfo);
+    if (!mailWasAccepted(mailSummary)) {
+      console.error("staff password reset email not accepted by smtp", {
+        targetUserId,
+        destination_domain: emailDomain(destinationEmail),
+        auth_email_is_alias: isAliasEmail(authEmail),
+        ...mailSummary,
+      });
+      return NextResponse.json({ error: "Could not deliver reset email." }, { status: 502 });
+    }
     console.info("staff password reset email accepted by smtp", {
       targetUserId,
       destination_domain: emailDomain(destinationEmail),

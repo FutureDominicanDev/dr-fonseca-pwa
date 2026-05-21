@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
-import { getAppUrl, getSmtpConfig } from "@/lib/emailConfig";
+import { getAppUrl, getRecoveryActionLink, getSmtpConfig } from "@/lib/emailConfig";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -33,6 +33,7 @@ const summarizeMailResult = (info: MailResult) => ({
   pending_count: Array.isArray(info?.pending) ? info.pending.length : 0,
   response: `${info?.response || ""}`.slice(0, 180),
 });
+const mailWasAccepted = (summary: ReturnType<typeof summarizeMailResult>) => summary.accepted_count > 0 && summary.rejected_count === 0;
 const escapeHtml = (value: unknown) =>
   `${value || ""}`
     .replace(/&/g, "&amp;")
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: notFound ? accountNotFoundMessage : resetLinkFailedMessage }, { status: notFound ? 404 : 500 });
     }
 
-    const actionLink = `${(data as any)?.properties?.action_link || ""}`.trim();
+    const actionLink = getRecoveryActionLink(data, lang, APP_URL);
     if (!actionLink) {
       console.error("password reset link missing action_link", { destinationEmail: resetIdentity.destinationEmail, authEmail: isAliasEmail(resetIdentity.authEmail) ? "alias" : resetIdentity.authEmail });
       return NextResponse.json({ error: resetLinkFailedMessage }, { status: 500 });
@@ -137,8 +138,14 @@ export async function POST(request: NextRequest) {
 
     const mailInfo = await transporter.sendMail({
       from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
+      envelope: { from: SMTP_FROM_EMAIL, to: resetIdentity.destinationEmail },
       to: resetIdentity.destinationEmail,
+      replyTo: SMTP_FROM_EMAIL,
       subject,
+      headers: {
+        "Auto-Submitted": "auto-generated",
+        "X-Auto-Response-Suppress": "All",
+      },
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f3f6fb;padding:20px;">
           <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
@@ -163,6 +170,15 @@ export async function POST(request: NextRequest) {
       text: `${title}\n\n${copy}\n\n${actionLink}\n\n${note}`,
     });
     const mailSummary = summarizeMailResult(mailInfo);
+    if (!mailWasAccepted(mailSummary)) {
+      console.error("password reset email not accepted by smtp", {
+        profileId: resetIdentity.profileId,
+        destination_domain: emailDomain(resetIdentity.destinationEmail),
+        auth_email_is_alias: isAliasEmail(resetIdentity.authEmail),
+        ...mailSummary,
+      });
+      return NextResponse.json({ error: "Could not deliver reset email." }, { status: 502 });
+    }
     console.info("password reset email accepted by smtp", {
       profileId: resetIdentity.profileId,
       destination_domain: emailDomain(resetIdentity.destinationEmail),

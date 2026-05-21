@@ -1586,6 +1586,12 @@ export default function InboxPage() {
     setStaffPrivateReply(value);
     updateSlashMenuState(value, "private");
   };
+  const openStaffQuickReplies = (target: "room" | "private") => {
+    const shouldClose = showSlashMenu && staffSlashTarget === target && slashFilter === "";
+    setStaffSlashTarget(target);
+    setSlashFilter("");
+    setShowSlashMenu(!shouldClose);
+  };
   const applyComposerInputHints = (node: HTMLDivElement | null) => {
     if (!node) return;
     node.setAttribute("autocomplete", "off");
@@ -5426,6 +5432,33 @@ export default function InboxPage() {
       setShowCreateStaffRoom(false);
       setShowAddStaffRoomMembers(false);
       setStaffRoomInviteMemberIds([]);
+      setShowSlashMenu(false);
+      setSlashFilter("");
+    };
+    const renderStaffQuickReplyPopup = (target: "room" | "private") => {
+      if (!showSlashMenu || staffSlashTarget !== target || (visibleSlashReplies.length === 0 && slashFilter)) return null;
+      return (
+        <div className="staff-slash-popup" onClick={e=>e.stopPropagation()}>
+          <div className="staff-slash-head">
+            <span>{t.quickReplies}</span>
+            <button
+              type="button"
+              className="staff-slash-manage"
+              onClick={()=>{setShowSlashMenu(false);setSlashFilter("");setShowQREditor(true);}}
+            >
+              {quickReplies.length ? t.edit : t.addReply}
+            </button>
+          </div>
+          {visibleSlashReplies.length > 0 ? visibleSlashReplies.map((r,i)=>(
+            <button key={`${target}-${r.shortcut}-${i}`} className="slash-item" onClick={()=>selectQuickReply(r)}>
+              <span>{r.message}</span>
+              <small>/{r.shortcut}</small>
+            </button>
+          )) : (
+            <div className="slash-empty">{t.noReplies}</div>
+          )}
+        </div>
+      );
     };
     return (
       <div className="modal-overlay" onClick={closePanel}>
@@ -5665,20 +5698,12 @@ export default function InboxPage() {
                   );
                 })}
               </div>
-              {showSlashMenu && staffSlashTarget === "room" && visibleSlashReplies.length > 0 && (
-                <div className="staff-slash-popup" onClick={e=>e.stopPropagation()}>
-                  {visibleSlashReplies.map((r,i)=>(
-                    <button key={`room-${r.shortcut}-${i}`} className="slash-item" onClick={()=>selectQuickReply(r)}>
-                      {r.message}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {renderStaffQuickReplyPopup("room")}
               <div className="staff-chat-composer">
                 <button
                   type="button"
                   className="staff-quick-btn"
-                  onClick={()=>setShowQREditor(true)}
+                  onClick={()=>openStaffQuickReplies("room")}
                   aria-label={t.quickReplies}
                   title={t.quickReplies}
                 >
@@ -5764,20 +5789,12 @@ export default function InboxPage() {
                   );
                 })}
               </div>
-              {showSlashMenu && staffSlashTarget === "private" && visibleSlashReplies.length > 0 && (
-                <div className="staff-slash-popup" onClick={e=>e.stopPropagation()}>
-                  {visibleSlashReplies.map((r,i)=>(
-                    <button key={`private-${r.shortcut}-${i}`} className="slash-item" onClick={()=>selectQuickReply(r)}>
-                      {r.message}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {renderStaffQuickReplyPopup("private")}
               <div className="staff-chat-composer">
                 <button
                   type="button"
                   className="staff-quick-btn"
-                  onClick={()=>setShowQREditor(true)}
+                  onClick={()=>openStaffQuickReplies("private")}
                   aria-label={t.quickReplies}
                   title={t.quickReplies}
                 >
@@ -6384,8 +6401,14 @@ export default function InboxPage() {
         .mic-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .mic-btn img { width: 36px; height: 36px; object-fit: contain; display: block; }
         .slash-popup { position: fixed; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); z-index: 45; pointer-events: auto; width: auto; max-height: min(32dvh, 214px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 6px; background: ${darkMode?"rgba(31,44,52,0.98)":"rgba(255,255,255,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"rgba(15,23,42,0.12)"}; border-radius: 16px; box-shadow: 0 16px 38px rgba(15,23,42,0.22); backdrop-filter: blur(10px); }
-        .staff-slash-popup { width: 100%; max-height: min(28dvh, 190px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 6px; background: ${darkMode?"rgba(31,44,52,0.98)":"rgba(255,255,255,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"rgba(15,23,42,0.12)"}; border-radius: 16px; box-shadow: 0 12px 30px rgba(15,23,42,0.18); }
+        .staff-slash-popup { position: sticky; bottom: calc(74px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); z-index: 8; width: 100%; max-height: min(32dvh, 230px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 6px; background: ${darkMode?"rgba(31,44,52,0.98)":"rgba(255,255,255,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"rgba(15,23,42,0.12)"}; border-radius: 16px; box-shadow: 0 14px 34px rgba(15,23,42,0.22); backdrop-filter: blur(10px); }
+        .staff-slash-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 4px 8px; background: inherit; color: ${subTextColor}; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
+        .staff-slash-manage { min-height: 34px; border: none; border-radius: 999px; padding: 0 11px; background: ${darkMode?"rgba(255,255,255,0.10)":"#EAF3FF"}; color: #075EA8; font-size: 12px; font-weight: 900; cursor: pointer; font-family: inherit; }
         .slash-item { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; width: 100%; min-height: 42px; border: none; border-radius: 12px; background: transparent; color: ${textColor}; padding: 10px 12px; text-align: left; font-size: 15px; line-height: 1.28; font-weight: 750; overflow: hidden; overflow-wrap: anywhere; white-space: normal; cursor: pointer; font-family: inherit; }
+        .staff-slash-popup .slash-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+        .staff-slash-popup .slash-item span { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .staff-slash-popup .slash-item small { color: ${subTextColor}; font-size: 12px; font-weight: 900; white-space: nowrap; }
+        .slash-empty { padding: 12px; color: ${subTextColor}; font-size: 14px; line-height: 1.35; font-weight: 750; }
         .slash-item + .slash-item { margin-top: 3px; }
         .slash-item:hover { background: ${darkMode?"rgba(255,255,255,0.08)":"#F1F6FC"}; }
 	        .modal-overlay { position: fixed; inset: 0; bottom: var(--native-keyboard-overlay-height, 0px); background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); overflow-y: auto; overflow-x: hidden; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }

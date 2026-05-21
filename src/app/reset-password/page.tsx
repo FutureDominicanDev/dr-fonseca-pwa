@@ -151,6 +151,27 @@ export default function ResetPasswordPage() {
     if (browserLang !== "es") window.setTimeout(() => setLang(browserLang), 0);
 
     const applyRecoverySession = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tokenHash = searchParams.get("token_hash");
+      const queryType = searchParams.get("type");
+      if (tokenHash && queryType === "recovery") {
+        const { error: tokenError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: "recovery",
+        });
+
+        if (tokenError) {
+          setError(COPY[browserLang].expiredLink);
+          setValidating(false);
+          return;
+        }
+
+        window.history.replaceState({}, document.title, `/reset-password?lang=${browserLang}`);
+        setReady(true);
+        setValidating(false);
+        return;
+      }
+
       const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
       const params = new URLSearchParams(hash);
       const accessToken = params.get("access_token");
