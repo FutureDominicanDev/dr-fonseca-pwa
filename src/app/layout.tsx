@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import AppUpdateWatcher from "./AppUpdateWatcher";
 import NativeAppBridge from "./NativeAppBridge";
 import NativeKeyboardTuning from "./NativeKeyboardTuning";
+import OrientationLock from "./OrientationLock";
 import "./globals.css";
 
 const BRAND_BROWSER_COLOR = "#0B63CE";
@@ -86,6 +87,7 @@ export default function RootLayout({
         `}</style>
       </head>
       <body>
+        <OrientationLock />
         <NativeKeyboardTuning />
         <NativeAppBridge />
         <AppUpdateWatcher buildVersion={APP_BUILD_VERSION} />

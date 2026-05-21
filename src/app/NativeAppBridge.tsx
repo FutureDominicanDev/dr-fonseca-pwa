@@ -7,6 +7,12 @@ const NATIVE_TOKEN_STORAGE_KEY = "drf_native_push_token";
 const NATIVE_PLATFORM_STORAGE_KEY = "drf_native_platform";
 const DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
 
+type ScreenOrientationModule = {
+  ScreenOrientation?: {
+    lock?: (options: { orientation: "portrait-primary" | "portrait" }) => Promise<void>;
+  };
+};
+
 const patientRoomContext = () => {
   if (typeof window === "undefined") return null;
   const match = window.location.pathname.match(/^\/chat\/([^/]+)/);
@@ -49,13 +55,14 @@ export default function NativeAppBridge() {
 
     const bootNative = async () => {
       try {
-        const [{ Capacitor }, { App }, { SplashScreen }, { PushNotifications }, { LocalNotifications }, { Preferences }, secureStorage, biometricAuth] = await Promise.all([
+        const [{ Capacitor }, { App }, { SplashScreen }, { PushNotifications }, { LocalNotifications }, { Preferences }, screenOrientation, secureStorage, biometricAuth] = await Promise.all([
           import("@capacitor/core"),
           import("@capacitor/app"),
           import("@capacitor/splash-screen"),
           import("@capacitor/push-notifications"),
           import("@capacitor/local-notifications"),
           import("@capacitor/preferences"),
+          import("@capacitor/screen-orientation").catch(() => ({})),
           import("@aparajita/capacitor-secure-storage").catch(() => ({})),
           import("@aparajita/capacitor-biometric-auth").catch(() => ({})),
         ]);
@@ -64,6 +71,13 @@ export default function NativeAppBridge() {
         const platform = Capacitor.getPlatform();
         await SplashScreen.hide().catch(() => {});
         await Preferences.set({ key: "drf_last_native_launch", value: new Date().toISOString() }).catch(() => {});
+
+        const ScreenOrientation = (screenOrientation as ScreenOrientationModule).ScreenOrientation;
+        if (platform === "android" && ScreenOrientation?.lock) {
+          await ScreenOrientation.lock({ orientation: "portrait-primary" }).catch(async () => {
+            await ScreenOrientation.lock({ orientation: "portrait" }).catch(() => {});
+          });
+        }
 
         const SecureStorage = (secureStorage as any).SecureStorage;
         if (SecureStorage?.set) {
