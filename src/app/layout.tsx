@@ -82,16 +82,35 @@ export default function RootLayout({
           .shell, .patient-shell { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; height: 100%; min-height: -webkit-fill-available; max-width: 100vw; }
           input, textarea, select { font-size: 16px !important; user-select: text !important; -webkit-user-select: text !important; touch-action: auto !important; font-family: inherit; }
           button, input, textarea, select, [role="button"] { min-height: 44px; }
+          #drf-app-frame { min-height: 100%; }
+          html.drf-phone-landscape-frame,
+          html.drf-phone-landscape-frame body { width: 100%; height: 100%; overflow: hidden; background: #f8fafc; }
+          html.drf-phone-landscape-frame body { position: fixed; inset: 0; }
+          html.drf-phone-landscape-frame #drf-app-frame {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            width: var(--drf-portrait-width, 100dvh);
+            height: var(--drf-portrait-height, 100dvw);
+            max-width: none;
+            max-height: none;
+            overflow: hidden;
+            background: #f8fafc;
+            transform: translate(-50%, -50%) rotate(var(--drf-counter-rotation, 90deg));
+            transform-origin: center center;
+          }
           ::-webkit-scrollbar { display: none; }
           scrollbar-width: none;
         `}</style>
       </head>
       <body>
         <OrientationLock />
-        <NativeKeyboardTuning />
-        <NativeAppBridge />
-        <AppUpdateWatcher buildVersion={APP_BUILD_VERSION} />
-        {children}
+        <div id="drf-app-frame">
+          <NativeKeyboardTuning />
+          <NativeAppBridge />
+          <AppUpdateWatcher buildVersion={APP_BUILD_VERSION} />
+          {children}
+        </div>
       </body>
     </html>
   );
