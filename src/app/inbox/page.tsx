@@ -779,6 +779,47 @@ function PendingGuideIcon({ kind }: { kind: "staff" | "room" | "labels" | "setti
   );
 }
 
+function SendPlaneIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 2 11 13" />
+      <path d="m22 2-7 20-4-9-9-4 20-7Z" />
+    </svg>
+  );
+}
+
+function PersonPlusIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 19.2c-.8-2.7-2.7-4.1-5.7-4.1s-4.9 1.4-5.7 4.1" />
+      <circle cx="9.3" cy="8.2" r="3.2" />
+      <path d="M18.2 7.4v6.8" />
+      <path d="M14.8 10.8h6.8" />
+    </svg>
+  );
+}
+
+function QuickReplyIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.35" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 17.5 4.2 21l3.5-1A8 8 0 1 0 5 17.5Z" />
+      <path d="M8.4 11h.1" />
+      <path d="M12 11h.1" />
+      <path d="M15.6 11h.1" />
+      <path d="M15.5 4.8 13.2 9h3.2l-2 4" />
+    </svg>
+  );
+}
+
+function BackArrowIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m15 18-6-6 6-6" />
+      <path d="M9 12h11" />
+    </svg>
+  );
+}
+
 const CARE_TEAM_ROLE_ORDER = ["doctor", "enfermeria", "coordinacion", "post_quirofano", "staff"] as const;
 
 interface QREditorProps {
@@ -1892,27 +1933,6 @@ export default function InboxPage() {
       setActiveStaffRoomId(null);
       setStaffRoomReply("");
     }
-  };
-
-  const leaveActiveStaffRoom = async () => {
-    if (!activeStaffRoomConversation || !currentUserId) return;
-    const confirmed = window.confirm(
-      lang === "es"
-        ? "¿Quieres salir de este chat interno? Si sales, tendrás que ser invitado nuevamente por la persona que creó el chat."
-        : "Leave this internal chat? If you leave, you must be invited again by the person who created the chat."
-    );
-    if (!confirmed) return;
-    const actorName = userProfile?.full_name || userProfile?.display_name || (lang === "es" ? "Personal" : "Staff");
-    const sent = await sendStaffRoomMessage(
-      activeStaffRoomConversation.roomId,
-      activeStaffRoomConversation.roomName,
-      activeStaffRoomConversation.memberIds,
-      lang === "es" ? `${actorName} salió del chat.` : `${actorName} left the chat.`,
-      { event: "leave", createdBy: activeStaffRoomConversation.createdBy || currentUserId, actorId: currentUserId }
-    );
-    if (!sent) return;
-    setActiveStaffRoomId(null);
-    setStaffRoomReply("");
   };
 
   const openStaffChatsHome = () => {
@@ -5507,7 +5527,7 @@ export default function InboxPage() {
               <p style={{fontSize:uiSmallSize,fontWeight:900,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginTop:4}}>{lang==="es"?"Mensajes directos":"Direct messages"}</p>
               {staffPrivateConversations.length === 0 ? (
                 <div style={{padding:22,borderRadius:18,background:cardBg,border:`1px solid ${borderColor}`,color:subTextColor,fontSize:uiBaseSize,fontWeight:700,lineHeight:1.5}}>
-                  {lang==="es"?"Todavía no hay mensajes privados staff a staff.":"No private staff-to-staff messages yet."}
+                  {lang==="es"?"Aquí aparecerán tus mensajes directos con otros miembros del equipo.":"Your direct messages with other team members will appear here."}
                 </div>
               ) : staffPrivateConversations.map((conversation) => (
                 <button
@@ -5533,22 +5553,27 @@ export default function InboxPage() {
             </div>
           ) : activeRoom ? (
             <div style={{display:"grid",gap:12}}>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                <button className="sbtn" onClick={()=>{setActiveStaffRoomId(null);setStaffRoomReply("");setShowAddStaffRoomMembers(false);setStaffRoomInviteMemberIds([]);}} style={{width:"auto",padding:"0 14px"}}>{lang==="es"?"Volver":"Back"}</button>
+              <div className="staff-room-toolbar">
+                <button
+                  className="staff-icon-action"
+                  onClick={()=>{setActiveStaffRoomId(null);setStaffRoomReply("");setShowAddStaffRoomMembers(false);setStaffRoomInviteMemberIds([]);}}
+                  aria-label={lang==="es"?"Volver":"Back"}
+                  title={lang==="es"?"Volver":"Back"}
+                >
+                  <BackArrowIcon />
+                </button>
                 <span style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700}}>{activeRoom.activeMemberIds.length} {lang==="es"?"participantes":"participants"}</span>
                 {activeRoom.currentUserStatus === "accepted" && (
-                  <>
+                  <div style={{marginLeft:"auto"}}>
                     <button
-                      className="pbtn"
+                      className={`staff-icon-action primary${showAddStaffRoomMembers ? " active" : ""}`}
                       onClick={()=>setShowAddStaffRoomMembers((value)=>!value)}
-                      style={{width:"auto",padding:"0 14px",marginLeft:"auto"}}
+                      aria-label={showAddStaffRoomMembers ? (lang==="es"?"Cerrar agregar staff":"Close add staff") : (lang==="es"?"Agregar staff":"Add staff")}
+                      title={showAddStaffRoomMembers ? (lang==="es"?"Cerrar agregar staff":"Close add staff") : (lang==="es"?"Agregar staff":"Add staff")}
                     >
-                      {showAddStaffRoomMembers ? (lang==="es"?"Cerrar":"Close") : (lang==="es"?"Agregar staff":"Add staff")}
+                      <PersonPlusIcon />
                     </button>
-                    <button className="sbtn" onClick={leaveActiveStaffRoom} style={{width:"auto",padding:"0 14px",color:"#B91C1C"}}>
-                      {lang==="es"?"Salir del chat":"Leave chat"}
-                    </button>
-                  </>
+                  </div>
                 )}
               </div>
               {activeRoom.currentUserStatus === "accepted" && showAddStaffRoomMembers && (
@@ -5649,6 +5674,15 @@ export default function InboxPage() {
                 </div>
               )}
               <div className="staff-chat-composer">
+                <button
+                  type="button"
+                  className="staff-quick-btn"
+                  onClick={()=>setShowQREditor(true)}
+                  aria-label={t.quickReplies}
+                  title={t.quickReplies}
+                >
+                  <QuickReplyIcon />
+                </button>
                 <textarea
                   ref={staffRoomComposerRef}
                   className="finput"
@@ -5667,15 +5701,29 @@ export default function InboxPage() {
                   placeholder={lang==="es"?"Mensaje para la sala staff":"Message the staff room"}
                   disabled={activeRoom.currentUserStatus !== "accepted"}
                 />
-                <button className="pbtn" disabled={activeRoom.currentUserStatus !== "accepted" || !staffRoomReply.trim() || savingStaffPrivateMessage} onClick={sendActiveStaffRoomReply}>
-                  {savingStaffPrivateMessage ? (lang==="es"?"...":"...") : (lang==="es"?"Enviar":"Send")}
+                <button
+                  type="button"
+                  className="staff-send-btn"
+                  disabled={activeRoom.currentUserStatus !== "accepted" || !staffRoomReply.trim() || savingStaffPrivateMessage}
+                  onClick={sendActiveStaffRoomReply}
+                  aria-label={t.send}
+                  title={t.send}
+                >
+                  <SendPlaneIcon />
                 </button>
               </div>
             </div>
           ) : (
             <div style={{display:"grid",gap:12}}>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                <button className="sbtn" onClick={()=>{setActiveStaffChatPeerId(null);setStaffPrivateReply("");}} style={{width:"auto",padding:"0 14px"}}>{lang==="es"?"Volver":"Back"}</button>
+              <div className="staff-room-toolbar">
+                <button
+                  className="staff-icon-action"
+                  onClick={()=>{setActiveStaffChatPeerId(null);setStaffPrivateReply("");}}
+                  aria-label={lang==="es"?"Volver":"Back"}
+                  title={lang==="es"?"Volver":"Back"}
+                >
+                  <BackArrowIcon />
+                </button>
                 <button
                   className="pbtn"
                   disabled={!activePeer?.phone}
@@ -5725,6 +5773,15 @@ export default function InboxPage() {
                 </div>
               )}
               <div className="staff-chat-composer">
+                <button
+                  type="button"
+                  className="staff-quick-btn"
+                  onClick={()=>setShowQREditor(true)}
+                  aria-label={t.quickReplies}
+                  title={t.quickReplies}
+                >
+                  <QuickReplyIcon />
+                </button>
                 <textarea
                   ref={staffPrivateComposerRef}
                   className="finput"
@@ -5742,8 +5799,15 @@ export default function InboxPage() {
                   }}
                   placeholder={lang==="es"?"Responder mensaje privado":"Reply privately"}
                 />
-                <button className="pbtn" disabled={!staffPrivateReply.trim() || savingStaffPrivateMessage} onClick={sendStaffPrivateReply}>
-                  {savingStaffPrivateMessage ? (lang==="es"?"...":"...") : (lang==="es"?"Enviar":"Send")}
+                <button
+                  type="button"
+                  className="staff-send-btn"
+                  disabled={!staffPrivateReply.trim() || savingStaffPrivateMessage}
+                  onClick={sendStaffPrivateReply}
+                  aria-label={t.send}
+                  title={t.send}
+                >
+                  <SendPlaneIcon />
                 </button>
               </div>
             </div>
@@ -6325,11 +6389,19 @@ export default function InboxPage() {
 	        .modal-overlay { position: fixed; inset: 0; bottom: var(--native-keyboard-overlay-height, 0px); background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); overflow-y: auto; overflow-x: hidden; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
 	        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px; width: min(560px, calc(100vw - 36px)); max-width: 100%; max-height: calc(100dvh - 36px); overflow-y: auto; overflow-x: hidden; padding: 24px; box-shadow: 0 18px 50px rgba(15,23,42,0.18); }
 	        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: min(560px, 100vw); position: fixed; top: 6vh; bottom: var(--native-keyboard-overlay-height, 0px); left: 50%; transform: translateX(-50%); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 24px max(18px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
-        .staff-chat-sheet { display: flex; flex-direction: column; }
+        .staff-chat-sheet { display: flex; flex-direction: column; padding-bottom: 0 !important; }
         .staff-thread-list { min-height: 170px; max-height: min(45dvh, calc(100dvh - 330px - var(--native-keyboard-overlay-height, 0px))) !important; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
-        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; padding: 10px 0 calc(4px + env(safe-area-inset-bottom)); background: ${darkMode?sidebarBg:"#FFFFFF"}; }
+        .staff-room-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-height: 48px; }
+        .staff-icon-action { width: 46px; height: 46px; min-width: 46px; min-height: 46px; border: 1px solid ${borderColor}; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: ${darkMode?cardBg:"#F5F8FC"}; color: ${textColor}; cursor: pointer; font-family: inherit; padding: 0; }
+        .staff-icon-action.primary { background: #007AFF; color: white; border-color: #007AFF; }
+        .staff-icon-action.primary.active { background: #075EA8; border-color: #075EA8; }
+        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: 46px 1fr 46px; gap: 8px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 10px max(18px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
         .staff-chat-composer .finput { margin-bottom: 0; min-height: 52px; max-height: 28dvh; resize: none !important; }
-        .staff-chat-composer .pbtn { margin-top: 0; width: auto; min-width: 76px; min-height: 52px; padding: 0 16px; }
+        .staff-quick-btn,
+        .staff-send-btn { width: 46px; height: 52px; min-width: 46px; min-height: 52px; border-radius: 14px; border: 1px solid ${borderColor}; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: inherit; padding: 0; margin: 0; }
+        .staff-quick-btn { background: ${darkMode?cardBg:"#F5F8FC"}; color: ${textColor}; }
+        .staff-send-btn { background: #007AFF; color: white; border-color: #007AFF; }
+        .staff-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .modal-title { font-size: 20px; font-weight: 700; color: ${textColor}; margin-bottom: 20px; }
         .room-create-modal { max-width: 680px; top: 4vh; background: ${darkMode?"#111B21":"#F8FBFF"}; padding-top: 18px; }
         .room-modal-head { background: linear-gradient(135deg,#07334D 0%,#0E4C75 100%); border-radius: 22px; padding: 18px; color: white; margin-bottom: 14px; box-shadow: 0 16px 34px rgba(7,51,77,0.18); }
@@ -6417,7 +6489,9 @@ export default function InboxPage() {
           .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
 	          .modal, .modal-scroll, .settings-sheet, .patient-info-sheet { width: 100%; max-width: 100vw; }
-          .staff-chat-composer { grid-template-columns: 1fr 58px; }
+          .staff-chat-composer { grid-template-columns: 44px 1fr 44px; gap: 7px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); }
+          .staff-quick-btn,
+          .staff-send-btn { width: 44px; min-width: 44px; }
 	          .room-create-modal { top: 0; max-height: 100dvh; border-radius: 0; }
 	          .room-modal-head { border-radius: 0 0 22px 22px; margin-left: calc(-1 * max(20px, env(safe-area-inset-left))); margin-right: calc(-1 * max(20px, env(safe-area-inset-right))); margin-top: -18px; padding-top: calc(18px + env(safe-area-inset-top)); }
 	          .room-modal-title { font-size: clamp(28px, 8.2vw, 34px); }
