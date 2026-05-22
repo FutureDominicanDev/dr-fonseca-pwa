@@ -26,6 +26,14 @@ function readPushData(event) {
   }
 }
 
+function notificationVibration(value) {
+  if (!Array.isArray(value)) return [450, 120, 450, 120, 450];
+  return value
+    .map(function(entry) { return Number(entry); })
+    .filter(function(entry) { return Number.isFinite(entry) && entry >= 0; })
+    .slice(0, 8);
+}
+
 self.addEventListener('install', function(event) {
   event.waitUntil(self.skipWaiting());
 });
@@ -76,11 +84,13 @@ self.addEventListener('push', function(event) {
     body: data.body || 'Tienes un nuevo mensaje',
     icon: '/apple-touch-icon.png',
     badge: '/apple-touch-icon.png',
-    vibrate: [200, 100, 200],
+    vibrate: notificationVibration(data.vibrate),
     tag: data.tag || 'new-message',      // groups notifications by room
-    renotify: true,                       // vibrate even if same tag
-    timestamp: Date.now(),
-    requireInteraction: data.requireInteraction === true,
+    renotify: data.renotify !== false,    // vibrate even if same tag
+    timestamp: data.timestamp || Date.now(),
+    requireInteraction: data.requireInteraction !== false,
+    silent: data.silent === true,
+    actions: [{ action: 'open', title: 'Abrir portal' }],
     data: { url: safeAppUrl(data.url) },
   };
   event.waitUntil(self.registration.showNotification(title, options));

@@ -2417,7 +2417,18 @@ export default function InboxPage() {
   const pushNotif = useCallback((title: string, body: string) => {
     if (notifRef.current==="granted"&&"serviceWorker" in navigator) {
       navigator.serviceWorker.ready.then((registration) =>
-        registration.showNotification(title,{body,icon:"/apple-touch-icon.png",vibrate:[200,100,200]} as any)
+        registration.showNotification(title,{
+          body,
+          icon:"/apple-touch-icon.png",
+          badge:"/apple-touch-icon.png",
+          tag:"portal-alert",
+          renotify:true,
+          requireInteraction:true,
+          silent:false,
+          vibrate:[450,120,450,120,450],
+          data:{url:"/inbox"},
+          actions:[{action:"open",title:"Abrir portal"}],
+        } as any)
       );
     }
   }, []);

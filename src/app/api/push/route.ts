@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 import { isOwnerIdentity } from "@/lib/securityConfig";
+import { isNativePushConfigured, sendNativePush, type NativeTokenEntry } from "@/lib/nativePushSender";
 
 const VAPID_EMAIL = process.env.VAPID_EMAIL || "";
 const VAPID_PUBLIC = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
@@ -18,6 +19,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY);
 const authClient = supabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 const supabase = supabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) : null;
+const NATIVE_PUSH_TOKENS_SETTING_KEY = "native_push_tokens";
 
 const subscriptionEndpoint = (subscription: webpush.PushSubscription | Record<string, any> | null | undefined) =>
   typeof subscription?.endpoint === "string" ? subscription.endpoint : "";
@@ -38,6 +40,37 @@ const normalizeUuidList = (value: unknown, excludeId = "") => {
 
 const normalizeTargetStaffIds = (value: unknown, excludeId = "") => normalizeUuidList(value, excludeId);
 const normalizeStaffMessageIds = (value: unknown) => normalizeUuidList(value);
+
+type NativePushTokenMap = {
+  staff?: Record<string, NativeTokenEntry[]>;
+  patientRooms?: Record<string, NativeTokenEntry[]>;
+};
+
+const parseNativePushTokenMap = (value: unknown): NativePushTokenMap => {
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value) as NativePushTokenMap;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const normalizeNotificationUrl = (value: unknown) => {
+  const candidate = typeof value === "string" ? value.trim() : "";
+  return candidate.startsWith("/") && !candidate.startsWith("//") ? candidate.slice(0, 240) : "/inbox";
+};
+
+const normalizeNotificationTag = (value: unknown) => {
+  const candidate = typeof value === "string" ? value.trim() : "";
+  return candidate ? candidate.slice(0, 80) : undefined;
+};
+
+const webPushTopic = (value?: string) =>
+  value
+    ?.replace(/[^a-z0-9_-]/gi, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 32) || undefined;
 
 async function resolveApprovedStaffIds(targetStaffIds: string[]) {
   if (!supabase || targetStaffIds.length === 0) return [] as string[];
@@ -237,6 +270,8 @@ export async function POST(req: NextRequest) {
     const patientRoomAccess = !staff && userType === "staff" ? await getPatientRoomAccess(body) : null;
     const requestedTargetStaffIds = staff ? normalizeTargetStaffIds(body?.targetStaffIds, staff.id) : [];
     const requestedStaffMessageIds = staff ? normalizeStaffMessageIds(body?.staffMessageIds) : [];
+    let nativeTargetStaffIds: string[] = [];
+    const nativeTargetPatientRoomIds = userType === "patient" && typeof roomId === "string" && roomId.trim() ? [roomId.trim()] : [];
     if (!staff && !patientRoomAccess) {
       return NextResponse.json({ error: "Missing or invalid notification sender." }, { status: 401 });
     }
@@ -271,7 +306,8 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     let subs = rawSubs || [];
     if (userType === "staff" && requestedTargetStaffIds.length > 0) {
-      const targetSet = new Set(await resolveStaffMessageTargetIds(staff?.id || "", requestedTargetStaffIds, requestedStaffMessageIds));
+      nativeTargetStaffIds = await resolveStaffMessageTargetIds(staff?.id || "", requestedTargetStaffIds, requestedStaffMessageIds);
+      const targetSet = new Set(nativeTargetStaffIds);
       subs = subs.filter((sub: any) => {
         const staffId = `${sub?.subscription?.portalUserId || ""}`.toLowerCase();
         return staffId && targetSet.has(staffId);
@@ -298,20 +334,56 @@ export async function POST(req: NextRequest) {
       }
 
       const targetSet = new Set(targetStaffIds);
+      nativeTargetStaffIds = targetStaffIds;
       subs = subs.filter((sub: any) => {
         const staffId = `${sub?.subscription?.portalUserId || ""}`;
         return staffId && targetSet.has(staffId);
       });
     }
-    if (!subs || subs.length === 0) return NextResponse.json({ sent: 0 });
+    let nativeTokens: NativeTokenEntry[] = [];
+    const nativeConfigured = isNativePushConfigured();
+    if (nativeConfigured && (nativeTargetStaffIds.length > 0 || nativeTargetPatientRoomIds.length > 0)) {
+      const { data: nativeSetting } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", NATIVE_PUSH_TOKENS_SETTING_KEY)
+        .maybeSingle();
+      const nativeTokenMap = parseNativePushTokenMap(nativeSetting?.value);
+      nativeTokens = [
+        ...nativeTargetStaffIds.flatMap((staffId) => nativeTokenMap.staff?.[staffId] || []),
+        ...nativeTargetPatientRoomIds.flatMap((targetRoomId) => nativeTokenMap.patientRooms?.[targetRoomId] || []),
+      ];
+    }
 
-    const payload = JSON.stringify({ title, body: messageBody, url: url || "/inbox", tag: typeof tag === "string" ? tag.slice(0, 80) : undefined });
+    if ((!subs || subs.length === 0) && nativeTokens.length === 0) {
+      return NextResponse.json({ sent: 0, nativeSent: 0, nativeConfigured });
+    }
+
+    const notificationUrl = normalizeNotificationUrl(url);
+    const notificationTag = normalizeNotificationTag(tag);
+    const payload = JSON.stringify({
+      title,
+      body: messageBody,
+      url: notificationUrl,
+      tag: notificationTag,
+      requireInteraction: body?.requireInteraction !== false,
+      renotify: true,
+      silent: false,
+      urgent: true,
+      vibrate: [450, 120, 450, 120, 450],
+      timestamp: Date.now(),
+    });
+    const pushOptions: webpush.RequestOptions = {
+      TTL: 60 * 60,
+      urgency: "high",
+      topic: webPushTopic(notificationTag),
+    };
     let sent = 0;
     const toDelete: string[] = [];
 
     for (const sub of subs) {
       try {
-        await webpush.sendNotification(sub.subscription as webpush.PushSubscription, payload);
+        await webpush.sendNotification(sub.subscription as webpush.PushSubscription, payload, pushOptions);
         sent++;
       } catch (err: any) {
         // Subscription expired or invalid — clean it up
@@ -323,7 +395,27 @@ export async function POST(req: NextRequest) {
       await supabase.from("push_subscriptions").delete().in("id", toDelete);
     }
 
-    return NextResponse.json({ sent });
+    let nativeResult = { configured: nativeConfigured, attempted: 0, sent: 0 };
+    if (nativeTokens.length > 0) {
+      try {
+        nativeResult = await sendNativePush(nativeTokens, {
+          title,
+          body: messageBody,
+          url: notificationUrl,
+          tag: notificationTag,
+        });
+      } catch (nativeError) {
+        console.error("Native push send error:", nativeError);
+        nativeResult = { configured: nativeConfigured, attempted: nativeTokens.length, sent: 0 };
+      }
+    }
+
+    return NextResponse.json({
+      sent,
+      nativeSent: nativeResult.sent,
+      nativeAttempted: nativeResult.attempted,
+      nativeConfigured: nativeResult.configured,
+    });
   } catch (err) {
     console.error("Push send error:", err);
     return NextResponse.json({ error: "Push failed" }, { status: 500 });

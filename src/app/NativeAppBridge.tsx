@@ -5,7 +5,8 @@ import { supabase } from "@/lib/supabaseClient";
 
 const NATIVE_TOKEN_STORAGE_KEY = "drf_native_push_token";
 const NATIVE_PLATFORM_STORAGE_KEY = "drf_native_platform";
-const DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
+const LEGACY_DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
+const DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v2";
 
 type ScreenOrientationModule = {
   ScreenOrientation?: {
@@ -91,19 +92,31 @@ export default function NativeAppBridge() {
         }
 
         if (platform === "android") {
-          const deviceAlertChannel = {
-            id: DEVICE_ALERT_CHANNEL_ID,
-            name: "Portal alerts",
-            description: "Patient and staff communication alerts using the device notification sound",
-            importance: 5,
-            visibility: 1,
-            vibration: true,
-          };
-          if ((LocalNotifications as any).createChannel) {
-            await (LocalNotifications as any).createChannel(deviceAlertChannel).catch(() => {});
-          }
-          if ((PushNotifications as any).createChannel) {
-            await (PushNotifications as any).createChannel(deviceAlertChannel).catch(() => {});
+          const deviceAlertChannels = [
+            {
+              id: LEGACY_DEVICE_ALERT_CHANNEL_ID,
+              name: "Portal alerts",
+              description: "Patient and staff communication alerts using the device notification sound",
+              importance: 5,
+              visibility: 1,
+              vibration: true,
+            },
+            {
+              id: DEVICE_ALERT_CHANNEL_ID,
+              name: "Urgent portal alerts",
+              description: "High-priority patient and staff communication alerts",
+              importance: 5,
+              visibility: 1,
+              vibration: true,
+            },
+          ];
+          for (const deviceAlertChannel of deviceAlertChannels) {
+            if ((LocalNotifications as any).createChannel) {
+              await (LocalNotifications as any).createChannel(deviceAlertChannel).catch(() => {});
+            }
+            if ((PushNotifications as any).createChannel) {
+              await (PushNotifications as any).createChannel(deviceAlertChannel).catch(() => {});
+            }
           }
         }
 
@@ -125,6 +138,7 @@ export default function NativeAppBridge() {
               title: notification.title || "Dr. Fonseca Portal",
               body: notification.body || "New portal message",
               channelId: DEVICE_ALERT_CHANNEL_ID,
+              sound: "default",
               extra: notification.data || {},
             }],
           }).catch(() => {});
