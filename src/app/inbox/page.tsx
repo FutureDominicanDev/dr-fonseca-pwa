@@ -1175,6 +1175,7 @@ export default function InboxPage() {
   const visibleRoomIdsRef = useRef<Set<string>>(new Set());
   const canSeeAllRoomsRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatMediaInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -5431,6 +5432,17 @@ export default function InboxPage() {
       (source === "camera" ? cameraInputRef : galleryInputRef).current?.click();
     }
   };
+  const openNativeVideoCapture = async () => {
+    setShowMediaMenu(false);
+    try {
+      const { Capacitor } = await import("@capacitor/core");
+      if (Capacitor.isNativePlatform()) {
+        videoInputRef.current?.click();
+        return;
+      }
+    } catch {}
+    void openCapture("video");
+  };
 
   const isPrescriptionEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[MED]");
   const isClinicalHistoryFileEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[FORM]");
@@ -7454,11 +7466,12 @@ export default function InboxPage() {
       `}</style>
 
       <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setPrescriptionInstructions("");setShowMediaMenu(false);}e.target.value="";}}/>
+      <input ref={chatMediaInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.heic,.heif" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={galleryInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
-      <input ref={staffChatImageInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
+      <input ref={staffChatImageInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.heic,.heif" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
       <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>
@@ -8733,8 +8746,12 @@ export default function InboxPage() {
                         }}>{lang==="es" ? "Fotos del dispositivo" : "Device photos"}</button>
                         <button className="staff-menu-item" onClick={()=>{
                           setShowMediaMenu(false);
-                          openCapture("video");
+                          void openNativeVideoCapture();
                         }}>{lang==="es" ? "Grabar video" : "Record video"}</button>
+                        <button className="staff-menu-item" onClick={()=>{
+                          setShowMediaMenu(false);
+                          chatMediaInputRef.current?.click();
+                        }}>{lang==="es" ? "Archivo, foto o video" : "File, photo, or video"}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setMediaLibraryTab("internal");setShowMediaLibrary(true);clearStaffRecordUnreadRoom(selectedRoom?.id);}}>{t.staffRecord}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}}>{lang==="es" ? "Recetas" : "Prescriptions"}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowMediaLibrary(true);}}>{t.mediaLibrary}</button>
@@ -8794,7 +8811,7 @@ export default function InboxPage() {
                         <img src="/Phone_icon.png" alt="" />
                       </a>
                     )}
-                    <button className="mic-btn" disabled={selectedRoomCancelled} onPointerDown={e=>{e.preventDefault();if(!selectedRoomCancelled)startRec();}} aria-label={t.recordAudio}>
+                    <button type="button" className="mic-btn" disabled={selectedRoomCancelled} onClick={()=>{if(!selectedRoomCancelled)void startRec();}} aria-label={t.recordAudio}>
                       <img src="/Microphone_icon.png" alt="" />
                     </button>
                   </div>

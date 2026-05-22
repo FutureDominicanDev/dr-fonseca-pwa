@@ -357,6 +357,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [textSize, setTextSize] = useState<PatientTextSize>(() => readPatientTextSize());
   const [alertTone, setAlertTone] = useState<AlertTone>(() => readPatientAlertTone());
   const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [uiLang, setUiLang] = useState<"es" | "en">(() => readPatientUiLang());
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [notificationBusy, setNotificationBusy] = useState(false);
@@ -390,6 +391,8 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const recorderRef = useRef<MediaRecorder | null>(null);
   const nativeAudioRecordingRef = useRef(false);
   const chunksRef = useRef<Blob[]>([]);
+  const discardAudioRef = useRef(false);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -404,9 +407,24 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const callClinicNumber = (phone: string) => {
     window.location.href = `tel:${phone}`;
   };
+  const stopRecordingTimer = () => {
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    recordingTimerRef.current = null;
+  };
+  const startRecordingTimer = () => {
+    stopRecordingTimer();
+    setRecordingSeconds(0);
+    recordingTimerRef.current = setInterval(() => setRecordingSeconds((seconds) => seconds + 1), 1000);
+  };
+  const formatRecordingDuration = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remaining = seconds % 60;
+    return `${minutes}:${String(remaining).padStart(2, "0")}`;
+  };
   const handleChatScroll = () => {
     shouldAutoScrollRef.current = isNearChatBottom();
   };
+  useEffect(() => () => stopRecordingTimer(), []);
   const sameMessageList = (current: Message[], next: Message[]) => {
     if (current.length !== next.length) return false;
     return current.every((message, index) => {
@@ -1777,6 +1795,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           await nativeRecorder.start();
           nativeAudioRecordingRef.current = true;
           setRecording(true);
+          startRecordingTimer();
           return;
         } catch (error: any) {
           nativeAudioRecordingRef.current = false;
@@ -1801,7 +1820,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         const mimeType = recorder.mimeType || preferredMimeType || "audio/mp4";
         const extension = mimeType.includes("aac") ? "aac" : mimeType.includes("mp4") ? "m4a" : "audio";
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        if (!blob.size) {
+        const shouldDiscard = discardAudioRef.current;
+        discardAudioRef.current = false;
+        if (shouldDiscard || !blob.size) {
           stream.getTracks().forEach((track) => track.stop());
           recorderRef.current = null;
           return;
@@ -1816,20 +1837,30 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
       recorderRef.current = recorder;
       recorder.start();
+      discardAudioRef.current = false;
       setRecording(true);
+      startRecordingTimer();
     } catch {
       setRecording(false);
+      stopRecordingTimer();
+      setRecordingSeconds(0);
       recorderRef.current = null;
       alert(uiLang === "es" ? "No se pudo acceder al micrófono." : "I could not access the microphone.");
     }
   };
 
-  const stopRecording = async () => {
+  const stopRecording = async (discard = false) => {
     if (nativeAudioRecordingRef.current) {
       nativeAudioRecordingRef.current = false;
       setRecording(false);
+      stopRecordingTimer();
+      setRecordingSeconds(0);
       const nativeRecorder = await getNativeAudioRecorder();
       if (!nativeRecorder) return;
+      if (discard) {
+        await nativeRecorder.cancel().catch(() => null);
+        return;
+      }
       try {
         const result = await nativeRecorder.stop();
         const dataUrl = result.dataUrl || "";
@@ -1847,8 +1878,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       return;
     }
     if (!recorderRef.current || recorderRef.current.state !== "recording") return;
+    discardAudioRef.current = discard;
     recorderRef.current.stop();
     setRecording(false);
+    stopRecordingTimer();
+    setRecordingSeconds(0);
   };
 
   const toggleRecording = () => {
@@ -2423,6 +2457,25 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             : "This room was cancelled by Dr. Fonseca's team. Your messages, forms, and files are still saved, but the chat is no longer active."}
         </div>
       )}
+      {recording && !roomClosed && (
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 0 6px rgba(239,68,68,0.12)", flexShrink: 0 }} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{ margin: 0, fontSize: patientTextSmall, fontWeight: 900, color: textPrimary, lineHeight: 1.2 }}>
+              {uiLang === "es" ? "Grabando audio" : "Recording audio"} · {formatRecordingDuration(recordingSeconds)}
+            </p>
+            <p style={{ margin: "2px 0 0", fontSize: Math.max(12, patientTextSmall - 1), fontWeight: 750, color: darkMode ? "#CBD5E1" : "#64748B", lineHeight: 1.25 }}>
+              {uiLang === "es" ? "Detenlo para revisarlo antes de enviar." : "Stop it to review before sending."}
+            </p>
+          </div>
+          <button type="button" onClick={() => void stopRecording(true)} style={{ border: "none", borderRadius: 999, background: inputPanelBg, color: textPrimary, minHeight: 40, padding: "0 13px", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit" }}>
+            {labels.cancel}
+          </button>
+          <button type="button" onClick={() => void stopRecording(false)} style={{ border: "none", borderRadius: 999, background: "#075e54", color: "#fff", minHeight: 40, padding: "0 14px", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit" }}>
+            {uiLang === "es" ? "Detener" : "Stop"}
+          </button>
+        </div>
+      )}
       <footer onClick={() => setDeleteMenuMessageId(null)} style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)", maxWidth: "100vw", opacity: roomClosed ? 0.72 : 1 }}>
         {menuOpen && (
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
@@ -2438,7 +2491,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           </div>
         )}
 
-        <button disabled={roomClosed} onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ position:"relative", width: 44, height: 44, minWidth: 44, minHeight: 44, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <button type="button" disabled={roomClosed} onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ position:"relative", width: 44, height: 44, minWidth: 44, minHeight: 44, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {menuOpen ? "×" : "+"}
           {newPrescriptionCount > 0 && <span style={{position:"absolute",right:0,top:0,width:12,height:12,borderRadius:"50%",background:"#DC2626",border:"2px solid #ededed"}} />}
         </button>
@@ -2468,13 +2521,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           style={{ minWidth: 0, flex: 1, minHeight: 58, maxHeight: 104, overflowY: "auto", border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: darkMode ? "#f8fafc" : "#1f2937", padding: "16px 20px", fontSize: messageFontSize, fontWeight: 500, lineHeight: 1.42, WebkitUserSelect: "text", userSelect: "text" }}
         />
 
-        <button disabled={roomClosed} onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
+        <button type="button" disabled={roomClosed} onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
 
-        <button onClick={() => setCallSheetOpen(true)} aria-label={labels.callClinic} style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
+        <button type="button" onClick={() => setCallSheetOpen(true)} aria-label={labels.callClinic} style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
           <Image src="/Phone_icon.png" alt="" width={30} height={30} style={{ width: 30, height: 30, objectFit: "contain" }} />
         </button>
 
-        <button disabled={roomClosed} onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
+        <button type="button" disabled={roomClosed} onClick={toggleRecording} aria-label="Record audio" style={{ ...roundButtonStyle, background: recording ? "#eef6ff" : "#eef6ff", color: "#0b4ea2", animation: recording ? "micPulse 1.15s ease-in-out infinite" : "none" }}>
           <Image src="/Microphone_icon.png" alt="" width={36} height={36} style={{ width: 36, height: 36, objectFit: "contain" }} />
         </button>
 

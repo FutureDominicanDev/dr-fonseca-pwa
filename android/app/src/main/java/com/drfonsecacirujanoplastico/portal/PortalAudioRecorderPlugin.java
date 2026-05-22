@@ -2,6 +2,7 @@ package com.drfonsecacirujanoplastico.portal;
 
 import android.Manifest;
 import android.media.MediaRecorder;
+import android.os.Build;
 import android.util.Base64;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -52,10 +53,13 @@ public class PortalAudioRecorderPlugin extends Plugin {
 
         try {
             outputFile = File.createTempFile("staff-voice-", ".m4a", getContext().getCacheDir());
-            recorder = new MediaRecorder();
+            recorder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                ? new MediaRecorder(getContext())
+                : new MediaRecorder();
             recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+            recorder.setAudioChannels(1);
             recorder.setAudioEncodingBitRate(96000);
             recorder.setAudioSamplingRate(44100);
             recorder.setOutputFile(outputFile.getAbsolutePath());
