@@ -76,9 +76,15 @@ type PortalNotificationSettingsPlugin = {
   open(options: { channelId: string }): Promise<void>;
 };
 
+type PortalAudioRecorderPlugin = {
+  start: () => Promise<{ started?: boolean }>;
+  stop: () => Promise<{ dataUrl?: string; mimeType?: string; fileName?: string }>;
+  cancel: () => Promise<{ cancelled?: boolean }>;
+};
+
 const readPatientTextSize = (): PatientTextSize => {
-  if (typeof window === "undefined") return "large";
-  return window.localStorage.getItem(PATIENT_TEXT_SIZE_STORAGE_KEY) === "normal" ? "normal" : "large";
+  if (typeof window === "undefined") return "normal";
+  return window.localStorage.getItem(PATIENT_TEXT_SIZE_STORAGE_KEY) === "large" ? "large" : "normal";
 };
 
 const readPatientAlertTone = (): AlertTone => {
@@ -322,7 +328,9 @@ const readPatientUiLang = (): "es" | "en" => {
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const searchParams = useSearchParams();
-  const token = searchParams.get("token") || "";
+  const queryToken = searchParams.get("token") || "";
+  const [roomToken, setRoomToken] = useState(queryToken);
+  const token = roomToken;
   const viewerType = "patient" as "patient" | "staff";
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
@@ -380,6 +388,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const audioContextRef = useRef<AudioContext | null>(null);
   const patientLatestStaffMessageRef = useRef("");
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const nativeAudioRecordingRef = useRef(false);
   const chunksRef = useRef<Blob[]>([]);
   const videoCaptureRef = useRef<HTMLInputElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -440,6 +449,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const prescriptionSeenKey = `patient_seen_recetas_${id}`;
   const clinicalPdfValuesStorageKey = `historia_clinica_values_${id}`;
   const clinicalPdfValuesStoragePath = `patients/${id}/historia-clinica-values.json`;
+  const patientRoomTokenStorageKey = `drf_patient_room_token_${id}`;
 
   const patientRoomEndpoint = (resource?: string) => {
     const params = new URLSearchParams({ roomId: id, roomToken: token });
@@ -457,6 +467,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (!response.ok) throw new Error(data?.error || "Patient room request failed");
     return data;
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const nextQueryToken = queryToken.trim();
+    if (nextQueryToken) {
+      window.localStorage.setItem(patientRoomTokenStorageKey, nextQueryToken);
+      setRoomToken(nextQueryToken);
+      return;
+    }
+    const storedToken = `${window.localStorage.getItem(patientRoomTokenStorageKey) || ""}`.trim();
+    if (storedToken && storedToken !== roomToken) setRoomToken(storedToken);
+  }, [patientRoomTokenStorageKey, queryToken, roomToken]);
 
   const urlBase64ToUint8Array = (b64: string) => {
     const padding = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -1319,6 +1341,69 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setMenuOpen(false);
   };
 
+  const extensionForMimeType = (mimeType: string, fallback: string) => {
+    const value = mimeType.toLowerCase();
+    if (value.includes("audio/mp4")) return "m4a";
+    if (value.includes("audio/webm")) return "webm";
+    if (value.includes("video/mp4")) return "mp4";
+    if (value.includes("video/webm")) return "webm";
+    if (value.includes("jpeg")) return "jpg";
+    return fallback;
+  };
+
+  const fileFromDataUrl = (dataUrl: string, fileName: string, fallbackMimeType = "image/jpeg") => {
+    const [meta = "", payload = ""] = dataUrl.split(",");
+    if (!payload) return null;
+    const mimeType = /data:([^;]+);/i.exec(meta)?.[1] || fallbackMimeType;
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return new File([bytes], fileName, { type: mimeType });
+  };
+
+  const getNativeAudioRecorder = async () => {
+    try {
+      const { Capacitor, registerPlugin } = await import("@capacitor/core");
+      if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") return null;
+      return registerPlugin<PortalAudioRecorderPlugin>("PortalAudioRecorder");
+    } catch {
+      return null;
+    }
+  };
+
+  const openNativePhotoPicker = async () => {
+    setMenuOpen(false);
+    try {
+      const [{ Capacitor }, { Camera, CameraResultType, CameraSource }] = await Promise.all([
+        import("@capacitor/core"),
+        import("@capacitor/camera"),
+      ]);
+      if (!Capacitor.isNativePlatform()) {
+        openPicker("image/*");
+        return;
+      }
+      const photo = await Camera.getPhoto({
+        quality: 88,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Prompt,
+        promptLabelHeader: uiLang === "es" ? "Enviar foto" : "Send photo",
+        promptLabelPhoto: uiLang === "es" ? "Elegir de fotos" : "Choose from photos",
+        promptLabelPicture: uiLang === "es" ? "Tomar foto" : "Take photo",
+        promptLabelCancel: uiLang === "es" ? "Cancelar" : "Cancel",
+      });
+      const dataUrl = photo.dataUrl || "";
+      const fallbackExt = photo.format || "jpg";
+      const safeExt = fallbackExt === "jpeg" ? "jpg" : fallbackExt;
+      const file = dataUrl ? fileFromDataUrl(dataUrl, `photo-${Date.now()}.${safeExt}`, `image/${safeExt === "jpg" ? "jpeg" : safeExt}`) : null;
+      if (file) await uploadFile(file, "image");
+    } catch (error: any) {
+      const message = `${error?.message || ""}`.toLowerCase();
+      if (message.includes("cancel")) return;
+      openPicker("image/*");
+    }
+  };
+
   const uploadPatientFile = async (
     file: File,
     messageType: Message["message_type"],
@@ -1686,6 +1771,23 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
       setAudioPreviewUrl("");
       setAudioPreviewFile(null);
+      const nativeRecorder = await getNativeAudioRecorder();
+      if (nativeRecorder) {
+        try {
+          await nativeRecorder.start();
+          nativeAudioRecordingRef.current = true;
+          setRecording(true);
+          return;
+        } catch (error: any) {
+          nativeAudioRecordingRef.current = false;
+          const message = `${error?.message || error || ""}`.toLowerCase();
+          if (!message.includes("not implemented") && !message.includes("not available")) {
+            setRecording(false);
+            alert(uiLang === "es" ? "No se pudo acceder al micrófono." : "I could not access the microphone.");
+            return;
+          }
+        }
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferredMimeType = ["audio/mp4", "audio/aac"].find((type) => MediaRecorder.isTypeSupported(type));
       const recorder = preferredMimeType ? new MediaRecorder(stream, { mimeType: preferredMimeType }) : new MediaRecorder(stream);
@@ -1718,22 +1820,43 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     } catch {
       setRecording(false);
       recorderRef.current = null;
-      alert("Microphone access required");
+      alert(uiLang === "es" ? "No se pudo acceder al micrófono." : "I could not access the microphone.");
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
+    if (nativeAudioRecordingRef.current) {
+      nativeAudioRecordingRef.current = false;
+      setRecording(false);
+      const nativeRecorder = await getNativeAudioRecorder();
+      if (!nativeRecorder) return;
+      try {
+        const result = await nativeRecorder.stop();
+        const dataUrl = result.dataUrl || "";
+        const mimeType = result.mimeType || "audio/mp4";
+        const ext = extensionForMimeType(mimeType, "m4a");
+        const file = fileFromDataUrl(dataUrl, result.fileName || `audio-${Date.now()}.${ext}`, mimeType);
+        if (!file) return;
+        if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+        setAudioPreviewFile(file);
+        setAudioPreviewUrl(URL.createObjectURL(file));
+      } catch {
+        await nativeRecorder.cancel().catch(() => null);
+        alert(uiLang === "es" ? "No se pudo preparar el audio." : "I could not prepare the audio.");
+      }
+      return;
+    }
     if (!recorderRef.current || recorderRef.current.state !== "recording") return;
     recorderRef.current.stop();
     setRecording(false);
   };
 
   const toggleRecording = () => {
-    if (recorderRef.current?.state === "recording") {
-      stopRecording();
+    if (nativeAudioRecordingRef.current || recorderRef.current?.state === "recording") {
+      void stopRecording();
       return;
     }
-    startRecording();
+    void startRecording();
   };
 
   const sendAudioPreview = async () => {
@@ -1813,9 +1936,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const panelBg = darkMode ? "#172033" : "#fff";
   const footerBg = darkMode ? "#111827" : "#ededed";
   const inputPanelBg = darkMode ? "#1f2937" : "#fff";
-  const messageFontSize = textSize === "large" ? 22 : 19;
-  const patientTextBase = textSize === "large" ? 18 : 17;
-  const patientTextSmall = textSize === "large" ? 16 : 15;
+  const messageFontSize = textSize === "large" ? 18 : 16;
+  const patientTextBase = textSize === "large" ? 17 : 16;
+  const patientTextSmall = textSize === "large" ? 15 : 14;
   const translations = {
     en: {
       messagePlaceholder: "Message",
@@ -2303,7 +2426,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       <footer onClick={() => setDeleteMenuMessageId(null)} style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)", maxWidth: "100vw", opacity: roomClosed ? 0.72 : 1 }}>
         {menuOpen && (
           <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
-            <button disabled={roomClosed} onClick={() => openPicker("image/*")} style={menuButtonStyle}>{labels.photos}</button>
+            <button disabled={roomClosed} onClick={() => void openNativePhotoPicker()} style={menuButtonStyle}>{labels.photos}</button>
             <button disabled={roomClosed} onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
             <button onClick={openPrescriptions} style={{ ...menuButtonStyle, position:"relative" }}>
               {labels.documents}

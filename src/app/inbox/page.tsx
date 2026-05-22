@@ -1192,6 +1192,7 @@ export default function InboxPage() {
   const staffAudioStreamRef = useRef<MediaStream | null>(null);
   const discardStaffAudioRef = useRef(false);
   const staffNativeAudioTargetRef = useRef<"private" | "room" | null>(null);
+  const patientNativeAudioRecordingRef = useRef(false);
   const staffAudioPreviewUrlRef = useRef("");
   const internalNoteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -4682,6 +4683,56 @@ export default function InboxPage() {
     await uploadFile(file);
   };
 
+  const uploadStaffPatientMedia = async (
+    file: File,
+    options: { roomId: string; folder: string; mediaType: "image" | "video" | "audio" | "file" },
+  ) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token || "";
+    if (!accessToken) throw new Error(lang === "es" ? "Vuelve a iniciar sesión para enviar archivos." : "Please sign in again to send files.");
+
+    const fileType = file.type || "application/octet-stream";
+    const createResponse = await fetch("/api/staff/patient-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        action: "createUpload",
+        roomId: options.roomId,
+        folder: options.folder,
+        fileName: file.name || `${options.mediaType}-${Date.now()}`,
+        fileType,
+        mediaType: options.mediaType,
+      }),
+    });
+    const createResult = await createResponse.json().catch(() => null);
+    if (!createResponse.ok || !createResult?.path || !createResult?.token) {
+      throw new Error(createResult?.error || (lang === "es" ? "No pude preparar la subida del archivo." : "I could not prepare the file upload."));
+    }
+
+    const { error: uploadError } = await supabase.storage.from("chat-files").uploadToSignedUrl(
+      createResult.path,
+      createResult.token,
+      file,
+      { contentType: fileType },
+    );
+    if (uploadError) throw uploadError;
+
+    const completeResponse = await fetch("/api/staff/patient-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ action: "completeUpload", roomId: options.roomId, path: createResult.path }),
+    });
+    const completeResult = await completeResponse.json().catch(() => null);
+    if (!completeResponse.ok || !completeResult?.publicUrl) {
+      throw new Error(completeResult?.error || (lang === "es" ? "No pude terminar la subida del archivo." : "I could not finish the file upload."));
+    }
+    return {
+      path: `${completeResult.path || createResult.path}`,
+      publicUrl: `${completeResult.publicUrl}`,
+      signedUrl: completeResult.signedUrl ? `${completeResult.signedUrl}` : "",
+    };
+  };
+
   const uploadFile = async (file: File, cat: FileCategory="general", folderLabel = "") => {
     if (!selectedRoom || selectedRoomCancelled) return; setSending(true);
     try {
@@ -4690,28 +4741,27 @@ export default function InboxPage() {
       const sOffice=userProfile?.office_location||selectedRoom?.procedures?.office_location||null;
       const patientId = selectedRoom?.procedures?.patients?.id || selectedRoom.id;
       const notificationPatientId = selectedRoom?.procedures?.patients?.id || null;
+      let mt: "image" | "video" | "audio" | "file" = "file";
+      if (file.type.startsWith("image/")) mt="image";
+      else if (file.type.startsWith("video/")) mt="video";
+      else if (file.type.startsWith("audio/")) mt="audio";
       const mediaFolder =
         cat === "before_photo"
           ? "pre-op-photos"
           : cat === "medication"
             ? "prescriptions"
-            : file.type.startsWith("image/")
-              ? "patient-photos"
-              : "chat-files";
-      const fn=`patients/${patientId}/${mediaFolder}/uploaded-by-${safeStorageSegment(sName)}/${Date.now()}-${safeStorageSegment(file.name)}`;
-      const { error: ue } = await supabase.storage.from("chat-files").upload(fn,file);
-      if (ue){setSending(false);return;}
-      const { data: ud } = supabase.storage.from("chat-files").getPublicUrl(fn);
-      const signedUrl = await signChatFileUrl(ud.publicUrl);
-      let mt="file";
-      if (file.type.startsWith("image/")) mt="image";
-      else if (file.type.startsWith("video/")) mt="video";
-      else if (file.type.startsWith("audio/")) mt="audio";
+            : "chat-media";
+      const upload = await uploadStaffPatientMedia(file, {
+        roomId: selectedRoom.id,
+        folder: mediaFolder,
+        mediaType: mt,
+      });
+      const signedUrl = upload.signedUrl || await signChatFileUrl(upload.publicUrl);
       const prefix=cat==="medication"?"[MED] ":cat==="before_photo"?"[BEFORE] ":"";
       const displayFileName = cat==="medication" ? `${prefix}${folderLabel.trim() || file.name}` : `${prefix}${file.name}`;
       const tempId="temp-file-"+Date.now();
-      setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:signedUrl || ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
-      const { data: nm } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:ud.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
+      setMessages(p=>[...p,{id:tempId,room_id:selectedRoom.id,content:signedUrl || upload.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_name:sName,sender_role:sRole,created_at:new Date().toISOString()}]);
+      const { data: nm } = await supabase.from("messages").insert({room_id:selectedRoom.id,content:upload.publicUrl,message_type:mt,file_name:displayFileName,file_size:file.size,sender_type:"staff",sender_id:currentUserId||null,sender_name:sName,sender_role:sRole,sender_office:sOffice}).select().single();
       if (nm) {
         const [signedMessage] = await signChatMessages([nm]);
         setMessages(p=>p.map(m=>m.id===tempId?signedMessage:m));
@@ -4725,7 +4775,7 @@ export default function InboxPage() {
           uploaded_by: currentUserId || null,
           staff_name: sName,
           type: mt === "image" ? "photo" : "video",
-          url: ud.publicUrl,
+          url: upload.publicUrl,
           created_at: new Date().toISOString(),
         }).then(() => undefined);
       }
@@ -4787,7 +4837,10 @@ export default function InboxPage() {
         setMediaLibraryTab("prescriptions");
         setShowMediaLibrary(true);
       }
-    } catch(e){console.error(e);}
+    } catch(e:any){
+      console.error(e);
+      alert(e?.message || (lang === "es" ? "No pude enviar el archivo. Revisa la conexión e inténtalo otra vez." : "I could not send the file. Check the connection and try again."));
+    }
     setSending(false);
   };
 
@@ -4871,24 +4924,26 @@ export default function InboxPage() {
     const sName = userProfile?.full_name || userProfile?.display_name || "Staff";
     const sRole = userProfile?.role || "staff";
     const sOffice = userProfile?.office_location || selectedRoom?.procedures?.office_location || null;
-    const patientId = selectedRoom?.procedures?.patients?.id || selectedRoom.id;
-    const path = `patients/${patientId}/staff-record/uploaded-by-${safeStorageSegment(sName)}/${Date.now()}-${safeStorageSegment(file.name)}`;
-
-    const { error: uploadError } = await supabase.storage.from("chat-files").upload(path, file);
-    if (uploadError) {
+    let upload: { publicUrl: string; signedUrl?: string } | null = null;
+    try {
+      upload = await uploadStaffPatientMedia(file, {
+        roomId: selectedRoom.id,
+        folder: "staff-record",
+        mediaType: "image",
+      });
+    } catch (error: any) {
       setUploadingStaffRecordPhoto(false);
-      alert(uploadError.message || (lang === "es" ? "No pude subir la foto interna." : "I could not upload the internal photo."));
+      alert(error?.message || (lang === "es" ? "No pude subir la foto interna." : "I could not upload the internal photo."));
       return;
     }
 
-    const { data: publicUrl } = supabase.storage.from("chat-files").getPublicUrl(path);
-    const signedUrl = await signChatFileUrl(publicUrl.publicUrl);
+    const signedUrl = upload.signedUrl || await signChatFileUrl(upload.publicUrl);
     const displayFileName = `${STAFF_RECORD_PHOTO_PREFIX} ${file.name || (lang === "es" ? "Foto interna" : "Internal photo")}`;
     const tempId = "temp-staff-record-photo-" + Date.now();
     const tempMessage = {
       id: tempId,
       room_id: selectedRoom.id,
-      content: signedUrl || publicUrl.publicUrl,
+      content: signedUrl || upload.publicUrl,
       message_type: "image",
       file_name: displayFileName,
       file_size: file.size,
@@ -4906,7 +4961,7 @@ export default function InboxPage() {
       .from("messages")
       .insert({
         room_id: selectedRoom.id,
-        content: publicUrl.publicUrl,
+        content: upload.publicUrl,
         message_type: "image",
         file_name: displayFileName,
         file_size: file.size,
@@ -5210,6 +5265,24 @@ export default function InboxPage() {
 
   const startRec = async () => {
     try {
+      const nativeRecorder = await getNativeStaffAudioRecorder();
+      if (nativeRecorder) {
+        try {
+          await nativeRecorder.start();
+          patientNativeAudioRecordingRef.current = true;
+          setRecording(true);
+          setRecordingSeconds(0);
+          recordingTimerRef.current = setInterval(()=>setRecordingSeconds(s=>s+1),1000);
+          return;
+        } catch (error: any) {
+          patientNativeAudioRecordingRef.current = false;
+          const message = `${error?.message || error || ""}`.toLowerCase();
+          if (!message.includes("not implemented") && !message.includes("not available")) {
+            alert("No se pudo acceder al micrófono.");
+            return;
+          }
+        }
+      }
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
       const mimeType = pickRecorderMimeType("audio");
       const mr=mimeType ? new MediaRecorder(stream,{ mimeType }) : new MediaRecorder(stream);
@@ -5230,7 +5303,33 @@ export default function InboxPage() {
       recordingTimerRef.current=setInterval(()=>setRecordingSeconds(s=>s+1),1000);
     } catch {alert("No se pudo acceder al micrófono.");}
   };
-  const stopRec = (discard=false) => { if (mediaRecorderRef.current&&recording){discardAudioRef.current=discard;mediaRecorderRef.current.stop();setRecording(false);clearInterval(recordingTimerRef.current);setRecordingSeconds(0);} };
+  const stopRec = async (discard=false) => {
+    if (patientNativeAudioRecordingRef.current) {
+      patientNativeAudioRecordingRef.current = false;
+      setRecording(false);
+      clearInterval(recordingTimerRef.current);
+      setRecordingSeconds(0);
+      const nativeRecorder = await getNativeStaffAudioRecorder();
+      if (!nativeRecorder) return;
+      if (discard) {
+        await nativeRecorder.cancel().catch(() => null);
+        return;
+      }
+      try {
+        const result = await nativeRecorder.stop();
+        const dataUrl = result.dataUrl || "";
+        const mimeType = result.mimeType || "audio/mp4";
+        const ext = extensionForMimeType(mimeType, "m4a");
+        const file = fileFromDataUrl(dataUrl, result.fileName || `voice-${Date.now()}.${ext}`, mimeType);
+        if (file) stagePreview(file);
+      } catch {
+        await nativeRecorder.cancel().catch(() => null);
+        alert(lang === "es" ? "No se pudo preparar el audio." : "I could not prepare the audio.");
+      }
+      return;
+    }
+    if (mediaRecorderRef.current&&recording){discardAudioRef.current=discard;mediaRecorderRef.current.stop();setRecording(false);clearInterval(recordingTimerRef.current);setRecordingSeconds(0);}
+  };
   const stopCaptureStream = () => {
     captureStreamRef.current?.getTracks().forEach((track) => track.stop());
     captureStreamRef.current = null;
