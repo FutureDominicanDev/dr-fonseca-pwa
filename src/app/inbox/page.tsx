@@ -629,6 +629,22 @@ type StaffRoomPayload = {
   createdBy?: string | null;
   actorId?: string | null;
   event?: "invite" | "message" | "accept" | "decline" | "leave";
+  attachment?: StaffChatAttachment | null;
+};
+type StaffChatMediaType = "image" | "audio" | "video" | "file";
+type StaffChatAttachment = {
+  kind: "staff_media";
+  mediaType: StaffChatMediaType;
+  url: string;
+  signedUrl?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
+};
+type StaffPrivateMediaPayload = {
+  kind: "staff_private_media";
+  text: string;
+  attachment: StaffChatAttachment;
 };
 type StaffRoomConversation = {
   roomId: string;
@@ -664,6 +680,7 @@ type PatientLabel = {
 };
 
 const STAFF_ROOM_PREFIX = "__DRF_STAFF_ROOM__:";
+const STAFF_PRIVATE_MEDIA_PREFIX = "__DRF_STAFF_PRIVATE_MEDIA__:";
 const makeStaffRoomId = () =>
   `staff-room-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 const makeStaffRoomMessageId = () =>
@@ -672,6 +689,19 @@ const makeStaffRoomMessageId = () =>
     : `staff-msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 const serializeStaffRoomPayload = (payload: StaffRoomPayload) =>
   `${STAFF_ROOM_PREFIX}${JSON.stringify(payload)}`;
+const normalizeStaffChatAttachment = (value: any): StaffChatAttachment | null => {
+  if (!value || value.kind !== "staff_media" || !value.url) return null;
+  const mediaType = ["image", "audio", "video", "file"].includes(value.mediaType) ? value.mediaType : "file";
+  return {
+    kind: "staff_media",
+    mediaType,
+    url: `${value.url}`,
+    signedUrl: value.signedUrl ? `${value.signedUrl}` : null,
+    fileName: value.fileName ? `${value.fileName}` : null,
+    fileSize: Number.isFinite(Number(value.fileSize)) ? Number(value.fileSize) : null,
+    mimeType: value.mimeType ? `${value.mimeType}` : null,
+  };
+};
 const parseStaffRoomPayload = (content?: string | null): StaffRoomPayload | null => {
   const value = `${content || ""}`;
   if (!value.startsWith(STAFF_ROOM_PREFIX)) return null;
@@ -688,6 +718,25 @@ const parseStaffRoomPayload = (content?: string | null): StaffRoomPayload | null
       createdBy: parsed.createdBy || null,
       actorId: parsed.actorId || null,
       event: ["invite", "message", "accept", "decline", "leave"].includes(parsed.event) ? parsed.event : "message",
+      attachment: normalizeStaffChatAttachment(parsed.attachment),
+    };
+  } catch {
+    return null;
+  }
+};
+const serializeStaffPrivateMediaPayload = (payload: StaffPrivateMediaPayload) =>
+  `${STAFF_PRIVATE_MEDIA_PREFIX}${JSON.stringify(payload)}`;
+const parseStaffPrivateMediaPayload = (content?: string | null): StaffPrivateMediaPayload | null => {
+  const value = `${content || ""}`;
+  if (!value.startsWith(STAFF_PRIVATE_MEDIA_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(value.slice(STAFF_PRIVATE_MEDIA_PREFIX.length));
+    const attachment = normalizeStaffChatAttachment(parsed?.attachment);
+    if (parsed?.kind !== "staff_private_media" || !attachment) return null;
+    return {
+      kind: "staff_private_media",
+      text: `${parsed.text || ""}`,
+      attachment,
     };
   } catch {
     return null;
@@ -784,6 +833,26 @@ function SendPlaneIcon({ size = 22 }: { size?: number }) {
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 2 11 13" />
       <path d="m22 2-7 20-4-9-9-4 20-7Z" />
+    </svg>
+  );
+}
+
+function CameraIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.8 5 13.4 3.2h-2.8L9.2 5H6.5A2.5 2.5 0 0 0 4 7.5v9A2.5 2.5 0 0 0 6.5 19h11a2.5 2.5 0 0 0 2.5-2.5v-9A2.5 2.5 0 0 0 17.5 5h-2.7Z" />
+      <circle cx="12" cy="12" r="3.5" />
+    </svg>
+  );
+}
+
+function MicrophoneLineIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <path d="M12 18v3" />
+      <path d="M8 21h8" />
     </svg>
   );
 }
@@ -916,8 +985,10 @@ export default function InboxPage() {
   const [editingMessage, setEditingMessage] = useState<any | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
   const [staffContactMember, setStaffContactMember] = useState<CareTeamMember | null>(null);
+  const [patientContactRoom, setPatientContactRoom] = useState<any | null>(null);
   const [staffPrivateDraft, setStaffPrivateDraft] = useState("");
   const [savingStaffPrivateMessage, setSavingStaffPrivateMessage] = useState(false);
+  const [staffChatUploading, setStaffChatUploading] = useState(false);
   const [staffPrivateMessages, setStaffPrivateMessages] = useState<StaffPrivateMessage[]>([]);
   const [showStaffChats, setShowStaffChats] = useState(false);
   const [activeStaffChatPeerId, setActiveStaffChatPeerId] = useState<string | null>(null);
@@ -1100,6 +1171,9 @@ export default function InboxPage() {
   const mediaCaptureVideoRef = useRef<HTMLVideoElement>(null);
   const profilePicRef = useRef<HTMLInputElement>(null);
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
+  const staffChatImageInputRef = useRef<HTMLInputElement>(null);
+  const staffChatAudioInputRef = useRef<HTMLInputElement>(null);
+  const staffChatUploadTargetRef = useRef<"private" | "room" | null>(null);
   const beforePhotosRef = useRef<HTMLInputElement>(null);
   const staffRecordPhotoInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
@@ -1122,6 +1196,8 @@ export default function InboxPage() {
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const translationCacheRef = useRef<Record<string, string>>({});
   const pauseBackgroundRefreshRef = useRef(false);
+  const accessRefreshRunningRef = useRef(false);
+  const lastAccessSignatureRef = useRef("");
   const messagePressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const patientLabelPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const patientTouchStartRef = useRef<{ id: string; x: number; y: number } | null>(null);
@@ -1133,6 +1209,24 @@ export default function InboxPage() {
   const createPatientDeepLinkHandledRef = useRef(false);
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
+  const accessSignature = (profile: any) => JSON.stringify({
+    role: `${profile?.role || ""}`.toLowerCase(),
+    admin_level: `${profile?.admin_level || ""}`.toLowerCase(),
+    permissions: Array.isArray(profile?.permissions) ? [...profile.permissions].sort() : profile?.permissions || null,
+  });
+  const staffAttachmentLabel = (attachment?: StaffChatAttachment | null) => {
+    if (!attachment) return "";
+    if (attachment.mediaType === "image") return lang === "es" ? "Foto" : "Photo";
+    if (attachment.mediaType === "audio") return lang === "es" ? "Audio" : "Audio";
+    if (attachment.mediaType === "video") return lang === "es" ? "Video" : "Video";
+    return attachment.fileName || (lang === "es" ? "Archivo" : "File");
+  };
+  const staffContentPreview = (text?: string | null, attachment?: StaffChatAttachment | null) => {
+    const cleanText = `${text || ""}`.trim();
+    const attachmentText = staffAttachmentLabel(attachment);
+    if (cleanText && attachmentText) return `${attachmentText}: ${cleanText}`;
+    return cleanText || attachmentText || (lang === "es" ? "Mensaje" : "Message");
+  };
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
   const fmtShortDate = (ts?: string | null) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}); };
@@ -1345,7 +1439,7 @@ export default function InboxPage() {
 
   const sendStaffPrivateToMember = async (member: CareTeamMember, content: string) => {
     const cleanContent = content.trim();
-    if (!cleanContent || !member?.id || !currentUserId || savingStaffPrivateMessage) return false;
+    if (!cleanContent || !member?.id || !currentUserId || savingStaffPrivateMessage || staffChatUploading) return false;
     setSavingStaffPrivateMessage(true);
     const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
     const { data, error } = await supabase.from("staff_private_messages").insert({
@@ -1446,10 +1540,11 @@ export default function InboxPage() {
       event?: StaffRoomPayload["event"];
       createdBy?: string | null;
       actorId?: string | null;
+      attachment?: StaffChatAttachment | null;
     } = {}
   ) => {
     const cleanContent = content.trim();
-    if (!currentUserId || !cleanContent || savingStaffPrivateMessage) return false;
+    if (!currentUserId || (!cleanContent && !options.attachment) || savingStaffPrivateMessage) return false;
     const uniqueMemberIds = Array.from(new Set([currentUserId, ...memberIds].filter(Boolean)));
     const recipientIds = uniqueMemberIds.filter((id) => id !== currentUserId);
     if (recipientIds.length === 0) {
@@ -1468,6 +1563,7 @@ export default function InboxPage() {
       createdBy: options.createdBy || currentUserId,
       actorId: options.actorId || currentUserId,
       event: options.event || "message",
+      attachment: options.attachment || null,
     });
     const rows = recipientIds.map((recipientId) => {
       const recipient = staffMemberById.get(recipientId);
@@ -1494,7 +1590,7 @@ export default function InboxPage() {
         targetStaffIds: recipientIds,
         staffMessageIds,
         title: lang === "es" ? "Chat staff" : "Staff chat",
-        body: `${roomName}: ${cleanContent}`.slice(0, 300),
+        body: `${roomName}: ${staffContentPreview(cleanContent, options.attachment)}`.slice(0, 300),
         url: "/inbox",
         tag: `staff-room-${roomId}`,
       });
@@ -1714,6 +1810,7 @@ export default function InboxPage() {
       .map(([peerId, conversationMessages]) => {
         const sorted = [...conversationMessages].sort((a, b) => `${a.created_at || ""}`.localeCompare(`${b.created_at || ""}`));
         const latest = sorted[sorted.length - 1] || {};
+        const latestMedia = parseStaffPrivateMediaPayload(latest.content);
         const fallbackName =
           latest.sender_id === peerId
             ? latest.sender_name
@@ -1734,7 +1831,7 @@ export default function InboxPage() {
           peer,
           messages: sorted,
           latestAt: latest.created_at || "",
-          latestText: `${latest.content || ""}`.trim(),
+          latestText: staffContentPreview(latestMedia ? latestMedia.text : latest.content, latestMedia?.attachment),
           unreadCount: sorted.filter((message) => message.recipient_id === currentUserId && !message.read_at).length,
         };
       })
@@ -1810,7 +1907,7 @@ export default function InboxPage() {
           currentUserStatus,
           messages,
           latestAt: latest?.created_at || "",
-          latestText: latestPayload?.text || "",
+          latestText: staffContentPreview(latestPayload?.text, latestPayload?.attachment),
           unreadCount: room.unread.size,
         };
       })
@@ -1895,6 +1992,91 @@ export default function InboxPage() {
       setShowSlashMenu(false);
       setSlashFilter("");
     }
+  };
+
+  const staffChatMediaTypeForFile = (file: File): StaffChatMediaType => {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type.startsWith("audio/")) return "audio";
+    if (file.type.startsWith("video/")) return "video";
+    return "file";
+  };
+
+  const openStaffChatFilePicker = (target: "private" | "room", kind: "image" | "audio") => {
+    staffChatUploadTargetRef.current = target;
+    if (kind === "image") staffChatImageInputRef.current?.click();
+    else staffChatAudioInputRef.current?.click();
+  };
+
+  const sendStaffChatAttachment = async (file: File, target: "private" | "room") => {
+    if (!file || !currentUserId || staffChatUploading || savingStaffPrivateMessage) return;
+    const activePrivate = target === "private" ? activeStaffPrivateConversation : null;
+    const activeRoom = target === "room" ? activeStaffRoomConversation : null;
+    if (target === "private" && !activePrivate?.peer?.id) return;
+    if (target === "room" && (!activeRoom || activeRoom.currentUserStatus !== "accepted")) return;
+
+    setStaffChatUploading(true);
+    try {
+      const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
+      const mediaType = staffChatMediaTypeForFile(file);
+      const path = `staff-chat/${safeStorageSegment(currentUserId)}/${Date.now()}-${safeStorageSegment(file.name || mediaType)}`;
+      const { error: uploadError } = await supabase.storage.from("chat-files").upload(path, file);
+      if (uploadError) throw uploadError;
+      const { data: publicData } = supabase.storage.from("chat-files").getPublicUrl(path);
+      const signedUrl = await signChatFileUrl(publicData.publicUrl);
+      const attachment: StaffChatAttachment = {
+        kind: "staff_media",
+        mediaType,
+        url: publicData.publicUrl,
+        signedUrl: signedUrl || null,
+        fileName: file.name || staffAttachmentLabel({ kind: "staff_media", mediaType, url: publicData.publicUrl }),
+        fileSize: file.size,
+        mimeType: file.type || null,
+      };
+
+      if (target === "private" && activePrivate?.peer) {
+        const content = serializeStaffPrivateMediaPayload({ kind: "staff_private_media", text: "", attachment });
+        const { data, error } = await supabase.from("staff_private_messages").insert({
+          sender_id: currentUserId,
+          recipient_id: activePrivate.peer.id,
+          sender_name: senderName,
+          recipient_name: activePrivate.peer.full_name || activePrivate.peer.display_name || null,
+          content,
+          created_at: new Date().toISOString(),
+        } as any).select("*").single();
+        if (error) throw error;
+        if (data) {
+          upsertStaffPrivateMessage(data as StaffPrivateMessage);
+          sendPushNotification({
+            userType: "staff",
+            targetStaffIds: [activePrivate.peer.id],
+            staffMessageIds: data.id ? [data.id] : [],
+            title: lang === "es" ? "Mensaje privado del equipo" : "Private staff message",
+            body: `${senderName}: ${staffContentPreview("", attachment)}`.slice(0, 300),
+            url: "/inbox",
+            tag: `staff-private-${currentUserId}-${activePrivate.peer.id}`,
+          });
+        }
+      } else if (target === "room" && activeRoom) {
+        await sendStaffRoomMessage(
+          activeRoom.roomId,
+          activeRoom.roomName,
+          activeRoom.activeMemberIds,
+          "",
+          { event: "message", createdBy: activeRoom.createdBy || currentUserId, attachment }
+        );
+      }
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude enviar el archivo al chat staff." : "I could not send the staff chat attachment."));
+    } finally {
+      setStaffChatUploading(false);
+      staffChatUploadTargetRef.current = null;
+    }
+  };
+
+  const handleStaffChatFileInput = async (file?: File | null) => {
+    const target = staffChatUploadTargetRef.current;
+    if (!file || !target) return;
+    await sendStaffChatAttachment(file, target);
   };
 
   const inviteMembersToActiveStaffRoom = async () => {
@@ -2829,6 +3011,7 @@ export default function InboxPage() {
         show_avatar_to_staff: ownAvatarVisible,
         permissions: permissionMap[id] ?? data.permissions,
       };
+      lastAccessSignatureRef.current = accessSignature(profileWithPermissions);
       setUserProfile(profileWithPermissions);
       setDisplayNameEdit(data.full_name||data.display_name||"");
       setPhoneEdit(data.phone || "");
@@ -3381,11 +3564,12 @@ export default function InboxPage() {
         } else {
           playStaffChatAlertTone();
           setPrivateToast(message);
+          const privatePayload = parseStaffPrivateMediaPayload(message.content);
           pushNotif(
             roomPayload ? (lang === "es" ? "Chat staff" : "Staff chat") : (lang === "es" ? "Mensaje privado del equipo" : "Private staff message"),
             roomPayload
-              ? `${roomPayload.roomName}: ${roomPayload.text.slice(0, 120)}`
-              : `${message.sender_name || (lang === "es" ? "Personal" : "Staff")}: ${`${message.content || ""}`.slice(0, 120)}`
+              ? `${roomPayload.roomName}: ${staffContentPreview(roomPayload.text, roomPayload.attachment).slice(0, 120)}`
+              : `${message.sender_name || (lang === "es" ? "Personal" : "Staff")}: ${staffContentPreview(privatePayload?.text ?? message.content, privatePayload?.attachment).slice(0, 120)}`
           );
         }
       }
@@ -3714,6 +3898,73 @@ export default function InboxPage() {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (!currentUserId || userProfile?.role === "pending_staff") return;
+    let cancelled = false;
+
+    const refreshAccessIfChanged = async (announce = false) => {
+      if (accessRefreshRunningRef.current) return;
+      accessRefreshRunningRef.current = true;
+
+      try {
+        const [profileRes, permissionsRes] = await Promise.all([
+          supabase.from("profiles").select("*").eq("id", currentUserId).maybeSingle(),
+          supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
+        ]);
+        if (cancelled || !profileRes.data) return;
+
+        const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
+        const profileWithPermissions = {
+          ...(profileRes.data as any),
+          permissions: permissionMap[currentUserId] ?? (profileRes.data as any).permissions,
+        };
+        const nextSignature = accessSignature(profileWithPermissions);
+        if (!lastAccessSignatureRef.current) {
+          lastAccessSignatureRef.current = nextSignature;
+          return;
+        }
+        if (lastAccessSignatureRef.current === nextSignature) return;
+
+        lastAccessSignatureRef.current = nextSignature;
+        await fetchProfile(currentUserId);
+        await Promise.all([fetchRooms(), fetchAssignableStaff(), fetchUserLabels()]);
+        if (announce && !cancelled) {
+          setNotificationFeedback({
+            tone: "success",
+            text: lang === "es"
+              ? "Tus permisos se actualizaron. El portal se refrescó automáticamente."
+              : "Your access was updated. The portal refreshed automatically.",
+          });
+        }
+      } finally {
+        accessRefreshRunningRef.current = false;
+      }
+    };
+
+    void refreshAccessIfChanged(false);
+    const interval = window.setInterval(() => void refreshAccessIfChanged(true), 8000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshAccessIfChanged(true);
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+
+    const channel = supabase
+      .channel(`staff-access-refresh:${currentUserId}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${currentUserId}` }, () => void refreshAccessIfChanged(true))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "app_settings", filter: `key=eq.${STAFF_PERMISSIONS_SETTING_KEY}` }, () => void refreshAccessIfChanged(true))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "app_settings", filter: `key=eq.${STAFF_PERMISSIONS_SETTING_KEY}` }, () => void refreshAccessIfChanged(true))
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, userProfile?.role, lang]);
 
   const patientRoomLink = (room: any) => {
     if (!room?.id || typeof window === "undefined") return "";
@@ -5005,6 +5256,16 @@ export default function InboxPage() {
     });
     return groups;
   };
+  const patientRoomForMessage = (msg: any) => {
+    const roomId = `${msg?.room_id || ""}`;
+    if (!roomId) return null;
+    if (selectedRoom?.id === roomId) return selectedRoom;
+    for (const patient of patients) {
+      const room = patient?.rooms?.find((entry: any) => entry.id === roomId);
+      if (room) return room;
+    }
+    return null;
+  };
 
   const renderMsg = (msg: any) => {
     const isOut=msg.sender_type==="staff"||!msg.sender_type;
@@ -5023,6 +5284,7 @@ export default function InboxPage() {
       msg.sender_type === "staff" && msg.sender_id && msg.sender_id !== currentUserId
         ? findStaffMemberForMessage(msg)
         : null;
+    const patientContact = msg.sender_type === "patient" ? patientRoomForMessage(msg) : null;
     const videoCallRoomName = parseVideoCallMessage(msg.content);
     const callRequestToken = parseCallRequestMessage(msg.content);
     const translated = !isOut && autoTranslateIncoming && msg.message_type === "text" && msg.id && !videoCallRoomName && !callRequestToken
@@ -5078,6 +5340,10 @@ export default function InboxPage() {
             openStaffContact(staffContact);
             return;
           }
+          if (patientContact) {
+            setPatientContactRoom(patientContact);
+            return;
+          }
           if (canDeleteOwnStaffMessage) setActiveMessageAction(msg);
         }}
         onMouseDown={()=> staffContact ? startStaffContactPress(staffContact) : startStaffMessagePress(msg.id, canDeleteOwnStaffMessage)}
@@ -5091,9 +5357,14 @@ export default function InboxPage() {
             openStaffContact(staffContact);
             return;
           }
+          if (patientContact) {
+            event.preventDefault();
+            setPatientContactRoom(patientContact);
+            return;
+          }
           if (canDeleteOwnStaffMessage) { event.preventDefault(); setPressedMsgId(msg.id); setActiveMessageAction(msg); }
         }}
-        style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:5,position:"relative",cursor:staffContact?"pointer":"default"}}
+        style={{display:"flex",flexDirection:"column",alignItems:isOut?"flex-end":"flex-start",marginBottom:5,position:"relative",cursor:staffContact||patientContact?"pointer":"default"}}
       >
         {effectiveType==="image"?(
           <div style={{...bubbleStyle,padding:4}}>
@@ -5460,6 +5731,41 @@ export default function InboxPage() {
         </div>
       );
     };
+    const renderStaffChatAttachment = (attachment?: StaffChatAttachment | null, mine = false) => {
+      if (!attachment) return null;
+      const mediaUrl = attachment.signedUrl || attachment.url;
+      if (attachment.mediaType === "image") {
+        return (
+          <button
+            type="button"
+            onClick={()=>setExpandedImage({ url: mediaUrl, name: attachment.fileName || "" })}
+            style={{display:"block",border:"none",background:"transparent",padding:0,margin:"0 0 8px",cursor:"zoom-in",fontFamily:"inherit"}}
+          >
+            <img src={mediaUrl} alt="" style={{display:"block",width:"min(220px, 64vw)",maxHeight:260,objectFit:"cover",borderRadius:14}} />
+          </button>
+        );
+      }
+      if (attachment.mediaType === "audio") {
+        return (
+          <audio controls src={mediaUrl} style={{display:"block",width:"min(260px, 68vw)",marginBottom:8}} />
+        );
+      }
+      if (attachment.mediaType === "video") {
+        return (
+          <video controls src={mediaUrl} style={{display:"block",width:"min(260px, 68vw)",maxHeight:260,borderRadius:14,marginBottom:8,background:"#000"}} />
+        );
+      }
+      return (
+        <a
+          href={mediaUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{display:"block",color:mine?"white":"#2563EB",fontWeight:900,overflowWrap:"anywhere",marginBottom:8}}
+        >
+          {attachment.fileName || (lang === "es" ? "Abrir archivo" : "Open file")}
+        </a>
+      );
+    };
     return (
       <div className="modal-overlay" onClick={closePanel}>
         <div className="modal-scroll staff-chat-sheet" onClick={e=>e.stopPropagation()} style={{maxWidth:720}}>
@@ -5663,6 +5969,7 @@ export default function InboxPage() {
                   const senderMember = staffMemberById.get(message.sender_id || "") || null;
                   const senderDisplayName = senderMember?.full_name || senderMember?.display_name || message.sender_name || (lang==="es"?"Personal":"Staff");
                   const senderInitial = ini(senderDisplayName);
+                  const canContactSender = !!senderMember?.id && senderMember.id !== currentUserId;
                   const senderLabel = mine
                     ? `${lang==="es"?"Tú":"You"} · ${senderDisplayName}`
                     : senderDisplayName;
@@ -5682,15 +5989,26 @@ export default function InboxPage() {
                     <div key={payload?.messageId || message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
                       <div style={{maxWidth:"92%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:5}}>
                         <div style={{display:"flex",alignItems:"center",gap:7,flexDirection:mine?"row-reverse":"row"}}>
-                          <div style={{width:34,height:34,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:13,fontWeight:900,boxShadow:"0 1px 3px rgba(15,23,42,0.18)"}}>
-                          {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : senderInitial}
-                          </div>
-                          <p style={{fontSize:Math.max(uiSmallSize - 1, 12),fontWeight:900,color:subTextColor,lineHeight:1.25,overflowWrap:"anywhere",textAlign:mine?"right":"left"}}>
+                          <button
+                            type="button"
+                            disabled={!canContactSender}
+                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                            style={{width:34,height:34,border:"none",borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:13,fontWeight:900,boxShadow:"0 1px 3px rgba(15,23,42,0.18)",padding:0,cursor:canContactSender?"pointer":"default"}}
+                          >
+                            {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : senderInitial}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!canContactSender}
+                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                            style={{border:"none",background:"transparent",padding:0,fontFamily:"inherit",fontSize:Math.max(uiSmallSize - 1, 12),fontWeight:900,color:subTextColor,lineHeight:1.25,overflowWrap:"anywhere",textAlign:mine?"right":"left",cursor:canContactSender?"pointer":"default"}}
+                          >
                             {senderLabel}
-                          </p>
+                          </button>
                         </div>
                         <div style={{minWidth:140,borderRadius:mine?"18px 18px 6px 18px":"18px 18px 18px 6px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"12px 14px",boxShadow:"0 1px 3px rgba(15,23,42,0.1)"}}>
-                          <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{payload?.text || ""}</p>
+                          {renderStaffChatAttachment(payload?.attachment, mine)}
+                          {payload?.text && <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{payload.text}</p>}
                           <p style={{fontSize:Math.max(uiSmallSize - 1, 12),opacity:0.78,textAlign:"right",marginTop:5,fontWeight:700}}>{fmtTime(message.created_at || "")}</p>
                         </div>
                       </div>
@@ -5708,6 +6026,26 @@ export default function InboxPage() {
                   title={t.quickReplies}
                 >
                   <QuickReplyIcon />
+                </button>
+                <button
+                  type="button"
+                  className="staff-quick-btn"
+                  disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading}
+                  onClick={()=>openStaffChatFilePicker("room", "image")}
+                  aria-label={lang==="es" ? "Enviar foto" : "Send photo"}
+                  title={lang==="es" ? "Enviar foto" : "Send photo"}
+                >
+                  <CameraIcon />
+                </button>
+                <button
+                  type="button"
+                  className="staff-quick-btn"
+                  disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading}
+                  onClick={()=>openStaffChatFilePicker("room", "audio")}
+                  aria-label={lang==="es" ? "Enviar audio" : "Send audio"}
+                  title={lang==="es" ? "Enviar audio" : "Send audio"}
+                >
+                  <MicrophoneLineIcon />
                 </button>
                 <textarea
                   ref={staffRoomComposerRef}
@@ -5730,7 +6068,7 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-send-btn"
-                  disabled={activeRoom.currentUserStatus !== "accepted" || !staffRoomReply.trim() || savingStaffPrivateMessage}
+                  disabled={activeRoom.currentUserStatus !== "accepted" || !staffRoomReply.trim() || savingStaffPrivateMessage || staffChatUploading}
                   onClick={sendActiveStaffRoomReply}
                   aria-label={t.send}
                   title={t.send}
@@ -5766,6 +6104,8 @@ export default function InboxPage() {
                   const senderMember = staffMemberById.get(message.sender_id || "") || (mine ? staffMemberById.get(currentUserId) : activePeer);
                   const senderDisplayName = senderMember?.full_name || senderMember?.display_name || message.sender_name || (lang==="es"?"Personal":"Staff");
                   const senderInitial = ini(senderDisplayName);
+                  const privateMedia = parseStaffPrivateMediaPayload(message.content);
+                  const canContactSender = !!senderMember?.id && senderMember.id !== currentUserId;
                   const senderLabel = mine
                     ? `${lang==="es"?"Tú":"You"} · ${senderDisplayName}`
                     : senderDisplayName;
@@ -5773,15 +6113,30 @@ export default function InboxPage() {
                     <div key={message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
                       <div style={{maxWidth:"92%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:5}}>
                         <div style={{display:"flex",alignItems:"center",gap:7,flexDirection:mine?"row-reverse":"row"}}>
-                          <div style={{width:34,height:34,borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:13,fontWeight:900,boxShadow:"0 1px 3px rgba(15,23,42,0.18)"}}>
+                          <button
+                            type="button"
+                            disabled={!canContactSender}
+                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                            style={{width:34,height:34,border:"none",borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:13,fontWeight:900,boxShadow:"0 1px 3px rgba(15,23,42,0.18)",padding:0,cursor:canContactSender?"pointer":"default"}}
+                          >
                             {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : senderInitial}
-                          </div>
-                          <p style={{fontSize:Math.max(uiSmallSize - 1, 12),fontWeight:900,color:subTextColor,lineHeight:1.25,overflowWrap:"anywhere",textAlign:mine?"right":"left"}}>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!canContactSender}
+                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                            style={{border:"none",background:"transparent",padding:0,fontFamily:"inherit",fontSize:Math.max(uiSmallSize - 1, 12),fontWeight:900,color:subTextColor,lineHeight:1.25,overflowWrap:"anywhere",textAlign:mine?"right":"left",cursor:canContactSender?"pointer":"default"}}
+                          >
                             {senderLabel}
-                          </p>
+                          </button>
                         </div>
                         <div style={{minWidth:140,borderRadius:mine?"18px 18px 6px 18px":"18px 18px 18px 6px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"12px 14px",boxShadow:"0 1px 3px rgba(15,23,42,0.1)"}}>
-                          <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{message.content}</p>
+                          {renderStaffChatAttachment(privateMedia?.attachment, mine)}
+                          {`${privateMedia?.text ?? (message.content || "")}`.trim() && (
+                            <p style={{fontSize:uiBaseSize,fontWeight:650,lineHeight:1.45,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>
+                              {privateMedia?.text ?? message.content}
+                            </p>
+                          )}
                           <p style={{fontSize:Math.max(uiSmallSize - 1, 12),opacity:0.78,textAlign:"right",marginTop:5,fontWeight:700}}>{fmtTime(message.created_at || "")}</p>
                         </div>
                       </div>
@@ -5799,6 +6154,26 @@ export default function InboxPage() {
                   title={t.quickReplies}
                 >
                   <QuickReplyIcon />
+                </button>
+                <button
+                  type="button"
+                  className="staff-quick-btn"
+                  disabled={staffChatUploading}
+                  onClick={()=>openStaffChatFilePicker("private", "image")}
+                  aria-label={lang==="es" ? "Enviar foto" : "Send photo"}
+                  title={lang==="es" ? "Enviar foto" : "Send photo"}
+                >
+                  <CameraIcon />
+                </button>
+                <button
+                  type="button"
+                  className="staff-quick-btn"
+                  disabled={staffChatUploading}
+                  onClick={()=>openStaffChatFilePicker("private", "audio")}
+                  aria-label={lang==="es" ? "Enviar audio" : "Send audio"}
+                  title={lang==="es" ? "Enviar audio" : "Send audio"}
+                >
+                  <MicrophoneLineIcon />
                 </button>
                 <textarea
                   ref={staffPrivateComposerRef}
@@ -5820,7 +6195,7 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-send-btn"
-                  disabled={!staffPrivateReply.trim() || savingStaffPrivateMessage}
+                  disabled={!staffPrivateReply.trim() || savingStaffPrivateMessage || staffChatUploading}
                   onClick={sendStaffPrivateReply}
                   aria-label={t.send}
                   title={t.send}
@@ -6534,6 +6909,8 @@ export default function InboxPage() {
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
+      <input ref={staffChatImageInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
+      <input ref={staffChatAudioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
       <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>
@@ -7281,6 +7658,30 @@ export default function InboxPage() {
           </div>
         </div>
       )}
+      {patientContactRoom && (() => {
+        const patient = patientContactRoom?.procedures?.patients;
+        const patientName = patient?.full_name || t.patientLabel;
+        const patientPhone = `${patient?.phone || ""}`.trim();
+        return (
+          <div className="modal-overlay" onClick={()=>setPatientContactRoom(null)} style={{alignItems:"center",padding:"max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left))"}}>
+            <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420,borderRadius:24,paddingBottom:"max(24px, env(safe-area-inset-bottom))"}}>
+              <p className="modal-title">{patientName}</p>
+              <div style={{fontSize:uiBaseSize,color:subTextColor,marginBottom:14,lineHeight:1.45,overflowWrap:"anywhere"}}>
+                {lang==="es" ? "Paciente" : "Patient"}{patientContactRoom?.procedures?.office_location ? ` · ${patientContactRoom.procedures.office_location}` : ""}
+              </div>
+              <button
+                className="pbtn"
+                disabled={!patientPhone}
+                onClick={()=>{ if (patientPhone) window.location.href = `tel:${patientPhone}`; }}
+                style={{opacity:patientPhone ? 1 : 0.55,cursor:patientPhone ? "pointer" : "not-allowed"}}
+              >
+                {patientPhone ? (lang==="es" ? `Llamar ${patientPhone}` : `Call ${patientPhone}`) : (lang==="es" ? "Sin teléfono registrado" : "No phone listed")}
+              </button>
+              <button className="sbtn" onClick={()=>setPatientContactRoom(null)}>{t.cancel}</button>
+            </div>
+          </div>
+        );
+      })()}
       {staffContactMember && (
         <div className="modal-overlay" onClick={closeStaffContact} style={{alignItems:"center",padding:"max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left))"}}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:460,borderRadius:24,paddingBottom:"max(24px, env(safe-area-inset-bottom))"}}>
@@ -7535,7 +7936,11 @@ export default function InboxPage() {
               <button onClick={(event)=>{event.stopPropagation();setPrivateToast(null);}} style={{border:"none",background:cardBg,borderRadius:999,width:34,height:34,minHeight:34,color:textColor,fontWeight:900,cursor:"pointer"}}>×</button>
             </div>
             <p style={{fontSize:uiBaseSize,fontWeight:900,marginBottom:4,overflowWrap:"anywhere"}}>{parseStaffRoomPayload(privateToast.content)?.roomName || privateToast.sender_name || (lang==="es"?"Personal":"Staff")}</p>
-            <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45,overflowWrap:"anywhere"}}>{`${parseStaffRoomPayload(privateToast.content)?.text || privateToast.content || ""}`.slice(0, 160)}</p>
+            <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,lineHeight:1.45,overflowWrap:"anywhere"}}>{(() => {
+              const roomPayload = parseStaffRoomPayload(privateToast.content);
+              const privatePayload = parseStaffPrivateMediaPayload(privateToast.content);
+              return staffContentPreview(roomPayload?.text ?? privatePayload?.text ?? privateToast.content, roomPayload?.attachment || privatePayload?.attachment).slice(0, 160);
+            })()}</p>
           </div>
         )}
 
