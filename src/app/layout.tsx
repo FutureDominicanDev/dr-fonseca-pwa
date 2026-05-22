@@ -76,6 +76,7 @@ export default function RootLayout({
         <link rel="manifest" href={`/manifest.json?v=${APP_BUILD_VERSION}`} />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <style>{`
+          :root { --drf-system-bar-bg: #F2F5F9; }
           *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
           html { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
           body { height: 100%; margin: 0; padding: 0; font-family: inherit; font-size: 16px; line-height: 1.55; overflow-x: hidden; }
@@ -83,6 +84,8 @@ export default function RootLayout({
           input, textarea, select { font-size: 16px !important; user-select: text !important; -webkit-user-select: text !important; touch-action: auto !important; font-family: inherit; }
           button, input, textarea, select, [role="button"] { min-height: 44px; }
           #drf-app-frame { min-height: 100%; }
+          html.native-platform, html.native-platform body, html.native-platform #drf-app-frame { background: var(--drf-system-bar-bg); }
+          @media all and (display-mode: standalone) { html, body, #drf-app-frame { background: var(--drf-system-bar-bg); } }
           html.drf-phone-landscape-frame,
           html.drf-phone-landscape-frame body { width: 100%; height: 100%; overflow: hidden; background: #f8fafc; }
           html.drf-phone-landscape-frame body { position: fixed; inset: 0; }

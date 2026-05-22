@@ -2149,6 +2149,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       <main className="patient-chat-app" data-text-size={textSize} style={{ height: "100%", minHeight: "-webkit-fill-available", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: chatFontFamily, overflow: "hidden", maxWidth: "100vw" }}>
         <style>{`
         .patient-chat-app { --patient-ui-font-size: ${patientTextBase}px; --patient-ui-small-size: ${patientTextSmall}px; }
+        html.native-platform { --drf-system-bar-bg: ${footerBg}; background: var(--drf-system-bar-bg); }
+        html.native-platform body, html.native-platform #drf-app-frame { background: var(--drf-system-bar-bg); }
+        @media all and (display-mode: standalone) { html { --drf-system-bar-bg: ${footerBg}; } html, body, #drf-app-frame { background: var(--drf-system-bar-bg); } }
         .patient-chat-app * { box-sizing: border-box; }
         .patient-chat-app p, .patient-chat-app label, .patient-chat-app button, .patient-chat-app input, .patient-chat-app textarea, .patient-chat-app a { overflow-wrap: anywhere; }
         .patient-chat-app button, .patient-chat-app [role="button"], .patient-chat-app input, .patient-chat-app textarea { min-height: 44px; }

@@ -1,3 +1,7 @@
+:root {
+  --drf-system-bar-bg: #F2F5F9;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -39,6 +43,20 @@ body {
   text-rendering: optimizeLegibility;
   user-select: none;
   -webkit-user-select: none;
+}
+
+html.native-platform,
+html.native-platform body,
+html.native-platform #drf-app-frame {
+  background-color: var(--drf-system-bar-bg);
+}
+
+@media all and (display-mode: standalone) {
+  html,
+  body,
+  #drf-app-frame {
+    background-color: var(--drf-system-bar-bg);
+  }
 }
 
 main, section, article, aside, header, footer, nav, form, fieldset, dialog,

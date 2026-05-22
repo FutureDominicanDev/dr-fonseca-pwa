@@ -6298,6 +6298,9 @@ export default function InboxPage() {
       <style>{`
 	        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; max-width: 100%; }
 	        :root { --native-keyboard-overlay-height: 0px; }
+	        html.native-platform { --drf-system-bar-bg: ${darkMode ? "#111B21" : "#EFF4F9"}; background: var(--drf-system-bar-bg); }
+	        html.native-platform body, html.native-platform #drf-app-frame { background: var(--drf-system-bar-bg); }
+	        @media all and (display-mode: standalone) { html { --drf-system-bar-bg: ${darkMode ? "#111B21" : "#EFF4F9"}; } html, body, #drf-app-frame { background: var(--drf-system-bar-bg); } }
 	        html.native-android { --native-keyboard-overlay-height: 0px !important; }
 	        html, body { height: 100%; font-size: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: hidden; }
 	        .shell { --app-ui-font-size: ${uiBaseSize}px; --app-ui-label-size: ${uiLabelSize}px; --app-ui-small-size: ${uiSmallSize}px; display: flex; flex-direction: column; height: auto; min-height: -webkit-fill-available; position: absolute; inset: 0; bottom: var(--native-keyboard-overlay-height, 0px); background: ${darkMode ? "#0B141A" : "#F2F7FB"}; overflow: hidden; max-width: 100vw; }

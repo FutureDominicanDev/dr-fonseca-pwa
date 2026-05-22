@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#0B63CE</color>
+    <color name="colorPrimaryDark">#07334D</color>
+    <color name="colorAccent">#0EA5E9</color>
+    <color name="drfSystemNavigationBar">#EFF4F9</color>
+</resources>
