@@ -279,6 +279,7 @@ const adminNavIconSvgProps = {
   "aria-hidden": true,
   focusable: "false",
 } as const;
+const ADMIN_LIVE_REFRESH_DELAY_MS = 700;
 
 function AdminNavIcon({ name }: { name: AdminNavIconName }) {
   switch (name) {
@@ -447,6 +448,7 @@ export default function AdminPage() {
   const [notificationReadiness, setNotificationReadiness] = useState<NotificationReadiness | null>(null);
   const [notificationReadinessLoading, setNotificationReadinessLoading] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const adminLiveRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const viewerPermissionProfile = viewerProfile
     ? { ...viewerProfile, permissions: staffPermissionMap[viewerProfile.id] ?? viewerProfile.permissions }
@@ -1232,6 +1234,46 @@ export default function AdminPage() {
   useEffect(() => {
     bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!sessionChecked || !viewerId || !hasAdminAccess) return;
+    let cancelled = false;
+
+    const scheduleAdminRefresh = () => {
+      if (cancelled) return;
+      if (adminLiveRefreshTimerRef.current) clearTimeout(adminLiveRefreshTimerRef.current);
+      adminLiveRefreshTimerRef.current = setTimeout(() => {
+        if (cancelled) return;
+        setRefreshing(true);
+        void fetchData().finally(() => {
+          if (!cancelled) setRefreshing(false);
+        });
+      }, ADMIN_LIVE_REFRESH_DELAY_MS);
+    };
+
+    const channel = supabase
+      .channel(`admin-personnel-refresh:${viewerId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleAdminRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "staff_access_requests" }, scheduleAdminRefresh)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "app_settings", filter: `key=eq.${STAFF_PERMISSIONS_SETTING_KEY}` }, scheduleAdminRefresh)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "app_settings", filter: `key=eq.${STAFF_PERMISSIONS_SETTING_KEY}` }, scheduleAdminRefresh)
+      .subscribe();
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") scheduleAdminRefresh();
+    };
+    window.addEventListener("focus", scheduleAdminRefresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      cancelled = true;
+      if (adminLiveRefreshTimerRef.current) clearTimeout(adminLiveRefreshTimerRef.current);
+      adminLiveRefreshTimerRef.current = null;
+      window.removeEventListener("focus", scheduleAdminRefresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      supabase.removeChannel(channel);
+    };
+  }, [sessionChecked, viewerId, hasAdminAccess]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
