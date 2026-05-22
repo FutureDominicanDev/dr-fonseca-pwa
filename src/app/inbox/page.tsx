@@ -569,6 +569,11 @@ const staffRecordPhotoName = (entry: any, fallback: string) =>
   `${entry?.file_name || ""}`.replace(STAFF_RECORD_PHOTO_PREFIX, "").trim() || fallback;
 
 interface QuickReply { shortcut: string; message: string; }
+type PortalAudioRecorderPlugin = {
+  start: () => Promise<{ started?: boolean }>;
+  stop: () => Promise<{ dataUrl?: string; mimeType?: string; fileName?: string }>;
+  cancel: () => Promise<{ cancelled?: boolean }>;
+};
 interface RoomMessageSummary {
   id?: string | null;
   room_id?: string | null;
@@ -1178,7 +1183,6 @@ export default function InboxPage() {
   const profilePicRef = useRef<HTMLInputElement>(null);
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
   const staffChatImageInputRef = useRef<HTMLInputElement>(null);
-  const staffChatAudioInputRef = useRef<HTMLInputElement>(null);
   const staffChatUploadTargetRef = useRef<"private" | "room" | null>(null);
   const beforePhotosRef = useRef<HTMLInputElement>(null);
   const staffRecordPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -1187,6 +1191,7 @@ export default function InboxPage() {
   const staffAudioChunksRef = useRef<Blob[]>([]);
   const staffAudioStreamRef = useRef<MediaStream | null>(null);
   const discardStaffAudioRef = useRef(false);
+  const staffNativeAudioTargetRef = useRef<"private" | "room" | null>(null);
   const staffAudioPreviewUrlRef = useRef("");
   const internalNoteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -1316,8 +1321,6 @@ export default function InboxPage() {
   const fmtRec = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
   const isImageUrl = (url: string) => { if (!url) return false; const u=url.toLowerCase(); return u.includes("supabase")&&(u.endsWith(".jpg")||u.endsWith(".jpeg")||u.endsWith(".png")||u.endsWith(".gif")||u.endsWith(".webp")||u.includes("before")||u.includes("patient-photo")); };
   const senderColor = (type: string, role: string) => type==="patient"?"#1A6B3C":({doctor:"#0050A0",post_quirofano:"#6B3A9E",enfermeria:"#007A7A",coordinacion:"#B35A00",staff:"#444"} as any)[role]||"#444";
-  const prefersNativeCapture =
-    typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   const pickRecorderMimeType = (kind: "audio" | "video") => {
     if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") return "";
     const options = kind === "audio"
@@ -2059,12 +2062,8 @@ export default function InboxPage() {
     return "file";
   };
 
-  const openStaffChatFilePicker = async (target: "private" | "room", kind: "image" | "audio") => {
+  const openStaffChatFilePicker = async (target: "private" | "room") => {
     staffChatUploadTargetRef.current = target;
-    if (kind === "audio") {
-      staffChatAudioInputRef.current?.click();
-      return;
-    }
 
     try {
       const [{ Capacitor }, { Camera, CameraResultType, CameraSource }] = await Promise.all([
@@ -2111,19 +2110,27 @@ export default function InboxPage() {
     try {
       const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
       const mediaType = staffChatMediaTypeForFile(file);
-      const path = `staff-chat/${safeStorageSegment(currentUserId)}/${Date.now()}-${safeStorageSegment(file.name || mediaType)}`;
-      const { error: uploadError } = await supabase.storage.from("chat-files").upload(path, file);
-      if (uploadError) throw uploadError;
-      const { data: publicData } = supabase.storage.from("chat-files").getPublicUrl(path);
-      const signedUrl = await signChatFileUrl(publicData.publicUrl);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token || "";
+      if (!accessToken) throw new Error(lang === "es" ? "Vuelve a iniciar sesión para enviar archivos." : "Please sign in again to send files.");
+      const formData = new FormData();
+      formData.append("file", file, file.name || `${mediaType}-${Date.now()}`);
+      formData.append("mediaType", mediaType);
+      const uploadResponse = await fetch("/api/staff-chat/media", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
+      });
+      const uploadResult = await uploadResponse.json().catch(() => null);
+      if (!uploadResponse.ok) throw new Error(uploadResult?.error || (lang === "es" ? "No pude subir el archivo." : "I could not upload the file."));
       const attachment: StaffChatAttachment = {
         kind: "staff_media",
         mediaType,
-        url: publicData.publicUrl,
-        signedUrl: signedUrl || null,
-        fileName: file.name || staffAttachmentLabel({ kind: "staff_media", mediaType, url: publicData.publicUrl }),
-        fileSize: file.size,
-        mimeType: file.type || null,
+        url: uploadResult.publicUrl,
+        signedUrl: uploadResult.signedUrl || null,
+        fileName: uploadResult.fileName || file.name || staffAttachmentLabel({ kind: "staff_media", mediaType, url: uploadResult.publicUrl }),
+        fileSize: uploadResult.fileSize || file.size,
+        mimeType: uploadResult.mimeType || file.type || null,
       };
 
       if (target === "private" && activePrivate?.peer) {
@@ -2199,23 +2206,42 @@ export default function InboxPage() {
     });
   };
 
+  const getNativeStaffAudioRecorder = async () => {
+    try {
+      const { Capacitor, registerPlugin } = await import("@capacitor/core");
+      if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") return null;
+      return registerPlugin<PortalAudioRecorderPlugin>("PortalAudioRecorder");
+    } catch {
+      return null;
+    }
+  };
+
   const startStaffAudioRecording = async (target: "private" | "room") => {
     if (staffRecordingTarget || staffAudioPreview || staffChatUploading || savingStaffPrivateMessage) return;
     if (target === "room" && activeStaffRoomConversation?.currentUserStatus !== "accepted") return;
-    if (prefersNativeCapture) {
-      setShowSlashMenu(false);
-      setSlashFilter("");
-      staffChatUploadTargetRef.current = target;
-      staffChatAudioInputRef.current?.click();
-      return;
-    }
-    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      alert(lang === "es" ? "Este dispositivo no permite grabar audio dentro del portal." : "This device cannot record audio inside the portal.");
-      return;
-    }
     try {
       setShowSlashMenu(false);
       setSlashFilter("");
+      const nativeRecorder = await getNativeStaffAudioRecorder();
+      if (nativeRecorder) {
+        try {
+          await nativeRecorder.start();
+          staffNativeAudioTargetRef.current = target;
+          setStaffRecordingTarget(target);
+          return;
+        } catch (error: any) {
+          staffNativeAudioTargetRef.current = null;
+          const message = `${error?.message || error || ""}`.toLowerCase();
+          if (!message.includes("not implemented") && !message.includes("not available")) {
+            alert(lang === "es" ? "No se pudo acceder al micrófono." : "I could not access the microphone.");
+            return;
+          }
+        }
+      }
+      if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        alert(lang === "es" ? "Este dispositivo no permite grabar audio dentro del portal." : "This device cannot record audio inside the portal.");
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickRecorderMimeType("audio");
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
@@ -2256,7 +2282,34 @@ export default function InboxPage() {
     }
   };
 
-  const stopStaffAudioRecording = (discard = false) => {
+  const stopStaffAudioRecording = async (discard = false) => {
+    const nativeTarget = staffNativeAudioTargetRef.current;
+    if (nativeTarget) {
+      const nativeRecorder = await getNativeStaffAudioRecorder();
+      staffNativeAudioTargetRef.current = null;
+      setStaffRecordingTarget(null);
+      if (!nativeRecorder) return;
+      if (discard) {
+        await nativeRecorder.cancel().catch(() => null);
+        return;
+      }
+      try {
+        const result = await nativeRecorder.stop();
+        const dataUrl = result.dataUrl || "";
+        const mimeType = result.mimeType || "audio/mp4";
+        const ext = extensionForMimeType(mimeType, "m4a");
+        const file = fileFromDataUrl(dataUrl, result.fileName || `staff-voice-${Date.now()}.${ext}`, mimeType);
+        if (!file) return;
+        setStaffAudioPreview((current) => {
+          if (current?.url) URL.revokeObjectURL(current.url);
+          return { target: nativeTarget, file, url: URL.createObjectURL(file) };
+        });
+      } catch {
+        await nativeRecorder.cancel().catch(() => null);
+        alert(lang === "es" ? "No se pudo preparar el audio." : "I could not prepare the audio.");
+      }
+      return;
+    }
     const recorder = staffAudioRecorderRef.current;
     discardStaffAudioRef.current = discard;
     if (recorder && recorder.state !== "inactive") {
@@ -6393,7 +6446,7 @@ export default function InboxPage() {
                   type="button"
                   className="staff-quick-btn"
                   disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading}
-                  onClick={()=>void openStaffChatFilePicker("room", "image")}
+                  onClick={()=>void openStaffChatFilePicker("room")}
                   aria-label={lang==="es" ? "Enviar foto" : "Send photo"}
                   title={lang==="es" ? "Enviar foto" : "Send photo"}
                 >
@@ -6524,7 +6577,7 @@ export default function InboxPage() {
                   type="button"
                   className="staff-quick-btn"
                   disabled={staffChatUploading}
-                  onClick={()=>void openStaffChatFilePicker("private", "image")}
+                  onClick={()=>void openStaffChatFilePicker("private")}
                   aria-label={lang==="es" ? "Enviar foto" : "Send photo"}
                   title={lang==="es" ? "Enviar foto" : "Send photo"}
                 >
@@ -7307,7 +7360,6 @@ export default function InboxPage() {
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={staffChatImageInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
-      <input ref={staffChatAudioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
       <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>

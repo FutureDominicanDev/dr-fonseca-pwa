@@ -40,6 +40,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         lockPortraitOrientation();
         registerPlugin(PortalNotificationSettingsPlugin.class);
+        registerPlugin(PortalAudioRecorderPlugin.class);
         super.onCreate(savedInstanceState);
         blendSystemNavigationBar();
     }
