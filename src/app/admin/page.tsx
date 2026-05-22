@@ -1561,7 +1561,7 @@ export default function AdminPage() {
     }
   };
 
-  const updateStaffPermissions = async (member: StaffProfile, nextPermissions: StaffPermissionKey[], success: string) => {
+  const updateStaffPermissions = async (member: StaffProfile, nextPermissions: StaffPermissionKey[], success: string, options?: { collapse?: boolean }) => {
     const cleanPermissions = sanitizeEditablePermissions(member, nextPermissions);
     const nextMap = { ...staffPermissionMap, [member.id]: cleanPermissions };
     setSavingKey(`${member.id}-permissions`);
@@ -1596,7 +1596,7 @@ export default function AdminPage() {
       metadata: { permissions: cleanPermissions },
     });
     updateSuccess(success);
-    collapseStaffControls(member.id);
+    if (options?.collapse) collapseStaffControls(member.id);
   };
 
   const applyStaffAccessPreset = async (member: StaffProfile, level: AdminLevel, success: string) => {
@@ -3792,8 +3792,8 @@ export default function AdminPage() {
 		                                <p className="group-label">{isSpanish ? "Permisos del portal" : "Portal permissions"}</p>
                                     <p className="access-help">
                                       {isSpanish
-                                        ? "Los botones de preset solo llenan una base. La lista de abajo muestra los derechos reales que este usuario recibe."
-                                        : "Preset buttons only fill a starting point. The list below shows the exact rights this user receives."}
+                                        ? "Cada cambio se guarda al instante. Los presets ajustan una base y la lista muestra los derechos activos."
+                                        : "Every change saves instantly. Presets set a base and the list shows the active rights."}
                                     </p>
                                     <div className="permission-toolbar">
                                       {(["none", "admin", "super_admin"] as AdminLevel[]).map((option) => (
@@ -3824,7 +3824,15 @@ export default function AdminPage() {
                                           const next = canManageOwner
                                             ? [...STAFF_PERMISSION_KEYS]
                                             : STAFF_PERMISSION_KEYS.filter((permission) => !doctorOnlyPermissions.has(permission));
-                                          setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: sanitizeEditablePermissions(member, next) }));
+                                          const cleanNext = sanitizeEditablePermissions(member, next);
+                                          setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: cleanNext }));
+                                          void updateStaffPermissions(
+                                            member,
+                                            cleanNext,
+                                            isSpanish
+                                              ? `Permisos de ${member.full_name || "staff"} guardados.`
+                                              : `Permissions for ${member.full_name || "staff"} saved.`
+                                          );
                                         }}
                                       >
                                         {isSpanish ? "Seleccionar todo" : "Select all"}
@@ -3834,27 +3842,27 @@ export default function AdminPage() {
                                         className="mini-btn"
                                         disabled={!canEditPermissionsForMember || savingKey === permissionsKey}
                                         onClick={() => {
-                                          setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: sanitizeEditablePermissions(member, []) }));
+                                          const cleanNext = sanitizeEditablePermissions(member, []);
+                                          setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: cleanNext }));
+                                          void updateStaffPermissions(
+                                            member,
+                                            cleanNext,
+                                            isSpanish
+                                              ? `Permisos de ${member.full_name || "staff"} guardados.`
+                                              : `Permissions for ${member.full_name || "staff"} saved.`
+                                          );
                                         }}
                                         style={{ background: "#FEE2E2", color: "#B91C1C" }}
                                       >
                                         {isSpanish ? "Reiniciar todo" : "Reset all"}
                                       </button>
-                                      <button
-                                        type="button"
-                                        className="mini-btn"
-                                        disabled={!canEditPermissionsForMember || savingKey === permissionsKey || !draftPermissionsDirty}
-                                        onClick={() => updateStaffPermissions(
-                                          member,
-                                          draftPermissionList,
-                                          isSpanish
-                                            ? `Permisos de ${member.full_name || "staff"} guardados.`
-                                            : `Permissions for ${member.full_name || "staff"} saved.`
-                                        )}
-                                        style={{ background: draftPermissionsDirty ? "#DCFCE7" : "#EFF3F8", color: draftPermissionsDirty ? "#166534" : "#64748B" }}
-                                      >
-                                        {savingKey === permissionsKey ? (isSpanish ? "Guardando..." : "Saving...") : (isSpanish ? "Guardar permisos" : "Save permissions")}
-                                      </button>
+                                      <span className="meta-badge" style={{ color: savingKey === permissionsKey ? "#1D4ED8" : draftPermissionsDirty ? "#166534" : "#0E7490", background: savingKey === permissionsKey ? "#EFF6FF" : draftPermissionsDirty ? "#DCFCE7" : "#ECFEFF" }}>
+                                        {savingKey === permissionsKey
+                                          ? (isSpanish ? "Guardando..." : "Saving...")
+                                          : draftPermissionsDirty
+                                            ? (isSpanish ? "Sincronizando" : "Syncing")
+                                            : (isSpanish ? "Guardado automático" : "Auto-saved")}
+                                      </span>
                                     </div>
                                     <div className="permission-grid">
                                       {permissionGroups.map((group) => (
@@ -3875,7 +3883,15 @@ export default function AdminPage() {
                                                       const next = STAFF_PERMISSION_KEYS.filter((candidate) =>
                                                         candidate === permission ? event.target.checked : draftPermissionSet.has(candidate)
                                                       );
-                                                      setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: sanitizeEditablePermissions(member, next) }));
+                                                      const cleanNext = sanitizeEditablePermissions(member, next);
+                                                      setStaffPermissionDrafts((previous) => ({ ...previous, [member.id]: cleanNext }));
+                                                      void updateStaffPermissions(
+                                                        member,
+                                                        cleanNext,
+                                                        isSpanish
+                                                          ? `Permisos de ${member.full_name || "staff"} guardados.`
+                                                          : `Permissions for ${member.full_name || "staff"} saved.`
+                                                      );
                                                     }}
                                                   />
                                                   <span>

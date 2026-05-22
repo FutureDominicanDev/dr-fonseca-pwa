@@ -615,11 +615,26 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       return;
     }
 
-    broadcastTypingState(true);
+    if (outgoingTypingRef.current) {
+      typingChannelRef.current?.send({
+        type: "broadcast",
+        event: "typing",
+        payload: {
+          roomId: id,
+          senderType: "patient",
+          name: patientDisplayName(),
+          isTyping: true,
+          sentAt: new Date().toISOString(),
+        },
+      }).catch(() => {});
+      sendTypingSignal(true);
+    } else {
+      broadcastTypingState(true);
+    }
     typingIdleTimeoutRef.current = setTimeout(() => {
       broadcastTypingState(false);
     }, 1400);
-  }, [accessDenied, accessReady, broadcastTypingState, roomClosed, token]);
+  }, [accessDenied, accessReady, broadcastTypingState, id, patientDisplayName, roomClosed, sendTypingSignal, token]);
 
   const changePatientLanguage = (nextLang: "es" | "en") => {
     setUiLang(nextLang);

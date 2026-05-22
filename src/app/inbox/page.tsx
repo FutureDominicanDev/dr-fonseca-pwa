@@ -687,6 +687,10 @@ const makeStaffRoomMessageId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `staff-msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+const staffChatSignalId = (target: "private" | "room", currentUserId: string, conversationId: string) =>
+  target === "room"
+    ? `room:${conversationId}`
+    : `private:${[currentUserId, conversationId].sort().join(":")}`;
 const serializeStaffRoomPayload = (payload: StaffRoomPayload) =>
   `${STAFF_ROOM_PREFIX}${JSON.stringify(payload)}`;
 const normalizeStaffChatAttachment = (value: any): StaffChatAttachment | null => {
@@ -985,12 +989,14 @@ export default function InboxPage() {
   const [editingMessage, setEditingMessage] = useState<any | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
   const [staffContactMember, setStaffContactMember] = useState<CareTeamMember | null>(null);
+  const [staffContactSource, setStaffContactSource] = useState<"patient" | "staffChat">("patient");
   const [patientContactRoom, setPatientContactRoom] = useState<any | null>(null);
   const [staffPrivateDraft, setStaffPrivateDraft] = useState("");
   const [savingStaffPrivateMessage, setSavingStaffPrivateMessage] = useState(false);
   const [staffChatUploading, setStaffChatUploading] = useState(false);
   const [staffRecordingTarget, setStaffRecordingTarget] = useState<"private" | "room" | null>(null);
   const [staffAudioPreview, setStaffAudioPreview] = useState<{ target: "private" | "room"; file: File; url: string } | null>(null);
+  const [staffChatTyping, setStaffChatTyping] = useState<{ target: "private" | "room"; conversationId: string; name: string } | null>(null);
   const [staffPrivateMessages, setStaffPrivateMessages] = useState<StaffPrivateMessage[]>([]);
   const [showStaffChats, setShowStaffChats] = useState(false);
   const [activeStaffChatPeerId, setActiveStaffChatPeerId] = useState<string | null>(null);
@@ -1198,6 +1204,10 @@ export default function InboxPage() {
   const typingIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outgoingTypingRef = useRef(false);
+  const staffChatTypingChannelRef = useRef<any>(null);
+  const staffChatTypingIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const staffChatRemoteTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const staffChatOutgoingTypingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioUnlockedRef = useRef(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1407,7 +1417,7 @@ export default function InboxPage() {
       }
     );
   };
-  const openStaffContact = (member: CareTeamMember | null) => {
+  const openStaffContact = (member: CareTeamMember | null, source: "patient" | "staffChat" = "patient") => {
     if (!member || member.id === currentUserId) return;
     if (messagePressTimerRef.current) {
       clearTimeout(messagePressTimerRef.current);
@@ -1415,10 +1425,12 @@ export default function InboxPage() {
     }
     setActiveMessageAction(null);
     setPressedMsgId(null);
+    setStaffContactSource(source);
     setStaffContactMember(member);
   };
   const closeStaffContact = () => {
     setStaffContactMember(null);
+    setStaffContactSource("patient");
     setStaffPrivateDraft("");
   };
 
@@ -1656,10 +1668,11 @@ export default function InboxPage() {
     clearTimeout(messagePressTimerRef.current);
     messagePressTimerRef.current = null;
   };
-  const startStaffContactPress = (member: CareTeamMember | null) => {
+  const startStaffContactPress = (member: CareTeamMember | null, source: "patient" | "staffChat" = "patient") => {
     if (!member || member.id === currentUserId) return;
     if (messagePressTimerRef.current) clearTimeout(messagePressTimerRef.current);
     messagePressTimerRef.current = setTimeout(() => {
+      setStaffContactSource(source);
       setStaffContactMember(member);
       messagePressTimerRef.current = null;
     }, 450);
@@ -1681,12 +1694,55 @@ export default function InboxPage() {
     }
     updateSlashMenuState(value, "patient");
   };
+  const sendStaffChatTypingPulse = useCallback((target: "private" | "room", conversationId: string, isTyping: boolean) => {
+    if (!currentUserId || !conversationId) return;
+    const signalId = staffChatSignalId(target, currentUserId, conversationId);
+    staffChatTypingChannelRef.current?.send({
+      type: "broadcast",
+      event: "typing",
+      payload: {
+        target,
+        conversationId,
+        signalId,
+        senderId: currentUserId,
+        name: userProfile?.full_name || userProfile?.display_name || (lang === "es" ? "Personal" : "Staff"),
+        isTyping,
+        sentAt: new Date().toISOString(),
+      },
+    }).catch(() => {});
+  }, [currentUserId, lang, userProfile?.display_name, userProfile?.full_name]);
+
+  const setStaffChatTypingState = useCallback((target: "private" | "room", isTyping: boolean) => {
+    const conversationId = target === "room" ? activeStaffRoomId : activeStaffChatPeerId;
+    if (!currentUserId || !conversationId) return;
+    if (staffChatOutgoingTypingRef.current === isTyping) {
+      if (isTyping) sendStaffChatTypingPulse(target, conversationId, true);
+      return;
+    }
+    staffChatOutgoingTypingRef.current = isTyping;
+    sendStaffChatTypingPulse(target, conversationId, isTyping);
+  }, [activeStaffChatPeerId, activeStaffRoomId, currentUserId, sendStaffChatTypingPulse]);
+
+  const updateStaffChatTypingState = useCallback((value: string, target: "private" | "room") => {
+    if (staffChatTypingIdleTimeoutRef.current) clearTimeout(staffChatTypingIdleTimeoutRef.current);
+    if (!value.trim()) {
+      if (staffChatOutgoingTypingRef.current) setStaffChatTypingState(target, false);
+      return;
+    }
+    setStaffChatTypingState(target, true);
+    staffChatTypingIdleTimeoutRef.current = setTimeout(() => {
+      setStaffChatTypingState(target, false);
+    }, 1400);
+  }, [setStaffChatTypingState]);
+
   const setStaffRoomComposerText = (value: string) => {
     setStaffRoomReply(value);
+    updateStaffChatTypingState(value, "room");
     updateSlashMenuState(value, "room");
   };
   const setStaffPrivateComposerText = (value: string) => {
     setStaffPrivateReply(value);
+    updateStaffChatTypingState(value, "private");
     updateSlashMenuState(value, "private");
   };
   const openStaffQuickReplies = (target: "room" | "private") => {
@@ -1977,6 +2033,7 @@ export default function InboxPage() {
 
   const sendStaffPrivateReply = async () => {
     if (!activeStaffPrivateConversation || !staffPrivateReply.trim()) return;
+    updateStaffChatTypingState("", "private");
     const sent = await sendStaffPrivateToMember(activeStaffPrivateConversation.peer, staffPrivateReply);
     if (sent) {
       setStaffPrivateReply("");
@@ -1987,6 +2044,7 @@ export default function InboxPage() {
 
   const sendActiveStaffRoomReply = async () => {
     if (!activeStaffRoomConversation || !staffRoomReply.trim()) return;
+    updateStaffChatTypingState("", "room");
     const sent = await sendStaffRoomMessage(
       activeStaffRoomConversation.roomId,
       activeStaffRoomConversation.roomName,
@@ -2008,10 +2066,50 @@ export default function InboxPage() {
     return "file";
   };
 
-  const openStaffChatFilePicker = (target: "private" | "room", kind: "image" | "audio") => {
+  const openStaffChatFilePicker = async (target: "private" | "room", kind: "image" | "audio") => {
     staffChatUploadTargetRef.current = target;
-    if (kind === "image") staffChatImageInputRef.current?.click();
-    else staffChatAudioInputRef.current?.click();
+    if (kind === "audio") {
+      staffChatAudioInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const [{ Capacitor }, { Camera, CameraResultType, CameraSource }] = await Promise.all([
+        import("@capacitor/core"),
+        import("@capacitor/camera"),
+      ]);
+      if (!Capacitor.isNativePlatform()) {
+        staffChatImageInputRef.current?.click();
+        return;
+      }
+
+      setShowSlashMenu(false);
+      setSlashFilter("");
+      const photo = await Camera.getPhoto({
+        quality: 88,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Prompt,
+        promptLabelHeader: lang === "es" ? "Enviar foto" : "Send photo",
+        promptLabelPhoto: lang === "es" ? "Elegir de fotos" : "Choose from photos",
+        promptLabelPicture: lang === "es" ? "Tomar foto" : "Take photo",
+        promptLabelCancel: lang === "es" ? "Cancelar" : "Cancel",
+      });
+      const webPath = photo.webPath || photo.path || "";
+      if (!webPath) return;
+      const response = await fetch(webPath);
+      const blob = await response.blob();
+      const fallbackExt = photo.format || (blob.type.split("/")[1] || "jpg");
+      const safeExt = fallbackExt === "jpeg" ? "jpg" : fallbackExt;
+      await sendStaffChatAttachment(
+        new File([blob], `staff-photo-${Date.now()}.${safeExt}`, { type: blob.type || "image/jpeg" }),
+        target
+      );
+    } catch (error: any) {
+      const message = `${error?.message || ""}`.toLowerCase();
+      if (message.includes("cancel")) return;
+      staffChatImageInputRef.current?.click();
+    }
   };
 
   const sendStaffChatAttachment = async (file: File, target: "private" | "room") => {
@@ -2744,11 +2842,26 @@ export default function InboxPage() {
       return;
     }
 
-    broadcastTypingState(true, activeRoomId, senderName);
+    if (outgoingTypingRef.current) {
+      typingChannelRef.current?.send({
+        type: "broadcast",
+        event: "typing",
+        payload: {
+          roomId: activeRoomId,
+          senderType: "staff",
+          name: senderName,
+          isTyping: true,
+          sentAt: new Date().toISOString(),
+        },
+      }).catch(() => {});
+      sendTypingSignal(true, activeRoomId, senderName);
+    } else {
+      broadcastTypingState(true, activeRoomId, senderName);
+    }
     typingIdleTimeoutRef.current = setTimeout(() => {
       broadcastTypingState(false, activeRoomId, senderName);
     }, 1400);
-  }, [broadcastTypingState, selectedRoom?.id, userProfile?.display_name, userProfile?.full_name]);
+  }, [broadcastTypingState, selectedRoom?.id, sendTypingSignal, userProfile?.display_name, userProfile?.full_name]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -3635,6 +3748,68 @@ export default function InboxPage() {
       supabase.removeChannel(channel);
     };
   }, [selectedRoom?.id, userProfile?.display_name, userProfile?.full_name]);
+
+  useEffect(() => {
+    const target = activeStaffRoomId ? "room" : activeStaffChatPeerId ? "private" : null;
+    const conversationId = activeStaffRoomId || activeStaffChatPeerId || "";
+    if (!showStaffChats || !target || !conversationId || !currentUserId) {
+      if (staffChatTypingIdleTimeoutRef.current) clearTimeout(staffChatTypingIdleTimeoutRef.current);
+      if (staffChatRemoteTypingTimeoutRef.current) clearTimeout(staffChatRemoteTypingTimeoutRef.current);
+      staffChatTypingChannelRef.current = null;
+      staffChatOutgoingTypingRef.current = false;
+      setStaffChatTyping(null);
+      return;
+    }
+
+    const signalId = staffChatSignalId(target, currentUserId, conversationId);
+    const channel = supabase
+      .channel(`staff-chat-signals:${signalId}`, { config: { broadcast: { self: false } } })
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload?.signalId !== signalId || payload?.senderId === currentUserId) return;
+        if (staffChatRemoteTypingTimeoutRef.current) clearTimeout(staffChatRemoteTypingTimeoutRef.current);
+
+        if (!payload?.isTyping) {
+          setStaffChatTyping(null);
+          return;
+        }
+
+        setStaffChatTyping({
+          target,
+          conversationId,
+          name: `${payload?.name || (lang === "es" ? "Personal" : "Staff")}`,
+        });
+        staffChatRemoteTypingTimeoutRef.current = setTimeout(() => {
+          setStaffChatTyping(null);
+        }, 2600);
+      });
+
+    staffChatTypingChannelRef.current = channel;
+    channel.subscribe();
+
+    return () => {
+      if (staffChatTypingIdleTimeoutRef.current) clearTimeout(staffChatTypingIdleTimeoutRef.current);
+      if (staffChatRemoteTypingTimeoutRef.current) clearTimeout(staffChatRemoteTypingTimeoutRef.current);
+      if (staffChatOutgoingTypingRef.current) {
+        channel.send({
+          type: "broadcast",
+          event: "typing",
+          payload: {
+            target,
+            conversationId,
+            signalId,
+            senderId: currentUserId,
+            name: userProfile?.full_name || userProfile?.display_name || (lang === "es" ? "Personal" : "Staff"),
+            isTyping: false,
+            sentAt: new Date().toISOString(),
+          },
+        }).catch(() => {});
+      }
+      staffChatTypingChannelRef.current = null;
+      staffChatOutgoingTypingRef.current = false;
+      setStaffChatTyping(null);
+      supabase.removeChannel(channel);
+    };
+  }, [activeStaffChatPeerId, activeStaffRoomId, currentUserId, lang, showStaffChats, userProfile?.display_name, userProfile?.full_name]);
 
   useEffect(() => {
     if (currentUserId) fetchAssignableStaff();
@@ -5932,6 +6107,16 @@ export default function InboxPage() {
         </div>
       );
     };
+    const renderStaffTypingIndicator = (target: "room" | "private") => {
+      const conversationId = target === "room" ? activeRoom?.roomId : activeStaffPrivateConversation?.peerId;
+      if (!conversationId || staffChatTyping?.target !== target || staffChatTyping.conversationId !== conversationId) return null;
+      return (
+        <div className="staff-chat-typing" aria-live="polite">
+          <span>{staffChatTyping.name} {t.typingSuffix}</span>
+          <span className="typing-dots" aria-hidden="true"><span /><span /><span /></span>
+        </div>
+      );
+    };
     return (
       <div className="modal-overlay" onClick={closePanel}>
         <div className="modal-scroll staff-chat-sheet" onClick={e=>e.stopPropagation()} style={{maxWidth:720}}>
@@ -6158,7 +6343,7 @@ export default function InboxPage() {
                           <button
                             type="button"
                             disabled={!canContactSender}
-                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember, "staffChat"); }}
                             style={{width:34,height:34,border:"none",borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:13,fontWeight:900,boxShadow:"0 1px 3px rgba(15,23,42,0.18)",padding:0,cursor:canContactSender?"pointer":"default"}}
                           >
                             {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : senderInitial}
@@ -6166,7 +6351,7 @@ export default function InboxPage() {
                           <button
                             type="button"
                             disabled={!canContactSender}
-                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember, "staffChat"); }}
                             style={{border:"none",background:"transparent",padding:0,fontFamily:"inherit",fontSize:Math.max(uiSmallSize - 1, 12),fontWeight:900,color:subTextColor,lineHeight:1.25,overflowWrap:"anywhere",textAlign:mine?"right":"left",cursor:canContactSender?"pointer":"default"}}
                           >
                             {senderLabel}
@@ -6181,6 +6366,7 @@ export default function InboxPage() {
                     </div>
                   );
                 })}
+                {renderStaffTypingIndicator("room")}
               </div>
               {renderStaffAudioPanel("room")}
               {renderStaffQuickReplyPopup("room")}
@@ -6198,7 +6384,7 @@ export default function InboxPage() {
                   type="button"
                   className="staff-quick-btn"
                   disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading}
-                  onClick={()=>openStaffChatFilePicker("room", "image")}
+                  onClick={()=>void openStaffChatFilePicker("room", "image")}
                   aria-label={lang==="es" ? "Enviar foto" : "Send photo"}
                   title={lang==="es" ? "Enviar foto" : "Send photo"}
                 >
@@ -6217,10 +6403,11 @@ export default function InboxPage() {
                 <textarea
                   ref={staffRoomComposerRef}
                   className="finput"
-                  rows={2}
+                  rows={1}
                   value={staffRoomReply}
                   onFocus={()=>updateSlashMenuState(staffRoomReply, "room")}
                   onChange={(event)=>setStaffRoomComposerText(event.target.value)}
+                  onBlur={()=>updateStaffChatTypingState("", "room")}
                   onKeyDown={(event)=>{
                     if(event.key==="Enter"&&!event.shiftKey){
                       event.preventDefault();
@@ -6229,7 +6416,7 @@ export default function InboxPage() {
                     }
                     if(event.key==="Escape") setShowSlashMenu(false);
                   }}
-                  placeholder={lang==="es"?"Mensaje para la sala staff":"Message the staff room"}
+                  placeholder={lang==="es"?"Mensaje":"Message"}
                   disabled={activeRoom.currentUserStatus !== "accepted"}
                 />
                 <button
@@ -6283,7 +6470,7 @@ export default function InboxPage() {
                           <button
                             type="button"
                             disabled={!canContactSender}
-                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember, "staffChat"); }}
                             style={{width:34,height:34,border:"none",borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:13,fontWeight:900,boxShadow:"0 1px 3px rgba(15,23,42,0.18)",padding:0,cursor:canContactSender?"pointer":"default"}}
                           >
                             {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : senderInitial}
@@ -6291,7 +6478,7 @@ export default function InboxPage() {
                           <button
                             type="button"
                             disabled={!canContactSender}
-                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember, "staffChat"); }}
                             style={{border:"none",background:"transparent",padding:0,fontFamily:"inherit",fontSize:Math.max(uiSmallSize - 1, 12),fontWeight:900,color:subTextColor,lineHeight:1.25,overflowWrap:"anywhere",textAlign:mine?"right":"left",cursor:canContactSender?"pointer":"default"}}
                           >
                             {senderLabel}
@@ -6310,6 +6497,7 @@ export default function InboxPage() {
                     </div>
                   );
                 })}
+                {renderStaffTypingIndicator("private")}
               </div>
               {renderStaffAudioPanel("private")}
               {renderStaffQuickReplyPopup("private")}
@@ -6327,7 +6515,7 @@ export default function InboxPage() {
                   type="button"
                   className="staff-quick-btn"
                   disabled={staffChatUploading}
-                  onClick={()=>openStaffChatFilePicker("private", "image")}
+                  onClick={()=>void openStaffChatFilePicker("private", "image")}
                   aria-label={lang==="es" ? "Enviar foto" : "Send photo"}
                   title={lang==="es" ? "Enviar foto" : "Send photo"}
                 >
@@ -6346,10 +6534,11 @@ export default function InboxPage() {
                 <textarea
                   ref={staffPrivateComposerRef}
                   className="finput"
-                  rows={2}
+                  rows={1}
                   value={staffPrivateReply}
                   onFocus={()=>updateSlashMenuState(staffPrivateReply, "private")}
                   onChange={(event)=>setStaffPrivateComposerText(event.target.value)}
+                  onBlur={()=>updateStaffChatTypingState("", "private")}
                   onKeyDown={(event)=>{
                     if(event.key==="Enter"&&!event.shiftKey){
                       event.preventDefault();
@@ -6358,7 +6547,7 @@ export default function InboxPage() {
                     }
                     if(event.key==="Escape") setShowSlashMenu(false);
                   }}
-                  placeholder={lang==="es"?"Responder mensaje privado":"Reply privately"}
+                  placeholder={lang==="es"?"Mensaje":"Message"}
                 />
                 <button
                   type="button"
@@ -6977,16 +7166,37 @@ export default function InboxPage() {
         .staff-audio-btn.primary { border-color: #007AFF; background: #007AFF; color: white; }
         .staff-audio-btn.danger { border-color: #FECACA; background: #FEE2E2; color: #B91C1C; }
         .staff-audio-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 42px) minmax(0, 1fr) 46px; gap: 7px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 10px max(18px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
-        .staff-chat-composer .finput { min-width: 0; width: 100%; margin-bottom: 0; min-height: 48px; max-height: 28dvh; resize: none !important; padding: 12px 13px; font-size: 15px; overflow-wrap: normal; word-break: normal; }
+        .staff-chat-typing { justify-self: start; max-width: min(84%, 360px); display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 4px; padding: 7px 10px; border-radius: 14px 14px 14px 5px; background: ${darkMode?"#253244":"#FFFFFF"}; border: 1px solid ${borderColor}; color: ${subTextColor}; box-shadow: 0 1px 3px rgba(15,23,42,0.08); font-size: 12px; font-weight: 850; line-height: 1.25; }
+        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 40px) minmax(0, 1fr) 42px; gap: 6px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 8px max(18px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
+        .staff-chat-composer .finput { min-width: 0; width: 100%; margin-bottom: 0; min-height: 42px; height: 42px; max-height: 22dvh; resize: none !important; padding: 9px 11px; font-size: 13px; line-height: 1.25; overflow-wrap: normal; word-break: normal; border-radius: 12px; }
+        .staff-chat-composer .finput::placeholder { font-size: 13px; }
         .staff-quick-btn,
-        .staff-send-btn { width: 42px; height: 48px; min-width: 42px; min-height: 48px; border-radius: 13px; border: 1px solid ${borderColor}; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: inherit; padding: 0; margin: 0; }
-        .staff-send-btn { width: 46px; min-width: 46px; }
+        .staff-send-btn { width: 40px; height: 42px; min-width: 40px; min-height: 42px; border-radius: 12px; border: 1px solid ${borderColor}; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: inherit; padding: 0; margin: 0; }
+        .staff-send-btn { width: 42px; min-width: 42px; }
         .staff-quick-btn svg,
-        .staff-send-btn svg { width: 21px; height: 21px; }
+        .staff-send-btn svg { width: 19px; height: 19px; }
         .staff-quick-btn { background: ${darkMode?cardBg:"#F5F8FC"}; color: ${textColor}; }
         .staff-send-btn { background: #007AFF; color: white; border-color: #007AFF; }
         .staff-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .staff-contact-card { width: min(360px, calc(100vw - 36px)); max-height: calc(100dvh - 36px); overflow-y: auto; border-radius: 22px; background: ${darkMode?"#111B21":"rgba(255,255,255,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(15,23,42,0.08)"}; box-shadow: 0 24px 70px rgba(15,23,42,0.28); padding: 17px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+        .staff-contact-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; min-width: 0; }
+        .staff-contact-avatar { width: 52px; height: 52px; min-width: 52px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: linear-gradient(135deg,#111827,#2563EB); color: #FFFFFF; font-size: 16px; font-weight: 950; box-shadow: 0 8px 22px rgba(37,99,235,0.24); }
+        .staff-contact-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .staff-contact-name { color: ${textColor}; font-size: 21px; font-weight: 950; line-height: 1.12; overflow-wrap: anywhere; }
+        .staff-contact-meta { color: ${subTextColor}; font-size: 13px; font-weight: 750; line-height: 1.3; margin-top: 4px; overflow-wrap: anywhere; }
+        .staff-contact-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .staff-contact-primary,
+        .staff-contact-secondary,
+        .staff-contact-send { min-height: 44px; border-radius: 13px; border: 1px solid ${borderColor}; font-family: inherit; font-size: 14px; font-weight: 950; cursor: pointer; padding: 0 12px; }
+        .staff-contact-primary { background: #007AFF; border-color: #007AFF; color: #FFFFFF; }
+        .staff-contact-primary:disabled { opacity: 0.48; cursor: not-allowed; }
+        .staff-contact-secondary { background: ${darkMode?cardBg:"#F5F8FC"}; color: ${textColor}; }
+        .staff-contact-hint { color: ${subTextColor}; font-size: 12px; font-weight: 700; line-height: 1.35; margin: 9px 2px 0; }
+        .staff-contact-private { margin-top: 14px; display: grid; gap: 8px; padding-top: 13px; border-top: 1px solid ${borderColor}; }
+        .staff-contact-private label { color: ${subTextColor}; font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.2; }
+        .staff-contact-private textarea { width: 100%; min-height: 78px; max-height: 142px; resize: vertical; border: 1px solid ${borderColor}; border-radius: 14px; background: ${darkMode?cardBg:"#F8FAFC"}; color: ${textColor}; outline: none; padding: 11px 12px; font-family: inherit; font-size: 14px; font-weight: 650; line-height: 1.35; }
+        .staff-contact-send { width: 100%; background: ${darkMode?"#253244":"#EEF6FF"}; color: #075EA8; border-color: ${darkMode?"rgba(255,255,255,0.12)":"#CFE5FA"}; }
+        .staff-contact-send:disabled { opacity: 0.48; cursor: not-allowed; }
         .modal-title { font-size: 20px; font-weight: 700; color: ${textColor}; margin-bottom: 20px; }
         .room-create-modal { max-width: 680px; top: 4vh; background: ${darkMode?"#111B21":"#F8FBFF"}; padding-top: 18px; }
         .room-modal-head { background: linear-gradient(135deg,#07334D 0%,#0E4C75 100%); border-radius: 22px; padding: 18px; color: white; margin-bottom: 14px; box-shadow: 0 16px 34px rgba(7,51,77,0.18); }
@@ -7074,13 +7284,13 @@ export default function InboxPage() {
           .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
 	          .modal, .modal-scroll, .settings-sheet, .patient-info-sheet { width: 100%; max-width: 100vw; }
-          .staff-chat-composer { grid-template-columns: repeat(3, 38px) minmax(0, 1fr) 42px; gap: 6px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); padding-top: 8px; }
+          .staff-chat-composer { grid-template-columns: repeat(3, 34px) minmax(0, 1fr) 38px; gap: 5px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); padding-top: 7px; }
           .staff-quick-btn,
-          .staff-send-btn { width: 38px; min-width: 38px; height: 44px; min-height: 44px; border-radius: 12px; }
-          .staff-send-btn { width: 42px; min-width: 42px; }
+          .staff-send-btn { width: 34px; min-width: 34px; height: 40px; min-height: 40px; border-radius: 11px; }
+          .staff-send-btn { width: 38px; min-width: 38px; }
           .staff-quick-btn svg,
-          .staff-send-btn svg { width: 20px; height: 20px; }
-          .staff-chat-composer .finput { min-height: 44px; padding: 10px 12px; font-size: 15px; line-height: 1.35; }
+          .staff-send-btn svg { width: 18px; height: 18px; }
+          .staff-chat-composer .finput { min-height: 40px; height: 40px; padding: 8px 10px; font-size: 13px; line-height: 1.25; }
 	          .room-create-modal { top: 0; max-height: 100dvh; border-radius: 0; }
 	          .room-modal-head { border-radius: 0 0 22px 22px; margin-left: calc(-1 * max(20px, env(safe-area-inset-left))); margin-right: calc(-1 * max(20px, env(safe-area-inset-right))); margin-top: -18px; padding-top: calc(18px + env(safe-area-inset-top)); }
 	          .room-modal-title { font-size: clamp(28px, 8.2vw, 34px); }
@@ -7095,7 +7305,7 @@ export default function InboxPage() {
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
-      <input ref={staffChatImageInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
+      <input ref={staffChatImageInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={staffChatAudioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
@@ -7868,48 +8078,70 @@ export default function InboxPage() {
           </div>
         );
       })()}
-      {staffContactMember && (
-        <div className="modal-overlay" onClick={closeStaffContact} style={{alignItems:"center",padding:"max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left))"}}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:460,borderRadius:24,paddingBottom:"max(24px, env(safe-area-inset-bottom))"}}>
-            <p className="modal-title">{staffContactMember.full_name || staffContactMember.display_name || (lang==="es" ? "Personal" : "Staff")}</p>
-            <div style={{fontSize:uiBaseSize,color:subTextColor,marginBottom:14,lineHeight:1.45,overflowWrap:"anywhere"}}>
-              {roleName(staffContactMember.role)}{staffContactMember.office_location ? ` · ${staffContactMember.office_location}` : ""}
-            </div>
-            <button
-              className="pbtn"
-              disabled={!staffPhoneFor(staffContactMember)}
-              onClick={()=>{ const phone = staffPhoneFor(staffContactMember); if (phone) window.location.href = `tel:${phone}`; }}
-              style={{opacity:staffPhoneFor(staffContactMember) ? 1 : 0.55,cursor:staffPhoneFor(staffContactMember) ? "pointer" : "not-allowed"}}
-            >
-              {staffPhoneFor(staffContactMember) ? (lang==="es" ? `Llamar ${staffPhoneFor(staffContactMember)}` : `Call ${staffPhoneFor(staffContactMember)}`) : (lang==="es" ? "Sin teléfono registrado" : "No phone listed")}
-            </button>
-            {!staffPhoneFor(staffContactMember) && (
-              <div style={{fontSize:uiSmallSize,color:subTextColor,marginTop:8,marginBottom:12,lineHeight:1.45}}>
-                {lang==="es"
-                  ? "Para llamar, este miembro debe agregar su teléfono en Ajustes o un admin puede guardarlo en Equipo y permisos."
-                  : "To call, this team member needs to add a phone number in Settings, or an admin can save it in Team and permissions."}
+      {staffContactMember && (() => {
+        const phone = staffPhoneFor(staffContactMember);
+        const canDraftPrivate = staffContactSource === "patient";
+        const displayName = staffContactMember.full_name || staffContactMember.display_name || (lang==="es" ? "Personal" : "Staff");
+        return (
+          <div className="modal-overlay" onClick={closeStaffContact} style={{alignItems:"center",padding:"max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left))"}}>
+            <div className="staff-contact-card" onClick={e=>e.stopPropagation()}>
+              <div className="staff-contact-head">
+                <div className="staff-contact-avatar">
+                  {staffContactMember.avatar_url ? <img src={staffContactMember.avatar_url} alt="" /> : ini(displayName)}
+                </div>
+                <div style={{minWidth:0,flex:1}}>
+                  <p className="staff-contact-name">{displayName}</p>
+                  <p className="staff-contact-meta">
+                    {roleName(staffContactMember.role)}{staffContactMember.office_location ? ` · ${staffContactMember.office_location}` : ""}
+                  </p>
+                </div>
               </div>
-            )}
-            <label className="flabel" style={{marginTop:12}}>{lang==="es" ? "Mensaje privado" : "Private message"}</label>
-            <textarea
-              className="finput"
-              rows={3}
-              value={staffPrivateDraft}
-              onChange={(event)=>setStaffPrivateDraft(event.target.value)}
-              placeholder={lang==="es" ? "Escribe un mensaje privado para este miembro del equipo" : "Write a private message to this staff member"}
-              style={{resize:"vertical",minHeight:96}}
-            />
-            <button
-              className="sbtn"
-              disabled={!staffPrivateDraft.trim() || savingStaffPrivateMessage}
-              onClick={sendStaffPrivateMessage}
-            >
-              {savingStaffPrivateMessage ? (lang==="es" ? "Enviando..." : "Sending...") : (lang==="es" ? "Enviar mensaje privado" : "Send private message")}
-            </button>
-            <button className="sbtn" onClick={closeStaffContact}>{t.cancel}</button>
+
+              <div className="staff-contact-actions">
+                <button
+                  type="button"
+                  className="staff-contact-primary"
+                  disabled={!phone}
+                  onClick={()=>{ if (phone) window.location.href = `tel:${phone}`; }}
+                >
+                  {phone ? (lang==="es" ? "Llamar" : "Call") : (lang==="es" ? "Sin teléfono" : "No phone")}
+                </button>
+                <button type="button" className="staff-contact-secondary" onClick={closeStaffContact}>
+                  {t.cancel}
+                </button>
+              </div>
+
+              {!phone && (
+                <p className="staff-contact-hint">
+                  {lang==="es"
+                    ? "El número puede agregarse desde Ajustes o Equipo y permisos."
+                    : "The phone number can be added from Settings or Team and permissions."}
+                </p>
+              )}
+
+              {canDraftPrivate && (
+                <div className="staff-contact-private">
+                  <label>{lang==="es" ? "Mensaje privado" : "Private message"}</label>
+                  <textarea
+                    value={staffPrivateDraft}
+                    onChange={(event)=>setStaffPrivateDraft(event.target.value)}
+                    placeholder={lang==="es" ? "Escribe para este miembro del equipo" : "Write to this team member"}
+                    rows={3}
+                  />
+                  <button
+                    type="button"
+                    className="staff-contact-send"
+                    disabled={!staffPrivateDraft.trim() || savingStaffPrivateMessage}
+                    onClick={sendStaffPrivateMessage}
+                  >
+                    {savingStaffPrivateMessage ? (lang==="es" ? "Enviando..." : "Sending...") : (lang==="es" ? "Enviar privado" : "Send private")}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <QREditor
         show={showQREditor}

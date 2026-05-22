@@ -69,6 +69,7 @@ export const LEGACY_ROLE_PERMISSION_DEFAULTS: Record<string, StaffPermissionKey[
     "manage_internal_notes",
     "manage_labels",
     "manage_staff",
+    "manage_permissions",
     "access_audit_logs",
     "access_settings_security",
   ],
@@ -79,7 +80,7 @@ export const LEGACY_ROLE_PERMISSION_DEFAULTS: Record<string, StaffPermissionKey[
     "manage_labels",
     "access_settings_security",
   ],
-  none: ["view_patients", "view_upload_files", "manage_labels"],
+  none: ["view_patients", "create_patients", "view_upload_files", "manage_labels"],
 };
 
 export const permissionLabel = (key: StaffPermissionKey, lang: PermissionLang) =>
@@ -125,12 +126,18 @@ export const permissionsForProfile = (profile: PermissionProfile | null | undefi
   })) return new Set(STAFF_PERMISSION_KEYS);
   if (`${profile?.role || ""}`.toLowerCase() === "pending_staff") return new Set();
 
-  const explicit = normalizePermissionList(profile?.permissions);
-  if (hasExplicitPermissionList(profile?.permissions)) return new Set(explicit);
-
   const rawLevel = `${profile?.admin_level || "none"}`.toLowerCase();
   const level = rawLevel === "owner" ? "super_admin" : rawLevel;
-  return new Set(LEGACY_ROLE_PERMISSION_DEFAULTS[level] || LEGACY_ROLE_PERMISSION_DEFAULTS.none);
+  const levelDefaults = LEGACY_ROLE_PERMISSION_DEFAULTS[level] || LEGACY_ROLE_PERMISSION_DEFAULTS.none;
+
+  const explicit = normalizePermissionList(profile?.permissions);
+  if (hasExplicitPermissionList(profile?.permissions)) {
+    const merged = new Set(explicit);
+    if (level !== "none") levelDefaults.forEach((permission) => merged.add(permission));
+    return merged;
+  }
+
+  return new Set(levelDefaults);
 };
 
 export const permissionPresetForAdminLevel = (level: string) =>
