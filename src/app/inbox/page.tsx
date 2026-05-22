@@ -6809,10 +6809,13 @@ export default function InboxPage() {
         .staff-icon-action { width: 46px; height: 46px; min-width: 46px; min-height: 46px; border: 1px solid ${borderColor}; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: ${darkMode?cardBg:"#F5F8FC"}; color: ${textColor}; cursor: pointer; font-family: inherit; padding: 0; }
         .staff-icon-action.primary { background: #007AFF; color: white; border-color: #007AFF; }
         .staff-icon-action.primary.active { background: #075EA8; border-color: #075EA8; }
-        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: 46px 1fr 46px; gap: 8px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 10px max(18px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
-        .staff-chat-composer .finput { margin-bottom: 0; min-height: 52px; max-height: 28dvh; resize: none !important; }
+        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 42px) minmax(0, 1fr) 46px; gap: 7px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 10px max(18px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
+        .staff-chat-composer .finput { min-width: 0; width: 100%; margin-bottom: 0; min-height: 48px; max-height: 28dvh; resize: none !important; padding: 12px 13px; font-size: 15px; overflow-wrap: normal; word-break: normal; }
         .staff-quick-btn,
-        .staff-send-btn { width: 46px; height: 52px; min-width: 46px; min-height: 52px; border-radius: 14px; border: 1px solid ${borderColor}; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: inherit; padding: 0; margin: 0; }
+        .staff-send-btn { width: 42px; height: 48px; min-width: 42px; min-height: 48px; border-radius: 13px; border: 1px solid ${borderColor}; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-family: inherit; padding: 0; margin: 0; }
+        .staff-send-btn { width: 46px; min-width: 46px; }
+        .staff-quick-btn svg,
+        .staff-send-btn svg { width: 21px; height: 21px; }
         .staff-quick-btn { background: ${darkMode?cardBg:"#F5F8FC"}; color: ${textColor}; }
         .staff-send-btn { background: #007AFF; color: white; border-color: #007AFF; }
         .staff-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -6903,9 +6906,13 @@ export default function InboxPage() {
           .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
 	          .modal, .modal-scroll, .settings-sheet, .patient-info-sheet { width: 100%; max-width: 100vw; }
-          .staff-chat-composer { grid-template-columns: 44px 1fr 44px; gap: 7px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); }
+          .staff-chat-composer { grid-template-columns: repeat(3, 38px) minmax(0, 1fr) 42px; gap: 6px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); padding-top: 8px; }
           .staff-quick-btn,
-          .staff-send-btn { width: 44px; min-width: 44px; }
+          .staff-send-btn { width: 38px; min-width: 38px; height: 44px; min-height: 44px; border-radius: 12px; }
+          .staff-send-btn { width: 42px; min-width: 42px; }
+          .staff-quick-btn svg,
+          .staff-send-btn svg { width: 20px; height: 20px; }
+          .staff-chat-composer .finput { min-height: 44px; padding: 10px 12px; font-size: 15px; line-height: 1.35; }
 	          .room-create-modal { top: 0; max-height: 100dvh; border-radius: 0; }
 	          .room-modal-head { border-radius: 0 0 22px 22px; margin-left: calc(-1 * max(20px, env(safe-area-inset-left))); margin-right: calc(-1 * max(20px, env(safe-area-inset-right))); margin-top: -18px; padding-top: calc(18px + env(safe-area-inset-top)); }
 	          .room-modal-title { font-size: clamp(28px, 8.2vw, 34px); }
