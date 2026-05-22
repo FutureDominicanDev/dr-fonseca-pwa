@@ -106,9 +106,13 @@ self.addEventListener('notificationclick', function(event) {
       // If the app is already open, focus it and navigate
       for (const client of clientList) {
         if ('navigate' in client) {
-          client.focus();
-          client.navigate(targetUrl);
-          return;
+          return client.focus()
+            .then(function(focusedClient) {
+              return focusedClient.navigate(targetUrl);
+            })
+            .catch(function() {
+              return client.navigate(targetUrl);
+            });
         }
       }
       // Otherwise open a new window

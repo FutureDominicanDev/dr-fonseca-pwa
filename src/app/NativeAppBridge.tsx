@@ -22,6 +22,32 @@ const patientRoomContext = () => {
   return token ? { roomId: decodeURIComponent(match[1]), roomToken: token } : null;
 };
 
+const notificationUrlFromData = (value: unknown) => {
+  const data = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const raw = typeof data.url === "string"
+    ? data.url
+    : typeof data.link === "string"
+      ? data.link
+      : typeof data.deepLink === "string"
+        ? data.deepLink
+        : "";
+  const candidate = raw.trim();
+  if (!candidate) return "/inbox";
+  try {
+    if (candidate.startsWith("/")) return candidate.startsWith("//") ? "/inbox" : candidate;
+    const url = new URL(candidate);
+    if (url.origin === window.location.origin) return `${url.pathname}${url.search}${url.hash}`;
+  } catch {}
+  return "/inbox";
+};
+
+const openNotificationTarget = (value: unknown) => {
+  if (typeof window === "undefined") return;
+  const target = notificationUrlFromData(value);
+  if (`${window.location.pathname}${window.location.search}${window.location.hash}` === target) return;
+  window.location.assign(target);
+};
+
 export default function NativeAppBridge() {
   useEffect(() => {
     let cancelled = false;
@@ -146,10 +172,14 @@ export default function NativeAppBridge() {
         listeners.push(received);
 
         const action = await PushNotifications.addListener("pushNotificationActionPerformed", (event) => {
-          const url = event.notification.data?.url;
-          if (typeof url === "string" && url.startsWith("/")) window.location.href = url;
+          openNotificationTarget(event.notification.data);
         });
         listeners.push(action);
+
+        const localAction = await LocalNotifications.addListener("localNotificationActionPerformed", (event) => {
+          openNotificationTarget(event.notification.extra || event.notification);
+        });
+        listeners.push(localAction);
 
         const appUrlOpen = await App.addListener("appUrlOpen", (event) => {
           try {

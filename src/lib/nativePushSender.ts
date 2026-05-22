@@ -132,7 +132,6 @@ function buildFcmMessage(token: string, payload: NativePushPayload) {
           default_sound: true,
           default_vibrate_timings: true,
           tag,
-          click_action: "OPEN_PORTAL",
         },
       },
       apns: {

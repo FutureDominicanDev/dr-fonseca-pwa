@@ -989,6 +989,8 @@ export default function InboxPage() {
   const [staffPrivateDraft, setStaffPrivateDraft] = useState("");
   const [savingStaffPrivateMessage, setSavingStaffPrivateMessage] = useState(false);
   const [staffChatUploading, setStaffChatUploading] = useState(false);
+  const [staffRecordingTarget, setStaffRecordingTarget] = useState<"private" | "room" | null>(null);
+  const [staffAudioPreview, setStaffAudioPreview] = useState<{ target: "private" | "room"; file: File; url: string } | null>(null);
   const [staffPrivateMessages, setStaffPrivateMessages] = useState<StaffPrivateMessage[]>([]);
   const [showStaffChats, setShowStaffChats] = useState(false);
   const [activeStaffChatPeerId, setActiveStaffChatPeerId] = useState<string | null>(null);
@@ -1177,6 +1179,11 @@ export default function InboxPage() {
   const beforePhotosRef = useRef<HTMLInputElement>(null);
   const staffRecordPhotoInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
+  const staffAudioRecorderRef = useRef<MediaRecorder | null>(null);
+  const staffAudioChunksRef = useRef<Blob[]>([]);
+  const staffAudioStreamRef = useRef<MediaStream | null>(null);
+  const discardStaffAudioRef = useRef(false);
+  const staffAudioPreviewUrlRef = useRef("");
   const internalNoteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
@@ -2008,11 +2015,11 @@ export default function InboxPage() {
   };
 
   const sendStaffChatAttachment = async (file: File, target: "private" | "room") => {
-    if (!file || !currentUserId || staffChatUploading || savingStaffPrivateMessage) return;
+    if (!file || !currentUserId || staffChatUploading || savingStaffPrivateMessage) return false;
     const activePrivate = target === "private" ? activeStaffPrivateConversation : null;
     const activeRoom = target === "room" ? activeStaffRoomConversation : null;
-    if (target === "private" && !activePrivate?.peer?.id) return;
-    if (target === "room" && (!activeRoom || activeRoom.currentUserStatus !== "accepted")) return;
+    if (target === "private" && !activePrivate?.peer?.id) return false;
+    if (target === "room" && (!activeRoom || activeRoom.currentUserStatus !== "accepted")) return false;
 
     setStaffChatUploading(true);
     try {
@@ -2057,16 +2064,19 @@ export default function InboxPage() {
           });
         }
       } else if (target === "room" && activeRoom) {
-        await sendStaffRoomMessage(
+        const sent = await sendStaffRoomMessage(
           activeRoom.roomId,
           activeRoom.roomName,
           activeRoom.activeMemberIds,
           "",
           { event: "message", createdBy: activeRoom.createdBy || currentUserId, attachment }
         );
+        if (!sent) return false;
       }
+      return true;
     } catch (error: any) {
       alert(error?.message || (lang === "es" ? "No pude enviar el archivo al chat staff." : "I could not send the staff chat attachment."));
+      return false;
     } finally {
       setStaffChatUploading(false);
       staffChatUploadTargetRef.current = null;
@@ -2077,6 +2087,88 @@ export default function InboxPage() {
     const target = staffChatUploadTargetRef.current;
     if (!file || !target) return;
     await sendStaffChatAttachment(file, target);
+  };
+
+  const stopStaffAudioStream = () => {
+    staffAudioStreamRef.current?.getTracks().forEach((track) => track.stop());
+    staffAudioStreamRef.current = null;
+  };
+
+  const clearStaffAudioPreview = () => {
+    setStaffAudioPreview((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  };
+
+  const startStaffAudioRecording = async (target: "private" | "room") => {
+    if (staffRecordingTarget || staffAudioPreview || staffChatUploading || savingStaffPrivateMessage) return;
+    if (target === "room" && activeStaffRoomConversation?.currentUserStatus !== "accepted") return;
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      alert(lang === "es" ? "Este dispositivo no permite grabar audio dentro del portal." : "This device cannot record audio inside the portal.");
+      return;
+    }
+    try {
+      setShowSlashMenu(false);
+      setSlashFilter("");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = pickRecorderMimeType("audio");
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      staffAudioRecorderRef.current = recorder;
+      staffAudioStreamRef.current = stream;
+      staffAudioChunksRef.current = [];
+      discardStaffAudioRef.current = false;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) staffAudioChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const shouldDiscard = discardStaffAudioRef.current;
+        const finalMimeType = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(staffAudioChunksRef.current, { type: finalMimeType });
+        staffAudioChunksRef.current = [];
+        staffAudioRecorderRef.current = null;
+        discardStaffAudioRef.current = false;
+        stopStaffAudioStream();
+        setStaffRecordingTarget(null);
+        if (shouldDiscard || blob.size === 0) return;
+        const ext = extensionForMimeType(finalMimeType, "webm");
+        const url = URL.createObjectURL(blob);
+        const file = new File([blob], `staff-voice-${Date.now()}.${ext}`, { type: finalMimeType });
+        setStaffAudioPreview((current) => {
+          if (current?.url) URL.revokeObjectURL(current.url);
+          return { target, file, url };
+        });
+      };
+      recorder.start();
+      setStaffRecordingTarget(target);
+    } catch {
+      stopStaffAudioStream();
+      staffAudioRecorderRef.current = null;
+      staffAudioChunksRef.current = [];
+      discardStaffAudioRef.current = false;
+      setStaffRecordingTarget(null);
+      alert(lang === "es" ? "No se pudo acceder al micrófono." : "I could not access the microphone.");
+    }
+  };
+
+  const stopStaffAudioRecording = (discard = false) => {
+    const recorder = staffAudioRecorderRef.current;
+    discardStaffAudioRef.current = discard;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+      return;
+    }
+    stopStaffAudioStream();
+    staffAudioRecorderRef.current = null;
+    staffAudioChunksRef.current = [];
+    setStaffRecordingTarget(null);
+  };
+
+  const sendStaffAudioPreview = async () => {
+    const preview = staffAudioPreview;
+    if (!preview || staffChatUploading || savingStaffPrivateMessage) return;
+    const sent = await sendStaffChatAttachment(preview.file, preview.target);
+    if (sent) clearStaffAudioPreview();
   };
 
   const inviteMembersToActiveStaffRoom = async () => {
@@ -3743,6 +3835,21 @@ export default function InboxPage() {
 
   useEffect(() => () => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+  }, []);
+
+  useEffect(() => {
+    staffAudioPreviewUrlRef.current = staffAudioPreview?.url || "";
+  }, [staffAudioPreview?.url]);
+
+  useEffect(() => () => {
+    const recorder = staffAudioRecorderRef.current;
+    if (recorder) {
+      recorder.ondataavailable = null;
+      recorder.onstop = null;
+      if (recorder.state !== "inactive") recorder.stop();
+    }
+    staffAudioStreamRef.current?.getTracks().forEach((track) => track.stop());
+    if (staffAudioPreviewUrlRef.current) URL.revokeObjectURL(staffAudioPreviewUrlRef.current);
   }, []);
 
   useEffect(() => {
@@ -5706,6 +5813,8 @@ export default function InboxPage() {
       ? staffRoomMemberOptions.filter((member) => !activeRoomMemberIds.has(member.id))
       : [];
     const closePanel = () => {
+      stopStaffAudioRecording(true);
+      clearStaffAudioPreview();
       setShowStaffChats(false);
       setActiveStaffChatPeerId(null);
       setActiveStaffRoomId(null);
@@ -5775,6 +5884,52 @@ export default function InboxPage() {
         >
           {attachment.fileName || (lang === "es" ? "Abrir archivo" : "Open file")}
         </a>
+      );
+    };
+    const renderStaffAudioPanel = (target: "room" | "private") => {
+      const isRecordingTarget = staffRecordingTarget === target;
+      const preview = staffAudioPreview?.target === target ? staffAudioPreview : null;
+      if (!isRecordingTarget && !preview) return null;
+      return (
+        <div className="staff-audio-panel">
+          {isRecordingTarget ? (
+            <>
+              <div className="staff-audio-status">
+                <span className="staff-audio-dot" aria-hidden="true" />
+                <span>
+                  <strong>{lang==="es" ? "Grabando audio" : "Recording audio"}</strong>
+                  <small>{lang==="es" ? "Detenlo para revisarlo antes de enviar." : "Stop it to review before sending."}</small>
+                </span>
+              </div>
+              <div className="staff-audio-actions">
+                <button type="button" className="staff-audio-btn" onClick={()=>stopStaffAudioRecording(true)}>
+                  {lang==="es" ? "Cancelar" : "Cancel"}
+                </button>
+                <button type="button" className="staff-audio-btn primary" onClick={()=>stopStaffAudioRecording(false)}>
+                  {lang==="es" ? "Detener" : "Stop"}
+                </button>
+              </div>
+            </>
+          ) : preview ? (
+            <>
+              <div className="staff-audio-status">
+                <span>
+                  <strong>{lang==="es" ? "Revisar audio" : "Review audio"}</strong>
+                  <small>{lang==="es" ? "Puedes enviarlo o eliminarlo." : "Send it or delete it."}</small>
+                </span>
+              </div>
+              <audio controls src={preview.url} className="staff-audio-player" />
+              <div className="staff-audio-actions">
+                <button type="button" className="staff-audio-btn danger" onClick={clearStaffAudioPreview}>
+                  {lang==="es" ? "Eliminar" : "Delete"}
+                </button>
+                <button type="button" className="staff-audio-btn primary" onClick={()=>void sendStaffAudioPreview()} disabled={staffChatUploading || savingStaffPrivateMessage}>
+                  {staffChatUploading || savingStaffPrivateMessage ? (lang==="es" ? "Enviando..." : "Sending...") : t.send}
+                </button>
+              </div>
+            </>
+          ) : null}
+        </div>
       );
     };
     return (
@@ -5907,7 +6062,7 @@ export default function InboxPage() {
               <div className="staff-room-toolbar">
                 <button
                   className="staff-icon-action"
-                  onClick={()=>{setActiveStaffRoomId(null);setStaffRoomReply("");setShowAddStaffRoomMembers(false);setStaffRoomInviteMemberIds([]);}}
+                  onClick={()=>{stopStaffAudioRecording(true);clearStaffAudioPreview();setActiveStaffRoomId(null);setStaffRoomReply("");setShowAddStaffRoomMembers(false);setStaffRoomInviteMemberIds([]);}}
                   aria-label={lang==="es"?"Volver":"Back"}
                   title={lang==="es"?"Volver":"Back"}
                 >
@@ -6027,6 +6182,7 @@ export default function InboxPage() {
                   );
                 })}
               </div>
+              {renderStaffAudioPanel("room")}
               {renderStaffQuickReplyPopup("room")}
               <div className="staff-chat-composer">
                 <button
@@ -6051,8 +6207,8 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-quick-btn"
-                  disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading}
-                  onClick={()=>openStaffChatFilePicker("room", "audio")}
+                  disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading || savingStaffPrivateMessage || !!staffRecordingTarget || !!staffAudioPreview}
+                  onClick={()=>void startStaffAudioRecording("room")}
                   aria-label={lang==="es" ? "Enviar audio" : "Send audio"}
                   title={lang==="es" ? "Enviar audio" : "Send audio"}
                 >
@@ -6093,7 +6249,7 @@ export default function InboxPage() {
               <div className="staff-room-toolbar">
                 <button
                   className="staff-icon-action"
-                  onClick={()=>{setActiveStaffChatPeerId(null);setStaffPrivateReply("");}}
+                  onClick={()=>{stopStaffAudioRecording(true);clearStaffAudioPreview();setActiveStaffChatPeerId(null);setStaffPrivateReply("");}}
                   aria-label={lang==="es"?"Volver":"Back"}
                   title={lang==="es"?"Volver":"Back"}
                 >
@@ -6155,6 +6311,7 @@ export default function InboxPage() {
                   );
                 })}
               </div>
+              {renderStaffAudioPanel("private")}
               {renderStaffQuickReplyPopup("private")}
               <div className="staff-chat-composer">
                 <button
@@ -6179,8 +6336,8 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-quick-btn"
-                  disabled={staffChatUploading}
-                  onClick={()=>openStaffChatFilePicker("private", "audio")}
+                  disabled={staffChatUploading || savingStaffPrivateMessage || !!staffRecordingTarget || !!staffAudioPreview}
+                  onClick={()=>void startStaffAudioRecording("private")}
                   aria-label={lang==="es" ? "Enviar audio" : "Send audio"}
                   title={lang==="es" ? "Enviar audio" : "Send audio"}
                 >
@@ -6809,6 +6966,17 @@ export default function InboxPage() {
         .staff-icon-action { width: 46px; height: 46px; min-width: 46px; min-height: 46px; border: 1px solid ${borderColor}; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: ${darkMode?cardBg:"#F5F8FC"}; color: ${textColor}; cursor: pointer; font-family: inherit; padding: 0; }
         .staff-icon-action.primary { background: #007AFF; color: white; border-color: #007AFF; }
         .staff-icon-action.primary.active { background: #075EA8; border-color: #075EA8; }
+        .staff-audio-panel { display: grid; gap: 10px; position: sticky; bottom: calc(74px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); z-index: 7; margin: 0 calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 11px max(18px, env(safe-area-inset-right)) 11px max(18px, env(safe-area-inset-left)); background: ${darkMode?"rgba(17,27,33,0.98)":"rgba(255,255,255,0.98)"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
+        .staff-audio-status { display: flex; align-items: center; gap: 10px; min-width: 0; color: ${textColor}; }
+        .staff-audio-status strong { display: block; font-size: 14px; font-weight: 950; line-height: 1.2; }
+        .staff-audio-status small { display: block; color: ${subTextColor}; font-size: 12px; font-weight: 750; line-height: 1.25; margin-top: 2px; }
+        .staff-audio-dot { width: 11px; height: 11px; border-radius: 50%; background: #EF4444; box-shadow: 0 0 0 6px rgba(239,68,68,0.13); flex-shrink: 0; }
+        .staff-audio-player { width: 100%; min-height: 42px; }
+        .staff-audio-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .staff-audio-btn { min-height: 42px; border: 1px solid ${borderColor}; border-radius: 12px; background: ${darkMode?cardBg:"#F5F8FC"}; color: ${textColor}; font-family: inherit; font-size: 14px; font-weight: 900; cursor: pointer; }
+        .staff-audio-btn.primary { border-color: #007AFF; background: #007AFF; color: white; }
+        .staff-audio-btn.danger { border-color: #FECACA; background: #FEE2E2; color: #B91C1C; }
+        .staff-audio-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 42px) minmax(0, 1fr) 46px; gap: 7px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 10px max(18px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
         .staff-chat-composer .finput { min-width: 0; width: 100%; margin-bottom: 0; min-height: 48px; max-height: 28dvh; resize: none !important; padding: 12px 13px; font-size: 15px; overflow-wrap: normal; word-break: normal; }
         .staff-quick-btn,
