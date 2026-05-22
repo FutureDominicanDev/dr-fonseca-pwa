@@ -16,11 +16,26 @@ function samePathWithRefresh(version: string) {
   return url.href;
 }
 
+function isSensitiveRecoveryUrl() {
+  const url = new URL(window.location.href);
+  if (url.pathname !== "/reset-password") return false;
+
+  const hash = url.hash.startsWith("#") ? url.hash.slice(1) : "";
+  const hashParams = new URLSearchParams(hash);
+  return Boolean(
+    url.searchParams.get("token_hash") ||
+    hashParams.get("access_token") ||
+    hashParams.get("refresh_token")
+  );
+}
+
 export default function AppUpdateWatcher({ buildVersion }: { buildVersion: string }) {
   const currentVersionRef = useRef(buildVersion || "");
   const reloadingRef = useRef(false);
 
   useEffect(() => {
+    if (isSensitiveRecoveryUrl()) return;
+
     let stopped = false;
     let timer: number | null = null;
     let controllerReloaded = false;

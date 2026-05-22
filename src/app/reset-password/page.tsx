@@ -102,6 +102,35 @@ const getBrowserLang = (): Lang => {
 };
 
 const withLang = (path: string, lang: Lang) => `${path}${path.includes("?") ? "&" : "?"}lang=${lang}`;
+const RECOVERY_SESSION_MARKER = "drf_password_recovery_session";
+const RECOVERY_SESSION_MAX_AGE_MS = 15 * 60 * 1000;
+
+const rememberRecoverySession = (tokenHash?: string | null) => {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(RECOVERY_SESSION_MARKER, JSON.stringify({
+    tokenHash: tokenHash || "",
+    createdAt: Date.now(),
+  }));
+};
+
+const hasRecentRecoverySession = async (tokenHash?: string | null) => {
+  if (typeof window === "undefined") return false;
+  try {
+    const rawMarker = window.sessionStorage.getItem(RECOVERY_SESSION_MARKER);
+    if (!rawMarker) return false;
+    const marker = JSON.parse(rawMarker) as { tokenHash?: string; createdAt?: number };
+    const createdAt = Number(marker.createdAt || 0);
+    if (!createdAt || Date.now() - createdAt > RECOVERY_SESSION_MAX_AGE_MS) {
+      window.sessionStorage.removeItem(RECOVERY_SESSION_MARKER);
+      return false;
+    }
+    if (tokenHash && marker.tokenHash && marker.tokenHash !== tokenHash) return false;
+    const { data } = await supabase.auth.getSession();
+    return Boolean(data.session?.access_token);
+  } catch {
+    return false;
+  }
+};
 
 function PasswordVisibilityIcon({ hidden }: { hidden: boolean }) {
   return hidden ? (
@@ -161,11 +190,18 @@ export default function ResetPasswordPage() {
         });
 
         if (tokenError) {
+          if (await hasRecentRecoverySession(tokenHash)) {
+            window.history.replaceState({}, document.title, `/reset-password?lang=${browserLang}`);
+            setReady(true);
+            setValidating(false);
+            return;
+          }
           setError(COPY[browserLang].expiredLink);
           setValidating(false);
           return;
         }
 
+        rememberRecoverySession(tokenHash);
         window.history.replaceState({}, document.title, `/reset-password?lang=${browserLang}`);
         setReady(true);
         setValidating(false);
@@ -179,6 +215,11 @@ export default function ResetPasswordPage() {
       const type = params.get("type");
 
       if (!accessToken || !refreshToken || type !== "recovery") {
+        if (await hasRecentRecoverySession()) {
+          setReady(true);
+          setValidating(false);
+          return;
+        }
         setError(COPY[browserLang].invalidLink);
         setValidating(false);
         return;
@@ -195,6 +236,7 @@ export default function ResetPasswordPage() {
         return;
       }
 
+      rememberRecoverySession();
       window.history.replaceState({}, document.title, `/reset-password?lang=${browserLang}`);
       setReady(true);
       setValidating(false);
@@ -224,6 +266,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    if (typeof window !== "undefined") window.sessionStorage.removeItem(RECOVERY_SESSION_MARKER);
     setDone(true);
   };
 
