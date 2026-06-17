@@ -972,6 +972,9 @@ export default function InboxPage() {
   const settingsTitleSize = fontSizeLevel === "large" ? 21 : 20;
 
   const headerBg = "#07334D";
+  const ownBubbleBg = darkMode ? "#005C4B" : "#D9FDD3";
+  const incomingBubbleBg = darkMode ? "#202C33" : "#FFFFFF";
+  const chatWallpaperBg = darkMode ? "#0B141A" : "#ECE5DD";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
   const inputBg = darkMode ? "#202C33" : "#F0F2F5";
   const textColor = darkMode ? "white" : "#1C1C1E";
@@ -5764,9 +5767,9 @@ export default function InboxPage() {
     );
 
     const isOwn = isOut && !!currentUserId && msg.sender_id === currentUserId;
-    const bubbleBg = isOut ? "#FFFFFF" : darkMode ? "#1F2C34" : "#E1F2FA";
+    const bubbleBg = isOut ? ownBubbleBg : incomingBubbleBg;
     const bubbleRadius=isOut?"16px 16px 6px 16px":"16px 16px 16px 6px";
-    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#07111F",borderRadius:bubbleRadius,maxWidth:"min(82%, 680px)",padding:"10px 12px 8px",boxShadow:"0 1px 2px rgba(15,23,42,0.13)",position:"relative",border:isOut?`1px solid ${borderColor}`:"none",fontSize, fontWeight:560,lineHeight:1.38,letterSpacing:0};
+    const bubbleStyle:React.CSSProperties={background:bubbleBg,color:darkMode&&!isOut?"#F8FAFC":"#07111F",borderRadius:bubbleRadius,maxWidth:"min(82%, 680px)",padding:"10px 12px 8px",boxShadow:"0 1px 2px rgba(15,23,42,0.13)",position:"relative",border:darkMode&&!isOut?`1px solid ${borderColor}`:"none",fontSize, fontWeight:560,lineHeight:1.38,letterSpacing:0};
     const patientDeletedNotice = msg.deleted_by_patient ? <div style={{marginTop:7,paddingTop:6,borderTop:"1px solid rgba(17,24,39,0.14)",fontSize:12,fontStyle:"italic",opacity:0.72}}>(This message was Deleted by user)</div> : null;
     const bubbleHeader = (style: React.CSSProperties = {}) => (
       <div style={{marginBottom:5,lineHeight:1.15,...style}}>
@@ -6228,7 +6231,7 @@ export default function InboxPage() {
           href={mediaUrl}
           target="_blank"
           rel="noopener noreferrer"
-          style={{display:"block",color:mine?"white":"#2563EB",fontWeight:900,overflowWrap:"anywhere",marginBottom:8}}
+          style={{display:"block",color:mine?(darkMode?"white":"#075EA8"):"#2563EB",fontWeight:900,overflowWrap:"anywhere",marginBottom:8}}
         >
           {attachment.fileName || (lang === "es" ? "Abrir archivo" : "Open file")}
         </a>
@@ -6290,25 +6293,41 @@ export default function InboxPage() {
         </div>
       );
     };
+    const staffPanelTitle = activeRoom
+      ? activeRoom.roomName
+      : activePeer
+      ? (activePeer.full_name || activePeer.display_name || (lang==="es"?"Personal":"Staff"))
+      : "Staff";
+    const staffPanelSubtitle = activeRoom
+      ? `${activeRoom.activeMemberIds.length} ${lang==="es"?"participantes":"participants"}`
+      : activePeer
+      ? (activePeer.phone || (lang==="es"?"Mensaje directo":"Direct message"))
+      : (lang==="es"?"Chats internos y mensajes directos":"Internal chats and direct messages");
     return (
       <div className="modal-overlay" onClick={closePanel}>
-        <div className="modal-scroll staff-chat-sheet" onClick={e=>e.stopPropagation()} style={{maxWidth:640}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
-            <div style={{minWidth:0}}>
-              <p className="modal-title" style={{margin:0,fontSize:20,lineHeight:1.15}}>{lang==="es"?"Comunicación interna":"Internal communication"}</p>
-              <p style={{fontSize:staffListMetaSize,color:subTextColor,fontWeight:700,lineHeight:1.3,marginTop:3}}>
-                {activeRoom
-                  ? activeRoom.roomName
-                  : activePeer
-                  ? (activePeer.full_name || activePeer.display_name || (lang==="es"?"Personal":"Staff"))
-                  : (lang==="es"?"Mensajes privados y salas internas del equipo.":"Private messages and internal team rooms.")}
-              </p>
+        <div className="modal-scroll staff-chat-sheet" onClick={e=>e.stopPropagation()} style={{maxWidth:760}}>
+          <div className="staff-chat-head">
+            <button
+              type="button"
+              className="staff-chat-back"
+              onClick={activeRoom ? ()=>{stopStaffAudioRecording(true);clearStaffAudioPreview();setActiveStaffRoomId(null);setStaffRoomReply("");setShowAddStaffRoomMembers(false);setStaffRoomInviteMemberIds([]);} : activePeer ? ()=>{stopStaffAudioRecording(true);clearStaffAudioPreview();setActiveStaffChatPeerId(null);setStaffPrivateReply("");} : closePanel}
+              aria-label={activeRoom || activePeer ? (lang==="es"?"Volver":"Back") : (lang==="es"?"Cerrar":"Close")}
+              title={activeRoom || activePeer ? (lang==="es"?"Volver":"Back") : (lang==="es"?"Cerrar":"Close")}
+            >
+              {activeRoom || activePeer ? <BackArrowIcon /> : "×"}
+            </button>
+            <div className="staff-chat-avatar">
+              {activePeer?.avatar_url ? <img src={activePeer.avatar_url} alt="" /> : activeRoom ? "👥" : "S"}
+            </div>
+            <div className="staff-chat-title">
+              <p>{staffPanelTitle}</p>
+              <span>{staffPanelSubtitle}</span>
             </div>
             <button
               onClick={closePanel}
               aria-label={lang==="es" ? "Salir" : "Exit"}
               title={lang==="es" ? "Salir" : "Exit"}
-              style={{width:42,height:42,display:"inline-flex",alignItems:"center",justifyContent:"center",background:cardBg,border:`1px solid ${borderColor}`,borderRadius:999,padding:0,cursor:"pointer",color:textColor,fontFamily:"inherit",flex:"0 0 auto"}}
+              className="staff-chat-close"
             >
               <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3" />
@@ -6486,7 +6505,7 @@ export default function InboxPage() {
                   </div>
                 </div>
               )}
-              <div className="staff-thread-list" style={{display:"grid",gap:6,maxHeight:"58dvh",overflowY:"auto",padding:8,borderRadius:14,background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
+              <div className="staff-thread-list" style={{display:"grid",gap:6,maxHeight:"58dvh",overflowY:"auto",padding:8,borderRadius:0,background:chatWallpaperBg,border:"none"}}>
                 {activeRoom.messages.map((message) => {
                   const mine = message.sender_id === currentUserId;
                   const payload = parseStaffRoomPayload(message.content);
@@ -6530,7 +6549,7 @@ export default function InboxPage() {
                             {senderLabel}
                           </button>
                         </div>
-                        <div style={{minWidth:96,borderRadius:mine?"15px 15px 5px 15px":"15px 15px 15px 5px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"8px 10px",boxShadow:"0 1px 3px rgba(15,23,42,0.1)"}}>
+                        <div style={{minWidth:96,borderRadius:mine?"15px 15px 5px 15px":"15px 15px 15px 5px",background:mine?ownBubbleBg:incomingBubbleBg,color:darkMode&&!mine?"#F8FAFC":"#07111F",border:darkMode&&!mine?`1px solid ${borderColor}`:"none",padding:"8px 10px",boxShadow:"0 1px 3px rgba(15,23,42,0.1)"}}>
                           {renderStaffChatAttachment(payload?.attachment, mine)}
                           {payload?.text && <p style={{fontSize:staffThreadTextSize,fontWeight:650,lineHeight:1.35,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{payload.text}</p>}
                           <p style={{fontSize:staffThreadMetaSize,opacity:0.78,textAlign:"right",marginTop:4,fontWeight:700}}>{fmtTime(message.created_at || "")}</p>
@@ -6625,7 +6644,7 @@ export default function InboxPage() {
                 </button>
                 {!activePeer?.phone && <span style={{fontSize:staffListMetaSize,color:subTextColor,fontWeight:700}}>{lang==="es"?"Sin teléfono registrado. Puede agregarlo en Ajustes.":"No phone listed. They can add it in Settings."}</span>}
               </div>
-              <div className="staff-thread-list" style={{display:"grid",gap:6,maxHeight:"58dvh",overflowY:"auto",padding:8,borderRadius:14,background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`}}>
+              <div className="staff-thread-list" style={{display:"grid",gap:6,maxHeight:"58dvh",overflowY:"auto",padding:8,borderRadius:0,background:chatWallpaperBg,border:"none"}}>
                 {activeStaffPrivateConversation!.messages.map((message) => {
                   const mine = message.sender_id === currentUserId;
                   const senderMember = staffMemberById.get(message.sender_id || "") || (mine ? staffMemberById.get(currentUserId) : activePeer);
@@ -6657,7 +6676,7 @@ export default function InboxPage() {
                             {senderLabel}
                           </button>
                         </div>
-                        <div style={{minWidth:96,borderRadius:mine?"15px 15px 5px 15px":"15px 15px 15px 5px",background:mine?"#2563EB":(darkMode?"#253244":"white"),color:mine?"white":textColor,border:mine?"none":`1px solid ${borderColor}`,padding:"8px 10px",boxShadow:"0 1px 3px rgba(15,23,42,0.1)"}}>
+                        <div style={{minWidth:96,borderRadius:mine?"15px 15px 5px 15px":"15px 15px 15px 5px",background:mine?ownBubbleBg:incomingBubbleBg,color:darkMode&&!mine?"#F8FAFC":"#07111F",border:darkMode&&!mine?`1px solid ${borderColor}`:"none",padding:"8px 10px",boxShadow:"0 1px 3px rgba(15,23,42,0.1)"}}>
                           {renderStaffChatAttachment(privateMedia?.attachment, mine)}
                           {`${privateMedia?.text ?? (message.content || "")}`.trim() && (
                             <p style={{fontSize:staffThreadTextSize,fontWeight:650,lineHeight:1.35,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>
@@ -7211,10 +7230,14 @@ export default function InboxPage() {
 	        .shell { --app-ui-font-size: ${uiBaseSize}px; --app-ui-label-size: ${uiLabelSize}px; --app-ui-small-size: ${uiSmallSize}px; display: flex; flex-direction: column; height: auto; min-height: -webkit-fill-available; position: absolute; inset: 0; bottom: var(--native-keyboard-overlay-height, 0px); background: ${darkMode ? "#0B141A" : "#F2F7FB"}; overflow: hidden; max-width: 100vw; }
 	        .shell p, .shell label, .shell button, .shell input, .shell textarea, .shell select, .shell summary { overflow-wrap: anywhere; }
 	        .shell button, .shell [role="button"], .shell input, .shell textarea, .shell select { min-height: 44px; }
-        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(52px, 1fr) minmax(280px, 760px) minmax(52px, 1fr); align-items: center; padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)); z-index: 100; height: calc(98px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 8px 24px rgba(7,51,77,0.18); }
+        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: env(safe-area-inset-top) max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); z-index: 100; height: calc(74px + env(safe-area-inset-top)); box-shadow: 0 8px 24px rgba(7,51,77,0.18); }
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.18); box-shadow: 0 1px 0 rgba(0,0,0,0.14); }
-        .topbar-logo { grid-column: 2; justify-self: center; align-self: center; height: 86px; width: min(680px, 92vw); object-fit: contain; object-position: center; display: block; }
-        .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .topbar-brand { min-width: 0; display: flex; align-items: center; gap: 10px; color: #FFFFFF; }
+        .topbar-logo { width: 54px; height: 54px; object-fit: contain; object-position: center; display: block; flex-shrink: 0; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.16)); }
+        .topbar-copy { min-width: 0; display: grid; gap: 1px; line-height: 1.1; }
+        .topbar-copy strong { color: #FFFFFF; font-size: 18px; font-weight: 950; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
+        .topbar-copy span { color: rgba(255,255,255,0.76); font-size: 12px; font-weight: 850; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
+        .topbar-actions { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 	        .admin-inline-btn { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 14px; background: rgba(8, 50, 76, 0.82); border: 1px solid rgba(210, 235, 255, 0.54); color: #F8FBFF; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 10px 24px rgba(2,14,28,0.28), 0 0 0 1px rgba(125,211,252,0.10); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease; }
         .admin-inline-btn:hover { background: rgba(14, 70, 105, 0.90); border-color: rgba(226, 242, 255, 0.70); transform: translateY(-1px); }
         .admin-inline-btn:active { transform: translateY(0); }
@@ -7235,6 +7258,12 @@ export default function InboxPage() {
         .search-input::placeholder { color: ${darkMode?"#94A3B8":"#7C8797"}; opacity: 1; font-weight: 650; }
         .label-filter-row { display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px 0; scrollbar-width: none; }
         .label-filter-row::-webkit-scrollbar { display: none; }
+        .chat-filter-row { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding: 10px 2px 0; scrollbar-width: none; }
+        .chat-filter-row::-webkit-scrollbar { display: none; }
+        .chat-filter { flex: 0 0 auto; min-height: 38px; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"#D5E4F2"}; border-radius: 999px; padding: 0 13px; display: inline-flex; align-items: center; gap: 7px; background: ${darkMode?"#1F2C34":"#FFFFFF"}; color: ${textColor}; font-family: inherit; font-size: var(--app-ui-small-size); font-weight: 900; cursor: pointer; }
+        .chat-filter.active { background: #DFF7E8; border-color: #B9E8C9; color: #075E54; }
+        .chat-filter.has-unread { border-color: #25D366; color: #075E54; }
+        .chat-filter strong { min-width: 21px; height: 21px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; background: #25D366; color: #FFFFFF; font-size: 12px; font-weight: 950; }
         .label-chip { min-height: 36px; max-width: 150px; border: none; border-radius: 999px; padding: 7px 12px; color: #FFFFFF; font-size: var(--app-ui-small-size); font-weight: 900; font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; cursor: pointer; }
         .label-chip.all { color: ${textColor}; background: ${darkMode?"#253244":"#EAF2FB"}; border: 1px solid ${borderColor}; }
         .label-chip.active { box-shadow: 0 0 0 2px ${darkMode?"#E5E7EB":"#0F172A"} inset; }
@@ -7274,7 +7303,7 @@ export default function InboxPage() {
         .main-area { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; transition: transform 0.25s ease; z-index: 20; }
         .sidebar.hidden { transform: translateX(-100%); pointer-events: none; }
         .main-area.hidden { transform: translateX(100%); pointer-events: none; }
-        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${darkMode ? "#0B141A" : "#F7FAFD"}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.040) 1px, transparent 1px)"}; background-size: 18px 18px; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
+        .chat-bg { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background-color: ${chatWallpaperBg}; background-image: ${darkMode ? "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)" : "radial-gradient(rgba(7,51,77,0.045) 1px, transparent 1px)"}; background-size: 18px 18px; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
         .chat-bg::-webkit-scrollbar { display: none; }
         .date-sep { display: flex; justify-content: center; margin: 16px 0 12px; }
 	        .date-sep-pill { background: ${darkMode?"rgba(17,27,33,0.92)":"rgba(255,255,255,0.96)"}; border-radius: 10px; padding: 6px 13px; font-size: var(--app-ui-small-size); color: ${darkMode?"#F8FAFC":"#111827"}; font-weight: 850; box-shadow: 0 1px 4px rgba(15,23,42,0.10); border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.08)"}; }
@@ -7287,6 +7316,10 @@ export default function InboxPage() {
         .chat-head-procedure { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .chat-head-date { flex: 0 0 auto; white-space: nowrap; }
         .chat-head-office { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .chat-head-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        .chat-head-icon { width: 40px; height: 40px; min-width: 40px; min-height: 40px; border: none; border-radius: 50%; background: transparent; color: ${textColor}; display: flex; align-items: center; justify-content: center; text-decoration: none; font-family: inherit; font-size: 20px; font-weight: 950; cursor: pointer; padding: 0; }
+        .chat-head-icon:hover { background: ${darkMode?"rgba(255,255,255,0.08)":"#EEF6FE"}; }
+        .chat-head-icon img { width: 27px; height: 27px; object-fit: contain; display: block; }
         .input-area { position: relative; flex-shrink: 0; z-index: 35; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
@@ -7298,6 +7331,7 @@ export default function InboxPage() {
         .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
         .plus-btn { position: relative; width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
+        .emoji-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: ${showEmojiMenu ? "#DFF7E8" : "transparent"}; color: ${showEmojiMenu ? "#075E54" : subTextColor}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 24px; line-height: 1; font-weight: 900; font-family: inherit; }
         .staff-record-dot { position: absolute; top: -2px; right: -2px; width: 11px; height: 11px; border-radius: 50%; background: #EF4444; border: 2px solid ${darkMode ? "#111B21" : "#F0F2F5"}; box-shadow: 0 2px 6px rgba(239,68,68,0.35); }
         .staff-menu-popup { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: calc(64px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); width: min(310px, calc(100vw - 32px)); background: white; border: 1px solid rgba(15,23,42,0.10); border-radius: 18px; overflow: hidden; box-shadow: 0 18px 45px rgba(15,23,42,0.22); z-index: 40; }
         .staff-menu-item { width: 100%; border: none; border-bottom: 1px solid rgba(15,23,42,0.08); background: white; color: #111827; padding: 18px 24px; text-align: left; cursor: pointer; font-family: inherit; font-size: 20px; font-weight: 900; }
@@ -7306,8 +7340,10 @@ export default function InboxPage() {
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .phone-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
         .phone-btn img { width: 30px; height: 30px; object-fit: contain; display: block; }
-        .mic-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .mic-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: #075E54; color: #FFFFFF; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(7,94,84,0.18); }
+        .mic-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .mic-btn img { width: 36px; height: 36px; object-fit: contain; display: block; }
+        .mic-btn svg { width: 23px; height: 23px; display: block; }
         .slash-popup { position: fixed; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); z-index: 45; pointer-events: auto; width: auto; max-height: min(32dvh, 214px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 6px; background: ${darkMode?"rgba(31,44,52,0.98)":"rgba(255,255,255,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"rgba(15,23,42,0.12)"}; border-radius: 16px; box-shadow: 0 16px 38px rgba(15,23,42,0.22); backdrop-filter: blur(10px); }
         .staff-slash-popup { position: sticky; bottom: calc(74px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); z-index: 8; width: 100%; max-height: min(32dvh, 230px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 6px; background: ${darkMode?"rgba(31,44,52,0.98)":"rgba(255,255,255,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"rgba(15,23,42,0.12)"}; border-radius: 16px; box-shadow: 0 14px 34px rgba(15,23,42,0.22); backdrop-filter: blur(10px); }
         .staff-slash-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 4px 8px; background: inherit; color: ${subTextColor}; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -7322,8 +7358,18 @@ export default function InboxPage() {
 	        .modal-overlay { position: fixed; inset: 0; bottom: var(--native-keyboard-overlay-height, 0px); background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); overflow-y: auto; overflow-x: hidden; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
 	        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px; width: min(560px, calc(100vw - 36px)); max-width: 100%; max-height: calc(100dvh - 36px); overflow-y: auto; overflow-x: hidden; padding: 24px; box-shadow: 0 18px 50px rgba(15,23,42,0.18); }
 	        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: min(560px, 100vw); position: fixed; top: 6vh; bottom: var(--native-keyboard-overlay-height, 0px); left: 50%; transform: translateX(-50%); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 24px max(18px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
-        .staff-chat-sheet { display: flex; flex-direction: column; padding: 16px max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)) !important; max-height: calc(100dvh - 20px); }
-        .staff-thread-list { min-height: 190px; max-height: min(58dvh, calc(100dvh - 250px - var(--native-keyboard-overlay-height, 0px))) !important; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
+        .staff-chat-sheet { display: flex; flex-direction: column; top: 0 !important; bottom: var(--native-keyboard-overlay-height, 0px) !important; width: min(760px, 100vw) !important; border-radius: 0 !important; padding: 0 !important; max-height: 100dvh; background: ${chatWallpaperBg} !important; }
+        .staff-chat-head { flex-shrink: 0; min-height: calc(64px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 9px; background: ${headerBg}; color: #FFFFFF; box-shadow: 0 6px 18px rgba(7,51,77,0.18); }
+        .staff-chat-back,
+        .staff-chat-close { width: 42px; height: 42px; min-width: 42px; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 50%; background: transparent; color: #FFFFFF; cursor: pointer; font-family: inherit; padding: 0; font-size: 28px; line-height: 1; flex: 0 0 auto; }
+        .staff-chat-back:hover,
+        .staff-chat-close:hover { background: rgba(255,255,255,0.10); }
+        .staff-chat-avatar { width: 42px; height: 42px; min-width: 42px; border-radius: 50%; overflow: hidden; background: rgba(255,255,255,0.16); display: grid; place-items: center; color: #FFFFFF; font-size: 16px; font-weight: 950; }
+        .staff-chat-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .staff-chat-title { min-width: 0; flex: 1; display: grid; gap: 2px; }
+        .staff-chat-title p { color: #FFFFFF; font-size: 17px; font-weight: 950; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .staff-chat-title span { color: rgba(255,255,255,0.74); font-size: 12px; font-weight: 850; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .staff-thread-list { flex: 1; min-height: 190px; max-height: calc(100dvh - 134px - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--native-keyboard-overlay-height, 0px)) !important; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
         .staff-room-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-height: 40px; }
         .staff-icon-action { width: 38px; height: 38px; min-width: 38px; min-height: 38px; border: 1px solid ${borderColor}; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: ${darkMode?cardBg:"#F5F8FC"}; color: ${textColor}; cursor: pointer; font-family: inherit; padding: 0; }
         .staff-icon-action.primary { background: #007AFF; color: white; border-color: #007AFF; }
@@ -7340,7 +7386,7 @@ export default function InboxPage() {
         .staff-audio-btn.danger { border-color: #FECACA; background: #FEE2E2; color: #B91C1C; }
         .staff-audio-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .staff-chat-typing { justify-self: start; max-width: min(84%, 360px); display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 4px; padding: 7px 10px; border-radius: 14px 14px 14px 5px; background: ${darkMode?"#253244":"#FFFFFF"}; border: 1px solid ${borderColor}; color: ${subTextColor}; box-shadow: 0 1px 3px rgba(15,23,42,0.08); font-size: 12px; font-weight: 850; line-height: 1.25; }
-        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 40px) minmax(0, 1fr) 42px; gap: 6px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 8px max(18px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
+        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 40px) minmax(0, 1fr) 42px; gap: 6px; align-items: end; margin: 0; padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: ${darkMode?"#111B21":"#F0F2F5"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
         .staff-chat-composer .finput { min-width: 0; width: 100%; margin-bottom: 0; min-height: 42px; height: 42px; max-height: 22dvh; resize: none !important; padding: 9px 11px; font-size: 13px; line-height: 1.25; overflow-wrap: normal; word-break: normal; border-radius: 12px; }
         .staff-chat-composer .finput::placeholder { font-size: 13px; }
         .staff-quick-btn,
@@ -7428,9 +7474,12 @@ export default function InboxPage() {
         @keyframes typingDot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-3px); opacity: 1; } }
         @keyframes spin { to { transform: rotate(360deg); } }
 	        @media (max-width: 700px) {
-          .topbar { height: calc(132px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
-          .topbar-logo { grid-column: 1; justify-self: center; align-self: start; height: 60px; width: min(390px, 78vw); }
-          .topbar-actions { right: max(14px, env(safe-area-inset-right)); left: max(14px, env(safe-area-inset-left)); top: auto; bottom: 10px; transform: none; justify-content: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+          .topbar { height: calc(78px + env(safe-area-inset-top)); padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); gap: 8px; }
+          .topbar-brand { flex: 1; }
+          .topbar-logo { width: 48px; height: 48px; }
+          .topbar-copy strong { font-size: 16px; }
+          .topbar-copy span { font-size: 11px; }
+          .topbar-actions { justify-content: flex-end; gap: 5px; overflow-x: auto; scrollbar-width: none; max-width: 62vw; }
           .topbar-actions::-webkit-scrollbar { display: none; }
           .topbar-actions .admin-inline-btn { width: 40px; min-width: 40px; height: 40px; min-height: 40px; border-radius: 13px; }
           .topbar-actions .admin-action-icon,
@@ -7441,15 +7490,18 @@ export default function InboxPage() {
           .search-bar { width: calc(100% - 10px); }
           .patient-list { padding-left: 10px; padding-right: 10px; }
           .chat-head { min-height: 62px; }
+          .chat-head-actions { gap: 1px; }
+          .chat-head-icon { width: 38px; height: 38px; min-width: 38px; min-height: 38px; }
           .input-area { gap: 8px; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
           .plus-btn { width: 44px; height: 44px; font-size: 28px; }
+          .emoji-btn { width: 40px; min-width: 40px; height: 44px; }
           .icon-btn, .send-btn { width: 44px; height: 44px; font-size: 20px; }
           .phone-btn, .mic-btn { width: 44px; height: 44px; }
           .phone-btn img { width: 30px; height: 30px; }
           .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
 	          .modal, .modal-scroll, .settings-sheet, .patient-info-sheet { width: 100%; max-width: 100vw; }
-          .staff-chat-composer { grid-template-columns: repeat(3, 34px) minmax(0, 1fr) 38px; gap: 5px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); padding-top: 7px; }
+          .staff-chat-composer { grid-template-columns: repeat(3, 34px) minmax(0, 1fr) 38px; gap: 5px; margin-left: 0; margin-right: 0; padding-top: 7px; }
           .staff-quick-btn,
           .staff-send-btn { width: 34px; min-width: 34px; height: 40px; min-height: 40px; border-radius: 11px; }
           .staff-send-btn { width: 38px; min-width: 38px; }
@@ -8436,7 +8488,13 @@ export default function InboxPage() {
 
 	      <div className="shell" data-text-size={fontSizeLevel} onClick={()=>{closeMessageActions();setShowSlashMenu(false);}}>
         <div className="topbar">
-          <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
+          <div className="topbar-brand">
+            <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
+            <div className="topbar-copy">
+              <strong>Dr. Fonseca</strong>
+              <span>{lang === "es" ? "Portal médico" : "Medical portal"}</span>
+            </div>
+          </div>
           <div className="topbar-actions">
             {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
             <StaffGlobalActions compact />
@@ -8516,6 +8574,24 @@ export default function InboxPage() {
               <div className="search-bar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input className="search-input" placeholder={t.search} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
+              </div>
+              <div className="chat-filter-row">
+                <button
+                  type="button"
+                  className="chat-filter active"
+                  onClick={()=>setMobileView("list")}
+                >
+                  <span>{t.patients}</span>
+                  {totalUnread > 0 && <strong>{totalUnread}</strong>}
+                </button>
+                <button
+                  type="button"
+                  className={`chat-filter${totalStaffChatUnread > 0 ? " has-unread" : ""}`}
+                  onClick={openStaffChatsHome}
+                >
+                  <span>{lang === "es" ? "Staff" : "Staff"}</span>
+                  {totalStaffChatUnread > 0 && <strong>{totalStaffChatUnread}</strong>}
+                </button>
               </div>
               {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
                 <button
@@ -8677,17 +8753,33 @@ export default function InboxPage() {
                       </div>
                     )}
                   </div>
-                  {canManageLabels && (
+                  <div className="chat-head-actions">
+                    {selectedRoom.procedures?.patients?.phone && (
+                      <a className="chat-head-icon" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} aria-label={t.callPatient}>
+                        <img src="/Phone_icon.png" alt="" />
+                      </a>
+                    )}
                     <button
-                      className="phone-btn"
-                      onClick={()=>openLabelSheetForPatient(selectedPatient)}
-                      title={lang === "es" ? "Etiquetas" : "Labels"}
-                      aria-label={lang === "es" ? "Etiquetas" : "Labels"}
-                      style={{color:textColor,fontSize:21,fontWeight:900}}
+                      type="button"
+                      className="chat-head-icon"
+                      onClick={()=>setShowPatientInfo(true)}
+                      title={t.patientInfo}
+                      aria-label={t.patientInfo}
                     >
-                      🏷
+                      i
                     </button>
-                  )}
+                    {canManageLabels && (
+                      <button
+                        type="button"
+                        className="chat-head-icon"
+                        onClick={()=>openLabelSheetForPatient(selectedPatient)}
+                        title={lang === "es" ? "Etiquetas" : "Labels"}
+                        aria-label={lang === "es" ? "Etiquetas" : "Labels"}
+                      >
+                        🏷
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div
@@ -8775,6 +8867,15 @@ export default function InboxPage() {
                       {showMediaMenu ? "×" : <PatientRoomToolsIcon />}
                       {staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread && <span className="staff-record-dot" aria-hidden="true" />}
                     </button>
+                    <button
+                      type="button"
+                      className={`emoji-btn${showEmojiMenu ? " active" : ""}`}
+                      onClick={()=>{setShowMediaMenu(false);setShowEmojiMenu((value)=>!value);}}
+                      aria-label={lang==="es" ? "Emojis" : "Emoji"}
+                      title={lang==="es" ? "Emojis" : "Emoji"}
+                    >
+                      ☺
+                    </button>
                     <div
                       ref={setComposerNode}
                       className="msg-input"
@@ -8806,13 +8907,8 @@ export default function InboxPage() {
                     <button className="send-btn" onClick={()=>sendMessage()} disabled={selectedRoomCancelled || sending || !newMessage.trim()} aria-label={t.send}>
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                     </button>
-                    {selectedRoom.procedures?.patients?.phone && (
-                      <a className="phone-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} aria-label={t.callPatient}>
-                        <img src="/Phone_icon.png" alt="" />
-                      </a>
-                    )}
                     <button type="button" className="mic-btn" disabled={selectedRoomCancelled} onClick={()=>{if(!selectedRoomCancelled)void startRec();}} aria-label={t.recordAudio}>
-                      <img src="/Microphone_icon.png" alt="" />
+                      <MicrophoneLineIcon />
                     </button>
                   </div>
                 )}
