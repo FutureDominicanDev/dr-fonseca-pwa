@@ -4,15 +4,27 @@ import { supabase } from "@/lib/supabaseClient";
 
 export default function Home() {
   useEffect(() => {
+    let redirected = false;
+    const redirectTo = (path: "/inbox" | "/login") => {
+      if (redirected) return;
+      redirected = true;
+      window.location.replace(path);
+    };
+    const fallback = window.setTimeout(() => redirectTo("/login"), 1800);
+
     const check = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        window.location.href = "/inbox";
-      } else {
-        window.location.href = "/login";
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        window.clearTimeout(fallback);
+        redirectTo(session ? "/inbox" : "/login");
+      } catch {
+        window.clearTimeout(fallback);
+        redirectTo("/login");
       }
     };
     check();
+
+    return () => window.clearTimeout(fallback);
   }, []);
 
   return (
