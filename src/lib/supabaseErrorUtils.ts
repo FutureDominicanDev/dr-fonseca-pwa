@@ -1,8 +1,16 @@
 export const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
-  const details = error as { message?: unknown; error_description?: unknown; code?: unknown };
-  return `${details?.message || details?.error_description || details?.code || error || ""}`;
+  const details = error as { message?: unknown; error_description?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+  const parts = [details?.message, details?.error_description, details?.code, details?.details, details?.hint]
+    .map((part) => `${part || ""}`.trim())
+    .filter(Boolean);
+  if (parts.length > 0) return parts.join(" ");
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return `${error || ""}`;
+  }
 };
 
 export const getSupabaseHost = (supabaseUrl: string) => {
