@@ -4,6 +4,13 @@ import nodemailer from "nodemailer";
 import { isOwnerEmail } from "@/lib/securityConfig";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
 import { getAppUrl, getRecoveryActionLink, getSmtpConfig } from "@/lib/emailConfig";
+import {
+  getErrorMessage,
+  getSupabaseHost,
+  isSupabaseConnectivityError,
+  isSupabaseRateLimitError,
+  isSupabaseUserNotFoundError,
+} from "@/lib/supabaseErrorUtils";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -49,17 +56,32 @@ export async function POST(request: NextRequest) {
 
     const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
     if (!token) return NextResponse.json({ error: "Missing session." }, { status: 401 });
+    const body = await request.json().catch(() => ({}));
+    const lang = body?.lang === "en" ? "en" : "es";
+    const serviceUnavailableMessage = lang === "en"
+      ? "The portal database is temporarily unavailable. Please try again in a few minutes or ask an administrator to check Supabase."
+      : "La base de datos del portal no está disponible temporalmente. Intenta de nuevo en unos minutos o pide al administrador revisar Supabase.";
+    const rateLimitedMessage = lang === "en"
+      ? "Too many reset attempts. Please wait a minute and try again."
+      : "Hay demasiados intentos de recuperación. Espera un minuto e intenta de nuevo.";
 
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
     const { data: requesterAuth, error: requesterAuthError } = await authClient.auth.getUser(token);
     const requester = requesterAuth?.user;
-    if (requesterAuthError || !requester?.id) return NextResponse.json({ error: "Invalid session." }, { status: 401 });
+    if (requesterAuthError || !requester?.id) {
+      const message = getErrorMessage(requesterAuthError);
+      if (isSupabaseConnectivityError(message)) {
+        console.error("staff password reset requester lookup failed", message, {
+          supabase_host: getSupabaseHost(SUPABASE_URL),
+        });
+        return NextResponse.json({ error: serviceUnavailableMessage }, { status: 503 });
+      }
+      return NextResponse.json({ error: "Invalid session." }, { status: 401 });
+    }
 
-    const body = await request.json().catch(() => ({}));
     const targetUserId = `${body?.targetUserId || requester.id}`.trim();
-    const lang = body?.lang === "en" ? "en" : "es";
     if (!targetUserId) return NextResponse.json({ error: "Missing staff user." }, { status: 400 });
 
     const [{ data: requesterProfile }, permissionsRes] = await Promise.all([
@@ -80,6 +102,14 @@ export async function POST(request: NextRequest) {
     ]);
     const targetAuthUser = targetAuthRes.data?.user;
     if (targetAuthRes.error || !targetAuthUser?.id) {
+      const message = getErrorMessage(targetAuthRes.error);
+      if (isSupabaseConnectivityError(message)) {
+        console.error("staff password reset target lookup failed", message, {
+          targetUserId,
+          supabase_host: getSupabaseHost(SUPABASE_URL),
+        });
+        return NextResponse.json({ error: serviceUnavailableMessage }, { status: 503 });
+      }
       return NextResponse.json({ error: "Staff user not found." }, { status: 404 });
     }
 
@@ -96,11 +126,22 @@ export async function POST(request: NextRequest) {
       options: { redirectTo },
     } as any);
     if (linkError) {
-      console.error("staff password reset link failed", linkError.message, {
+      const message = getErrorMessage(linkError);
+      console.error("staff password reset link failed", message, {
         targetUserId,
         destination_domain: emailDomain(destinationEmail),
         auth_email_is_alias: isAliasEmail(authEmail),
+        supabase_host: getSupabaseHost(SUPABASE_URL),
       });
+      if (isSupabaseConnectivityError(message)) {
+        return NextResponse.json({ error: serviceUnavailableMessage }, { status: 503 });
+      }
+      if (isSupabaseRateLimitError(message)) {
+        return NextResponse.json({ error: rateLimitedMessage }, { status: 429 });
+      }
+      if (isSupabaseUserNotFoundError(message)) {
+        return NextResponse.json({ error: "Staff user not found." }, { status: 404 });
+      }
       return NextResponse.json({ error: "Could not generate reset link." }, { status: 500 });
     }
 

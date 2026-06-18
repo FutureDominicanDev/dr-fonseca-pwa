@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 import { getAppUrl, getRecoveryActionLink, getSmtpConfig } from "@/lib/emailConfig";
+import {
+  getErrorMessage,
+  getSupabaseHost,
+  isSupabaseConnectivityError,
+  isSupabaseRateLimitError,
+  isSupabaseUserNotFoundError,
+} from "@/lib/supabaseErrorUtils";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -44,14 +51,19 @@ const escapeHtml = (value: unknown) =>
 
 async function resolveResetIdentity(email: string) {
   const normalized = email.trim().toLowerCase();
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("id, email, full_name, display_name")
     .ilike("email", normalized)
     .maybeSingle();
 
+  if (profileError) throw profileError;
+
   if (profile?.id) {
-    const { data: authUserData } = await supabase.auth.admin.getUserById(profile.id);
+    const { data: authUserData, error: authUserError } = await supabase.auth.admin.getUserById(profile.id);
+    if (authUserError && isSupabaseConnectivityError(getErrorMessage(authUserError))) {
+      throw authUserError;
+    }
     const authEmail = `${authUserData?.user?.email || ""}`.trim().toLowerCase();
     if (validEmail(authEmail)) {
       return {
@@ -89,8 +101,27 @@ export async function POST(request: NextRequest) {
     const resetLinkFailedMessage = lang === "en"
       ? "I could not create the recovery link. Please ask an administrator to verify the account email."
       : "No pude crear el enlace de recuperación. Pide al administrador verificar el correo de la cuenta.";
+    const serviceUnavailableMessage = lang === "en"
+      ? "The portal database is temporarily unavailable. Please try again in a few minutes or ask an administrator to check Supabase."
+      : "La base de datos del portal no está disponible temporalmente. Intenta de nuevo en unos minutos o pide al administrador revisar Supabase.";
+    const rateLimitedMessage = lang === "en"
+      ? "Too many reset attempts. Please wait a minute and try again."
+      : "Hay demasiados intentos de recuperación. Espera un minuto e intenta de nuevo.";
 
-    const resetIdentity = await resolveResetIdentity(email);
+    let resetIdentity: Awaited<ReturnType<typeof resolveResetIdentity>>;
+    try {
+      resetIdentity = await resolveResetIdentity(email);
+    } catch (identityError) {
+      const message = getErrorMessage(identityError);
+      console.error("password reset identity lookup failed", message, {
+        destination_domain: emailDomain(email),
+        supabase_host: getSupabaseHost(SUPABASE_URL),
+      });
+      return NextResponse.json(
+        { error: isSupabaseConnectivityError(message) ? serviceUnavailableMessage : resetLinkFailedMessage },
+        { status: isSupabaseConnectivityError(message) ? 503 : 500 },
+      );
+    }
     const redirectTo = `${APP_URL}/reset-password?lang=${lang}`;
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "recovery",
@@ -99,14 +130,30 @@ export async function POST(request: NextRequest) {
     } as any);
 
     if (error) {
-      console.error("password reset link failed", error.message, { destinationEmail: resetIdentity.destinationEmail, authEmail: isAliasEmail(resetIdentity.authEmail) ? "alias" : resetIdentity.authEmail });
-      const notFound = /not\s+found|unable\s+to\s+find|no\s+user/i.test(error.message || "");
+      const message = getErrorMessage(error);
+      console.error("password reset link failed", message, {
+        profileId: resetIdentity.profileId,
+        destination_domain: emailDomain(resetIdentity.destinationEmail),
+        auth_email_is_alias: isAliasEmail(resetIdentity.authEmail),
+        supabase_host: getSupabaseHost(SUPABASE_URL),
+      });
+      if (isSupabaseConnectivityError(message)) {
+        return NextResponse.json({ error: serviceUnavailableMessage }, { status: 503 });
+      }
+      if (isSupabaseRateLimitError(message)) {
+        return NextResponse.json({ error: rateLimitedMessage }, { status: 429 });
+      }
+      const notFound = isSupabaseUserNotFoundError(message);
       return NextResponse.json({ error: notFound ? accountNotFoundMessage : resetLinkFailedMessage }, { status: notFound ? 404 : 500 });
     }
 
     const actionLink = getRecoveryActionLink(data, lang, APP_URL);
     if (!actionLink) {
-      console.error("password reset link missing action_link", { destinationEmail: resetIdentity.destinationEmail, authEmail: isAliasEmail(resetIdentity.authEmail) ? "alias" : resetIdentity.authEmail });
+      console.error("password reset link missing action_link", {
+        profileId: resetIdentity.profileId,
+        destination_domain: emailDomain(resetIdentity.destinationEmail),
+        auth_email_is_alias: isAliasEmail(resetIdentity.authEmail),
+      });
       return NextResponse.json({ error: resetLinkFailedMessage }, { status: 500 });
     }
 
