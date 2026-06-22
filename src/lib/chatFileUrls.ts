@@ -10,7 +10,7 @@ const STORAGE_PATH_MARKERS = [
 export const extractChatFilePath = (value?: string | null) => {
   const raw = `${value || ""}`.trim();
   if (!raw) return "";
-  if (raw.startsWith("patients/") || raw.startsWith("profile-photos/")) return raw;
+  if (raw.startsWith("patients/") || raw.startsWith("profile-photos/") || raw.startsWith("staff-chat/")) return raw;
 
   try {
     const url = new URL(raw);

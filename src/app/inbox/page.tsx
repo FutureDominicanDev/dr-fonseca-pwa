@@ -662,6 +662,10 @@ type StaffChatAttachment = {
   fileSize?: number | null;
   mimeType?: string | null;
 };
+type SignedStaffChatMediaUrl = {
+  url: string;
+  expiresAt: number;
+};
 type StaffPrivateMediaPayload = {
   kind: "staff_private_media";
   text: string;
@@ -767,6 +771,16 @@ const parseStaffPrivateMediaPayload = (content?: string | null): StaffPrivateMed
     return null;
   }
 };
+const collectStaffChatAttachments = (messages: StaffPrivateMessage[]) => {
+  const attachments: StaffChatAttachment[] = [];
+  messages.forEach((message) => {
+    const roomPayload = parseStaffRoomPayload(message.content);
+    if (roomPayload?.attachment) attachments.push(roomPayload.attachment);
+    const privatePayload = parseStaffPrivateMediaPayload(message.content);
+    if (privatePayload?.attachment) attachments.push(privatePayload.attachment);
+  });
+  return attachments;
+};
 
 const isStaffAliasEmail = (email?: string | null) => `${email || ""}`.trim().toLowerCase().endsWith("@portal-staff.local");
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -858,15 +872,6 @@ function SendPlaneIcon({ size = 22 }: { size?: number }) {
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 2 11 13" />
       <path d="m22 2-7 20-4-9-9-4 20-7Z" />
-    </svg>
-  );
-}
-
-function CameraIcon({ size = 22 }: { size?: number }) {
-  return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.8 5 13.4 3.2h-2.8L9.2 5H6.5A2.5 2.5 0 0 0 4 7.5v9A2.5 2.5 0 0 0 6.5 19h11a2.5 2.5 0 0 0 2.5-2.5v-9A2.5 2.5 0 0 0 17.5 5h-2.7Z" />
-      <circle cx="12" cy="12" r="3.5" />
     </svg>
   );
 }
@@ -1017,6 +1022,7 @@ export default function InboxPage() {
   const [staffAudioPreview, setStaffAudioPreview] = useState<{ target: "private" | "room"; file: File; url: string } | null>(null);
   const [staffChatTyping, setStaffChatTyping] = useState<{ target: "private" | "room"; conversationId: string; name: string } | null>(null);
   const [staffPrivateMessages, setStaffPrivateMessages] = useState<StaffPrivateMessage[]>([]);
+  const [signedStaffChatMediaUrls, setSignedStaffChatMediaUrls] = useState<Record<string, SignedStaffChatMediaUrl>>({});
   const [showStaffChats, setShowStaffChats] = useState(false);
   const [activeStaffChatPeerId, setActiveStaffChatPeerId] = useState<string | null>(null);
   const [activeStaffRoomId, setActiveStaffRoomId] = useState<string | null>(null);
@@ -1159,6 +1165,12 @@ export default function InboxPage() {
   const backgroundRefreshRunningRef = useRef(false);
   const signChatFileUrl = useCallback((value?: string | null) => createSignedChatFileUrl(supabase, value, 3600, signedChatFileUrlCacheRef.current), []);
   const signChatMessages = useCallback((entries: any[]) => signMessageMediaUrls(supabase, entries || [], 3600, signedChatFileUrlCacheRef.current), []);
+  const staffAttachmentDisplayUrl = useCallback((attachment?: StaffChatAttachment | null) => {
+    if (!attachment) return "";
+    const source = attachment.url || attachment.signedUrl || "";
+    const cached = source ? signedStaffChatMediaUrls[source] : null;
+    return (cached?.url && cached.expiresAt > Date.now()) ? cached.url : attachment.signedUrl || source;
+  }, [signedStaffChatMediaUrls]);
   const signPatientMedia = useCallback(async (patient: any) => ({
     ...patient,
     profile_picture_url: await signChatFileUrl(patient?.profile_picture_url),
@@ -1176,6 +1188,41 @@ export default function InboxPage() {
       show_avatar_to_staff: visible,
     };
   }, [signChatFileUrl, staffAvatarVisibilityMap]);
+  useEffect(() => {
+    let cancelled = false;
+    const now = Date.now();
+    const sources = Array.from(new Set(
+      collectStaffChatAttachments(staffPrivateMessages)
+        .map((attachment) => attachment.url || attachment.signedUrl || "")
+        .filter(Boolean),
+    )).filter((source) => {
+      const cached = signedStaffChatMediaUrls[source];
+      return !cached?.url || cached.expiresAt <= now + 60_000;
+    });
+    if (sources.length === 0) return;
+
+    Promise.all(sources.map(async (source) => {
+      try {
+        const signedUrl = await signChatFileUrl(source);
+        return { source, url: signedUrl || source, expiresAt: Date.now() + 55 * 60 * 1000 };
+      } catch {
+        return { source, url: source, expiresAt: Date.now() + 5 * 60 * 1000 };
+      }
+    })).then((entries) => {
+      if (cancelled || entries.length === 0) return;
+      setSignedStaffChatMediaUrls((current) => {
+        const next = { ...current };
+        entries.forEach((entry) => {
+          next[entry.source] = { url: entry.url, expiresAt: entry.expiresAt };
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [signChatFileUrl, signedStaffChatMediaUrls, staffPrivateMessages]);
   const [activeCallUrl, setActiveCallUrl] = useState<string | null>(null);
   const [activeCallRoomName, setActiveCallRoomName] = useState<string | null>(null);
   const [callInviteFeedback, setCallInviteFeedback] = useState("");
@@ -2095,49 +2142,51 @@ export default function InboxPage() {
     }
   };
 
-  const staffChatMediaTypeForFile = (file: File): StaffChatMediaType => {
+  const mediaTypeForFile = (file: File): StaffChatMediaType => {
+    const mimeType = `${file.type || ""}`.toLowerCase();
     const fileName = `${file.name || ""}`.toLowerCase();
-    if (file.type.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|heif)$/.test(fileName)) return "image";
-    if (file.type.startsWith("audio/") || /\.(m4a|mp3|wav|aac|ogg|oga|webm|3gp|3gpp|amr)$/.test(fileName)) return "audio";
-    if (file.type.startsWith("video/") || /\.(mp4|mov|m4v|webm|3gp|3gpp)$/.test(fileName)) return "video";
+    if (mimeType.startsWith("image/")) return "image";
+    if (mimeType.startsWith("video/")) return "video";
+    if (mimeType.startsWith("audio/")) return "audio";
+    if (/\.(jpe?g|png|gif|webp|heic|heif)$/.test(fileName)) return "image";
+    if (/\.(mp4|mov|m4v|webm|3gp|3gpp)$/.test(fileName)) return "video";
+    if (/\.(m4a|mp3|wav|aac|ogg|oga|weba|amr)$/.test(fileName)) return "audio";
     return "file";
   };
 
-  const openStaffChatFilePicker = async (target: "private" | "room") => {
-    staffChatUploadTargetRef.current = target;
-
-    try {
-      const [{ Capacitor }, { Camera, CameraResultType, CameraSource }] = await Promise.all([
-        import("@capacitor/core"),
-        import("@capacitor/camera"),
-      ]);
-      if (!Capacitor.isNativePlatform()) {
-        staffChatImageInputRef.current?.click();
-        return;
-      }
-
-      setShowSlashMenu(false);
-      setSlashFilter("");
-      const photo = await Camera.getPhoto({
-        quality: 88,
-        allowEditing: false,
-        resultType: CameraResultType.DataUrl,
-        source: CameraSource.Prompt,
-        promptLabelHeader: lang === "es" ? "Enviar foto" : "Send photo",
-        promptLabelPhoto: lang === "es" ? "Elegir de fotos" : "Choose from photos",
-        promptLabelPicture: lang === "es" ? "Tomar foto" : "Take photo",
-        promptLabelCancel: lang === "es" ? "Cancelar" : "Cancel",
-      });
-      const dataUrl = photo.dataUrl || "";
-      const fallbackExt = photo.format || "jpg";
-      const safeExt = fallbackExt === "jpeg" ? "jpg" : fallbackExt;
-      const file = dataUrl ? fileFromDataUrl(dataUrl, `staff-photo-${Date.now()}.${safeExt}`, `image/${safeExt === "jpg" ? "jpeg" : safeExt}`) : null;
-      if (file) await sendStaffChatAttachment(file, target);
-    } catch (error: any) {
-      const message = `${error?.message || ""}`.toLowerCase();
-      if (message.includes("cancel")) return;
-      staffChatImageInputRef.current?.click();
+  const contentTypeForFile = (file: File, mediaType: StaffChatMediaType) => {
+    if (file.type) return file.type;
+    const fileName = `${file.name || ""}`.toLowerCase();
+    if (mediaType === "image") {
+      if (/\.(jpe?g)$/.test(fileName)) return "image/jpeg";
+      if (/\.png$/.test(fileName)) return "image/png";
+      if (/\.webp$/.test(fileName)) return "image/webp";
+      if (/\.gif$/.test(fileName)) return "image/gif";
+      return "image/jpeg";
     }
+    if (mediaType === "video") {
+      if (/\.mov$/.test(fileName)) return "video/quicktime";
+      if (/\.m4v$/.test(fileName)) return "video/x-m4v";
+      if (/\.webm$/.test(fileName)) return "video/webm";
+      if (/\.(3gp|3gpp)$/.test(fileName)) return "video/3gpp";
+      return "video/mp4";
+    }
+    if (mediaType === "audio") {
+      if (/\.mp3$/.test(fileName)) return "audio/mpeg";
+      if (/\.wav$/.test(fileName)) return "audio/wav";
+      if (/\.webm$/.test(fileName)) return "audio/webm";
+      if (/\.ogg$/.test(fileName)) return "audio/ogg";
+      return "audio/mp4";
+    }
+    if (/\.pdf$/.test(fileName)) return "application/pdf";
+    return "application/octet-stream";
+  };
+
+  const openStaffChatFilePicker = (target: "private" | "room") => {
+    staffChatUploadTargetRef.current = target;
+    setShowSlashMenu(false);
+    setSlashFilter("");
+    staffChatImageInputRef.current?.click();
   };
 
   const sendStaffChatAttachment = async (file: File, target: "private" | "room") => {
@@ -2150,20 +2199,45 @@ export default function InboxPage() {
     setStaffChatUploading(true);
     try {
       const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
-      const mediaType = staffChatMediaTypeForFile(file);
+      const mediaType = mediaTypeForFile(file);
+      const fileType = contentTypeForFile(file, mediaType);
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token || "";
       if (!accessToken) throw new Error(lang === "es" ? "Vuelve a iniciar sesión para enviar archivos." : "Please sign in again to send files.");
-      const formData = new FormData();
-      formData.append("file", file, file.name || `${mediaType}-${Date.now()}`);
-      formData.append("mediaType", mediaType);
-      const uploadResponse = await fetch("/api/staff-chat/media", {
+
+      const createResponse = await fetch("/api/staff-chat/media", {
         method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: formData,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          action: "createUpload",
+          fileName: file.name || `${mediaType}-${Date.now()}`,
+          fileType,
+          mediaType,
+        }),
       });
-      const uploadResult = await uploadResponse.json().catch(() => null);
-      if (!uploadResponse.ok) throw new Error(uploadResult?.error || (lang === "es" ? "No pude subir el archivo." : "I could not upload the file."));
+      const createResult = await createResponse.json().catch(() => null);
+      if (!createResponse.ok || !createResult?.path || !createResult?.token) {
+        throw new Error(createResult?.error || (lang === "es" ? "No pude preparar la subida del archivo." : "I could not prepare the file upload."));
+      }
+
+      const { error: uploadError } = await supabase.storage.from("chat-files").uploadToSignedUrl(
+        createResult.path,
+        createResult.token,
+        file,
+        { contentType: fileType },
+      );
+      if (uploadError) throw uploadError;
+
+      const completeResponse = await fetch("/api/staff-chat/media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: "completeUpload", path: createResult.path }),
+      });
+      const uploadResult = await completeResponse.json().catch(() => null);
+      if (!completeResponse.ok || !uploadResult?.publicUrl) {
+        throw new Error(uploadResult?.error || (lang === "es" ? "No pude terminar la subida del archivo." : "I could not finish the file upload."));
+      }
+
       const attachment: StaffChatAttachment = {
         kind: "staff_media",
         mediaType,
@@ -2171,7 +2245,7 @@ export default function InboxPage() {
         signedUrl: uploadResult.signedUrl || null,
         fileName: uploadResult.fileName || file.name || staffAttachmentLabel({ kind: "staff_media", mediaType, url: uploadResult.publicUrl }),
         fileSize: uploadResult.fileSize || file.size,
-        mimeType: uploadResult.mimeType || file.type || null,
+        mimeType: uploadResult.mimeType || fileType || null,
       };
 
       if (target === "private" && activePrivate?.peer) {
@@ -2215,7 +2289,7 @@ export default function InboxPage() {
   const handleStaffChatFileInput = async (file?: File | null) => {
     const target = staffChatUploadTargetRef.current;
     if (!file || !target) return;
-    if (staffChatMediaTypeForFile(file) === "audio") {
+    if (mediaTypeForFile(file) === "audio") {
       setStaffAudioPreview((current) => {
         if (current?.url) URL.revokeObjectURL(current.url);
         return { target, file, url: URL.createObjectURL(file) };
@@ -4720,18 +4794,11 @@ export default function InboxPage() {
 
   const confirmUpload = async (cat: FileCategory) => { if (!pendingFile) return; setShowUploadMenu(false); await uploadFile(pendingFile,cat); setPendingFile(null); };
   const stagePreview = (file: File) => {
+    const mediaType = mediaTypeForFile(file);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewFile(file);
     setPreviewUrl(URL.createObjectURL(file));
-    setPreviewType(
-      file.type.startsWith("image/")
-        ? "image"
-        : file.type.startsWith("video/")
-          ? "video"
-          : file.type.startsWith("audio/")
-            ? "audio"
-            : "file",
-    );
+    setPreviewType(mediaType);
   };
   const clearPreview = () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -4754,7 +4821,7 @@ export default function InboxPage() {
     const accessToken = sessionData.session?.access_token || "";
     if (!accessToken) throw new Error(lang === "es" ? "Vuelve a iniciar sesión para enviar archivos." : "Please sign in again to send files.");
 
-    const fileType = file.type || "application/octet-stream";
+    const fileType = contentTypeForFile(file, options.mediaType);
     const createResponse = await fetch("/api/staff/patient-media", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
@@ -4804,10 +4871,7 @@ export default function InboxPage() {
       const sOffice=userProfile?.office_location||selectedRoom?.procedures?.office_location||null;
       const patientId = selectedRoom?.procedures?.patients?.id || selectedRoom.id;
       const notificationPatientId = selectedRoom?.procedures?.patients?.id || null;
-      let mt: "image" | "video" | "audio" | "file" = "file";
-      if (file.type.startsWith("image/")) mt="image";
-      else if (file.type.startsWith("video/")) mt="video";
-      else if (file.type.startsWith("audio/")) mt="audio";
+      const mt = mediaTypeForFile(file);
       const mediaFolder =
         cat === "before_photo"
           ? "pre-op-photos"
@@ -6263,7 +6327,7 @@ export default function InboxPage() {
     };
     const renderStaffChatAttachment = (attachment?: StaffChatAttachment | null, mine = false) => {
       if (!attachment) return null;
-      const mediaUrl = attachment.signedUrl || attachment.url;
+      const mediaUrl = staffAttachmentDisplayUrl(attachment);
       if (attachment.mediaType === "image") {
         return (
           <button
@@ -6620,10 +6684,10 @@ export default function InboxPage() {
                   className="staff-quick-btn"
                   disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading}
                   onClick={()=>void openStaffChatFilePicker("room")}
-                  aria-label={lang==="es" ? "Enviar foto" : "Send photo"}
-                  title={lang==="es" ? "Enviar foto" : "Send photo"}
+                  aria-label={lang==="es" ? "Enviar archivo, foto o video" : "Send file, photo, or video"}
+                  title={lang==="es" ? "Enviar archivo, foto o video" : "Send file, photo, or video"}
                 >
-                  <CameraIcon />
+                  <PatientRoomToolsIcon />
                 </button>
                 <button
                   type="button"
@@ -6751,10 +6815,10 @@ export default function InboxPage() {
                   className="staff-quick-btn"
                   disabled={staffChatUploading}
                   onClick={()=>void openStaffChatFilePicker("private")}
-                  aria-label={lang==="es" ? "Enviar foto" : "Send photo"}
-                  title={lang==="es" ? "Enviar foto" : "Send photo"}
+                  aria-label={lang==="es" ? "Enviar archivo, foto o video" : "Send file, photo, or video"}
+                  title={lang==="es" ? "Enviar archivo, foto o video" : "Send file, photo, or video"}
                 >
-                  <CameraIcon />
+                  <PatientRoomToolsIcon />
                 </button>
                 <button
                   type="button"

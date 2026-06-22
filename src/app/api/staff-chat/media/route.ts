@@ -25,15 +25,23 @@ const safeStorageSegment = (value: string) =>
     .replace(/^-|-$/g, "")
     .slice(0, 120) || "file";
 
-const extensionFor = (fileName: string, mimeType: string) => {
+const normalizeMediaType = (value: FormDataEntryValue | string | null | undefined) => {
+  const clean = `${value || ""}`.trim().toLowerCase();
+  return clean === "image" || clean === "video" || clean === "audio" || clean === "file" ? clean : "file";
+};
+
+const extensionFor = (fileName: string, mimeType: string, mediaType = "file") => {
   const fromName = /\.([a-z0-9]{2,8})$/i.exec(fileName)?.[1]?.toLowerCase();
   if (fromName) return fromName;
-  if (mimeType.includes("jpeg")) return "jpg";
-  if (mimeType.includes("png")) return "png";
-  if (mimeType.includes("webp")) return "webp";
-  if (mimeType.includes("mp4")) return "m4a";
-  if (mimeType.includes("mpeg")) return "mp3";
-  if (mimeType.includes("webm")) return "webm";
+  const type = mimeType.toLowerCase();
+  if (type.includes("jpeg")) return "jpg";
+  if (type.includes("png")) return "png";
+  if (type.includes("webp")) return "webp";
+  if (type.includes("quicktime")) return "mov";
+  if (type.includes("3gpp")) return "3gp";
+  if (type.includes("mp4")) return mediaType === "audio" || type.startsWith("audio/") ? "m4a" : "mp4";
+  if (type.includes("mpeg")) return "mp3";
+  if (type.includes("webm")) return "webm";
   return "bin";
 };
 
@@ -59,6 +67,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Staff approval is required before uploading media." }, { status: 403 });
     }
 
+    const contentType = request.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const body = await request.json().catch(() => ({}));
+      const action = `${body?.action || ""}`.trim();
+
+      if (action === "createUpload") {
+        const mediaType = normalizeMediaType(body?.mediaType);
+        const fileType = `${body?.fileType || "application/octet-stream"}`.trim() || "application/octet-stream";
+        const originalName = safeStorageSegment(`${body?.fileName || `${mediaType}-${Date.now()}`}`);
+        const ext = extensionFor(originalName, fileType, mediaType);
+        const fileBase = originalName.toLowerCase().endsWith(`.${ext}`) ? originalName : `${originalName}.${ext}`;
+        const path = `staff-chat/${safeStorageSegment(user.id)}/${Date.now()}-${fileBase}`;
+        const { data, error } = await adminClient.storage.from(CHAT_FILES_BUCKET).createSignedUploadUrl(path);
+        if (error || !data?.token) throw error || new Error("Missing signed upload token.");
+        return NextResponse.json({ path: data.path || path, token: data.token });
+      }
+
+      if (action === "completeUpload") {
+        const path = `${body?.path || ""}`.trim();
+        const expectedPrefix = `staff-chat/${safeStorageSegment(user.id)}/`;
+        if (!path || path.includes("..") || !path.startsWith(expectedPrefix)) {
+          return NextResponse.json({ error: "Invalid media path." }, { status: 400 });
+        }
+
+        const { data: publicData } = adminClient.storage.from(CHAT_FILES_BUCKET).getPublicUrl(path);
+        const { data: signedData } = await adminClient.storage.from(CHAT_FILES_BUCKET).createSignedUrl(path, 3600);
+        return NextResponse.json({
+          path,
+          publicUrl: publicData.publicUrl,
+          signedUrl: signedData?.signedUrl || null,
+        });
+      }
+
+      return NextResponse.json({ error: "Unknown staff media action." }, { status: 400 });
+    }
+
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File) || file.size <= 0) {
@@ -68,9 +112,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File is too large." }, { status: 413 });
     }
 
-    const mediaType = safeStorageSegment(`${formData.get("mediaType") || "file"}`);
+    const mediaType = normalizeMediaType(formData.get("mediaType"));
     const originalName = safeStorageSegment(file.name || `${mediaType}-${Date.now()}`);
-    const ext = extensionFor(originalName, file.type || "application/octet-stream");
+    const ext = extensionFor(originalName, file.type || "application/octet-stream", mediaType);
     const fileBase = originalName.toLowerCase().endsWith(`.${ext}`) ? originalName : `${originalName}.${ext}`;
     const path = `staff-chat/${safeStorageSegment(user.id)}/${Date.now()}-${fileBase}`;
     const bytes = Buffer.from(await file.arrayBuffer());

@@ -1431,9 +1431,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     displayFileName?: string,
     existingMessageId?: string,
   ) => {
-    const fileType = file.type || (messageType === "video" ? "video/mp4" : "application/octet-stream");
+    const fileType = file.type || (messageType === "video" ? "video/mp4" : messageType === "audio" ? "audio/mp4" : "application/octet-stream");
+    const fallbackExtension = messageType === "video" ? "mp4" : messageType === "audio" ? "m4a" : "bin";
+    const fallbackFileName = `${messageType || "upload"}-${Date.now()}.${fallbackExtension}`;
+    const resolvedFileName = displayFileName || file.name || fallbackFileName;
     const uploadTicket = await postPatientRoomAction("createUpload", {
-      fileName: displayFileName || file.name || "upload.bin",
+      fileName: resolvedFileName,
       fileType,
       messageType,
     });
@@ -1448,7 +1451,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
     const attachResult = await postPatientRoomAction("attachUpload", {
       path: uploadPath,
-      fileName: displayFileName || file.name,
+      fileName: resolvedFileName,
       fileType,
       messageType,
       existingMessageId: existingMessageId || "",

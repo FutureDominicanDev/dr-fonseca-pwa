@@ -40,6 +40,8 @@ const extensionFor = (fileName: string, mimeType: string) => {
   if (type.includes("jpeg")) return "jpg";
   if (type.includes("png")) return "png";
   if (type.includes("webp")) return "webp";
+  if (type.includes("quicktime")) return "mov";
+  if (type.includes("3gpp")) return "3gp";
   if (type.includes("mp4")) return type.startsWith("audio/") ? "m4a" : "mp4";
   if (type.includes("webm")) return "webm";
   if (type.includes("pdf")) return "pdf";
