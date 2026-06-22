@@ -7,6 +7,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf
 import { supabase } from "@/lib/supabaseClient";
 import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { signMessageMediaUrls } from "@/lib/chatFileUrls";
+import { isClinicalHistoryFileName } from "@/lib/clinicalHistoryFiles";
 import {
   STAFF_PERMISSIONS_SETTING_KEY,
   hasPermission,
@@ -1202,7 +1203,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     .find((message) => (
       message.sender_type === "patient" &&
       message.message_type === "file" &&
-      `${message.file_name || ""}` === HISTORIA_CLINICA_FILE_NAME &&
+      isClinicalHistoryFileName(message.file_name) &&
       !message.deleted_by_patient &&
       !message.deleted_by_staff
     ));
@@ -2241,7 +2242,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     const fileName = `${message.file_name || ""}`;
     if (message.is_internal) return false;
     if (isLegacyRoomCreatedMessage(message)) return false;
-    if (fileName === HISTORIA_CLINICA_FILE_NAME || fileName.startsWith("[FORM]") || parseFormMessage(message.content)) return false;
+    if (isClinicalHistoryFileName(fileName) || parseFormMessage(message.content)) return false;
     if (fileName.startsWith("[MED]") || fileName.startsWith("[BEFORE]") || fileName.startsWith("[PROFILE]") || fileName.startsWith("profile.") || `${message.content || ""}`.includes("patient-profiles/") || `${message.content || ""}`.includes("patient-photos/")) return false;
     if (viewerType === "patient" && (message.deleted_by_patient || message.deleted_by_staff)) return false;
     return true;

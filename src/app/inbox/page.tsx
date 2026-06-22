@@ -7,6 +7,7 @@ import { syncPushSubscription } from "@/lib/pushSubscriptions";
 import { isOwnerEmail, isOwnerIdentity } from "@/lib/securityConfig";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
 import { createSignedChatFileUrl, signMessageMediaUrls, type SignedChatFileUrlCache } from "@/lib/chatFileUrls";
+import { isClinicalHistoryFileName } from "@/lib/clinicalHistoryFiles";
 import {
   STAFF_AVATAR_VISIBILITY_SETTING_KEY,
   parseStaffAvatarVisibilityMap,
@@ -2616,7 +2617,7 @@ export default function InboxPage() {
 
   const describeIncomingMessage = useCallback((message: RoomMessageSummary, translatedText = "") => {
     if (parseCallRequestMessage(message.content)) return t.incomingCallRequest;
-    if (`${message.file_name || ""}`.startsWith("[FORM]")) {
+    if (isClinicalHistoryFileName(message.file_name)) {
       return lang==="es" ? "Historia Clinica enviada" : "Historia Clinica submitted";
     }
     if (message.message_type === "audio") return lang==="es" ? "Nuevo audio" : "New audio";
@@ -5457,7 +5458,7 @@ export default function InboxPage() {
   };
 
   const isPrescriptionEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[MED]");
-  const isClinicalHistoryFileEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[FORM]");
+  const isClinicalHistoryFileEntry = (entry: any) => isClinicalHistoryFileName(entry?.file_name);
   const isPatientFolderEntry = (entry: any) => {
     const fileName = `${entry?.file_name || ""}`;
     return (

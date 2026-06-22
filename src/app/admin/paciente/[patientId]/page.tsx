@@ -9,6 +9,7 @@ import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, 
 import { useAdminLang } from "@/lib/useAdminLang";
 import { STAFF_PERMISSIONS_SETTING_KEY, hasPermission, parseStaffPermissionMap } from "@/lib/permissions";
 import { createSignedChatFileUrl } from "@/lib/chatFileUrls";
+import { isClinicalHistoryFileName } from "@/lib/clinicalHistoryFiles";
 import {
   PROCEDURE_STATUS_OPTIONS,
   buildExportHtml,
@@ -310,7 +311,7 @@ export default function AdminPatientRecordPage() {
     if (message.is_internal) return isSpanish ? "Seguimiento interno del equipo" : "Internal team follow-up";
     if (rawName.startsWith("[MED]")) return isSpanish ? "Seguimiento de medicamento" : "Medication follow-up";
     if (rawName.startsWith("[BEFORE]")) return isSpanish ? "Material preoperatorio" : "Pre-op material";
-    if (rawName.startsWith("[FORM]")) return "Historia Clinica";
+    if (isClinicalHistoryFileName(rawName)) return "Historia Clinica";
     if (message.message_type === "image") return isSpanish ? "Imagen compartida en el chat" : "Image shared in chat";
     if (message.message_type === "video") return isSpanish ? "Video compartido en el chat" : "Video shared in chat";
     if (message.message_type === "audio") return isSpanish ? "Audio compartido en el chat" : "Audio shared in chat";
@@ -344,13 +345,13 @@ export default function AdminPatientRecordPage() {
   const clinicalHistoryEntries = useMemo(() => {
     const latestByRoom = new Map<string, typeof media.files[number]>();
     media.files.forEach((entry) => {
-      if (!`${entry.message.file_name || ""}`.startsWith("[FORM]")) return;
+      if (!isClinicalHistoryFileName(entry.message.file_name)) return;
       latestByRoom.set(entry.room.id, entry);
     });
     return Array.from(latestByRoom.values());
   }, [media.files]);
   const regularFileEntries = useMemo(
-    () => media.files.filter((entry) => !`${entry.message.file_name || ""}`.startsWith("[FORM]")),
+    () => media.files.filter((entry) => !isClinicalHistoryFileName(entry.message.file_name)),
     [media.files]
   );
   const internalNoteEntries = useMemo(
@@ -867,7 +868,7 @@ export default function AdminPatientRecordPage() {
   const renderTimelineBody = (entry: (typeof timeline)[number]) => {
     const { message } = entry;
     const cleanFileName = (message.file_name || "").replace(/^\[(MED|BEFORE|FORM|STAFF_RECORD)\]\s*/i, "");
-    const isClinicalHistoryFile = `${message.file_name || ""}`.startsWith("[FORM]");
+    const isClinicalHistoryFile = isClinicalHistoryFileName(message.file_name);
 
     if (message.deleted_by_staff || message.deleted_by_patient) {
       return <p className="body-muted">{t.deletedMessage}</p>;
@@ -945,7 +946,7 @@ export default function AdminPatientRecordPage() {
               normalizeOffice(entry.procedure.office_location) ||
               "";
             const cleanFileName = (entry.message.file_name || "").replace(/^\[(MED|BEFORE|FORM)\]\s*/i, "");
-            const isClinicalHistoryFile = `${entry.message.file_name || ""}`.startsWith("[FORM]");
+            const isClinicalHistoryFile = isClinicalHistoryFileName(entry.message.file_name);
 
             return (
               <div key={entry.message.id} className="media-item">

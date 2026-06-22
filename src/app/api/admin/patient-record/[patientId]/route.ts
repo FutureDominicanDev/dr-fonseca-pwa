@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { isOwnerIdentity } from "@/lib/securityConfig";
 import { hasPermission, normalizePermissionList } from "@/lib/permissions";
 import { CHAT_FILES_BUCKET, extractChatFilePath } from "@/lib/chatFileUrls";
+import { isClinicalHistoryFileName } from "@/lib/clinicalHistoryFiles";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -41,7 +42,7 @@ const visibleMessagesForProfile = (messages: any[], profile: any, email: string)
     const fileName = `${message?.file_name || ""}`;
     const messageType = `${message?.message_type || ""}`;
     if (message?.is_internal) return canViewInternal;
-    if (fileName.startsWith("[FORM]")) return canViewClinicalHistory;
+    if (isClinicalHistoryFileName(fileName)) return canViewClinicalHistory;
     if (fileName.startsWith("[MED]")) return canViewFiles;
     if (messageType === "image" || messageType === "video" || messageType === "file") return canViewFiles;
     return true;

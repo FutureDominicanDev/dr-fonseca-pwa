@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { isClinicalHistoryFileName } from "@/lib/clinicalHistoryFiles";
 import { PRIMARY_OWNER_EMAIL, isOwnerEmail } from "@/lib/securityConfig";
 
 export type AdminLevel = "owner" | "super_admin" | "admin" | "none";
@@ -312,7 +313,7 @@ export const messageReason = (message: MessageRecord, procedure: ProcedureRecord
   if (message.is_internal) return "Seguimiento interno del equipo";
   if (rawName.startsWith("[MED]")) return "Seguimiento de medicamento";
   if (rawName.startsWith("[BEFORE]")) return "Material preoperatorio";
-  if (rawName.startsWith("[FORM]")) return "Historia Clinica";
+  if (isClinicalHistoryFileName(rawName)) return "Historia Clinica";
   if (message.message_type === "image") return "Imagen compartida en el chat";
   if (message.message_type === "video") return "Video compartido en el chat";
   if (message.message_type === "audio") return "Audio compartido en el chat";

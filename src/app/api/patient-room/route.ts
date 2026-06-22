@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CHAT_FILES_BUCKET, patientMediaUrl } from "@/lib/chatFileUrls";
+import { isClinicalHistoryFileName } from "@/lib/clinicalHistoryFiles";
 import { sendPatientMessageStaffAlert } from "@/lib/urgentNotifications";
 
 export const dynamic = "force-dynamic";
@@ -468,7 +469,7 @@ export async function POST(req: NextRequest) {
         ? await updateMessage(client, existingMessageId, room.id, payload)
         : await insertMessage(client, payload);
       await logMessageAudit(client, room.id, timestamp);
-      const isClinicalHistoryPdf = messageType === "file" && fileName.toLowerCase() === "historia-clinica.pdf";
+      const isClinicalHistoryPdf = messageType === "file" && isClinicalHistoryFileName(fileName);
       const alertBody = isClinicalHistoryPdf
         ? (existingMessageId ? "Historia Clinica actualizada" : "Historia Clinica enviada")
         : fileName || "Nuevo archivo de paciente";
