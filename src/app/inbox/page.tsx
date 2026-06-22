@@ -887,6 +887,16 @@ function MicrophoneLineIcon({ size = 22 }: { size?: number }) {
   );
 }
 
+function VideoCameraIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.35" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3.6" y="6.4" width="11.8" height="11.2" rx="2.2" />
+      <path d="m15.4 10.1 4.8-2.7v9.2l-4.8-2.7Z" />
+      <path d="M8.2 10.2h3.2" />
+    </svg>
+  );
+}
+
 function PersonPlusIcon({ size = 22 }: { size?: number }) {
   return (
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -1249,6 +1259,7 @@ export default function InboxPage() {
   const profilePicRef = useRef<HTMLInputElement>(null);
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
   const staffChatImageInputRef = useRef<HTMLInputElement>(null);
+  const staffChatVideoInputRef = useRef<HTMLInputElement>(null);
   const staffChatUploadTargetRef = useRef<"private" | "room" | null>(null);
   const beforePhotosRef = useRef<HTMLInputElement>(null);
   const staffRecordPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -2187,6 +2198,13 @@ export default function InboxPage() {
     setShowSlashMenu(false);
     setSlashFilter("");
     staffChatImageInputRef.current?.click();
+  };
+
+  const openStaffChatVideoPicker = (target: "private" | "room") => {
+    staffChatUploadTargetRef.current = target;
+    setShowSlashMenu(false);
+    setSlashFilter("");
+    staffChatVideoInputRef.current?.click();
   };
 
   const sendStaffChatAttachment = async (file: File, target: "private" | "room") => {
@@ -6638,20 +6656,22 @@ export default function InboxPage() {
                   return (
                     <div key={payload?.messageId || message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
                       <div style={{maxWidth:"90%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:4}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6,flexDirection:mine?"row-reverse":"row"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexDirection:"row"}}>
+                          {!mine && (
+                            <button
+                              type="button"
+                              disabled={!canContactSender}
+                              onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                              style={{width:28,height:28,minWidth:28,minHeight:28,maxWidth:28,maxHeight:28,aspectRatio:"1 / 1",flex:"0 0 28px",border:"none",borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:11,fontWeight:900,lineHeight:1,boxShadow:"0 1px 3px rgba(15,23,42,0.18)",padding:0,cursor:canContactSender?"pointer":"default"}}
+                            >
+                              {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{display:"block",width:"100%",height:"100%",objectFit:"cover",objectPosition:"center"}} /> : senderInitial}
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={!canContactSender}
                             onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
-                            style={{width:28,height:28,border:"none",borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:11,fontWeight:900,boxShadow:"0 1px 3px rgba(15,23,42,0.18)",padding:0,cursor:canContactSender?"pointer":"default"}}
-                          >
-                            {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : senderInitial}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!canContactSender}
-                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
-                            style={{border:"none",background:"transparent",padding:0,fontFamily:"inherit",fontSize:staffThreadMetaSize,fontWeight:900,color:subTextColor,lineHeight:1.2,overflowWrap:"anywhere",textAlign:mine?"right":"left",cursor:canContactSender?"pointer":"default"}}
+                            style={{maxWidth:"100%",border:"none",background:"transparent",padding:0,fontFamily:"inherit",fontSize:staffThreadMetaSize,fontWeight:900,color:subTextColor,lineHeight:1.2,overflowWrap:"anywhere",textAlign:mine?"right":"left",cursor:canContactSender?"pointer":"default"}}
                           >
                             {senderLabel}
                           </button>
@@ -6688,6 +6708,16 @@ export default function InboxPage() {
                   title={lang==="es" ? "Enviar archivo, foto o video" : "Send file, photo, or video"}
                 >
                   <PatientRoomToolsIcon />
+                </button>
+                <button
+                  type="button"
+                  className="staff-quick-btn"
+                  disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading}
+                  onClick={()=>void openStaffChatVideoPicker("room")}
+                  aria-label={lang==="es" ? "Enviar video" : "Send video"}
+                  title={lang==="es" ? "Enviar video" : "Send video"}
+                >
+                  <VideoCameraIcon />
                 </button>
                 <button
                   type="button"
@@ -6765,20 +6795,22 @@ export default function InboxPage() {
                   return (
                     <div key={message.id || `${message.created_at}-${message.content}`} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
                       <div style={{maxWidth:"90%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:4}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6,flexDirection:mine?"row-reverse":"row"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexDirection:"row"}}>
+                          {!mine && (
+                            <button
+                              type="button"
+                              disabled={!canContactSender}
+                              onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
+                              style={{width:28,height:28,minWidth:28,minHeight:28,maxWidth:28,maxHeight:28,aspectRatio:"1 / 1",flex:"0 0 28px",border:"none",borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:11,fontWeight:900,lineHeight:1,boxShadow:"0 1px 3px rgba(15,23,42,0.18)",padding:0,cursor:canContactSender?"pointer":"default"}}
+                            >
+                              {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{display:"block",width:"100%",height:"100%",objectFit:"cover",objectPosition:"center"}} /> : senderInitial}
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={!canContactSender}
                             onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
-                            style={{width:28,height:28,border:"none",borderRadius:"50%",overflow:"hidden",background:"linear-gradient(135deg,#111827,#2563EB)",display:"grid",placeItems:"center",color:"white",fontSize:11,fontWeight:900,boxShadow:"0 1px 3px rgba(15,23,42,0.18)",padding:0,cursor:canContactSender?"pointer":"default"}}
-                          >
-                            {senderMember?.avatar_url ? <img src={senderMember.avatar_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : senderInitial}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!canContactSender}
-                            onClick={()=>{ if (senderMember && canContactSender) openStaffContact(senderMember); }}
-                            style={{border:"none",background:"transparent",padding:0,fontFamily:"inherit",fontSize:staffThreadMetaSize,fontWeight:900,color:subTextColor,lineHeight:1.2,overflowWrap:"anywhere",textAlign:mine?"right":"left",cursor:canContactSender?"pointer":"default"}}
+                            style={{maxWidth:"100%",border:"none",background:"transparent",padding:0,fontFamily:"inherit",fontSize:staffThreadMetaSize,fontWeight:900,color:subTextColor,lineHeight:1.2,overflowWrap:"anywhere",textAlign:mine?"right":"left",cursor:canContactSender?"pointer":"default"}}
                           >
                             {senderLabel}
                           </button>
@@ -6819,6 +6851,16 @@ export default function InboxPage() {
                   title={lang==="es" ? "Enviar archivo, foto o video" : "Send file, photo, or video"}
                 >
                   <PatientRoomToolsIcon />
+                </button>
+                <button
+                  type="button"
+                  className="staff-quick-btn"
+                  disabled={staffChatUploading}
+                  onClick={()=>void openStaffChatVideoPicker("private")}
+                  aria-label={lang==="es" ? "Enviar video" : "Send video"}
+                  title={lang==="es" ? "Enviar video" : "Send video"}
+                >
+                  <VideoCameraIcon />
                 </button>
                 <button
                   type="button"
@@ -7432,6 +7474,9 @@ export default function InboxPage() {
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .phone-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
         .phone-btn img { width: 30px; height: 30px; object-fit: contain; display: block; }
+        .video-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
+        .video-btn svg { width: 23px; height: 23px; }
+        .video-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .mic-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .mic-btn img { width: 36px; height: 36px; object-fit: contain; display: block; }
         .slash-popup { position: fixed; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); z-index: 45; pointer-events: auto; width: auto; max-height: min(32dvh, 214px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 6px; background: ${darkMode?"rgba(31,44,52,0.98)":"rgba(255,255,255,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"rgba(15,23,42,0.12)"}; border-radius: 16px; box-shadow: 0 16px 38px rgba(15,23,42,0.22); backdrop-filter: blur(10px); }
@@ -7466,7 +7511,7 @@ export default function InboxPage() {
         .staff-audio-btn.danger { border-color: #FECACA; background: #FEE2E2; color: #B91C1C; }
         .staff-audio-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .staff-chat-typing { justify-self: start; max-width: min(84%, 360px); display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 4px; padding: 7px 10px; border-radius: 14px 14px 14px 5px; background: ${darkMode?"#253244":"#FFFFFF"}; border: 1px solid ${borderColor}; color: ${subTextColor}; box-shadow: 0 1px 3px rgba(15,23,42,0.08); font-size: 12px; font-weight: 850; line-height: 1.25; }
-        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 40px) minmax(0, 1fr) 42px; gap: 6px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 8px max(18px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
+        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(4, 40px) minmax(0, 1fr) 42px; gap: 6px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 8px max(18px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
         .staff-chat-composer .finput { min-width: 0; width: 100%; margin-bottom: 0; min-height: 42px; height: 42px; max-height: 22dvh; resize: none !important; padding: 9px 11px; font-size: 13px; line-height: 1.25; overflow-wrap: normal; word-break: normal; border-radius: 12px; }
         .staff-chat-composer .finput::placeholder { font-size: 13px; }
         .staff-quick-btn,
@@ -7570,12 +7615,12 @@ export default function InboxPage() {
           .input-area { gap: 8px; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
           .plus-btn { width: 44px; height: 44px; font-size: 28px; }
           .icon-btn, .send-btn { width: 44px; height: 44px; font-size: 20px; }
-          .phone-btn, .mic-btn { width: 44px; height: 44px; }
+          .phone-btn, .video-btn, .mic-btn { width: 44px; height: 44px; }
           .phone-btn img { width: 30px; height: 30px; }
           .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
 	          .modal, .modal-scroll, .settings-sheet, .patient-info-sheet { width: 100%; max-width: 100vw; }
-          .staff-chat-composer { grid-template-columns: repeat(3, 34px) minmax(0, 1fr) 38px; gap: 5px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); padding-top: 7px; }
+          .staff-chat-composer { grid-template-columns: repeat(4, 34px) minmax(0, 1fr) 38px; gap: 5px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); padding-top: 7px; }
           .staff-quick-btn,
           .staff-send-btn { width: 34px; min-width: 34px; height: 40px; min-height: 40px; border-radius: 11px; }
           .staff-send-btn { width: 38px; min-width: 38px; }
@@ -7598,6 +7643,7 @@ export default function InboxPage() {
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={staffChatImageInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.heic,.heif" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
+      <input ref={staffChatVideoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
       <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>
@@ -8917,10 +8963,6 @@ export default function InboxPage() {
                         }}>{lang==="es" ? "Fotos del dispositivo" : "Device photos"}</button>
                         <button className="staff-menu-item" onClick={()=>{
                           setShowMediaMenu(false);
-                          void openNativeVideoCapture();
-                        }}>{lang==="es" ? "Grabar video" : "Record video"}</button>
-                        <button className="staff-menu-item" onClick={()=>{
-                          setShowMediaMenu(false);
                           chatMediaInputRef.current?.click();
                         }}>{lang==="es" ? "Archivo, foto o video" : "File, photo, or video"}</button>
                         <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setMediaLibraryTab("internal");setShowMediaLibrary(true);clearStaffRecordUnreadRoom(selectedRoom?.id);}}>{t.staffRecord}</button>
@@ -8945,6 +8987,21 @@ export default function InboxPage() {
                     <button className="plus-btn" onClick={()=>{setShowEmojiMenu(false);setShowMediaMenu(v=>!v);}} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>
                       {showMediaMenu ? "×" : <PatientRoomToolsIcon />}
                       {staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread && <span className="staff-record-dot" aria-hidden="true" />}
+                    </button>
+                    <button
+                      type="button"
+                      className="video-btn"
+                      disabled={selectedRoomCancelled}
+                      onClick={()=>{
+                        if (selectedRoomCancelled) return;
+                        setShowEmojiMenu(false);
+                        setShowMediaMenu(false);
+                        void openNativeVideoCapture();
+                      }}
+                      aria-label={lang==="es" ? "Enviar video" : "Send video"}
+                      title={lang==="es" ? "Enviar video" : "Send video"}
+                    >
+                      <VideoCameraIcon />
                     </button>
                     <div
                       ref={setComposerNode}
