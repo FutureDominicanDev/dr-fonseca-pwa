@@ -1474,6 +1474,15 @@ export default function AdminPage() {
         setPageError(payload?.error || (isSpanish ? "No pude enviar el enlace de recuperación." : "I could not send the reset link."));
         return;
       }
+      if (payload?.delivery === "manual" && payload?.recoveryLink) {
+        await navigator.clipboard?.writeText(payload.recoveryLink).catch(() => undefined);
+        updateSuccess(
+          isSpanish
+            ? "Enlace de recuperación generado y copiado. Pégalo en WhatsApp o envíalo al usuario; se usa una sola vez."
+            : "Recovery link generated and copied. Paste it into WhatsApp or send it to the user; it is one-time use.",
+        );
+        return;
+      }
       updateSuccess(isSpanish ? "Enlace de recuperación enviado." : "Password reset link sent.");
     } catch (error: any) {
       setPageError(error?.message || (isSpanish ? "No pude enviar el enlace de recuperación." : "I could not send the reset link."));
@@ -3526,7 +3535,7 @@ export default function AdminPage() {
                     const canEditOfficeForMember = !isGlobalAccessMember && canManageAdmins && (canManageOwner || (level !== "owner" && level !== "super_admin"));
                     const enabledPermissionCount = STAFF_PERMISSION_KEYS.filter((permission) => draftPermissionSet.has(permission)).length;
                     const isPendingStaff = `${member.role || ""}`.toLowerCase() === "pending_staff";
-                    const canSendResetForMember = canManageAdmins && Boolean(visibleMemberEmail);
+                    const canSendResetForMember = canManageAdmins;
                     const savedAlertTones = memberAlertTones(member.id);
 
                     return (

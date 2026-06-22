@@ -73,6 +73,7 @@ export default function AdminAuditPage() {
       password_reset_email_sent: "Recovery email sent",
       staff_password_reset_self_sent: "Own recovery email sent",
       staff_password_reset_sent: "Staff recovery email sent",
+      staff_password_reset_manual_link_generated: "Manual recovery link generated",
       invite_code_updated: "Invitation code updated",
     };
 

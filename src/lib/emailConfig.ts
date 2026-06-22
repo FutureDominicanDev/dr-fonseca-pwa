@@ -13,8 +13,10 @@ type RecoveryLinkData = {
 
 export const getRecoveryActionLink = (linkData: RecoveryLinkData, lang: "es" | "en", appUrl = getAppUrl()) => {
   const properties = linkData?.properties || {};
-  const hashedToken = `${properties.hashed_token || ""}`.trim();
   const actionLink = `${properties.action_link || ""}`.trim();
+  if (actionLink) return actionLink;
+
+  const hashedToken = `${properties.hashed_token || ""}`.trim();
   if (!hashedToken) return actionLink;
 
   const params = new URLSearchParams({

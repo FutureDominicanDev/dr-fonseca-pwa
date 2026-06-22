@@ -114,9 +114,14 @@ export async function POST(request: NextRequest) {
     }
 
     const authEmail = `${targetAuthUser.email || ""}`.trim().toLowerCase();
-    const destinationEmail = `${(targetProfile as any)?.email || (!isAliasEmail(authEmail) ? authEmail : "")}`.trim().toLowerCase();
-    if (!validEmail(authEmail) || !validEmail(destinationEmail)) {
-      return NextResponse.json({ error: "This staff member needs a recovery email saved before an email reset link can be sent." }, { status: 400 });
+    const profileEmail = `${(targetProfile as any)?.email || ""}`.trim().toLowerCase();
+    const destinationEmail = validEmail(profileEmail) && !isAliasEmail(profileEmail)
+      ? profileEmail
+      : !isAliasEmail(authEmail)
+        ? authEmail
+        : "";
+    if (!validEmail(authEmail)) {
+      return NextResponse.json({ error: "Staff user does not have a valid login email." }, { status: 400 });
     }
 
     const redirectTo = `${APP_URL}/reset-password?lang=${lang}`;
@@ -147,6 +152,29 @@ export async function POST(request: NextRequest) {
 
     const actionLink = getRecoveryActionLink(linkData, lang, APP_URL);
     if (!actionLink) return NextResponse.json({ error: "Reset link was empty." }, { status: 500 });
+
+    if (!validEmail(destinationEmail)) {
+      if (!canSendForOthers) {
+        return NextResponse.json({ error: "This staff member needs a recovery email saved before an email reset link can be sent." }, { status: 400 });
+      }
+      const staffName = `${(targetProfile as any)?.full_name || (targetProfile as any)?.display_name || (lang === "en" ? "team member" : "integrante del equipo")}`;
+      try {
+        await adminClient.from("admin_audit_events").insert({
+          action: "staff_password_reset_manual_link_generated",
+          entity_type: "staff_profile",
+          entity_id: targetUserId,
+          entity_name: staffName,
+          actor_id: requester.id,
+          actor_name: (requesterProfile as any)?.full_name || (requesterProfile as any)?.display_name || requesterEmail,
+          actor_email: requesterEmail,
+          notes: "Manual password recovery link generated because this account has no real recovery email.",
+          metadata: { auth_email_is_alias: isAliasEmail(authEmail), generated_at: new Date().toISOString() },
+        });
+      } catch {
+        // Best-effort audit trail; the manual link should still be returned to the authorized admin.
+      }
+      return NextResponse.json({ ok: true, delivery: "manual", recoveryLink: actionLink, destinationEmail: null });
+    }
 
     const transporter = nodemailer.createTransport({
       host: SMTP_HOST,
