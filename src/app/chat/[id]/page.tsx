@@ -398,7 +398,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
-    window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior, block: "end" }));
+    window.requestAnimationFrame(() => {
+      const container = chatScrollRef.current;
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior });
+        return;
+      }
+      bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+    });
   };
   const isNearChatBottom = () => {
     const container = chatScrollRef.current;
