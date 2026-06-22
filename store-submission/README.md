@@ -1,6 +1,7 @@
 # Store Submission Packet
 
 Prepared May 11, 2026.
+Updated June 22, 2026 for the Android v19 launcher icon / Play release pass.
 
 This packet is the starting point for publishing the existing Dr. Fonseca PWA as store apps without changing the production portal workflow.
 
@@ -36,5 +37,6 @@ This packet is the starting point for publishing the existing Dr. Fonseca PWA as
 
 - Apple review notes: `apple-review-notes.md`
 - Google Play Data Safety draft: `google-play-data-safety-draft.md`
+- Google Play v19 readiness checklist: `google-play-v19-readiness.md`
 - Wrapper plan: `wrapper-plan.md`
 - Android Digital Asset Links template: `android-assetlinks.template.json`
