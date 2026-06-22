@@ -41,7 +41,7 @@ const STAFF_RECORD_ALERTS_MUTED_KEY = "drf_staff_record_alerts_muted";
 const STAFF_ALERT_TONE_STORAGE_KEY = "drf_staff_alert_tone";
 const STAFF_CHAT_ALERT_TONE_STORAGE_KEY = "drf_staff_chat_alert_tone";
 const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
-const DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
+const DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v3";
 
 type PortalNotificationSettingsPlugin = {
   open(options: { channelId: string }): Promise<void>;
@@ -1465,37 +1465,65 @@ export default function InboxPage() {
     if (!error) setStaffPrivateMessages((data || []) as StaffPrivateMessage[]);
   }, [currentUserId]);
 
+  const sendStaffPrivateMessagesViaServer = async (params: {
+    recipients: Array<{ id: string; name?: string | null }>;
+    content: string;
+    title: string;
+    body: string;
+    url?: string;
+    tag?: string;
+  }) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token || "";
+    if (!accessToken) {
+      throw new Error(lang === "es" ? "Vuelve a iniciar sesión para enviar el mensaje." : "Please sign in again to send this message.");
+    }
+    const response = await fetch("/api/staff-private-messages/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        recipients: params.recipients,
+        content: params.content,
+        title: params.title,
+        body: params.body,
+        url: params.url || "/inbox",
+        tag: params.tag,
+      }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(result?.error || (lang === "es" ? "No pude enviar el mensaje staff." : "I could not send the staff message."));
+    }
+    return (Array.isArray(result?.messages) ? result.messages : []) as StaffPrivateMessage[];
+  };
+
   const sendStaffPrivateToMember = async (member: CareTeamMember, content: string) => {
     const cleanContent = content.trim();
     if (!cleanContent || !member?.id || !currentUserId || savingStaffPrivateMessage || staffChatUploading) return false;
     setSavingStaffPrivateMessage(true);
     const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
-    const { data, error } = await supabase.from("staff_private_messages").insert({
-      sender_id: currentUserId,
-      recipient_id: member.id,
-      sender_name: senderName,
-      recipient_name: member.full_name || member.display_name || null,
-      content: cleanContent,
-      created_at: new Date().toISOString(),
-    } as any).select("*").single();
-    setSavingStaffPrivateMessage(false);
-    if (error) {
-      alert(lang === "es" ? "No pude guardar el mensaje privado. Falta configurar la tabla de mensajes privados staff a staff." : "I could not save the private message. The staff-to-staff private messages table is not configured yet.");
+    let messages: StaffPrivateMessage[] = [];
+    try {
+      messages = await sendStaffPrivateMessagesViaServer({
+        recipients: [{ id: member.id, name: member.full_name || member.display_name || null }],
+        content: cleanContent,
+        title: lang === "es" ? "Mensaje privado del equipo" : "Private staff message",
+        body: `${senderName}: ${cleanContent}`.slice(0, 300),
+        url: "/inbox",
+        tag: `staff-private-${currentUserId}-${member.id}`,
+      });
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude guardar el mensaje privado." : "I could not save the private message."));
       return false;
+    } finally {
+      setSavingStaffPrivateMessage(false);
     }
+    const data = messages[0];
     if (data) {
       upsertStaffPrivateMessage(data as StaffPrivateMessage);
-      if (data.id) {
-        sendPushNotification({
-          userType: "staff",
-          targetStaffIds: [member.id],
-          staffMessageIds: [data.id],
-          title: lang === "es" ? "Mensaje privado del equipo" : "Private staff message",
-          body: `${senderName}: ${cleanContent}`.slice(0, 300),
-          url: "/inbox",
-          tag: `staff-private-${currentUserId}-${member.id}`,
-        });
-      }
     }
     return true;
   };
@@ -1569,7 +1597,6 @@ export default function InboxPage() {
       return false;
     }
     setSavingStaffPrivateMessage(true);
-    const senderName = userProfile?.full_name || userProfile?.display_name || "Staff";
     const payload = serializeStaffRoomPayload({
       kind: "staff_room",
       roomId,
@@ -1585,33 +1612,27 @@ export default function InboxPage() {
     const rows = recipientIds.map((recipientId) => {
       const recipient = staffMemberById.get(recipientId);
       return {
-        sender_id: currentUserId,
-        recipient_id: recipientId,
-        sender_name: senderName,
-        recipient_name: recipient?.full_name || recipient?.display_name || null,
-        content: payload,
-        created_at: new Date().toISOString(),
+        id: recipientId,
+        name: recipient?.full_name || recipient?.display_name || null,
       };
     });
-    const { data, error } = await supabase.from("staff_private_messages").insert(rows as any).select("*");
-    setSavingStaffPrivateMessage(false);
-    if (error) {
-      alert(lang === "es" ? "No pude guardar el chat staff. Revisa la tabla staff_private_messages." : "I could not save the staff chat. Please check the staff_private_messages table.");
-      return false;
-    }
-    (data || []).forEach((entry) => upsertStaffPrivateMessage(entry as StaffPrivateMessage));
-    const staffMessageIds = (data || []).map((entry) => entry.id).filter(Boolean);
-    if (staffMessageIds.length) {
-      sendPushNotification({
-        userType: "staff",
-        targetStaffIds: recipientIds,
-        staffMessageIds,
+    let data: StaffPrivateMessage[] = [];
+    try {
+      data = await sendStaffPrivateMessagesViaServer({
+        recipients: rows,
+        content: payload,
         title: lang === "es" ? "Chat staff" : "Staff chat",
         body: `${roomName}: ${staffContentPreview(cleanContent, options.attachment)}`.slice(0, 300),
         url: "/inbox",
         tag: `staff-room-${roomId}`,
       });
+    } catch (error: any) {
+      alert(error?.message || (lang === "es" ? "No pude guardar el chat staff." : "I could not save the staff chat."));
+      return false;
+    } finally {
+      setSavingStaffPrivateMessage(false);
     }
+    (data || []).forEach((entry) => upsertStaffPrivateMessage(entry as StaffPrivateMessage));
     return true;
   };
 
@@ -2137,26 +2158,17 @@ export default function InboxPage() {
 
       if (target === "private" && activePrivate?.peer) {
         const content = serializeStaffPrivateMediaPayload({ kind: "staff_private_media", text: "", attachment });
-        const { data, error } = await supabase.from("staff_private_messages").insert({
-          sender_id: currentUserId,
-          recipient_id: activePrivate.peer.id,
-          sender_name: senderName,
-          recipient_name: activePrivate.peer.full_name || activePrivate.peer.display_name || null,
+        const messages = await sendStaffPrivateMessagesViaServer({
+          recipients: [{ id: activePrivate.peer.id, name: activePrivate.peer.full_name || activePrivate.peer.display_name || null }],
           content,
-          created_at: new Date().toISOString(),
-        } as any).select("*").single();
-        if (error) throw error;
+          title: lang === "es" ? "Mensaje privado del equipo" : "Private staff message",
+          body: `${senderName}: ${staffContentPreview("", attachment)}`.slice(0, 300),
+          url: "/inbox",
+          tag: `staff-private-${currentUserId}-${activePrivate.peer.id}`,
+        });
+        const data = messages[0];
         if (data) {
           upsertStaffPrivateMessage(data as StaffPrivateMessage);
-          sendPushNotification({
-            userType: "staff",
-            targetStaffIds: [activePrivate.peer.id],
-            staffMessageIds: data.id ? [data.id] : [],
-            title: lang === "es" ? "Mensaje privado del equipo" : "Private staff message",
-            body: `${senderName}: ${staffContentPreview("", attachment)}`.slice(0, 300),
-            url: "/inbox",
-            tag: `staff-private-${currentUserId}-${activePrivate.peer.id}`,
-          });
         }
       } else if (target === "room" && activeRoom) {
         const sent = await sendStaffRoomMessage(

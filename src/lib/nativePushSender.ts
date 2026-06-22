@@ -2,7 +2,10 @@ import { createSign } from "node:crypto";
 
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v2";
+export const DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v3";
+const ANDROID_ALERT_SOUND = "critical_repeat";
+const IOS_ALERT_SOUND = "critical_repeat.wav";
+const IOS_CRITICAL_ALERTS_ENABLED = /^true|1|yes$/i.test(`${process.env.IOS_CRITICAL_ALERTS_ENABLED || ""}`);
 
 type FirebaseCredentials = {
   projectId: string;
@@ -21,6 +24,7 @@ export type NativePushPayload = {
   body: string;
   url: string;
   tag?: string;
+  urgency?: "normal" | "urgent" | "critical";
 };
 
 let cachedAccessToken: { token: string; expiresAt: number } | null = null;
@@ -108,6 +112,10 @@ const cleanTag = (tag?: string) =>
 
 function buildFcmMessage(token: string, payload: NativePushPayload) {
   const tag = cleanTag(payload.tag);
+  const critical = payload.urgency === "critical" && IOS_CRITICAL_ALERTS_ENABLED;
+  const apsSound = critical
+    ? { critical: 1, name: IOS_ALERT_SOUND, volume: 1.0 }
+    : IOS_ALERT_SOUND;
   return {
     message: {
       token,
@@ -121,6 +129,7 @@ function buildFcmMessage(token: string, payload: NativePushPayload) {
         url: payload.url,
         tag,
         source: "dr-fonseca-portal",
+        urgency: payload.urgency || "urgent",
       },
       android: {
         priority: "HIGH",
@@ -129,18 +138,21 @@ function buildFcmMessage(token: string, payload: NativePushPayload) {
           channel_id: DEVICE_ALERT_CHANNEL_ID,
           notification_priority: "PRIORITY_MAX",
           visibility: "PUBLIC",
-          default_sound: true,
+          sound: ANDROID_ALERT_SOUND,
           default_vibrate_timings: true,
           tag,
         },
       },
       apns: {
         headers: {
+          "apns-push-type": "alert",
           "apns-priority": "10",
         },
         payload: {
           aps: {
-            sound: "default",
+            sound: apsSound,
+            "interruption-level": critical ? "critical" : "time-sensitive",
+            "thread-id": tag,
           },
         },
       },

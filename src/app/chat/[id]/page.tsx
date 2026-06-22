@@ -1155,7 +1155,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             if (current.some((item) => item.id === data.id)) return current;
             return [...current, data];
           });
-          sendStaffPushNotification(content);
         }
       } catch (error) {
         setComposerText(content);
@@ -1224,10 +1223,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               ? current.map((message) => (message.id === existing.id ? data : message))
               : current.some((item) => item.id === data.id) ? current : [...current, data]
           ));
-          sendStaffPushNotification(existing?.id
-            ? (uiLang === "es" ? "Historia clínica actualizada" : "Medical history updated")
-            : (uiLang === "es" ? "Historia clínica enviada" : "Medical history submitted"),
-            "advanced_assigned");
         }
       } catch (error) {
         console.error("patient clinical form save failed", error);
@@ -1479,10 +1474,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             if (current.some((item) => item.id === message.id)) return current;
             return [...current, message];
           });
-          sendStaffPushNotification(message.message_type === "file" && overrideFileName === HISTORIA_CLINICA_FILE_NAME
-            ? (uiLang === "es" ? "Historia Clinica enviada" : "Historia Clinica submitted")
-            : file.name || (uiLang === "es" ? "Nuevo archivo" : "New file"),
-            message.message_type === "file" && overrideFileName === HISTORIA_CLINICA_FILE_NAME ? "advanced_assigned" : undefined);
         }
         return url || null;
       } catch (error: any) {
@@ -1616,9 +1607,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (accessDenied || roomClosed || !accessReady) return null;
 
     if (viewerType === "patient") {
-      const notificationText = latestClinicalPdfMessage?.id
-        ? (uiLang === "es" ? "Historia Clinica actualizada" : "Historia Clinica updated")
-        : (uiLang === "es" ? "Historia Clinica enviada" : "Historia Clinica submitted");
       try {
         const { message, url } = await uploadPatientFile(file, "file", HISTORIA_CLINICA_FILE_NAME, latestClinicalPdfMessage?.id);
         if (message) {
@@ -1628,7 +1616,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               ? current.map((item) => (item.id === latestClinicalPdfMessage.id ? message : item))
               : current.some((item) => item.id === message.id) ? current : [...current, message]
           ));
-          sendStaffPushNotification(notificationText, "advanced_assigned");
         }
         return url || null;
       } catch (error: any) {
@@ -2152,7 +2139,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         setPatientPhoneFeedback(labels.phoneUnchanged);
       } else {
         setPatientPhoneFeedback(labels.phoneSaved);
-        sendStaffPushNotification(labels.phoneUpdateAlert.replace("{phone}", nextPhone), "advanced_assigned");
       }
     } catch (error: any) {
       setPatientPhoneFeedback(error?.message || labels.phoneSaveFailed);

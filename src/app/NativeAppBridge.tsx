@@ -6,7 +6,9 @@ import { supabase } from "@/lib/supabaseClient";
 const NATIVE_TOKEN_STORAGE_KEY = "drf_native_push_token";
 const NATIVE_PLATFORM_STORAGE_KEY = "drf_native_platform";
 const LEGACY_DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
-const DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v2";
+const DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v3";
+const PREVIOUS_DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v2";
+const DEVICE_ALERT_SOUND = "critical_repeat";
 
 type ScreenOrientationModule = {
   ScreenOrientation?: {
@@ -128,12 +130,21 @@ export default function NativeAppBridge() {
               vibration: true,
             },
             {
-              id: DEVICE_ALERT_CHANNEL_ID,
+              id: PREVIOUS_DEVICE_ALERT_CHANNEL_ID,
               name: "Urgent portal alerts",
               description: "High-priority patient and staff communication alerts",
               importance: 5,
               visibility: 1,
               vibration: true,
+            },
+            {
+              id: DEVICE_ALERT_CHANNEL_ID,
+              name: "Medical urgent alerts",
+              description: "Loud urgent alerts for patient and staff medical messages",
+              importance: 5,
+              visibility: 1,
+              vibration: true,
+              sound: DEVICE_ALERT_SOUND,
             },
           ];
           for (const deviceAlertChannel of deviceAlertChannels) {
@@ -164,7 +175,7 @@ export default function NativeAppBridge() {
               title: notification.title || "Dr. Fonseca Portal",
               body: notification.body || "New portal message",
               channelId: DEVICE_ALERT_CHANNEL_ID,
-              sound: "default",
+              sound: DEVICE_ALERT_SOUND,
               extra: notification.data || {},
             }],
           }).catch(() => {});

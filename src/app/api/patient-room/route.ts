@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CHAT_FILES_BUCKET, patientMediaUrl } from "@/lib/chatFileUrls";
+import { sendPatientMessageStaffAlert } from "@/lib/urgentNotifications";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,9 @@ const normalizePatient = (room: RoomAccess | null) => {
   const patient = procedure?.patients;
   return Array.isArray(patient) ? patient[0] : patient;
 };
+
+const patientDisplayName = (room: RoomAccess | null) =>
+  `${normalizePatient(room)?.full_name || ""}`.trim() || "Paciente";
 
 const isRoomClosed = (room: RoomAccess | null) => {
   const procedure = normalizeProcedure(room);
@@ -236,6 +240,25 @@ async function logAdminAuditBestEffort(client: SupabaseClient, payload: Record<s
   if (error && !isSchemaColumnError(error)) console.warn("patient-room admin audit failed", error.message);
 }
 
+async function notifyStaffOfPatientMessage(
+  client: SupabaseClient,
+  room: RoomAccess,
+  body: string,
+  audience?: "advanced_assigned",
+) {
+  try {
+    await sendPatientMessageStaffAlert(client, {
+      roomId: room.id,
+      title: patientDisplayName(room),
+      body,
+      tag: room.id,
+      audience,
+    });
+  } catch (error: any) {
+    console.error("patient-room staff alert failed", error?.message || error);
+  }
+}
+
 async function loadClinicalPdfValues(client: SupabaseClient, roomId: string) {
   const path = `patients/${roomId}/historia-clinica-values.json`;
   const { data } = await client.storage.from(CHAT_FILES_BUCKET).download(path);
@@ -337,6 +360,7 @@ export async function POST(req: NextRequest) {
         notes: `Patient self-updated contact phone to ${phone}.`,
         metadata: { room_id: room.id, previous_phone: previousPhone || null, next_phone: phone, updated_at: createdAt },
       });
+      await notifyStaffOfPatientMessage(client, room, content, "advanced_assigned");
 
       return NextResponse.json({
         ok: true,
@@ -359,6 +383,7 @@ export async function POST(req: NextRequest) {
         message_hash: hashMessage(content, createdAt, null),
       });
       await logMessageAudit(client, room.id, createdAt);
+      await notifyStaffOfPatientMessage(client, room, content);
       return NextResponse.json({ message });
     }
 
@@ -369,6 +394,7 @@ export async function POST(req: NextRequest) {
 
       if (existingMessageId) {
         const message = await updateMessage(client, existingMessageId, room.id, { content });
+        await notifyStaffOfPatientMessage(client, room, "Historia clínica actualizada", "advanced_assigned");
         return NextResponse.json({ message });
       }
 
@@ -381,6 +407,7 @@ export async function POST(req: NextRequest) {
         message_type: "text",
         created_at: createdAt,
       });
+      await notifyStaffOfPatientMessage(client, room, "Historia clínica enviada", "advanced_assigned");
       return NextResponse.json({ message });
     }
 
@@ -441,6 +468,16 @@ export async function POST(req: NextRequest) {
         ? await updateMessage(client, existingMessageId, room.id, payload)
         : await insertMessage(client, payload);
       await logMessageAudit(client, room.id, timestamp);
+      const isClinicalHistoryPdf = messageType === "file" && fileName.toLowerCase() === "historia-clinica.pdf";
+      const alertBody = isClinicalHistoryPdf
+        ? (existingMessageId ? "Historia Clinica actualizada" : "Historia Clinica enviada")
+        : fileName || "Nuevo archivo de paciente";
+      await notifyStaffOfPatientMessage(
+        client,
+        room,
+        alertBody,
+        isClinicalHistoryPdf ? "advanced_assigned" : undefined,
+      );
       const rewrittenMessage = rewritePatientMessageMedia(message, room.id, roomToken);
       return NextResponse.json({ message: rewrittenMessage, url: rewrittenMessage.file_url || rewrittenMessage.content || url });
     }
