@@ -2312,7 +2312,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }
 
   return (
-      <main className="patient-chat-app" data-text-size={textSize} style={{ height: "100%", minHeight: "-webkit-fill-available", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: chatFontFamily, overflow: "hidden", maxWidth: "100vw" }}>
+      <main className="patient-chat-app" data-text-size={textSize} style={{ height: "100dvh", minHeight: 0, maxHeight: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: chatFontFamily, overflow: "hidden", maxWidth: "100vw" }}>
         <style>{`
         .patient-chat-app { --patient-ui-font-size: ${patientTextBase}px; --patient-ui-small-size: ${patientTextSmall}px; }
         html.native-platform { --drf-system-bar-bg: ${footerBg}; background: var(--drf-system-bar-bg); }
@@ -2379,7 +2379,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         className="patient-chat-scroll"
         ref={chatScrollRef}
         onScroll={handleChatScroll}
-        style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain", touchAction: "pan-y" }}
+        style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain", touchAction: "pan-y" }}
         onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}
       >
         {(() => {
