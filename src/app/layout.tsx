@@ -3,6 +3,7 @@ import AppUpdateWatcher from "./AppUpdateWatcher";
 import NativeAppBridge from "./NativeAppBridge";
 import NativeKeyboardTuning from "./NativeKeyboardTuning";
 import OrientationLock from "./OrientationLock";
+import StaffRecoveryEmailReminder from "./StaffRecoveryEmailReminder";
 import "./globals.css";
 
 const BRAND_BROWSER_COLOR = "#0B63CE";
@@ -112,6 +113,7 @@ export default function RootLayout({
           <NativeKeyboardTuning />
           <NativeAppBridge />
           <AppUpdateWatcher buildVersion={APP_BUILD_VERSION} />
+          <StaffRecoveryEmailReminder />
           {children}
         </div>
       </body>
