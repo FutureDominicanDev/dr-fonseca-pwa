@@ -43,6 +43,7 @@ const STAFF_ALERT_TONE_STORAGE_KEY = "drf_staff_alert_tone";
 const STAFF_CHAT_ALERT_TONE_STORAGE_KEY = "drf_staff_chat_alert_tone";
 const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
 const DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v3";
+const ROOM_CANCEL_CONFIRM_PHRASE = "CANCEL ROOM";
 
 type PortalNotificationSettingsPlugin = {
   open(options: { channelId: string }): Promise<void>;
@@ -193,6 +194,13 @@ const T = {
     cancelRoom: "Cancelar sala",
     restoreRoom: "Restaurar sala",
     cancelRoomConfirm: "Esta sala saldrá de la lista activa y el paciente ya no podrá usarla como chat activo. Los formularios, archivos, recetas y mensajes se conservan para restaurarla si fue un error.",
+    cancelRoomSafetyTitle: "Confirmación de seguridad",
+    cancelRoomSafetyCopy: "Esto no borra mensajes, archivos, formularios ni auditoría. Archiva el expediente y desactiva el enlace del paciente hasta que alguien restaure la sala.",
+    cancelRoomSafetyType: "Para continuar escribe CANCEL ROOM.",
+    cancelRoomSafetyInput: "Escribe CANCEL ROOM",
+    cancelRoomSafetyMismatch: "La frase debe coincidir exactamente.",
+    cancelRoomSafetyAction: "Sí, cancelar sala",
+    roomLifecycleMismatch: "La sala cambió. Cierra esta ventana y vuelve a intentarlo.",
     restoreRoomConfirm: "Esta sala volverá a la lista activa y el paciente podrá usar el mismo enlace de nuevo.",
     roomCancelled: "Sala cancelada y expediente archivado.",
     roomRestored: "Sala restaurada.",
@@ -392,6 +400,13 @@ const T = {
     cancelRoom: "Cancel room",
     restoreRoom: "Restore room",
     cancelRoomConfirm: "This room will leave the active list and the patient will no longer use it as an active chat. Forms, files, prescriptions, and messages stay saved for recovery.",
+    cancelRoomSafetyTitle: "Required safety confirmation",
+    cancelRoomSafetyCopy: "This does not delete messages, files, forms, or audit history. It archives the record and disables the patient link until someone restores the room.",
+    cancelRoomSafetyType: "To continue, type CANCEL ROOM.",
+    cancelRoomSafetyInput: "Type CANCEL ROOM",
+    cancelRoomSafetyMismatch: "The phrase must match exactly.",
+    cancelRoomSafetyAction: "Yes, cancel room",
+    roomLifecycleMismatch: "The selected room changed. Close this window and try again.",
     restoreRoomConfirm: "This room will return to the active list and the patient can use the same link again.",
     roomCancelled: "Room cancelled and record archived.",
     roomRestored: "Room restored.",
@@ -1053,6 +1068,8 @@ export default function InboxPage() {
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [newRoomError, setNewRoomError] = useState("");
   const [roomLifecycleBusy, setRoomLifecycleBusy] = useState(false);
+  const [roomLifecycleConfirm, setRoomLifecycleConfirm] = useState<{ roomId: string; patientName: string; procedureName: string } | null>(null);
+  const [roomLifecycleConfirmText, setRoomLifecycleConfirmText] = useState("");
   const [createdRoomLink, setCreatedRoomLink] = useState<string|null>(null);
   const [createdPatientName, setCreatedPatientName] = useState("");
   const [createdPatientLanguage, setCreatedPatientLanguage] = useState<"es" | "en">("es");
@@ -4371,10 +4388,36 @@ export default function InboxPage() {
     window.location.href = `sms:?&body=${encodeURIComponent(link)}`;
   };
 
-  const changeSelectedRoomLifecycle = async (action: "cancel" | "restore") => {
+  const closeRoomLifecycleConfirm = (force = false) => {
+    if (roomLifecycleBusy && !force) return;
+    setRoomLifecycleConfirm(null);
+    setRoomLifecycleConfirmText("");
+  };
+  const openRoomCancelConfirmation = () => {
     if (!selectedRoom || roomLifecycleBusy) return;
-    const confirmText = action === "cancel" ? t.cancelRoomConfirm : t.restoreRoomConfirm;
-    if (!window.confirm(confirmText)) return;
+    setRoomLifecycleConfirm({
+      roomId: selectedRoom.id,
+      patientName: selectedRoom.procedures?.patients?.full_name || t.patientLabel,
+      procedureName: selectedRoom.procedures?.procedure_name || (lang === "es" ? "Sin procedimiento" : "No procedure"),
+    });
+    setRoomLifecycleConfirmText("");
+  };
+  const roomLifecycleConfirmMatches = roomLifecycleConfirmText.trim().toUpperCase() === ROOM_CANCEL_CONFIRM_PHRASE;
+  const changeSelectedRoomLifecycle = async (
+    action: "cancel" | "restore",
+    safety?: { confirmed?: boolean; confirmRoomId?: string; confirmPhrase?: string },
+  ) => {
+    if (!selectedRoom || roomLifecycleBusy) return;
+    if (action === "cancel" && !safety?.confirmed) {
+      openRoomCancelConfirmation();
+      return;
+    }
+    if (action === "cancel" && safety?.confirmRoomId !== selectedRoom.id) {
+      alert(t.roomLifecycleMismatch);
+      closeRoomLifecycleConfirm();
+      return;
+    }
+    if (action === "restore" && !window.confirm(t.restoreRoomConfirm)) return;
 
     setRoomLifecycleBusy(true);
     try {
@@ -4386,7 +4429,12 @@ export default function InboxPage() {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
-        body: JSON.stringify({ roomId: selectedRoom.id, action }),
+        body: JSON.stringify({
+          roomId: selectedRoom.id,
+          action,
+          confirmRoomId: safety?.confirmRoomId || "",
+          confirmPhrase: safety?.confirmPhrase || "",
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || t.roomLifecycleError);
@@ -4404,6 +4452,7 @@ export default function InboxPage() {
           ...patient,
           rooms: (patient.rooms || []).filter((room:any) => room.id !== selectedRoom.id),
         })).filter((patient:any) => (patient.rooms || []).length > 0));
+        closeRoomLifecycleConfirm(true);
         alert(t.roomCancelled);
       } else {
         alert(t.roomRestored);
@@ -8187,6 +8236,51 @@ export default function InboxPage() {
       {showSettings && SettingsPanel()}
       {showStaffChats && StaffChatsPanel()}
       {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
+      {roomLifecycleConfirm && selectedRoom && (
+        <div className="modal-overlay" onClick={() => closeRoomLifecycleConfirm()}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520}}>
+            <p className="modal-title" style={{color:"#991B1B"}}>{t.cancelRoomSafetyTitle}</p>
+            <div style={{display:"grid",gap:10,marginTop:10}}>
+              <div style={{padding:12,borderRadius:14,background:"#FFF7ED",border:"1px solid #FDBA74",color:"#7C2D12",fontSize:uiSmallSize,fontWeight:800,lineHeight:1.45}}>
+                {t.cancelRoomSafetyCopy}
+              </div>
+              <div style={{padding:12,borderRadius:14,background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`,display:"grid",gap:4}}>
+                <div style={{fontSize:uiBaseSize,fontWeight:900,color:textColor,overflowWrap:"anywhere"}}>{roomLifecycleConfirm.patientName}</div>
+                <div style={{fontSize:uiSmallSize,fontWeight:800,color:subTextColor,overflowWrap:"anywhere"}}>{roomLifecycleConfirm.procedureName}</div>
+              </div>
+              <label style={{display:"grid",gap:8}}>
+                <span style={{fontSize:uiSmallSize,fontWeight:900,color:textColor}}>{t.cancelRoomSafetyType}</span>
+                <input
+                  className="finput"
+                  autoFocus
+                  value={roomLifecycleConfirmText}
+                  onChange={event=>setRoomLifecycleConfirmText(event.target.value)}
+                  placeholder={t.cancelRoomSafetyInput}
+                  style={{textTransform:"uppercase"}}
+                />
+              </label>
+              {roomLifecycleConfirmText.trim() && !roomLifecycleConfirmMatches && (
+                <div style={{fontSize:uiSmallSize,fontWeight:800,color:"#B91C1C"}}>{t.cancelRoomSafetyMismatch}</div>
+              )}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <button className="sbtn" disabled={roomLifecycleBusy} onClick={() => closeRoomLifecycleConfirm()}>{t.cancel}</button>
+                <button
+                  className="pbtn"
+                  disabled={roomLifecycleBusy || !roomLifecycleConfirmMatches || roomLifecycleConfirm.roomId !== selectedRoom.id}
+                  onClick={() => void changeSelectedRoomLifecycle("cancel", {
+                    confirmed: true,
+                    confirmRoomId: roomLifecycleConfirm.roomId,
+                    confirmPhrase: ROOM_CANCEL_CONFIRM_PHRASE,
+                  })}
+                  style={{background:"#B91C1C",opacity:roomLifecycleBusy || !roomLifecycleConfirmMatches || roomLifecycleConfirm.roomId !== selectedRoom.id ? 0.55 : 1}}
+                >
+                  {roomLifecycleBusy ? (lang==="es" ? "Guardando..." : "Saving...") : t.cancelRoomSafetyAction}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {activeMessageAction && (
         <div className="modal-overlay" onClick={closeMessageActions}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>

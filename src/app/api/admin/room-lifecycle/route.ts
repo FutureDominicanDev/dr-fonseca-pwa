@@ -6,6 +6,7 @@ import { isOwnerIdentity } from "@/lib/securityConfig";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const STAFF_PERMISSIONS_SETTING_KEY = "staff_permissions";
+const ROOM_CANCEL_CONFIRM_PHRASE = "CANCEL ROOM";
 
 const getAdminClient = () =>
   createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || "missing-key", {
@@ -60,7 +61,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const roomId = typeof body?.roomId === "string" ? body.roomId.trim() : "";
     const action = body?.action === "restore" ? "restore" : body?.action === "cancel" ? "cancel" : "";
+    const confirmRoomId = typeof body?.confirmRoomId === "string" ? body.confirmRoomId.trim() : "";
+    const confirmPhrase = typeof body?.confirmPhrase === "string" ? body.confirmPhrase.trim().toUpperCase() : "";
     if (!roomId || !action) return NextResponse.json({ error: "Missing room action." }, { status: 400 });
+    if (action === "cancel" && (confirmRoomId !== roomId || confirmPhrase !== ROOM_CANCEL_CONFIRM_PHRASE)) {
+      return NextResponse.json({ error: "Room cancellation requires typed confirmation." }, { status: 400 });
+    }
 
     const requesterEmail = requester.email?.trim().toLowerCase() || "";
     const [{ data: profile }, permissionsRes] = await Promise.all([
