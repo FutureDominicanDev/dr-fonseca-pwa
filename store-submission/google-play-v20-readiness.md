@@ -1,4 +1,4 @@
-# Google Play v19 Readiness Checklist
+# Google Play v20 Readiness Checklist
 
 Updated June 22, 2026.
 
@@ -6,14 +6,14 @@ Updated June 22, 2026.
 
 - Android package id: `com.drfonsecacirujanoplastico.portal`
 - App name: `Dr. Fonseca Portal`
-- Current release candidate: versionCode `19`, versionName `1.0.18`
+- Current release candidate: versionCode `20`, versionName `1.0.19`
 - Target SDK: API `35`
 - Minimum SDK: API `24`
 - Production portal URL: `https://portal.drfonsecacirujanoplastico.com`
 
 ## Release Assets
 
-- Upload AAB: `store-upload/dr-fonseca-portal-google-play-v19.aab`
+- Upload AAB: `store-upload/dr-fonseca-portal-google-play-v20.aab`
 - Play Store icon: `assets/store/android/icons/PlayStore-512.png` (`512x512`, RGBA PNG)
 - Feature graphic: `assets/store/android/feature-graphic-1024x500.png`
 - Launcher icon resources: `android/app/src/main/res/mipmap-*/ic_launcher*.png`
@@ -27,11 +27,11 @@ Updated June 22, 2026.
 - Account deletion URL: `https://portal.drfonsecacirujanoplastico.com/account-deletion`
 - Short description suggestion: `Secure clinic messaging and patient care coordination for Dr. Fonseca.`
 
-## Screenshots Still Needed
+## Screenshots
 
 Use only demo/test data. Do not show real patient names, photos, medical records, phone numbers, or email addresses.
 
-Minimum required for Play: at least two screenshots across device types.
+Generated demo screenshots are staged in `/Users/rmd/Downloads/dr-fonseca-play-store-assets/`.
 
 Recommended phone set:
 
