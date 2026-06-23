@@ -6321,6 +6321,7 @@ export default function InboxPage() {
     const closePanel = () => {
       stopStaffAudioRecording(true);
       clearStaffAudioPreview();
+      cancelCapture();
       setShowStaffChats(false);
       setActiveStaffChatPeerId(null);
       setActiveStaffRoomId(null);
@@ -7505,8 +7506,10 @@ export default function InboxPage() {
         .slash-item + .slash-item { margin-top: 3px; }
         .slash-item:hover { background: ${darkMode?"rgba(255,255,255,0.08)":"#F1F6FC"}; }
 	        .modal-overlay { position: fixed; inset: 0; bottom: var(--native-keyboard-overlay-height, 0px); background: rgba(15,23,42,0.32); z-index: 200; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); overflow-y: auto; overflow-x: hidden; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); }
-	        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px; width: min(560px, calc(100vw - 36px)); max-width: 100%; max-height: calc(100dvh - 36px); overflow-y: auto; overflow-x: hidden; padding: 24px; box-shadow: 0 18px 50px rgba(15,23,42,0.18); }
-	        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: min(560px, 100vw); position: fixed; top: 6vh; bottom: var(--native-keyboard-overlay-height, 0px); left: 50%; transform: translateX(-50%); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 24px max(18px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
+		        .modal { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px; width: min(560px, calc(100vw - 36px)); max-width: 100%; max-height: calc(100dvh - 36px); overflow-y: auto; overflow-x: hidden; padding: 24px; box-shadow: 0 18px 50px rgba(15,23,42,0.18); }
+		        .modal-scroll { background: ${darkMode?sidebarBg:"#FFFFFF"}; border-radius: 24px 24px 0 0; width: 100%; max-width: min(560px, 100vw); position: fixed; top: 6vh; bottom: var(--native-keyboard-overlay-height, 0px); left: 50%; transform: translateX(-50%); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 24px max(18px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); z-index: 201; box-shadow: 0 -12px 40px rgba(15,23,42,0.12); }
+        .capture-overlay { z-index: 320; }
+        .capture-overlay .modal { position: relative; z-index: 321; }
         .staff-chat-sheet { display: flex; flex-direction: column; padding: 16px max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)) !important; max-height: calc(100dvh - 20px); }
         .staff-thread-list { min-height: 190px; max-height: min(58dvh, calc(100dvh - 250px - var(--native-keyboard-overlay-height, 0px))) !important; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; touch-action: pan-y; }
         .staff-room-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-height: 40px; }
@@ -7662,7 +7665,7 @@ export default function InboxPage() {
       <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>
 
       {(captureMode || preparingCapture) && (
-        <div className="modal-overlay" onClick={cancelCapture}>
+        <div className="modal-overlay capture-overlay" onClick={cancelCapture}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxHeight:"88vh",paddingTop:16}}>
             <p style={{fontSize:18,fontWeight:700,marginBottom:12,color:textColor}}>
               {preparingCapture ? t.preparingCamera : captureMode==="photo" ? t.takePhoto : t.recordVideoOption}
