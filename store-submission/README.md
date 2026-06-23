@@ -36,6 +36,7 @@ This packet is the starting point for publishing the existing Dr. Fonseca PWA as
 ## Source Files
 
 - Apple review notes: `apple-review-notes.md`
+- Apple iOS v20 readiness checklist: `apple-ios-v20-readiness.md`
 - Google Play Data Safety draft: `google-play-data-safety-draft.md`
 - Google Play v20 readiness checklist: `google-play-v20-readiness.md`
 - Wrapper plan: `wrapper-plan.md`
