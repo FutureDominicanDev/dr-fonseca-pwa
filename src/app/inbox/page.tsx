@@ -1259,8 +1259,8 @@ export default function InboxPage() {
   const profilePicRef = useRef<HTMLInputElement>(null);
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
   const staffChatImageInputRef = useRef<HTMLInputElement>(null);
-  const staffChatVideoInputRef = useRef<HTMLInputElement>(null);
   const staffChatUploadTargetRef = useRef<"private" | "room" | null>(null);
+  const staffVideoCaptureTargetRef = useRef<"private" | "room" | null>(null);
   const beforePhotosRef = useRef<HTMLInputElement>(null);
   const staffRecordPhotoInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
@@ -2200,11 +2200,17 @@ export default function InboxPage() {
     staffChatImageInputRef.current?.click();
   };
 
-  const openStaffChatVideoPicker = (target: "private" | "room") => {
-    staffChatUploadTargetRef.current = target;
+  const openStaffChatVideoPicker = async (target: "private" | "room") => {
+    if (staffChatUploading || savingStaffPrivateMessage || captureMode || preparingCapture) return;
+    if (target === "room" && activeStaffRoomConversation?.currentUserStatus !== "accepted") return;
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      alert(lang === "es" ? "Este dispositivo no permite grabar video dentro del portal." : "This device cannot record video inside the portal.");
+      return;
+    }
+    staffVideoCaptureTargetRef.current = target;
     setShowSlashMenu(false);
     setSlashFilter("");
-    staffChatVideoInputRef.current?.click();
+    await openCapture("video");
   };
 
   const sendStaffChatAttachment = async (file: File, target: "private" | "room") => {
@@ -5506,7 +5512,13 @@ export default function InboxPage() {
           setRecordingVideo(false);
           if (!shouldDiscard && blob.size > 0) {
             const ext = extensionForMimeType(finalMimeType, "webm");
-            stagePreview(new File([blob], `video-${Date.now()}.${ext}`, { type: blob.type || finalMimeType }));
+            const videoFile = new File([blob], `video-${Date.now()}.${ext}`, { type: blob.type || finalMimeType });
+            const staffTarget = staffVideoCaptureTargetRef.current;
+            staffVideoCaptureTargetRef.current = null;
+            if (staffTarget) void sendStaffChatAttachment(videoFile, staffTarget);
+            else stagePreview(videoFile);
+          } else {
+            staffVideoCaptureTargetRef.current = null;
           }
         };
         recorder.start();
@@ -5514,6 +5526,7 @@ export default function InboxPage() {
       }
     } catch {
       stopCaptureStream();
+      staffVideoCaptureTargetRef.current = null;
       alert(lang==="es" ? "No se pudo abrir la cámara." : "I could not open the camera.");
     } finally {
       setPreparingCapture(false);
@@ -5526,6 +5539,7 @@ export default function InboxPage() {
       return;
     }
     stopCaptureStream();
+    staffVideoCaptureTargetRef.current = null;
     setCaptureMode(null);
     setRecordingVideo(false);
   };
@@ -6712,7 +6726,7 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-quick-btn"
-                  disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading}
+                  disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading || savingStaffPrivateMessage || !!captureMode || preparingCapture}
                   onClick={()=>void openStaffChatVideoPicker("room")}
                   aria-label={lang==="es" ? "Enviar video" : "Send video"}
                   title={lang==="es" ? "Enviar video" : "Send video"}
@@ -6855,7 +6869,7 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-quick-btn"
-                  disabled={staffChatUploading}
+                  disabled={staffChatUploading || savingStaffPrivateMessage || !!captureMode || preparingCapture}
                   onClick={()=>void openStaffChatVideoPicker("private")}
                   aria-label={lang==="es" ? "Enviar video" : "Send video"}
                   title={lang==="es" ? "Enviar video" : "Send video"}
@@ -7643,7 +7657,6 @@ export default function InboxPage() {
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={staffChatImageInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.heic,.heif" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
-      <input ref={staffChatVideoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
       <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>
