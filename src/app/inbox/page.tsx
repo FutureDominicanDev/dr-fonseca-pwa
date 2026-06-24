@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useCallback, useMemo, type TouchEvent } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode, type TouchEvent } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { displayToIsoDate, formatDateTyping, isoToDisplayDate } from "@/lib/dateInput";
 import { PATIENT_LANGUAGE_OPTIONS, PATIENT_TIMEZONE_OPTIONS, currentTimeInZone, labelPatientLanguage, labelTimeZone, onboardingMessageForPatient } from "@/lib/patientMeta";
@@ -15,13 +15,8 @@ import {
   type StaffAvatarVisibilityMap,
 } from "@/lib/staffAvatarVisibility";
 import {
-  ALERT_TONE_OPTIONS,
-  emptyStaffAlertTonePreference,
-  alertToneTextForCategory,
-  normalizeAlertTone,
   type AlertTone,
   type AlertToneCategory,
-  type StaffAlertTonePreference,
 } from "@/lib/alertToneSettings";
 import { FormMessage, parseFormMessage } from "@/components/FormMessage";
 
@@ -37,27 +32,20 @@ const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", 
 const MAX_PATIENT_LABELS = 20;
 const LABEL_COLORS = ["#EF4444", "#F97316", "#F59E0B", "#10B981", "#14B8A6", "#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", "#64748B"];
 const STAFF_FONT_SIZE_STORAGE_KEY = "drf_staff_font_size_level";
-const STAFF_LANG_STORAGE_KEY = "drf_staff_ui_lang";
-const STAFF_RECORD_ALERTS_MUTED_KEY = "drf_staff_record_alerts_muted";
-const STAFF_ALERT_TONE_STORAGE_KEY = "drf_staff_alert_tone";
-const STAFF_CHAT_ALERT_TONE_STORAGE_KEY = "drf_staff_chat_alert_tone";
 const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
-const DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v3";
 const ROOM_CANCEL_CONFIRM_PHRASE = "CANCEL ROOM";
 
-type PortalNotificationSettingsPlugin = {
-  open(options: { channelId: string }): Promise<void>;
+const deviceStaffLang = (): Lang => {
+  if (typeof navigator === "undefined") return "es";
+  const languages = [navigator.language, ...(navigator.languages || [])];
+  return languages.some((entry) => `${entry || ""}`.toLowerCase().startsWith("en")) ? "en" : "es";
 };
 
 const readStaffLang = (): Lang => {
   if (typeof window === "undefined") return "es";
   const queryLang = new URLSearchParams(window.location.search).get("lang");
-  if (queryLang === "en" || queryLang === "es") {
-    window.localStorage.setItem(STAFF_LANG_STORAGE_KEY, queryLang);
-    return queryLang;
-  }
-  const stored = window.localStorage.getItem(STAFF_LANG_STORAGE_KEY);
-  return stored === "en" ? "en" : "es";
+  if (queryLang === "en" || queryLang === "es") return queryLang;
+  return deviceStaffLang();
 };
 
 const readStaffFontSizeLevel = (): StaffFontSizeLevel => {
@@ -65,19 +53,6 @@ const readStaffFontSizeLevel = (): StaffFontSizeLevel => {
   const stored = window.localStorage.getItem(STAFF_FONT_SIZE_STORAGE_KEY);
   return stored === "small" || stored === "medium" || stored === "large" ? stored : "large";
 };
-
-const readStaffRecordAlertsMuted = () => {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(STAFF_RECORD_ALERTS_MUTED_KEY) === "1";
-};
-
-const readStaffAlertTone = (key = STAFF_ALERT_TONE_STORAGE_KEY, fallback: AlertTone = "system"): AlertTone => {
-  if (typeof window === "undefined") return fallback;
-  const stored = window.localStorage.getItem(key);
-  return normalizeAlertTone(stored, fallback);
-};
-
-const alertToneOptions = ALERT_TONE_OPTIONS;
 
 const PHONE_COUNTRY_OPTIONS: PhoneCountryOption[] = [
   { code: "+52", label: "🇲🇽 +52 México" },
@@ -270,10 +245,6 @@ const T = {
     staffRecordUploading: "Subiendo...",
     staffRecordNewPhoto: "Nueva foto interna",
     staffRecordNewNote: "Nueva nota interna",
-    staffRecordAlerts: "Alertas de notas y fotos internas",
-    staffRecordAlertsHint: "Muestra avisos cuando alguien del equipo asignado agrega una nota o foto al expediente.",
-    staffRecordAlertsOn: "Alertas activadas",
-    staffRecordAlertsOff: "Alertas pausadas",
     uploadedBy: "Subido por",
     noTeamSelected: "Dr. Fonseca se mantiene asignado siempre. Si no agregas a nadie más, solo el equipo base verá la sala.",
     noPatientInfo: "Todavía no hay datos extendidos para este paciente.",
@@ -293,12 +264,8 @@ const T = {
     invalidEmail: "El correo debe incluir un formato válido, por ejemplo nombre@correo.com.",
     invalidPhone: "El teléfono debe tener al menos 7 dígitos.",
     settings: "Ajustes", myProfile: "Mi Perfil",
-    trainingCenter: "Leyenda de iconos",
-    trainingHint: "Referencia compacta para saber que hace cada icono del portal. No abre expedientes reales.",
-    openTraining: "Abrir leyenda",
     displayName: "Nombre a Mostrar",
     darkMode: "Modo Oscuro", fontSize: "Tamaño de Texto",
-    language: "Idioma", spanish: "Español", english: "English",
     role: "Rol", fileCategory: "¿Cómo clasificar este archivo?",
     general: "💬 General", medication: "💊 Medicamento", beforePhoto: "📸 Foto Pre-Op",
     generalSub: "Solo aparece en el chat", medicationSub: "Carpeta de medicamentos",
@@ -476,10 +443,6 @@ const T = {
     staffRecordUploading: "Uploading...",
     staffRecordNewPhoto: "New internal photo",
     staffRecordNewNote: "New internal note",
-    staffRecordAlerts: "Internal note and photo alerts",
-    staffRecordAlertsHint: "Show alerts when someone on the assigned team adds a note or photo to the record.",
-    staffRecordAlertsOn: "Alerts enabled",
-    staffRecordAlertsOff: "Alerts paused",
     uploadedBy: "Uploaded by",
     noTeamSelected: "Dr. Fonseca always stays assigned. If you do not add anyone else, only the base team will see the room.",
     noPatientInfo: "There is no extended patient data yet.",
@@ -499,12 +462,8 @@ const T = {
     invalidEmail: "Email must use a valid format, for example name@email.com.",
     invalidPhone: "Phone number must contain at least 7 digits.",
     settings: "Settings", myProfile: "My Profile",
-    trainingCenter: "Icon legend",
-    trainingHint: "Compact reference for what each portal icon does. It does not open real records.",
-    openTraining: "Open legend",
     displayName: "Display Name",
     darkMode: "Dark Mode", fontSize: "Font Size",
-    language: "Language", spanish: "Español", english: "English",
     role: "Role", fileCategory: "How to classify this file?",
     general: "💬 General", medication: "💊 Medication", beforePhoto: "📸 Pre-Op Photo",
     generalSub: "Appears in chat only", medicationSub: "Medication folder",
@@ -920,6 +879,112 @@ function QuickReplyIcon({ size = 22 }: { size?: number }) {
   );
 }
 
+function ChatActionIcon({ kind, size = 24 }: { kind: "camera" | "photos" | "video" | "file" | "folder" | "record" | "prescription" | "library" | "team" | "quick" | "patient"; size?: number }) {
+  const commonProps = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.25, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (kind === "camera") {
+    return (
+      <svg {...commonProps}>
+        <path d="M8.5 6.2 10 4.4h4l1.5 1.8H19a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.2a2 2 0 0 1 2-2h3.5Z" />
+        <circle cx="12" cy="12.4" r="3.4" />
+      </svg>
+    );
+  }
+  if (kind === "photos") {
+    return (
+      <svg {...commonProps}>
+        <rect x="4" y="5" width="14" height="14" rx="2.2" />
+        <path d="M8 13.5 10.2 11l2.3 2.7 1.5-1.6 4 4.5" />
+        <circle cx="14.8" cy="8.8" r="1.1" fill="currentColor" stroke="none" />
+        <path d="M8 3h11a2 2 0 0 1 2 2v11" />
+      </svg>
+    );
+  }
+  if (kind === "video") return <VideoCameraIcon size={size} />;
+  if (kind === "file") {
+    return (
+      <svg {...commonProps}>
+        <path d="M7 3.8h6.4L18 8.4v11.8H7V3.8Z" />
+        <path d="M13.2 3.9v4.7h4.7" />
+        <path d="M9.8 13h5" />
+        <path d="M9.8 16h4.2" />
+      </svg>
+    );
+  }
+  if (kind === "folder") {
+    return (
+      <svg {...commonProps}>
+        <path d="M3.6 7.2a2.2 2.2 0 0 1 2.2-2.2h4l2 2h6.4a2.2 2.2 0 0 1 2.2 2.2v8.6a2.2 2.2 0 0 1-2.2 2.2H5.8a2.2 2.2 0 0 1-2.2-2.2V7.2Z" />
+        <path d="M8.5 13h7" />
+        <path d="M12 9.5v7" />
+      </svg>
+    );
+  }
+  if (kind === "record") {
+    return (
+      <svg {...commonProps}>
+        <path d="M8 4.2h8l3 3v12.6H5V4.2h3Z" />
+        <path d="M16 4.5v3h3" />
+        <path d="M8.5 12h7" />
+        <path d="M8.5 15h5" />
+        <path d="M8.5 18h7" />
+      </svg>
+    );
+  }
+  if (kind === "prescription") {
+    return (
+      <svg {...commonProps}>
+        <path d="M7.2 4h7.6L18 7.2V20H6V4h1.2Z" />
+        <path d="M14.6 4.3v3.2h3.1" />
+        <path d="M9 12h6" />
+        <path d="M12 9v6" />
+      </svg>
+    );
+  }
+  if (kind === "library") {
+    return (
+      <svg {...commonProps}>
+        <rect x="4" y="5" width="16" height="14" rx="2.2" />
+        <path d="M4 9h16" />
+        <path d="M8 13h3" />
+        <path d="M8 16h6" />
+      </svg>
+    );
+  }
+  if (kind === "team") return <PersonPlusIcon size={size} />;
+  if (kind === "quick") {
+    return (
+      <svg {...commonProps}>
+        <path d="M13.3 2.8 5.7 13h5.1l-1 8.2 8.5-11.5h-5.2l.2-6.9Z" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...commonProps}>
+      <circle cx="12" cy="8.3" r="3.3" />
+      <path d="M5.4 20c.9-3.4 3.1-5.1 6.6-5.1s5.7 1.7 6.6 5.1" />
+      <path d="M18.2 5.4h2.8" />
+      <path d="M19.6 4v2.8" />
+    </svg>
+  );
+}
+
+function ChatActionTile({ label, children, onClick, disabled = false, accent = "", dot = false }: { label: string; children: ReactNode; onClick: () => void; disabled?: boolean; accent?: "primary" | "success" | "warning" | ""; dot?: boolean }) {
+  return (
+    <button
+      type="button"
+      className={`staff-action-tile${accent ? ` ${accent}` : ""}`}
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+    >
+      <span className="staff-action-icon-wrap" aria-hidden="true">{children}</span>
+      <span className="staff-action-label">{label}</span>
+      {dot && <span className="staff-action-dot" aria-hidden="true" />}
+    </button>
+  );
+}
+
 function BackArrowIcon({ size = 22 }: { size?: number }) {
   return (
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
@@ -989,9 +1054,10 @@ function QREditor({ show, onClose, quickReplies, onSave, savingQR, savedQR, dark
 }
 
 export default function InboxPage() {
-  const [lang, setLang] = useState<Lang>(() => readStaffLang());
+  const [lang, setLang] = useState<Lang>("es");
   const t = T[lang];
   const [darkMode, setDarkMode] = useState(false);
+  const [showTopbarMenu, setShowTopbarMenu] = useState(false);
   const [fontSizeLevel, setFontSizeLevel] = useState<StaffFontSizeLevel>(() => readStaffFontSizeLevel());
   const fontSize = fontSizeLevel === "small" ? 17 : fontSizeLevel === "large" ? 22 : 20;
   const uiBaseSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 19 : 18;
@@ -1093,6 +1159,7 @@ export default function InboxPage() {
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [pendingFile, setPendingFile] = useState<File|null>(null);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
+  const [mediaMenuView, setMediaMenuView] = useState<"main" | "patientFiles">("main");
   const [captureMode, setCaptureMode] = useState<"photo" | "video" | null>(null);
   const [preparingCapture, setPreparingCapture] = useState(false);
   const [recordingVideo, setRecordingVideo] = useState(false);
@@ -1120,7 +1187,7 @@ export default function InboxPage() {
   const [showEmojiMenu, setShowEmojiMenu] = useState(false);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [mediaLibraryTab, setMediaLibraryTab] = useState<MediaTab>("media");
-  const [staffRecordAlertsMuted, setStaffRecordAlertsMuted] = useState(() => readStaffRecordAlertsMuted());
+  const staffRecordAlertsMuted = false;
   const [staffRecordUnreadRooms, setStaffRecordUnreadRooms] = useState<Record<string, boolean>>({});
   const [uploadingStaffRecordPhoto, setUploadingStaffRecordPhoto] = useState(false);
   const [showCareStaffInvite, setShowCareStaffInvite] = useState(false);
@@ -1162,11 +1229,9 @@ export default function InboxPage() {
   const [savingMedication, setSavingMedication] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
-  const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
-  const [portalAlertTone, setPortalAlertTone] = useState<AlertTone>(() => readStaffAlertTone());
-  const [staffChatAlertTone, setStaffChatAlertTone] = useState<AlertTone>(() => readStaffAlertTone(STAFF_CHAT_ALERT_TONE_STORAGE_KEY, "system"));
-  const [serverAlertTones, setServerAlertTones] = useState<StaffAlertTonePreference>(() => emptyStaffAlertTonePreference());
+  const portalAlertTone: AlertTone = "system";
+  const staffChatAlertTone: AlertTone = "system";
   const [autoTranslateIncoming, setAutoTranslateIncoming] = useState(true);
   const [translatedIncoming, setTranslatedIncoming] = useState<Record<string, string>>({});
   const [callOverlayOpen, setCallOverlayOpen] = useState(false);
@@ -1328,63 +1393,6 @@ export default function InboxPage() {
   const fmtTime = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleTimeString(lang==="es"?"es-MX":"en-US",{hour:"2-digit",minute:"2-digit"}); };
   const fmtDateLabel = (ts: string) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); };
   const fmtShortDate = (ts?: string | null) => { if (!ts) return ""; return new Date(ts).toLocaleDateString(lang==="es"?"es-MX":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit"}); };
-  const alertToneLabelForCategory = (tone: AlertTone, category: AlertToneCategory) => alertToneTextForCategory(tone, category, lang === "es");
-  const saveOwnAlertTone = useCallback(async (category: AlertToneCategory, tone: AlertTone) => {
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token || "";
-      if (!accessToken) return;
-      const response = await fetch("/api/staff/alert-tone", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ toneType: category, tone }),
-      });
-      if (response.ok) setServerAlertTones((current) => ({ ...current, [category]: tone }));
-    } catch {
-      // Local alert preference still works if the server-side status cannot be saved.
-    }
-  }, []);
-  const chooseAlertTone = useCallback((category: AlertToneCategory, tone: AlertTone) => {
-    if (category === "portal") setPortalAlertTone(tone);
-    else setStaffChatAlertTone(tone);
-    void saveOwnAlertTone(category, tone);
-  }, [saveOwnAlertTone]);
-  const openDeviceNotificationSettings = useCallback(async () => {
-    try {
-      const { Capacitor, registerPlugin } = await import("@capacitor/core");
-      if (!Capacitor.isNativePlatform()) {
-        setNotificationFeedback({
-          tone: "info",
-          text: lang === "es"
-            ? "En navegador o PWA, el sonido lo controla el permiso de notificaciones del sistema."
-            : "In the browser or PWA, the system notification permission controls the sound.",
-        });
-        return;
-      }
-      if (Capacitor.getPlatform() !== "android") {
-        setNotificationFeedback({
-          tone: "info",
-          text: lang === "es"
-            ? "En iPhone, usa Ajustes de iOS para el sonido general de notificaciones. Apple no permite elegir la lista completa de tonos dentro de la app."
-            : "On iPhone, use iOS Settings for the general notification sound. Apple does not expose the full tone picker inside the app.",
-        });
-        return;
-      }
-      setNotificationFeedback(null);
-      const PortalNotificationSettings = registerPlugin<PortalNotificationSettingsPlugin>("PortalNotificationSettings");
-      await PortalNotificationSettings.open({ channelId: DEVICE_ALERT_CHANNEL_ID });
-    } catch {
-      setNotificationFeedback({
-        tone: "error",
-        text: lang === "es"
-          ? "No pude abrir los ajustes del dispositivo desde esta pantalla."
-          : "I could not open device settings from this screen.",
-      });
-    }
-  }, [lang]);
   const fmtChatDateLabel = (ts: string) => {
     if (!ts) return "";
     const date = new Date(ts);
@@ -2527,6 +2535,14 @@ export default function InboxPage() {
   };
 
   useEffect(() => {
+    setLang(readStaffLang());
+  }, []);
+
+  useEffect(() => {
+    setShowTopbarMenu(false);
+  }, [mobileView, selectedRoom?.id]);
+
+  useEffect(() => {
     if (createPatientDeepLinkHandledRef.current || loading || typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const queryLang = url.searchParams.get("lang");
@@ -2539,29 +2555,19 @@ export default function InboxPage() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }, [loading, canCreatePatientRooms]);
 
-  const toggleStaffLanguage = () => setLang((current) => current === "es" ? "en" : "es");
-
-  const StaffGlobalActions = ({ compact = false }: { compact?: boolean }) => (
+  const StaffGlobalActions = ({ compact = false, onAction }: { compact?: boolean; onAction?: () => void }) => (
     <div className={`staff-global-actions${compact ? " compact" : ""}`}>
-      <button
-        type="button"
-        className="admin-inline-btn staff-lang-btn"
-        onClick={toggleStaffLanguage}
-        title={lang === "es" ? "Cambiar a English" : "Switch to Español"}
-        aria-label={lang === "es" ? "Cambiar idioma a English" : "Switch language to Español"}
-      >
-        <span aria-hidden="true">{lang === "es" ? "🇲🇽" : "🇺🇸"}</span>
-      </button>
       <div className="staff-action-cluster">
         <button
           type="button"
           className="admin-inline-btn"
-          onClick={openStaffChatsHome}
+          onClick={()=>{onAction?.();openStaffChatsHome();}}
           title={lang==="es" ? "Comunicación interna del equipo" : "Internal team communication"}
           aria-label={lang==="es" ? "Comunicación interna del equipo" : "Internal team communication"}
           style={{position:"relative"}}
         >
           <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="staff" /></span>
+          <span className="topbar-action-label">{lang==="es" ? "Equipo" : "Team"}</span>
           {totalStaffChatUnread > 0 && (
             <span style={{position:"absolute",top:-6,right:-6,minWidth:20,height:20,padding:"0 5px",borderRadius:99,background:"#EF4444",color:"white",fontSize:12,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(239,68,68,0.35)"}}>
               {totalStaffChatUnread}
@@ -2571,44 +2577,48 @@ export default function InboxPage() {
         <button
           type="button"
           className="admin-inline-btn"
-          onClick={()=>setShowSettings(true)}
+          onClick={()=>{onAction?.();setShowSettings(true);}}
           title={lang === "es" ? "Ajustes de mi cuenta" : "My account settings"}
           aria-label={lang === "es" ? "Ajustes de mi cuenta" : "My account settings"}
         >
           <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="settings" /></span>
+          <span className="topbar-action-label">{lang === "es" ? "Ajustes" : "Settings"}</span>
         </button>
         {canManageLabels && (
           <button
             type="button"
             className="admin-inline-btn"
-            onClick={()=>setShowLabelManager(true)}
+            onClick={()=>{onAction?.();setShowLabelManager(true);}}
             title={lang === "es" ? "Etiquetas" : "Labels"}
             aria-label={lang === "es" ? "Etiquetas" : "Labels"}
           >
             <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="labels" /></span>
+            <span className="topbar-action-label">{lang === "es" ? "Etiquetas" : "Labels"}</span>
           </button>
         )}
         {canOpenAdmin && (
           <button
             type="button"
             className="admin-inline-btn"
-            onClick={()=>window.location.href="/admin"}
+            onClick={()=>{onAction?.();window.location.href="/admin";}}
             title="Admin"
             aria-label={lang === "es" ? "Abrir Admin" : "Open Admin"}
           >
             <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="admin" /></span>
+            <span className="topbar-action-label">Admin</span>
           </button>
         )}
       </div>
       {canCreatePatientRooms && (
         <button
           type="button"
-          className="staff-plus-btn"
-          onClick={requestNewPatientRoom}
+          className="staff-plus-btn staff-create-patient-btn"
+          onClick={()=>{onAction?.();requestNewPatientRoom();}}
           title={lang === "es" ? "Crear paciente" : "Create patient"}
           aria-label={lang === "es" ? "Crear paciente" : "Create patient"}
         >
-          +
+          <span className="staff-plus-glyph" aria-hidden="true">+</span>
+          <span className="topbar-action-label">{lang === "es" ? "Crear paciente" : "Create patient"}</span>
         </button>
       )}
     </div>
@@ -3095,28 +3105,8 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(STAFF_LANG_STORAGE_KEY, lang);
-  }, [lang]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
     window.localStorage.setItem(STAFF_FONT_SIZE_STORAGE_KEY, fontSizeLevel);
   }, [fontSizeLevel]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STAFF_RECORD_ALERTS_MUTED_KEY, staffRecordAlertsMuted ? "1" : "0");
-  }, [staffRecordAlertsMuted]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STAFF_ALERT_TONE_STORAGE_KEY, portalAlertTone);
-  }, [portalAlertTone]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STAFF_CHAT_ALERT_TONE_STORAGE_KEY, staffChatAlertTone);
-  }, [staffChatAlertTone]);
 
   useEffect(() => {
     setTranslatedIncoming({});
@@ -3256,49 +3246,6 @@ export default function InboxPage() {
     } catch(_) {}
   };
 
-  const requestStaffNotifications = useCallback(async () => {
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      setNotificationPermission("unsupported");
-      setNotificationFeedback({
-        tone: "error",
-        text: lang === "es" ? "Este navegador no soporta notificaciones." : "This browser does not support notifications.",
-      });
-      return;
-    }
-
-    setNotificationBusy(true);
-    setNotificationFeedback(null);
-
-    try {
-      const permission = await Notification.requestPermission();
-      notifRef.current = permission;
-      setNotificationPermission(permission);
-
-      if (permission === "granted") {
-        armAudioAlerts();
-        await subscribeStaffToPush();
-        setNotificationFeedback({
-          tone: "success",
-          text: lang === "es" ? "Alertas activadas en este dispositivo." : "Alerts are enabled on this device.",
-        });
-      } else if (permission === "denied") {
-        setNotificationFeedback({
-          tone: "error",
-          text: lang === "es"
-            ? "Safari está bloqueando las notificaciones para este sitio. Si estás en una ventana privada, abre el portal en una ventana normal o en la app instalada; si ya las bloqueaste, permite notificaciones para este sitio en ajustes de Safari."
-            : "Safari is blocking notifications for this site. If you are in a private window, open the portal in a normal window or the installed app; if you already blocked them, allow notifications for this site in Safari settings.",
-        });
-      } else {
-        setNotificationFeedback({
-          tone: "info",
-          text: lang === "es" ? "Permiso pendiente. Vuelve a intentarlo cuando el navegador lo permita." : "Permission is still pending. Try again when the browser allows it.",
-        });
-      }
-    } finally {
-      setNotificationBusy(false);
-    }
-  }, [armAudioAlerts, lang]);
-
   // --- Unread badge polling: check rooms for new patient messages ---
   // Uses per-staff localStorage timestamps so badges survive refresh without replaying old history.
   const checkUnreadBadges = useCallback(async () => {
@@ -3368,41 +3315,12 @@ export default function InboxPage() {
     }
   }, [currentUserId, describeIncomingMessage, getRoomAlertedMessage, getRoomLastAlert, getRoomLastSeen, incomingMessageKey, playPortalAlertTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
 
-  const fetchManagedAlertTone = async () => {
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token || "";
-      if (!accessToken) return;
-      const response = await fetch("/api/staff/alert-tone", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        cache: "no-store",
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return;
-      const tones = payload?.tones && typeof payload.tones === "object"
-        ? {
-          portal: payload.tones.portal ? normalizeAlertTone(payload.tones.portal, "classic") : null,
-          staffChat: payload.tones.staffChat ? normalizeAlertTone(payload.tones.staffChat, "classic") : null,
-        }
-        : {
-          portal: payload?.tone ? normalizeAlertTone(payload?.tone, "classic") : null,
-          staffChat: payload?.tone ? normalizeAlertTone(payload?.tone, "classic") : null,
-        };
-      setServerAlertTones(tones);
-      if (tones.portal) setPortalAlertTone(tones.portal);
-      if (tones.staffChat) setStaffChatAlertTone(tones.staffChat);
-    } catch {
-      // Staff can still use the locally saved tone if the server-side status is unavailable.
-    }
-  };
-
   const fetchProfile = async (id: string) => {
     const [profileRes, permissionsRes, avatarVisibilityRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("id",id).single(),
       supabase.from("app_settings").select("value").eq("key", STAFF_PERMISSIONS_SETTING_KEY).maybeSingle(),
       supabase.from("app_settings").select("value").eq("key", STAFF_AVATAR_VISIBILITY_SETTING_KEY).maybeSingle(),
     ]);
-    await fetchManagedAlertTone();
     const data = profileRes.data;
     const permissionMap = parseStaffPermissionMap(permissionsRes.data?.value);
     const avatarVisibility = parseStaffAvatarVisibilityMap(avatarVisibilityRes.data?.value);
@@ -5489,6 +5407,7 @@ export default function InboxPage() {
     try {
       setPreparingCapture(true);
       setShowMediaMenu(false);
+      setMediaMenuView("main");
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: mode === "video" });
       captureStreamRef.current = stream;
       setCaptureMode(mode);
@@ -5572,7 +5491,11 @@ export default function InboxPage() {
         import("@capacitor/camera"),
       ]);
       if (!Capacitor.isNativePlatform()) {
-        (source === "camera" ? cameraInputRef : galleryInputRef).current?.click();
+        if (source === "camera") {
+          await openCapture("photo");
+          return;
+        }
+        galleryInputRef.current?.click();
         return;
       }
       const photo = await Camera.getPhoto({
@@ -5587,11 +5510,16 @@ export default function InboxPage() {
       const file = dataUrl ? fileFromDataUrl(dataUrl, `${source === "camera" ? "photo" : "device-photo"}-${Date.now()}.${safeExt}`, `image/${safeExt === "jpg" ? "jpeg" : safeExt}`) : null;
       if (file) stagePreview(file);
     } catch {
-      (source === "camera" ? cameraInputRef : galleryInputRef).current?.click();
+      if (source === "camera") {
+        await openCapture("photo");
+        return;
+      }
+      galleryInputRef.current?.click();
     }
   };
   const openNativeVideoCapture = async () => {
     setShowMediaMenu(false);
+    setMediaMenuView("main");
     try {
       const { Capacitor } = await import("@capacitor/core");
       if (Capacitor.isNativePlatform()) {
@@ -5600,6 +5528,24 @@ export default function InboxPage() {
       }
     } catch {}
     void openCapture("video");
+  };
+  const closeMediaActionTray = () => {
+    setShowMediaMenu(false);
+    setMediaMenuView("main");
+  };
+  const toggleMediaActionTray = () => {
+    setShowTopbarMenu(false);
+    setShowEmojiMenu(false);
+    setMediaMenuView("main");
+    setShowMediaMenu((open) => !open);
+  };
+  const openPatientQuickReplies = () => {
+    closeMediaActionTray();
+    const shouldClose = showSlashMenu && staffSlashTarget === "patient" && slashFilter === "";
+    setStaffSlashTarget("patient");
+    setSlashFilter("");
+    setShowSlashMenu(!shouldClose);
+    requestAnimationFrame(() => composerRef.current?.focus());
   };
 
   const isPrescriptionEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[MED]");
@@ -6095,17 +6041,6 @@ export default function InboxPage() {
         </div>
         <div style={{padding:"0 20px"}}>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8,lineHeight:1.35}}>{t.trainingCenter}</p>
-            <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginBottom:12}}>{t.trainingHint}</p>
-            <button
-              type="button"
-              onClick={() => { setShowSettings(false); window.location.href = "/training"; }}
-              style={{width:"100%",height:48,border:"none",borderRadius:14,background:"#0B63CE",color:"white",fontSize:settingsBaseSize,fontWeight:900,cursor:"pointer",fontFamily:"inherit"}}
-            >
-              {t.openTraining}
-            </button>
-          </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>{lang==="es"?"Mi nombre":"My name"}</p>
             <label style={{display:"block",fontSize:settingsBaseSize,fontWeight:700,color:textColor,marginBottom:8,lineHeight:1.4}}>{t.displayName}</label>
             <input
@@ -6221,14 +6156,6 @@ export default function InboxPage() {
           </div>
           <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
             <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:14,lineHeight:1.35}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
-            <span style={{fontSize:settingsBaseSize,color:textColor,fontWeight:650,display:"block",marginBottom:10,lineHeight:1.4}}>🌐 {t.language}</span>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-              {(["es","en"] as const).map(nextLang=>(
-                <button key={nextLang} type="button" onClick={()=>setLang(nextLang)} style={{minHeight:46,borderRadius:12,border:lang===nextLang?"2px solid #007AFF":`2px solid ${borderColor}`,background:lang===nextLang?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:lang===nextLang?"#007AFF":textColor,fontWeight:850,cursor:"pointer",fontFamily:"inherit",fontSize:16,lineHeight:1.25}}>
-                  {nextLang==="es" ? "🇲🇽 Español" : "🇺🇸 English"}
-                </button>
-              ))}
-            </div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
               <span style={{fontSize:settingsBaseSize,color:textColor,fontWeight:650,lineHeight:1.4}}>🌙 {t.darkMode}</span>
               <button onClick={()=>setDarkMode(d=>!d)} style={{width:52,height:30,borderRadius:99,background:darkMode?"#34C759":"#E5E5EA",border:"none",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
@@ -6243,64 +6170,6 @@ export default function InboxPage() {
                 </button>
               ))}
             </div>
-          </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12,lineHeight:1.35}}>
-              {lang==="es"?"Sonido de alertas":"Alert sound"}
-            </p>
-            {(serverAlertTones.portal || serverAlertTones.staffChat) && (
-              <p style={{fontSize:settingsSmallSize,color:"#1D4ED8",fontWeight:750,lineHeight:1.45,marginBottom:10}}>
-                {lang==="es"
-                  ? "Tonos guardados en tu cuenta. Puedes cambiarlos cuando quieras."
-                  : "Saved tones on your account. You can change them any time."}
-              </p>
-            )}
-            <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginBottom:10}}>
-              {lang==="es"
-                ? "Elige Sistema del dispositivo para usar el sonido de notificación configurado en el teléfono."
-                : "Choose Device default to use the notification sound configured on the phone."}
-            </p>
-            {([
-              { category: "portal" as const, title: lang==="es" ? "Portal y pacientes" : "Portal and patient alerts", tone: portalAlertTone, test: playPortalAlertTone },
-              { category: "staffChat" as const, title: lang==="es" ? "Chat staff a staff" : "Staff-to-staff chat", tone: staffChatAlertTone, test: playStaffChatAlertTone },
-            ]).map((group) => (
-              <div key={group.category} style={{display:"grid",gap:8,marginTop:12}}>
-                <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:900,lineHeight:1.35,margin:0}}>{group.title}</p>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))",gap:8}}>
-                  {alertToneOptions.map((tone) => (
-                    <button
-                      key={`${group.category}-${tone}`}
-                      type="button"
-                      onClick={()=>chooseAlertTone(group.category, tone)}
-                      style={{minHeight:46,borderRadius:12,border:group.tone===tone?"2px solid #007AFF":`2px solid ${borderColor}`,background:group.tone===tone?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:group.tone===tone?"#007AFF":textColor,fontWeight:850,cursor:"pointer",fontFamily:"inherit",fontSize:settingsBaseSize,lineHeight:1.25}}
-                    >
-                      {alertToneLabelForCategory(tone, group.category)}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={group.tone==="system" ? openDeviceNotificationSettings : group.test}
-                  disabled={group.tone==="off"}
-                  style={{width:"100%",minHeight:46,border:"none",borderRadius:14,background:group.tone==="off"?(darkMode?"#334155":"#E5E7EB"):"#EAF2FB",color:group.tone==="off"?(darkMode?"#94A3B8":"#64748B"):"#1D4ED8",fontFamily:"inherit",fontSize:settingsBaseSize,fontWeight:900,cursor:group.tone==="off"?"not-allowed":"pointer"}}
-                >
-                  {group.tone==="system"
-                    ? (lang==="es" ? "Abrir ajustes del dispositivo" : "Open device settings")
-                    : (lang==="es"?"Probar sonido":"Test sound")}
-                </button>
-              </div>
-            ))}
-          </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8,lineHeight:1.35}}>{t.staffRecordAlerts}</p>
-            <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginBottom:12}}>{t.staffRecordAlertsHint}</p>
-            <button
-              type="button"
-              onClick={()=>setStaffRecordAlertsMuted((current)=>!current)}
-              style={{width:"100%",minHeight:48,border:"none",borderRadius:14,background:staffRecordAlertsMuted?"#FEF3C7":"#DCFCE7",color:staffRecordAlertsMuted?"#92400E":"#166534",fontFamily:"inherit",fontSize:settingsBaseSize,fontWeight:900,cursor:"pointer"}}
-            >
-              {staffRecordAlertsMuted ? t.staffRecordAlertsOff : t.staffRecordAlertsOn}
-            </button>
           </div>
         </div>
       </div>
@@ -7134,6 +7003,11 @@ export default function InboxPage() {
                   ))}
                 </div>
               )}
+              {notificationFeedback && (
+                <div style={{marginTop:10,padding:"10px 12px",borderRadius:14,background:notificationFeedback.tone==="success"?"#DCFCE7":notificationFeedback.tone==="error"?"#FEE2E2":"#DBEAFE",color:notificationFeedback.tone==="success"?"#166534":notificationFeedback.tone==="error"?"#991B1B":"#1D4ED8",fontSize:13,fontWeight:700,lineHeight:1.4}}>
+                  {notificationFeedback.text}
+                </div>
+              )}
             </div>
 
             <div style={{background:cardBg,borderRadius:18,padding:16}}>
@@ -7264,7 +7138,7 @@ export default function InboxPage() {
       {
         kind: "settings" as const,
         title: lang === "es" ? "Mi cuenta" : "My account",
-        body: lang === "es" ? "Idioma, teléfono, correo y recuperación de contraseña." : "Language, phone, email, and password recovery.",
+        body: lang === "es" ? "Teléfono, correo y recuperación de contraseña." : "Phone, email, and password recovery.",
       },
     ];
     const adminGuideItems = [
@@ -7290,16 +7164,6 @@ export default function InboxPage() {
         <div style={{width:"100%",maxWidth:760,margin:"0 auto",background:darkMode?"#111B21":"#FFFFFF",border:`1px solid ${borderColor}`,borderRadius:20,overflow:"visible",boxShadow:darkMode?"0 20px 60px rgba(0,0,0,0.28)":"0 20px 60px rgba(28,66,104,0.14)"}}>
           <div style={{background:headerBg,padding:"15px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <img src="/fonseca_blue.png" alt="Dr. Miguel Fonseca" style={{height:62,width:"min(72%, 340px)",objectFit:"contain",objectPosition:"left center",display:"block"}}/>
-            <button
-              type="button"
-              className="admin-inline-btn staff-lang-btn"
-              onClick={toggleStaffLanguage}
-              title={lang === "es" ? "Cambiar a English" : "Switch to Español"}
-              aria-label={lang === "es" ? "Cambiar idioma a English" : "Switch language to Español"}
-              style={{width:44,minWidth:44,height:44,minHeight:44,borderRadius:14,background:"rgba(8, 50, 76, 0.82)",border:"1px solid rgba(210, 235, 255, 0.54)",color:"#F8FBFF",fontSize:21,cursor:"pointer"}}
-            >
-              {lang === "es" ? "🇲🇽" : "🇺🇸"}
-            </button>
           </div>
           <div style={{padding:"18px 18px 18px",display:"grid",gap:12}}>
             <div>
@@ -7394,19 +7258,31 @@ export default function InboxPage() {
 	        .shell { --app-ui-font-size: ${uiBaseSize}px; --app-ui-label-size: ${uiLabelSize}px; --app-ui-small-size: ${uiSmallSize}px; display: flex; flex-direction: column; height: auto; min-height: -webkit-fill-available; position: absolute; inset: 0; bottom: var(--native-keyboard-overlay-height, 0px); background: ${darkMode ? "#0B141A" : "#F2F7FB"}; overflow: hidden; max-width: 100vw; }
 	        .shell p, .shell label, .shell button, .shell input, .shell textarea, .shell select, .shell summary { overflow-wrap: anywhere; }
 	        .shell button, .shell [role="button"], .shell input, .shell textarea, .shell select { min-height: 44px; }
-        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: minmax(52px, 1fr) minmax(280px, 760px) minmax(52px, 1fr); align-items: center; padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)); z-index: 100; height: calc(98px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); box-shadow: 0 8px 24px rgba(7,51,77,0.18); }
+        .topbar { position: relative; flex-shrink: 0; background: ${headerBg}; display: grid; grid-template-columns: 1fr; place-items: center; padding: env(safe-area-inset-top) max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)); z-index: 100; height: calc(122px + env(safe-area-inset-top)); box-shadow: 0 8px 24px rgba(7,51,77,0.18); overflow: visible; }
         .topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,0.18); box-shadow: 0 1px 0 rgba(0,0,0,0.14); }
-        .topbar-logo { grid-column: 2; justify-self: center; align-self: center; height: 86px; width: min(680px, 92vw); object-fit: contain; object-position: center; display: block; }
-        .topbar-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 46px); transform: translateY(-50%); display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .topbar-logo { justify-self: center; align-self: center; height: 112px; width: min(760px, 88vw); object-fit: contain; object-position: center; display: block; pointer-events: none; }
+        .topbar-actions { position: absolute; right: max(14px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 14px); display: flex; align-items: flex-start; justify-content: flex-end; z-index: 120; }
+        .topbar-menu-button { position: relative; width: 46px; height: 46px; min-width: 46px; min-height: 46px; border: 1px solid rgba(210,235,255,0.54); border-radius: 16px; background: rgba(4,34,53,0.72); color: #F8FBFF; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.20), 0 10px 24px rgba(2,14,28,0.28); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+        .topbar-menu-lines { width: 20px; height: 14px; display: grid; gap: 4px; }
+        .topbar-menu-lines span { display: block; height: 2px; border-radius: 99px; background: currentColor; }
+        .topbar-menu-badge { position: absolute; top: -7px; right: -7px; min-width: 21px; height: 21px; padding: 0 6px; border-radius: 999px; background: #EF4444; color: #FFFFFF; font-size: 12px; line-height: 21px; font-weight: 900; box-shadow: 0 3px 9px rgba(239,68,68,0.36); }
+        .topbar-action-panel { position: absolute; top: 56px; right: 0; width: min(286px, calc(100vw - 28px)); max-width: min(286px, calc(100vw - 28px)); padding: 12px; border-radius: 22px; background: ${darkMode?"rgba(17,27,33,0.98)":"rgba(255,255,255,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"rgba(15,23,42,0.10)"}; box-shadow: 0 20px 54px rgba(2,14,28,0.30); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: top right; }
 	        .admin-inline-btn { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 14px; background: rgba(8, 50, 76, 0.82); border: 1px solid rgba(210, 235, 255, 0.54); color: #F8FBFF; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-family: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 10px 24px rgba(2,14,28,0.28), 0 0 0 1px rgba(125,211,252,0.10); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease; }
         .admin-inline-btn:hover { background: rgba(14, 70, 105, 0.90); border-color: rgba(226, 242, 255, 0.70); transform: translateY(-1px); }
         .admin-inline-btn:active { transform: translateY(0); }
-        .staff-lang-btn { font-size: 23px; }
         .admin-action-icon { width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .admin-action-icon svg { width: 21px; height: 21px; display: block; }
         .staff-global-actions { display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; max-width: 100%; }
         .staff-action-cluster { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 20px; background: rgba(4, 34, 53, 0.72); border: 1px solid rgba(210, 235, 255, 0.44); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 14px 30px rgba(2,14,28,0.30), 0 0 0 1px rgba(125,211,252,0.08); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
         .staff-plus-btn { width: 46px; height: 46px; min-height: 46px; border-radius: 50%; background: linear-gradient(135deg,#0B8CFF 0%,#006DFF 100%); border: 1px solid rgba(191,219,254,0.70); color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.32), 0 10px 22px rgba(0,107,255,0.34); font-size: 30px; line-height: 1; font-weight: 400; font-family: inherit; flex-shrink: 0; }
+        .staff-plus-glyph { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+        .topbar-action-label { display: none; }
+        .topbar-action-panel .staff-global-actions { width: 100%; display: grid; grid-template-columns: 1fr; gap: 9px; align-items: stretch; justify-content: stretch; }
+        .topbar-action-panel .staff-action-cluster { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; padding: 0; border: none; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+        .topbar-action-panel .admin-inline-btn, .topbar-action-panel .staff-plus-btn { width: 100%; min-width: 0; height: 50px; min-height: 50px; border-radius: 16px; display: flex; gap: 9px; align-items: center; justify-content: center; font-size: 15px; font-weight: 900; }
+        .topbar-action-panel .staff-plus-btn { border-radius: 16px; font-size: 16px; }
+        .topbar-action-panel .staff-plus-glyph { font-size: 28px; }
+        .topbar-action-panel .topbar-action-label { display: inline; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .body { display: flex; flex: 1; overflow: hidden; position: relative; background: ${darkMode ? "#0B141A" : "#F2F7FB"}; }
         .sidebar { position: absolute; inset: 0; width: 100%; flex-shrink: 0; background: ${darkMode ? "#111B21" : "#F2F7FB"}; display: flex; flex-direction: column; overflow: hidden; transition: transform 0.25s ease; z-index: 10; }
         .sidebar-head { padding: 12px 14px 10px; background: ${darkMode?"#111B21":"linear-gradient(180deg,#FFFFFF 0%,#F2F7FB 100%)"}; border-bottom: 1px solid ${darkMode?"rgba(255,255,255,0.10)":"rgba(102,132,163,0.16)"}; box-shadow: ${darkMode?"none":"0 8px 24px rgba(28,66,104,0.06)"}; }
@@ -7469,7 +7345,6 @@ export default function InboxPage() {
 	        .chat-head-sub { font-size: var(--app-ui-small-size); color: ${subTextColor}; margin-top: 2px; font-weight: 650; display: flex; align-items: center; gap: 0; min-width: 0; overflow: hidden; white-space: nowrap; }
         .chat-head-procedure { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .chat-head-date { flex: 0 0 auto; white-space: nowrap; }
-        .chat-head-office { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .input-area { position: relative; flex-shrink: 0; z-index: 35; background: ${darkMode ? "#111B21" : "rgba(239,244,249,0.98)"}; padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 10px; border-top: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; box-shadow: 0 -8px 24px rgba(15,23,42,0.10); }
         .msg-input { flex: 1; padding: 13px 18px; background: ${darkMode?"#253244":"white"}; border: none; border-radius: 999px; font-size: ${Math.max(fontSize - 1, 15)}px; font-family: inherit; color: ${textColor}; outline: none; min-width: 0; max-height: 84px; resize: none; line-height: 1.35; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .msg-input::placeholder { color: #AEAEB2; }
@@ -7482,9 +7357,21 @@ export default function InboxPage() {
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
         .plus-btn { position: relative; width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
         .staff-record-dot { position: absolute; top: -2px; right: -2px; width: 11px; height: 11px; border-radius: 50%; background: #EF4444; border: 2px solid ${darkMode ? "#111B21" : "#F0F2F5"}; box-shadow: 0 2px 6px rgba(239,68,68,0.35); }
-        .staff-menu-popup { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: calc(64px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); width: min(310px, calc(100vw - 32px)); background: white; border: 1px solid rgba(15,23,42,0.10); border-radius: 18px; overflow: hidden; box-shadow: 0 18px 45px rgba(15,23,42,0.22); z-index: 40; }
-        .staff-menu-item { width: 100%; border: none; border-bottom: 1px solid rgba(15,23,42,0.08); background: white; color: #111827; padding: 18px 24px; text-align: left; cursor: pointer; font-family: inherit; font-size: 20px; font-weight: 900; }
-        .staff-menu-item:last-child { border-bottom: none; }
+        .staff-menu-popup { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); width: auto; max-width: min(560px, calc(100vw - 24px)); background: ${darkMode?"rgba(31,44,52,0.98)":"rgba(247,241,232,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"rgba(15,23,42,0.10)"}; border-radius: 28px; padding: 18px 16px 16px; box-shadow: 0 18px 45px rgba(15,23,42,0.24); z-index: 40; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
+        .staff-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+        .staff-menu-back { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: none; border-radius: 50%; background: ${darkMode?"#253244":"#EEF4FA"}; color: ${textColor}; display: grid; place-items: center; cursor: pointer; }
+        .staff-menu-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 12px; }
+        .staff-action-tile { position: relative; min-width: 0; width: 100%; min-height: 102px; border: none; border-radius: 20px; background: transparent; color: ${darkMode?"#F8FAFC":"#111827"}; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; padding: 0; cursor: pointer; font-family: inherit; box-shadow: none; }
+        .staff-action-icon-wrap { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; background: ${darkMode?"#253244":"#FFFFFF"}; color: ${darkMode?"#E2E8F0":"#0B3C5D"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.06)"}; box-shadow: ${darkMode?"0 8px 18px rgba(0,0,0,0.18)":"0 8px 20px rgba(15,23,42,0.10)"}; }
+        .staff-action-tile svg { width: 31px; height: 31px; display: block; }
+        .staff-action-label { width: 100%; min-height: 30px; display: flex; align-items: flex-start; justify-content: center; color: ${darkMode?"#F8FAFC":"#0F172A"}; font-size: 12.5px; line-height: 1.15; font-weight: 900; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
+        .staff-action-tile.primary .staff-action-icon-wrap { background: #EAF3FF; color: #075EA8; border-color: #CFE4FA; }
+        .staff-action-tile.success .staff-action-icon-wrap { background: #E9FBEF; color: #128C4A; border-color: #BFEFD0; }
+        .staff-action-tile.warning .staff-action-icon-wrap { background: #FFF7E6; color: #B45309; border-color: #FDE1A7; }
+        .staff-action-tile:disabled { cursor: not-allowed; }
+        .staff-action-tile:disabled .staff-action-icon-wrap, .staff-action-tile:disabled .staff-action-label { opacity: 0.45; }
+        .staff-action-dot { position: absolute; top: 3px; right: calc(50% - 34px); width: 12px; height: 12px; border-radius: 50%; background: #EF4444; border: 2px solid ${darkMode ? "#253244" : "#FFFFFF"}; box-shadow: 0 2px 6px rgba(239,68,68,0.35); }
+        @media (max-width: 520px) { .staff-menu-popup { max-width: none; padding: 16px 12px 14px; } .staff-menu-grid { gap: 14px 8px; } .staff-action-tile { min-height: 98px; } .staff-action-icon-wrap { width: 62px; height: 62px; } .staff-action-label { font-size: 12px; } }
         .send-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: #EAF3FF; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: 0 3px 12px rgba(15,23,42,0.08); }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .phone-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; text-decoration: none; }
@@ -7611,21 +7498,20 @@ export default function InboxPage() {
 	        .file-box { width: 100%; min-height: 54px; padding: 16px; border: 2px dashed ${darkMode?"#555":"#C7D8EA"}; border-radius: 14px; cursor: pointer; text-align: center; font-size: var(--app-ui-font-size); font-weight: 650; color: ${subTextColor}; margin-bottom: 14px; background: ${darkMode?"transparent":"#F8FBFF"}; overflow-wrap: anywhere; line-height: 1.45; }
 	        .pbtn { width: 100%; min-height: 50px; padding: 15px; background: #007AFF; border: none; border-radius: 14px; color: white; font-size: var(--app-ui-font-size); font-weight: 800; cursor: pointer; font-family: inherit; margin-top: 8px; }
         .pbtn:disabled { opacity: 0.45; }
-	        .sbtn { width: 100%; min-height: 48px; padding: 13px; background: ${darkMode?cardBg:"#F5F8FC"}; border: 1px solid ${darkMode?"transparent":"#D9E4F2"}; border-radius: 14px; color: ${textColor}; font-size: var(--app-ui-font-size); font-weight: 750; cursor: pointer; font-family: inherit; margin-top: 8px; }
+		        .sbtn { width: 100%; min-height: 48px; padding: 13px; background: ${darkMode?cardBg:"#F5F8FC"}; border: 1px solid ${darkMode?"transparent":"#D9E4F2"}; border-radius: 14px; color: ${textColor}; font-size: var(--app-ui-font-size); font-weight: 750; cursor: pointer; font-family: inherit; margin-top: 8px; }
         .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
+        @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(1.12); } }
         @keyframes typingDot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-3px); opacity: 1; } }
         @keyframes spin { to { transform: rotate(360deg); } }
 	        @media (max-width: 700px) {
-          .topbar { height: calc(132px + env(safe-area-inset-top)); grid-template-columns: 1fr; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
-          .topbar-logo { grid-column: 1; justify-self: center; align-self: start; height: 60px; width: min(390px, 78vw); }
-          .topbar-actions { right: max(14px, env(safe-area-inset-right)); left: max(14px, env(safe-area-inset-left)); top: auto; bottom: 10px; transform: none; justify-content: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-          .topbar-actions::-webkit-scrollbar { display: none; }
-          .topbar-actions .admin-inline-btn { width: 40px; min-width: 40px; height: 40px; min-height: 40px; border-radius: 13px; }
-          .topbar-actions .admin-action-icon,
-          .topbar-actions .admin-action-icon svg { width: 18px; height: 18px; }
-          .topbar-actions .staff-action-cluster { gap: 3px; padding: 3px; border-radius: 18px; }
-          .topbar-actions .staff-plus-btn { width: 42px; height: 42px; min-height: 42px; font-size: 28px; }
-          .sidebar-head { padding: 12px 12px 10px; }
+          .topbar { height: calc(150px + env(safe-area-inset-top)); padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+          .topbar-logo { height: 122px; width: min(620px, 88vw); }
+          .topbar-actions { right: max(12px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 12px); left: auto; bottom: auto; transform: none; overflow: visible; }
+          .topbar-menu-button { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 15px; }
+          .topbar-action-panel { top: 52px; right: 0; width: min(282px, calc(100vw - 24px)); }
+	          .topbar-actions.chat-open .staff-create-patient-btn { display: none; }
+	          .sidebar-head { padding: 12px 12px 10px; }
           .search-bar { width: calc(100% - 10px); }
           .patient-list { padding-left: 10px; padding-right: 10px; }
           .chat-head { min-height: 62px; }
@@ -7653,7 +7539,7 @@ export default function InboxPage() {
         }
       `}</style>
 
-      <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setPrescriptionInstructions("");setShowMediaMenu(false);}e.target.value="";}}/>
+      <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setPrescriptionInstructions("");closeMediaActionTray();}e.target.value="";}}/>
       <input ref={chatMediaInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.heic,.heif" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={galleryInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
@@ -8667,12 +8553,25 @@ export default function InboxPage() {
         </div>
       )}
 
-	      <div className="shell" data-text-size={fontSizeLevel} onClick={()=>{closeMessageActions();setShowSlashMenu(false);}}>
-        <div className="topbar">
+	      <div className="shell" data-text-size={fontSizeLevel} onClick={()=>{closeMessageActions();setShowSlashMenu(false);setShowTopbarMenu(false);}}>
+        <div className="topbar" onClick={e=>e.stopPropagation()}>
           <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
-          <div className="topbar-actions">
-            {totalUnread>0&&<div style={{background:"#FF3B30",color:"white",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:99}}>{totalUnread}</div>}
-            <StaffGlobalActions compact />
+	          <div className={`topbar-actions${mobileView === "chat" ? " chat-open" : ""}`}>
+            <button
+              type="button"
+              className="topbar-menu-button"
+              onClick={()=>setShowTopbarMenu(open=>!open)}
+              aria-label={lang === "es" ? "Abrir menú" : "Open menu"}
+              title={lang === "es" ? "Menú" : "Menu"}
+            >
+              <span className="topbar-menu-lines" aria-hidden="true"><span /><span /><span /></span>
+              {(totalUnread + totalStaffChatUnread)>0&&<span className="topbar-menu-badge">{Math.min(totalUnread + totalStaffChatUnread, 99)}</span>}
+            </button>
+            {showTopbarMenu&&(
+              <div className="topbar-action-panel">
+                <StaffGlobalActions compact onAction={()=>setShowTopbarMenu(false)} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -8750,20 +8649,6 @@ export default function InboxPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input className="search-input" placeholder={t.search} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
               </div>
-              {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
-                <button
-                  type="button"
-                  onClick={()=>void requestStaffNotifications()}
-                  disabled={notificationBusy || notificationPermission === "denied"}
-                  style={{marginTop:10,width:"100%",minHeight:44,border:"none",borderRadius:12,background:notificationPermission === "denied" ? "#F1F5F9" : "#DBEAFE",color:notificationPermission === "denied" ? "#64748B" : "#1D4ED8",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:notificationPermission === "denied" ? "not-allowed" : "pointer",opacity:notificationBusy?0.6:1}}
-                >
-                  {notificationPermission === "denied"
-                    ? (lang==="es" ? "Alertas bloqueadas" : "Alerts blocked")
-                    : notificationBusy
-                      ? (lang==="es" ? "Activando..." : "Enabling...")
-                      : (lang==="es" ? "Activar alertas" : "Enable alerts")}
-                </button>
-              )}
               {userLabels.length > 0 && (
                 <div className="label-filter-row">
                   <button className={`label-chip all${!activeLabelFilter ? " active" : ""}`} onClick={()=>{setActiveLabelFilter("");setMobileView("list");}}>
@@ -8779,11 +8664,6 @@ export default function InboxPage() {
                       {labelName(label)}
                     </button>
                   ))}
-                </div>
-              )}
-              {notificationFeedback && (
-                <div style={{marginTop:10,padding:"10px 12px",borderRadius:14,background:notificationFeedback.tone==="success"?"#DCFCE7":notificationFeedback.tone==="error"?"#FEE2E2":"#DBEAFE",color:notificationFeedback.tone==="success"?"#166534":notificationFeedback.tone==="error"?"#991B1B":"#1D4ED8",fontSize:13,fontWeight:700,lineHeight:1.4}}>
-                  {notificationFeedback.text}
                 </div>
               )}
             </div>
@@ -8866,7 +8746,6 @@ export default function InboxPage() {
                         <div className="patient-meta">
                           {proc?.procedure_name&&<span>{proc.procedure_name}</span>}
                           {surgDate&&<span> · {surgDate}</span>}
-                          {proc?.office_location&&<span> · 📍{proc.office_location==="Guadalajara"?"GDL":"TJN"}</span>}
                         </div>
                         <div className="patient-preview">{latestPreview}</div>
                       </div>
@@ -8901,7 +8780,6 @@ export default function InboxPage() {
                     <div className="chat-head-sub">
                       {selectedRoom.procedures?.procedure_name && <span className="chat-head-procedure">{selectedRoom.procedures.procedure_name}</span>}
                       {selectedRoom.procedures?.surgery_date && <span className="chat-head-date">{selectedRoom.procedures?.procedure_name ? " · " : ""}{fmtShortDate(selectedRoom.procedures.surgery_date)}</span>}
-                      {selectedRoom.procedures?.office_location && <span className="chat-head-office"> · 📍{selectedRoom.procedures.office_location}</span>}
                     </div>
                     {patientTyping && (
                       <div style={{fontSize:12,color:"#93C5FD",fontWeight:700,marginTop:4}}>
@@ -8927,11 +8805,11 @@ export default function InboxPage() {
                   className="chat-bg"
                   ref={chatScrollRef}
                   onScroll={updateAutoScrollPreference}
-                  onClick={()=>{
-                    setShowSlashMenu(false);
-                    setShowEmojiMenu(false);
-                    setShowMediaMenu(false);
-                  }}
+	                  onClick={()=>{
+	                    setShowSlashMenu(false);
+	                    setShowEmojiMenu(false);
+	                    closeMediaActionTray();
+	                  }}
                 >
                   {messages.filter(m=>!m.deleted_by_staff).length===0?(
                     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:40,textAlign:"center"}}>
@@ -8947,13 +8825,13 @@ export default function InboxPage() {
                   ))}
                   <div ref={messagesEndRef}/>
                 </div>
-                {showSlashMenu&&staffSlashTarget==="patient"&&visibleSlashReplies.length>0&&(
+                {showSlashMenu&&staffSlashTarget==="patient"&&(
                   <div className="slash-popup" onClick={e=>e.stopPropagation()}>
-                    {visibleSlashReplies.map((r,i)=>(
+                    {visibleSlashReplies.length>0?visibleSlashReplies.map((r,i)=>(
                       <button key={`${r.shortcut}-${i}`} className="slash-item" onClick={()=>selectQuickReply(r)}>
                         {r.message}
                       </button>
-                    ))}
+                    )):<div className="slash-empty">{lang==="es" ? "No hay respuestas rápidas con ese atajo." : "No quick replies match that shortcut."}</div>}
                   </div>
                 )}
 
@@ -8967,28 +8845,80 @@ export default function InboxPage() {
                   </div>
                 ):(
                   <div className="input-area" onClick={e=>{e.stopPropagation();closeMessageActions();}}>
-                    {showMediaMenu&&(
-                      <div className="staff-menu-popup">
-                        <button className="staff-menu-item" onClick={()=>{
-                          setShowMediaMenu(false);
-                          void openNativePhotoPicker("camera");
-                        }}>{lang==="es" ? "Cámara" : "Camera"}</button>
-                        <button className="staff-menu-item" onClick={()=>{
-                          setShowMediaMenu(false);
-                          void openNativePhotoPicker("photos");
-                        }}>{lang==="es" ? "Fotos del dispositivo" : "Device photos"}</button>
-                        <button className="staff-menu-item" onClick={()=>{
-                          setShowMediaMenu(false);
-                          chatMediaInputRef.current?.click();
-                        }}>{lang==="es" ? "Archivo, foto o video" : "File, photo, or video"}</button>
-                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setMediaLibraryTab("internal");setShowMediaLibrary(true);clearStaffRecordUnreadRoom(selectedRoom?.id);}}>{t.staffRecord}</button>
-                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);fileInputRef.current?.click();}}>{lang==="es" ? "Recetas" : "Prescriptions"}</button>
-                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowMediaLibrary(true);}}>{t.mediaLibrary}</button>
-                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setCareStaffInviteIds([]);setShowCareStaffInvite(true);}}>{t.addCareStaff}</button>
-                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowQREditor(true);}}>{t.quickReplies}</button>
-                        <button className="staff-menu-item" onClick={()=>{setShowMediaMenu(false);setShowPatientInfo(true);}}>{t.patientInfo}</button>
-                      </div>
-                    )}
+	                    {showMediaMenu&&(
+	                      <div className="staff-menu-popup">
+	                        {mediaMenuView === "patientFiles" && (
+	                          <div className="staff-menu-head">
+	                            <button
+	                              type="button"
+	                              className="staff-menu-back"
+	                              onClick={()=>setMediaMenuView("main")}
+	                              aria-label={lang === "es" ? "Volver" : "Back"}
+	                              title={lang === "es" ? "Volver" : "Back"}
+	                            >
+	                              <BackArrowIcon size={22} />
+	                            </button>
+	                          </div>
+	                        )}
+	                        <div className="staff-menu-grid">
+	                          {mediaMenuView === "main" ? (
+	                            <>
+	                              <ChatActionTile label={lang==="es" ? "Cámara" : "Camera"} accent="primary" disabled={selectedRoomCancelled} onClick={()=>{
+	                                closeMediaActionTray();
+	                                void openNativePhotoPicker("camera");
+	                              }}>
+	                                <ChatActionIcon kind="camera" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={lang==="es" ? "Fotos" : "Photos"} accent="primary" disabled={selectedRoomCancelled} onClick={()=>{
+	                                closeMediaActionTray();
+	                                void openNativePhotoPicker("photos");
+	                              }}>
+	                                <ChatActionIcon kind="photos" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={lang==="es" ? "Video" : "Video"} accent="primary" disabled={selectedRoomCancelled} onClick={()=>{
+	                                if (selectedRoomCancelled) return;
+	                                void openNativeVideoCapture();
+	                              }}>
+	                                <ChatActionIcon kind="video" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={lang==="es" ? "Archivo" : "File"} disabled={selectedRoomCancelled} onClick={()=>{
+	                                closeMediaActionTray();
+	                                chatMediaInputRef.current?.click();
+	                              }}>
+	                                <ChatActionIcon kind="file" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={lang==="es" ? "Carpeta del paciente" : "Patient folder"} accent="success" dot={staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread} onClick={()=>setMediaMenuView("patientFiles")}>
+	                                <ChatActionIcon kind="folder" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={t.quickReplies} onClick={openPatientQuickReplies}>
+	                                <ChatActionIcon kind="quick" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={t.addCareStaff} onClick={()=>{closeMediaActionTray();setCareStaffInviteIds([]);setShowCareStaffInvite(true);}}>
+	                                <ChatActionIcon kind="team" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={t.patientInfo} onClick={()=>{closeMediaActionTray();setShowPatientInfo(true);}}>
+	                                <ChatActionIcon kind="patient" />
+	                              </ChatActionTile>
+	                            </>
+	                          ) : (
+	                            <>
+	                              <ChatActionTile label={t.staffRecord} accent="success" dot={staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread} onClick={()=>{closeMediaActionTray();setMediaLibraryTab("internal");setShowMediaLibrary(true);clearStaffRecordUnreadRoom(selectedRoom?.id);}}>
+	                                <ChatActionIcon kind="record" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={lang==="es" ? "Recetas" : "Prescriptions"} accent="warning" disabled={selectedRoomCancelled} onClick={()=>{closeMediaActionTray();fileInputRef.current?.click();}}>
+	                                <ChatActionIcon kind="prescription" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={t.mediaLibrary} onClick={()=>{closeMediaActionTray();setShowMediaLibrary(true);}}>
+	                                <ChatActionIcon kind="library" />
+	                              </ChatActionTile>
+	                              <ChatActionTile label={t.patientInfo} onClick={()=>{closeMediaActionTray();setShowPatientInfo(true);}}>
+	                                <ChatActionIcon kind="patient" />
+	                              </ChatActionTile>
+	                            </>
+	                          )}
+	                        </div>
+	                      </div>
+	                    )}
                     {showEmojiMenu && (
                       <div style={{position:"absolute",left:64,bottom:`calc(66px + env(safe-area-inset-bottom))`,width:250,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`,borderRadius:18,padding:10,boxShadow:"0 14px 34px rgba(15,23,42,0.16)",zIndex:31}}>
                         <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:6}}>
@@ -9000,26 +8930,11 @@ export default function InboxPage() {
                         </div>
                       </div>
                     )}
-                    <button className="plus-btn" onClick={()=>{setShowEmojiMenu(false);setShowMediaMenu(v=>!v);}} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>
-                      {showMediaMenu ? "×" : <PatientRoomToolsIcon />}
-                      {staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread && <span className="staff-record-dot" aria-hidden="true" />}
-                    </button>
-                    <button
-                      type="button"
-                      className="video-btn"
-                      disabled={selectedRoomCancelled}
-                      onClick={()=>{
-                        if (selectedRoomCancelled) return;
-                        setShowEmojiMenu(false);
-                        setShowMediaMenu(false);
-                        void openNativeVideoCapture();
-                      }}
-                      aria-label={lang==="es" ? "Enviar video" : "Send video"}
-                      title={lang==="es" ? "Enviar video" : "Send video"}
-                    >
-                      <VideoCameraIcon />
-                    </button>
-                    <div
+	                    <button className="plus-btn" onClick={toggleMediaActionTray} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>
+	                      {showMediaMenu ? "×" : <PatientRoomToolsIcon />}
+	                      {staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread && <span className="staff-record-dot" aria-hidden="true" />}
+	                    </button>
+	                    <div
                       ref={setComposerNode}
                       className="msg-input"
                       contentEditable={!selectedRoomCancelled}
@@ -9029,11 +8944,11 @@ export default function InboxPage() {
                       data-placeholder={selectedRoomCancelled ? t.roomCancelledBadge : (lang==="es" ? "Mensaje" : "Message")}
                       onFocus={()=>{closeMessageActions();jumpToLatest();}}
                       onInput={e=>{
-                        const v=e.currentTarget.textContent || "";
-                        setNewMessage(v);
-                        updateTypingState(v);
-                        setShowMediaMenu(false);
-                        setShowEmojiMenu(false);
+	                        const v=e.currentTarget.textContent || "";
+	                        setNewMessage(v);
+	                        updateTypingState(v);
+	                        closeMediaActionTray();
+	                        setShowEmojiMenu(false);
                         updateSlashMenuState(v, "patient");
                       }}
                       onBlur={()=>updateTypingState("")}

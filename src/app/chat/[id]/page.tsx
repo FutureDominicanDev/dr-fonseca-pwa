@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, use, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, use, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
@@ -68,14 +68,6 @@ type PatientTextSize = "normal" | "large";
 type AlertTone = "system" | "classic" | "soft" | "urgent" | "critical" | "off";
 
 const PATIENT_TEXT_SIZE_STORAGE_KEY = "drf_patient_text_size";
-const PATIENT_LANG_STORAGE_KEY = "drf_patient_ui_lang";
-const PATIENT_ALERT_TONE_STORAGE_KEY = "drf_patient_alert_tone";
-const DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
-const alertToneOptions: AlertTone[] = ["system", "classic", "soft", "urgent", "critical"];
-
-type PortalNotificationSettingsPlugin = {
-  open(options: { channelId: string }): Promise<void>;
-};
 
 type PortalAudioRecorderPlugin = {
   start: () => Promise<{ started?: boolean }>;
@@ -83,15 +75,94 @@ type PortalAudioRecorderPlugin = {
   cancel: () => Promise<{ cancelled?: boolean }>;
 };
 
+function PatientTrayIcon({ kind, size = 25 }: { kind: "camera" | "photos" | "video" | "folder" | "documents" | "form" | "quick" | "settings"; size?: number }) {
+  const commonProps = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.25, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (kind === "camera") {
+    return (
+      <svg {...commonProps}>
+        <path d="M8.5 6.2 10 4.4h4l1.5 1.8H19a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.2a2 2 0 0 1 2-2h3.5Z" />
+        <circle cx="12" cy="12.4" r="3.4" />
+      </svg>
+    );
+  }
+  if (kind === "photos") {
+    return (
+      <svg {...commonProps}>
+        <rect x="4" y="5" width="14" height="14" rx="2.2" />
+        <path d="M8 13.5 10.2 11l2.3 2.7 1.5-1.6 4 4.5" />
+        <circle cx="14.8" cy="8.8" r="1.1" fill="currentColor" stroke="none" />
+        <path d="M8 3h11a2 2 0 0 1 2 2v11" />
+      </svg>
+    );
+  }
+  if (kind === "video") {
+    return (
+      <svg {...commonProps}>
+        <rect x="3.6" y="6.4" width="11.8" height="11.2" rx="2.2" />
+        <path d="m15.4 10.1 4.8-2.7v9.2l-4.8-2.7Z" />
+      </svg>
+    );
+  }
+  if (kind === "folder") {
+    return (
+      <svg {...commonProps}>
+        <path d="M3.6 7.2a2.2 2.2 0 0 1 2.2-2.2h4l2 2h6.4a2.2 2.2 0 0 1 2.2 2.2v8.6a2.2 2.2 0 0 1-2.2 2.2H5.8a2.2 2.2 0 0 1-2.2-2.2V7.2Z" />
+        <path d="M8.5 13h7" />
+      </svg>
+    );
+  }
+  if (kind === "documents") {
+    return (
+      <svg {...commonProps}>
+        <path d="M7.2 4h7.6L18 7.2V20H6V4h1.2Z" />
+        <path d="M14.6 4.3v3.2h3.1" />
+        <path d="M9 12h6" />
+        <path d="M12 9v6" />
+      </svg>
+    );
+  }
+  if (kind === "form") {
+    return (
+      <svg {...commonProps}>
+        <path d="M7 3.8h6.4L18 8.4v11.8H7V3.8Z" />
+        <path d="M13.2 3.9v4.7h4.7" />
+        <path d="M9.8 13h5" />
+        <path d="M9.8 16h4.2" />
+      </svg>
+    );
+  }
+  if (kind === "quick") {
+    return (
+      <svg {...commonProps}>
+        <path d="M13.3 2.8 5.7 13h5.1l-1 8.2 8.5-11.5h-5.2l.2-6.9Z" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...commonProps}>
+      <path d="M4 7h9" />
+      <path d="M17 7h3" />
+      <circle cx="15" cy="7" r="2" />
+      <path d="M4 17h3" />
+      <path d="M11 17h9" />
+      <circle cx="9" cy="17" r="2" />
+    </svg>
+  );
+}
+
+function PatientActionTile({ label, children, onClick, disabled = false, accent = "", dot = false }: { label: string; children: ReactNode; onClick: () => void; disabled?: boolean; accent?: "primary" | "success" | "warning" | ""; dot?: boolean }) {
+  return (
+    <button type="button" className={`patient-action-tile${accent ? ` ${accent}` : ""}`} onClick={onClick} disabled={disabled} title={label} aria-label={label}>
+      <span className="patient-action-icon-wrap" aria-hidden="true">{children}</span>
+      <span className="patient-action-label">{label}</span>
+      {dot && <span className="patient-action-dot" aria-hidden="true" />}
+    </button>
+  );
+}
+
 const readPatientTextSize = (): PatientTextSize => {
   if (typeof window === "undefined") return "normal";
   return window.localStorage.getItem(PATIENT_TEXT_SIZE_STORAGE_KEY) === "large" ? "large" : "normal";
-};
-
-const readPatientAlertTone = (): AlertTone => {
-  if (typeof window === "undefined") return "system";
-  const stored = window.localStorage.getItem(PATIENT_ALERT_TONE_STORAGE_KEY);
-  return stored === "system" || stored === "classic" || stored === "soft" || stored === "urgent" || stored === "critical" || stored === "off" ? stored : "system";
 };
 
 const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
@@ -321,11 +392,6 @@ const deviceUiLang = (): "es" | "en" => {
   return options.map((entry) => normalizeUiLang(entry)).find(Boolean) || "es";
 };
 
-const readPatientUiLang = (): "es" | "en" => {
-  if (typeof window === "undefined") return "es";
-  return normalizeUiLang(window.localStorage.getItem(PATIENT_LANG_STORAGE_KEY)) || deviceUiLang();
-};
-
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const searchParams = useSearchParams();
@@ -337,6 +403,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [text, setText] = useState("");
   const [staffTyping, setStaffTyping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [patientMenuView, setPatientMenuView] = useState<"main" | "folder">("main");
   const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
   const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
   const [clinicalFormOpen, setClinicalFormOpen] = useState(false);
@@ -356,13 +423,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [editingReplyIndex, setEditingReplyIndex] = useState<number | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [textSize, setTextSize] = useState<PatientTextSize>(() => readPatientTextSize());
-  const [alertTone, setAlertTone] = useState<AlertTone>(() => readPatientAlertTone());
+  const [alertTone] = useState<AlertTone>("system");
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [uiLang, setUiLang] = useState<"es" | "en">(() => readPatientUiLang());
+  const [uiLang, setUiLang] = useState<"es" | "en">("es");
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
-  const [notificationBusy, setNotificationBusy] = useState(false);
-  const [notificationFeedback, setNotificationFeedback] = useState("");
   const [patientPhoneEdit, setPatientPhoneEdit] = useState("");
   const [patientPhoneSaving, setPatientPhoneSaving] = useState(false);
   const [patientPhoneFeedback, setPatientPhoneFeedback] = useState("");
@@ -535,60 +600,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     });
   }, [accessDenied, accessReady, id, roomClosed, token]);
 
-  const requestPatientNotifications = useCallback(async () => {
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      setNotificationPermission("unsupported");
-      setNotificationFeedback(uiLang === "es" ? "Este dispositivo no soporta alertas." : "This device does not support alerts.");
-      return;
-    }
-
-    setNotificationBusy(true);
-    setNotificationFeedback("");
-    try {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
-      if (permission === "granted") {
-        await subscribePatientToPush();
-        setNotificationFeedback(uiLang === "es" ? "Alertas activadas en este dispositivo." : "Alerts are enabled on this device.");
-      } else if (permission === "denied") {
-        setNotificationFeedback(uiLang === "es"
-          ? "Safari está bloqueando las alertas para este sitio. Si estás en una ventana privada, abre el portal en una ventana normal o en la app instalada; si ya las bloqueaste, permite notificaciones para este sitio en ajustes de Safari."
-          : "Safari is blocking alerts for this site. If you are in a private window, open the portal in a normal window or the installed app; if you already blocked them, allow notifications for this site in Safari settings.");
-      } else {
-        setNotificationFeedback(uiLang === "es" ? "Permiso pendiente." : "Permission is still pending.");
-      }
-    } catch {
-      setNotificationFeedback(uiLang === "es" ? "No pude activar alertas." : "I could not enable alerts.");
-    } finally {
-      setNotificationBusy(false);
-    }
-  }, [subscribePatientToPush, uiLang]);
-
-  const openDeviceNotificationSettings = useCallback(async () => {
-    try {
-      const { Capacitor, registerPlugin } = await import("@capacitor/core");
-      if (!Capacitor.isNativePlatform()) {
-        setNotificationFeedback(uiLang === "es"
-          ? "En navegador o PWA, el sonido lo controla el permiso de notificaciones del sistema."
-          : "In the browser or PWA, the system notification permission controls the sound.");
-        return;
-      }
-      if (Capacitor.getPlatform() !== "android") {
-        setNotificationFeedback(uiLang === "es"
-          ? "En iPhone, usa Ajustes de iOS para el sonido general de notificaciones. Apple no permite elegir la lista completa de tonos dentro de la app."
-          : "On iPhone, use iOS Settings for the general notification sound. Apple does not expose the full tone picker inside the app.");
-        return;
-      }
-      setNotificationFeedback("");
-      const PortalNotificationSettings = registerPlugin<PortalNotificationSettingsPlugin>("PortalNotificationSettings");
-      await PortalNotificationSettings.open({ channelId: DEVICE_ALERT_CHANNEL_ID });
-    } catch {
-      setNotificationFeedback(uiLang === "es"
-        ? "No pude abrir los ajustes del dispositivo desde esta pantalla."
-        : "I could not open device settings from this screen.");
-    }
-  }, [uiLang]);
-
   const patientDisplayName = useCallback(() => {
     const patient = room?.procedures?.patients as any;
     const name = Array.isArray(patient) ? patient[0]?.full_name : patient?.full_name;
@@ -684,31 +695,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     }, 1400);
   }, [accessDenied, accessReady, broadcastTypingState, id, patientDisplayName, roomClosed, sendTypingSignal, token]);
 
-  const changePatientLanguage = (nextLang: "es" | "en") => {
-    setUiLang(nextLang);
-    if (typeof window !== "undefined") window.localStorage.setItem(PATIENT_LANG_STORAGE_KEY, nextLang);
-  };
-
-  const togglePatientLanguage = () => changePatientLanguage(uiLang === "es" ? "en" : "es");
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(PATIENT_TEXT_SIZE_STORAGE_KEY, textSize);
   }, [textSize]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(PATIENT_ALERT_TONE_STORAGE_KEY, alertTone);
-  }, [alertTone]);
-
-  const alertToneLabel = (tone: AlertTone) => ({
-    system: uiLang === "es" ? "Sistema del dispositivo" : "Device default",
-    classic: uiLang === "es" ? "Portal" : "Portal",
-    soft: uiLang === "es" ? "Suave" : "Soft",
-    urgent: uiLang === "es" ? "Urgente" : "Urgent",
-    critical: uiLang === "es" ? "Crítico repetido" : "Critical repeat",
-    off: uiLang === "es" ? "Silencio" : "Silent",
-  }[tone]);
+    setUiLang(deviceUiLang());
+  }, []);
 
   const ensureAudioContext = useCallback(() => {
     if (typeof window === "undefined") return null;
@@ -785,13 +779,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setPatientPhoneEdit(patientPhoneFromRoom());
     setPatientPhoneFeedback("");
   }, [patientPhoneFromRoom, settingsOpen]);
-
-  useEffect(() => {
-    const patient = room?.procedures?.patients;
-    const patientLang = normalizeUiLang(Array.isArray(patient) ? patient[0]?.preferred_language : patient?.preferred_language);
-    const stored = typeof window !== "undefined" ? normalizeUiLang(window.localStorage.getItem(PATIENT_LANG_STORAGE_KEY)) : null;
-    if (patientLang && !stored) setUiLang(patientLang);
-  }, [room]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1354,12 +1341,24 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setEditingReplyIndex(null);
   };
 
-  const openPicker = (accept: string) => {
+  const closePatientActionTray = () => {
+    setMenuOpen(false);
+    setPatientMenuView("main");
+  };
+
+  const togglePatientActionTray = () => {
+    setPatientMenuView("main");
+    setMenuOpen((open) => !open);
+  };
+
+  const openPicker = (accept: string, capture?: "environment" | "user") => {
     setFileAccept(accept);
     if (!fileRef.current) return;
     fileRef.current.accept = accept;
+    if (capture) fileRef.current.setAttribute("capture", capture);
+    else fileRef.current.removeAttribute("capture");
     fileRef.current.click();
-    setMenuOpen(false);
+    closePatientActionTray();
   };
 
   const extensionForMimeType = (mimeType: string, fallback: string) => {
@@ -1392,22 +1391,22 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     }
   };
 
-  const openNativePhotoPicker = async () => {
-    setMenuOpen(false);
+  const openNativePhotoPicker = async (source: "camera" | "photos") => {
+    closePatientActionTray();
     try {
       const [{ Capacitor }, { Camera, CameraResultType, CameraSource }] = await Promise.all([
         import("@capacitor/core"),
         import("@capacitor/camera"),
       ]);
       if (!Capacitor.isNativePlatform()) {
-        openPicker("image/*");
+        openPicker("image/*", source === "camera" ? "environment" : undefined);
         return;
       }
       const photo = await Camera.getPhoto({
         quality: 88,
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
-        source: CameraSource.Prompt,
+        source: source === "camera" ? CameraSource.Camera : CameraSource.Photos,
         promptLabelHeader: uiLang === "es" ? "Enviar foto" : "Send photo",
         promptLabelPhoto: uiLang === "es" ? "Elegir de fotos" : "Choose from photos",
         promptLabelPicture: uiLang === "es" ? "Tomar foto" : "Take photo",
@@ -1421,7 +1420,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     } catch (error: any) {
       const message = `${error?.message || ""}`.toLowerCase();
       if (message.includes("cancel")) return;
-      openPicker("image/*");
+      openPicker("image/*", source === "camera" ? "environment" : undefined);
     }
   };
 
@@ -1759,7 +1758,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       await persistClinicalPdfValues(clinicalPdfValues);
       setClinicalPdfEditorOpen(false);
       setDocumentFolderOpen(false);
-      setMenuOpen(false);
+      closePatientActionTray();
       window.setTimeout(() => scrollToLatest("smooth"), 80);
     } catch (error) {
       const message = error instanceof Error ? error.message : (uiLang === "es" ? "No pude guardar el formulario." : "Could not save the form.");
@@ -1775,7 +1774,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       event.target.value = "";
       return;
     }
-    setMenuOpen(false);
+    closePatientActionTray();
     await uploadFile(file, "video");
     event.target.value = "";
   };
@@ -2021,9 +2020,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       invalidPhone: "Enter a valid phone number.",
       phoneSaveFailed: "I could not save the phone number.",
       phoneUpdateAlert: "Patient updated contact phone: {phone}",
-      alerts: "Alerts",
-      enableAlerts: "Enable alerts",
-      enablingAlerts: "Enabling...",
       callClinic: "Call clinic",
       callSheetTitle: "Call clinic",
       callSheetCopy: `Call the main number first. If no one answers after ${CLINIC_FALLBACK_SECONDS} seconds, call the backup number immediately.`,
@@ -2084,9 +2080,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       invalidPhone: "Ingresa un número de teléfono válido.",
       phoneSaveFailed: "No pude guardar el teléfono.",
       phoneUpdateAlert: "Paciente actualizó su teléfono de contacto: {phone}",
-      alerts: "Alertas",
-      enableAlerts: "Activar alertas",
-      enablingAlerts: "Activando...",
       callClinic: "Llamar a la clínica",
       callSheetTitle: "Llamar a la clínica",
       callSheetCopy: `Llama primero al número principal. Si nadie contesta después de ${CLINIC_FALLBACK_SECONDS} segundos, llama de inmediato al número de respaldo.`,
@@ -2162,7 +2155,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const openPrescriptions = () => {
     const latest = prescriptionMessages[prescriptionMessages.length - 1]?.created_at || new Date().toISOString();
     setPrescriptionsOpen(true);
-    setMenuOpen(false);
+    closePatientActionTray();
     setLastPrescriptionSeenAt(latest);
     if (typeof window !== "undefined") window.localStorage.setItem(prescriptionSeenKey, latest);
   };
@@ -2326,10 +2319,25 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         .patient-chat-app button, .patient-chat-app [role="button"], .patient-chat-app input, .patient-chat-app textarea { min-height: 44px; }
         button { transition: transform 150ms ease, opacity 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
         button:active { transform: scale(0.96); opacity: 0.86; }
-        input { transition: box-shadow 170ms ease, background-color 170ms ease; }
-        input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
-        .chat-composer:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
-        .typing-dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; vertical-align: middle; }
+	        input { transition: box-shadow 170ms ease, background-color 170ms ease; }
+	        input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
+	        .chat-composer:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
+	        .patient-action-tray { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); width: auto; max-width: min(560px, calc(100vw - 24px)); background: ${darkMode ? "rgba(31,44,52,0.98)" : "rgba(247,241,232,0.98)"}; border: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; border-radius: 28px; padding: 18px 16px 16px; box-shadow: 0 18px 45px rgba(15,23,42,0.24); z-index: 5; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
+	        .patient-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+	        .patient-menu-back { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: none; border-radius: 50%; background: ${darkMode ? "#253244" : "#EEF4FA"}; color: ${darkMode ? "#F8FAFC" : "#111827"}; display: grid; place-items: center; }
+	        .patient-action-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 12px; }
+	        .patient-action-tile { position: relative; width: 100%; min-height: 102px; border: none; border-radius: 20px; background: transparent; color: ${darkMode ? "#F8FAFC" : "#111827"}; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; padding: 0; cursor: pointer; font-family: inherit; box-shadow: none; }
+	        .patient-action-icon-wrap { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; background: ${darkMode ? "#253244" : "#FFFFFF"}; color: ${darkMode ? "#E2E8F0" : "#0B3C5D"}; border: 1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)"}; box-shadow: ${darkMode ? "0 8px 18px rgba(0,0,0,0.18)" : "0 8px 20px rgba(15,23,42,0.10)"}; }
+	        .patient-action-tile svg { width: 31px; height: 31px; display: block; }
+	        .patient-action-label { width: 100%; min-height: 30px; display: flex; align-items: flex-start; justify-content: center; color: ${darkMode ? "#F8FAFC" : "#0F172A"}; font-size: 12.5px; line-height: 1.15; font-weight: 900; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
+	        .patient-action-tile.primary .patient-action-icon-wrap { background: #EAF3FF; color: #075EA8; border-color: #CFE4FA; }
+	        .patient-action-tile.success .patient-action-icon-wrap { background: #E9FBEF; color: #128C4A; border-color: #BFEFD0; }
+	        .patient-action-tile.warning .patient-action-icon-wrap { background: #FFF7E6; color: #B45309; border-color: #FDE1A7; }
+	        .patient-action-tile:disabled { cursor: not-allowed; }
+	        .patient-action-tile:disabled .patient-action-icon-wrap, .patient-action-tile:disabled .patient-action-label { opacity: 0.45; }
+	        .patient-action-dot { position: absolute; top: 3px; right: calc(50% - 34px); width: 12px; height: 12px; border-radius: 50%; background: #DC2626; border: 2px solid ${darkMode ? "#253244" : "#FFFFFF"}; box-shadow: 0 2px 6px rgba(220,38,38,0.35); }
+	        @media (max-width: 520px) { .patient-action-tray { max-width: none; padding: 16px 12px 14px; } .patient-action-grid { gap: 14px 8px; } .patient-action-tile { min-height: 98px; } .patient-action-icon-wrap { width: 62px; height: 62px; } .patient-action-label { font-size: 12px; } }
+	        .typing-dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; vertical-align: middle; }
         .typing-dots span { width: 5px; height: 5px; border-radius: 999px; background: currentColor; opacity: 0.42; animation: typingDot 1.15s ease-in-out infinite; }
         .typing-dots span:nth-child(2) { animation-delay: 0.16s; }
         .typing-dots span:nth-child(3) { animation-delay: 0.32s; }
@@ -2342,35 +2350,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       `}</style>
       <header style={{ position: "relative", height: 88, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0B3C5D", borderBottom: "1px solid rgba(229,231,235,0.65)", padding: "5px 8px", overflow: "hidden" }}>
         <Image src="/fonseca_blue.png" alt="Dr. Fonseca" width={430} height={78} priority style={{ width: "95%", maxWidth: 520, height: "auto", maxHeight: 78, objectFit: "contain", objectPosition: "center" }} />
-        <button
-          type="button"
-          onClick={togglePatientLanguage}
-          aria-label={uiLang === "es" ? "Cambiar idioma a English" : "Switch language to Español"}
-          title={uiLang === "es" ? "Cambiar a English" : "Switch to Español"}
-          style={{
-            position: "absolute",
-            ...(viewerType === "staff" ? { left: "max(12px, env(safe-area-inset-left))" } : { right: "max(12px, env(safe-area-inset-right))" }),
-            top: "50%",
-            transform: "translateY(-50%)",
-            width: 46,
-            height: 46,
-            minHeight: 46,
-            borderRadius: 16,
-            border: "1px solid rgba(210,235,255,0.44)",
-            background: "rgba(4,34,53,0.68)",
-            color: "#fff",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 23,
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 18px rgba(2,14,28,0.22)",
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
-            fontFamily: "inherit",
-          }}
-        >
-          <span aria-hidden="true">{uiLang === "es" ? "🇲🇽" : "🇺🇸"}</span>
-        </button>
         {viewerType === "staff" && (
           <a className="staff-exit-link" href="/inbox">
             Salir
@@ -2383,7 +2362,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         ref={chatScrollRef}
         onScroll={handleChatScroll}
         style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: "12px max(10px, env(safe-area-inset-right)) 16px max(10px, env(safe-area-inset-left))", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain", touchAction: "pan-y" }}
-        onClick={() => { setMenuOpen(false); setDeleteMenuMessageId(null); }}
+        onClick={() => { closePatientActionTray(); setDeleteMenuMessageId(null); }}
       >
         {(() => {
           let previousMessageDate = "";
@@ -2473,22 +2452,59 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           </button>
         </div>
       )}
-      <footer onClick={() => setDeleteMenuMessageId(null)} style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)", maxWidth: "100vw", opacity: roomClosed ? 0.72 : 1 }}>
-        {menuOpen && (
-          <div style={{ position: "absolute", bottom: "calc(78px + env(safe-area-inset-bottom))", left: 14, width: 248, overflow: "hidden", background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", zIndex: 5, animation: "menuIn 160ms ease-out", transformOrigin: "left bottom" }}>
-            <button disabled={roomClosed} onClick={() => void openNativePhotoPicker()} style={menuButtonStyle}>{labels.photos}</button>
-            <button disabled={roomClosed} onClick={() => { videoCaptureRef.current?.click(); setMenuOpen(false); }} style={menuButtonStyle}>{labels.video}</button>
-            <button onClick={openPrescriptions} style={{ ...menuButtonStyle, position:"relative" }}>
-              {labels.documents}
-              {newPrescriptionCount > 0 && <span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",minWidth:22,height:22,borderRadius:999,background:"#DC2626",color:"white",display:"grid",placeItems:"center",fontSize:12,fontWeight:900}}>{newPrescriptionCount}</span>}
-            </button>
-            <button onClick={() => { setDocumentFolderOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.documentFolder}</button>
-            <button onClick={() => { setQuickRepliesManageOpen(true); setMenuOpen(false); }} style={menuButtonStyle}>{labels.quickReplies}</button>
-            <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} style={{ ...menuButtonStyle, borderBottom: "none" }}>{labels.settings}</button>
-          </div>
-        )}
+	      <footer onClick={() => setDeleteMenuMessageId(null)} style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)", maxWidth: "100vw", opacity: roomClosed ? 0.72 : 1 }}>
+	        {menuOpen && (
+	          <div className="patient-action-tray">
+	            {patientMenuView === "folder" && (
+	              <div className="patient-menu-head">
+	                <button
+	                  type="button"
+	                  className="patient-menu-back"
+	                  onClick={() => setPatientMenuView("main")}
+	                  aria-label={uiLang === "es" ? "Volver" : "Back"}
+	                  title={uiLang === "es" ? "Volver" : "Back"}
+	                >
+	                  ‹
+	                </button>
+	              </div>
+	            )}
+	            <div className="patient-action-grid">
+	              {patientMenuView === "main" ? (
+	                <>
+	                  <PatientActionTile label={uiLang === "es" ? "Cámara" : "Camera"} accent="primary" disabled={roomClosed} onClick={() => void openNativePhotoPicker("camera")}>
+	                    <PatientTrayIcon kind="camera" />
+	                  </PatientActionTile>
+	                  <PatientActionTile label={labels.photos} accent="primary" disabled={roomClosed} onClick={() => void openNativePhotoPicker("photos")}>
+	                    <PatientTrayIcon kind="photos" />
+	                  </PatientActionTile>
+	                  <PatientActionTile label={labels.video} accent="primary" disabled={roomClosed} onClick={() => { closePatientActionTray(); videoCaptureRef.current?.click(); }}>
+	                    <PatientTrayIcon kind="video" />
+	                  </PatientActionTile>
+	                  <PatientActionTile label={uiLang === "es" ? "Carpeta" : "Folder"} accent="success" dot={newPrescriptionCount > 0} onClick={() => setPatientMenuView("folder")}>
+	                    <PatientTrayIcon kind="folder" />
+	                  </PatientActionTile>
+                  <PatientActionTile label={labels.quickReplies} onClick={() => { closePatientActionTray(); setQuickRepliesOpen(true); requestAnimationFrame(() => composerRef.current?.focus()); }}>
+	                    <PatientTrayIcon kind="quick" />
+	                  </PatientActionTile>
+	                  <PatientActionTile label={labels.settings} onClick={() => { closePatientActionTray(); setSettingsOpen(true); }}>
+	                    <PatientTrayIcon kind="settings" />
+	                  </PatientActionTile>
+	                </>
+	              ) : (
+	                <>
+	                  <PatientActionTile label={labels.documents} accent="warning" dot={newPrescriptionCount > 0} onClick={openPrescriptions}>
+	                    <PatientTrayIcon kind="documents" />
+	                  </PatientActionTile>
+	                  <PatientActionTile label={labels.documentFolder} accent="success" onClick={() => { closePatientActionTray(); setDocumentFolderOpen(true); }}>
+	                    <PatientTrayIcon kind="form" />
+	                  </PatientActionTile>
+	                </>
+	              )}
+	            </div>
+	          </div>
+	        )}
 
-        <button type="button" disabled={roomClosed} onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu" style={{ position:"relative", width: 44, height: 44, minWidth: 44, minHeight: 44, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
+	        <button type="button" disabled={roomClosed} onClick={togglePatientActionTray} aria-label={menuOpen ? labels.cancel : "Open menu"} style={{ position:"relative", width: 44, height: 44, minWidth: 44, minHeight: 44, borderRadius: "50%", border: "none", background: menuOpen ? "#075e54" : "#ddd", color: menuOpen ? "#fff" : "#111", fontSize: 28, lineHeight: 1, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {menuOpen ? "×" : "+"}
           {newPrescriptionCount > 0 && <span style={{position:"absolute",right:0,top:0,width:12,height:12,borderRadius:"50%",background:"#DC2626",border:"2px solid #ededed"}} />}
         </button>
@@ -2858,21 +2874,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               {labels.darkMode}
               <input type="checkbox" checked={darkMode} onChange={(event) => setDarkMode(event.target.checked)} style={{ width: 24, height: 24 }} />
             </label>
-            <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
-              <div style={{ fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.language}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                {(["es", "en"] as const).map((nextLang) => (
-                  <button
-                    key={nextLang}
-                    type="button"
-                    onClick={() => changePatientLanguage(nextLang)}
-                    style={{ height: 48, border: "none", borderRadius: 14, background: uiLang === nextLang ? "#075e54" : inputPanelBg, color: uiLang === nextLang ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}
-                  >
-                    {nextLang === "es" ? "🇲🇽 Español" : "🇺🇸 English"}
-                  </button>
-                ))}
-              </div>
-            </div>
             {viewerType === "patient" && (
               <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
                 <div style={{ fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.contactPhone}</div>
@@ -2899,46 +2900,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                 </div>
               </div>
             )}
-            <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
-              <div style={{ fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.alerts}</div>
-              {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
-                <button onClick={()=>void requestPatientNotifications()} disabled={notificationBusy} style={{ minHeight: 48, border: "none", borderRadius: 14, background: "#DBEAFE", color: "#1D4ED8", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit", opacity: notificationBusy ? 0.6 : 1 }}>
-                  {notificationBusy ? labels.enablingAlerts : labels.enableAlerts}
-                </button>
-              )}
-              {notificationFeedback && (
-                <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 700, lineHeight: 1.45 }}>
-                  {notificationFeedback}
-                </div>
-              )}
-              <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 700, lineHeight: 1.45 }}>
-                {uiLang === "es"
-                  ? "Sistema del dispositivo usa el sonido de notificación configurado en el teléfono."
-                  : "Device default uses the notification sound configured on the phone."}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(128px, 1fr))", gap: 10, marginTop: 4 }}>
-                {alertToneOptions.map((tone) => (
-                  <button
-                    key={tone}
-                    type="button"
-                    onClick={() => setAlertTone(tone)}
-                    style={{ minHeight: 48, border: "none", borderRadius: 14, background: alertTone === tone ? "#075e54" : inputPanelBg, color: alertTone === tone ? "#fff" : textPrimary, fontSize: patientTextSmall, fontWeight: 850, fontFamily: "inherit" }}
-                  >
-                    {alertToneLabel(tone)}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={alertTone === "system" ? openDeviceNotificationSettings : playIncomingTone}
-                disabled={alertTone === "off"}
-                style={{ minHeight: 48, border: "none", borderRadius: 14, background: alertTone === "off" ? inputPanelBg : "#DBEAFE", color: alertTone === "off" ? (darkMode ? "#94A3B8" : "#64748B") : "#1D4ED8", fontSize: patientTextBase, fontWeight: 900, fontFamily: "inherit", opacity: alertTone === "off" ? 0.75 : 1 }}
-              >
-                {alertTone === "system"
-                  ? (uiLang === "es" ? "Abrir ajustes del dispositivo" : "Open device settings")
-                  : (uiLang === "es" ? "Probar sonido" : "Test sound")}
-              </button>
-            </div>
             <div style={{ fontSize: patientTextBase, lineHeight: 1.45, marginBottom: 10 }}>{labels.textSize}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <button onClick={() => setTextSize("normal")} style={{ height: 48, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 800 }}>{labels.normal}</button>
@@ -2987,16 +2948,4 @@ const roundButtonStyle: React.CSSProperties = {
   display: "grid",
   placeItems: "center",
   flexShrink: 0,
-};
-
-const menuButtonStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "18px 20px",
-  border: "none",
-  borderBottom: "1px solid rgba(0,0,0,0.08)",
-  background: "#fff",
-  color: "#111",
-  textAlign: "left",
-  fontSize: 17,
-  fontWeight: 700,
 };
