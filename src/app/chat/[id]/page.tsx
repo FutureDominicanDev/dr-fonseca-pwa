@@ -64,10 +64,7 @@ type RoomAccess = {
   } | null;
 };
 
-type PatientTextSize = "normal" | "large";
 type AlertTone = "system" | "classic" | "soft" | "urgent" | "critical" | "off";
-
-const PATIENT_TEXT_SIZE_STORAGE_KEY = "drf_patient_text_size";
 
 type PortalAudioRecorderPlugin = {
   start: () => Promise<{ started?: boolean }>;
@@ -75,7 +72,7 @@ type PortalAudioRecorderPlugin = {
   cancel: () => Promise<{ cancelled?: boolean }>;
 };
 
-function PatientTrayIcon({ kind, size = 25 }: { kind: "camera" | "photos" | "video" | "folder" | "documents" | "form" | "quick" | "settings"; size?: number }) {
+function PatientTrayIcon({ kind, size = 25 }: { kind: "camera" | "photos" | "video" | "folder" | "documents" | "form" | "call"; size?: number }) {
   const commonProps = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.25, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   if (kind === "camera") {
     return (
@@ -131,26 +128,17 @@ function PatientTrayIcon({ kind, size = 25 }: { kind: "camera" | "photos" | "vid
       </svg>
     );
   }
-  if (kind === "quick") {
+  if (kind === "call") {
     return (
       <svg {...commonProps}>
-        <path d="M13.3 2.8 5.7 13h5.1l-1 8.2 8.5-11.5h-5.2l.2-6.9Z" fill="currentColor" stroke="none" />
+        <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.3 19.3 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.1 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.7 2.6a2 2 0 0 1-.4 2.1L8.1 9.7a16 16 0 0 0 6.2 6.2l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.7.6 2.6.7a2 2 0 0 1 1.7 2Z" />
       </svg>
     );
   }
-  return (
-    <svg {...commonProps}>
-      <path d="M4 7h9" />
-      <path d="M17 7h3" />
-      <circle cx="15" cy="7" r="2" />
-      <path d="M4 17h3" />
-      <path d="M11 17h9" />
-      <circle cx="9" cy="17" r="2" />
-    </svg>
-  );
+  return null;
 }
 
-function PatientActionTile({ label, children, onClick, disabled = false, accent = "", dot = false }: { label: string; children: ReactNode; onClick: () => void; disabled?: boolean; accent?: "primary" | "success" | "warning" | ""; dot?: boolean }) {
+function PatientActionTile({ label, children, onClick, disabled = false, accent = "", dot = false }: { label: string; children: ReactNode; onClick: () => void; disabled?: boolean; accent?: "primary" | "success" | "warning" | "info" | ""; dot?: boolean }) {
   return (
     <button type="button" className={`patient-action-tile${accent ? ` ${accent}` : ""}`} onClick={onClick} disabled={disabled} title={label} aria-label={label}>
       <span className="patient-action-icon-wrap" aria-hidden="true">{children}</span>
@@ -159,11 +147,6 @@ function PatientActionTile({ label, children, onClick, disabled = false, accent 
     </button>
   );
 }
-
-const readPatientTextSize = (): PatientTextSize => {
-  if (typeof window === "undefined") return "normal";
-  return window.localStorage.getItem(PATIENT_TEXT_SIZE_STORAGE_KEY) === "large" ? "large" : "normal";
-};
 
 const normalizeUiLang = (value?: string | null): "es" | "en" | null => {
   const normalized = `${value || ""}`.toLowerCase();
@@ -388,8 +371,8 @@ const drawWrappedPdfText = (page: PDFPage, font: PDFFont, field: ClinicalPdfFiel
 
 const deviceUiLang = (): "es" | "en" => {
   if (typeof navigator === "undefined") return "es";
-  const options = [navigator.language, ...(navigator.languages || [])];
-  return options.map((entry) => normalizeUiLang(entry)).find(Boolean) || "es";
+  const primaryLanguage = navigator.languages?.[0] || navigator.language;
+  return normalizeUiLang(primaryLanguage) || "es";
 };
 
 export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
@@ -404,8 +387,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [staffTyping, setStaffTyping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [patientMenuView, setPatientMenuView] = useState<"main" | "folder">("main");
-  const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
-  const [quickRepliesManageOpen, setQuickRepliesManageOpen] = useState(false);
   const [clinicalFormOpen, setClinicalFormOpen] = useState(false);
   const [documentFolderOpen, setDocumentFolderOpen] = useState(false);
   const [clinicalPdfEditorOpen, setClinicalPdfEditorOpen] = useState(false);
@@ -417,20 +398,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const [selectedPrescription, setSelectedPrescription] = useState<Message | null>(null);
   const [lastPrescriptionSeenAt, setLastPrescriptionSeenAt] = useState("");
   const [callSheetOpen, setCallSheetOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [quickReplies, setQuickReplies] = useState<string[]>(["Gracias", "Tengo una pregunta", "Voy en camino"]);
-  const [replyDraft, setReplyDraft] = useState("");
-  const [editingReplyIndex, setEditingReplyIndex] = useState<number | null>(null);
-  const [darkMode, setDarkMode] = useState(false);
-  const [textSize, setTextSize] = useState<PatientTextSize>(() => readPatientTextSize());
+  const darkMode = false;
   const [alertTone] = useState<AlertTone>("system");
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [uiLang, setUiLang] = useState<"es" | "en">("es");
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
-  const [patientPhoneEdit, setPatientPhoneEdit] = useState("");
-  const [patientPhoneSaving, setPatientPhoneSaving] = useState(false);
-  const [patientPhoneFeedback, setPatientPhoneFeedback] = useState("");
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
   const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
@@ -522,7 +495,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (composerRef.current && composerRef.current.textContent !== value) {
       composerRef.current.textContent = value;
     }
-    setQuickRepliesOpen(value.startsWith("/"));
   };
   const applyComposerInputHints = (node: HTMLDivElement | null) => {
     if (!node) return;
@@ -606,13 +578,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     return name || (uiLang === "es" ? "Paciente" : "Patient");
   }, [room, uiLang]);
 
-  const patientRecord = useCallback(() => {
-    const patient = room?.procedures?.patients as any;
-    return Array.isArray(patient) ? patient[0] : patient;
-  }, [room]);
-
-  const patientPhoneFromRoom = useCallback(() => `${patientRecord()?.phone || ""}`.trim(), [patientRecord]);
-
   const sendStaffPushNotification = useCallback((body: string, audience?: "advanced_assigned") => {
     if (!token || !body.trim()) return;
     fetch("/api/push", {
@@ -624,7 +589,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         userType: "staff",
         title: patientDisplayName(),
         body: body.trim().slice(0, 300),
-        url: "/inbox",
+        url: `/inbox?roomId=${encodeURIComponent(id)}`,
         tag: id,
         audience,
       }),
@@ -694,11 +659,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       broadcastTypingState(false);
     }, 1400);
   }, [accessDenied, accessReady, broadcastTypingState, id, patientDisplayName, roomClosed, sendTypingSignal, token]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(PATIENT_TEXT_SIZE_STORAGE_KEY, textSize);
-  }, [textSize]);
 
   useEffect(() => {
     setUiLang(deviceUiLang());
@@ -773,12 +733,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => {
     if (notificationPermission === "granted") subscribePatientToPush().catch(() => {});
   }, [notificationPermission, subscribePatientToPush]);
-
-  useEffect(() => {
-    if (!settingsOpen) return;
-    setPatientPhoneEdit(patientPhoneFromRoom());
-    setPatientPhoneFeedback("");
-  }, [patientPhoneFromRoom, settingsOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1328,17 +1282,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     if (!longPressTimerRef.current) return;
     clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = null;
-  };
-
-  const saveQuickReply = () => {
-    const next = replyDraft.trim();
-    if (!next) return;
-    setQuickReplies((current) => {
-      if (editingReplyIndex === null) return [...current, next];
-      return current.map((reply, index) => index === editingReplyIndex ? next : reply);
-    });
-    setReplyDraft("");
-    setEditingReplyIndex(null);
   };
 
   const closePatientActionTray = () => {
@@ -1967,16 +1910,14 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const panelBg = darkMode ? "#172033" : "#fff";
   const footerBg = darkMode ? "#111827" : "#ededed";
   const inputPanelBg = darkMode ? "#1f2937" : "#fff";
-  const messageFontSize = textSize === "large" ? 18 : 16;
-  const patientTextBase = textSize === "large" ? 17 : 16;
-  const patientTextSmall = textSize === "large" ? 15 : 14;
+  const messageFontSize = 16;
+  const patientTextBase = 16;
+  const patientTextSmall = 14;
   const translations = {
     en: {
       messagePlaceholder: "Message",
       send: "SEND",
       cancel: "Cancel",
-      settings: "Settings",
-      quickReplies: "Quick Replies",
       photos: "Photos",
       video: "Video",
       documents: "Prescriptions",
@@ -2009,34 +1950,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       edit: "Edit",
       delete: "Delete",
       deletedByUser: "This message was Deleted by user",
-      darkMode: "Dark mode",
-      contactPhone: "Contact phone",
-      contactPhoneHint: "Add or update the number where the clinic can reach you. The doctor/admin team receives an alert when you save it.",
-      contactPhonePlaceholder: "Phone number",
-      savePhone: "Save phone",
-      savingPhone: "Saving...",
-      phoneSaved: "Phone saved. The doctor/admin team was alerted.",
-      phoneUnchanged: "This phone is already saved.",
-      invalidPhone: "Enter a valid phone number.",
-      phoneSaveFailed: "I could not save the phone number.",
-      phoneUpdateAlert: "Patient updated contact phone: {phone}",
       callClinic: "Call clinic",
       callSheetTitle: "Call clinic",
       callSheetCopy: `Call the main number first. If no one answers after ${CLINIC_FALLBACK_SECONDS} seconds, call the backup number immediately.`,
       callPrimary: "Call main number",
       callBackup: "Call backup number",
       emergencyNotice: "For a medical emergency, call local emergency services first.",
-      textSize: "Text size",
-      normal: "Normal",
-      large: "Large",
       careTeamTyping: "The care team is typing",
     },
     es: {
       messagePlaceholder: "Mensaje",
       send: "ENVIAR",
       cancel: "Cancelar",
-      settings: "Ajustes",
-      quickReplies: "Respuestas rápidas",
       photos: "Fotos",
       video: "Video",
       documents: "Recetas",
@@ -2069,87 +1994,16 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       edit: "Editar",
       delete: "Eliminar",
       deletedByUser: "Este mensaje fue eliminado por el usuario",
-      darkMode: "Modo oscuro",
-      contactPhone: "Teléfono de contacto",
-      contactPhoneHint: "Agrega o actualiza el número donde la clínica puede contactarte. El equipo doctor/admin recibe una alerta al guardarlo.",
-      contactPhonePlaceholder: "Número de teléfono",
-      savePhone: "Guardar teléfono",
-      savingPhone: "Guardando...",
-      phoneSaved: "Teléfono guardado. El equipo doctor/admin fue alertado.",
-      phoneUnchanged: "Este teléfono ya está guardado.",
-      invalidPhone: "Ingresa un número de teléfono válido.",
-      phoneSaveFailed: "No pude guardar el teléfono.",
-      phoneUpdateAlert: "Paciente actualizó su teléfono de contacto: {phone}",
       callClinic: "Llamar a la clínica",
       callSheetTitle: "Llamar a la clínica",
       callSheetCopy: `Llama primero al número principal. Si nadie contesta después de ${CLINIC_FALLBACK_SECONDS} segundos, llama de inmediato al número de respaldo.`,
       callPrimary: "Llamar número principal",
       callBackup: "Llamar respaldo",
       emergencyNotice: "Si es una emergencia médica, llama primero a los servicios de emergencia locales.",
-      textSize: "Tamaño de texto",
-      normal: "Normal",
-      large: "Grande",
       careTeamTyping: "El equipo está escribiendo",
     },
   };
   const labels = translations[uiLang] || translations.en;
-  const updateRoomPatientPhone = (phone: string) => {
-    setRoom((current) => {
-      if (!current?.procedures) return current;
-      const updatePatient = (patient: any) => ({ ...(patient || {}), phone });
-      const procedures = current.procedures as any;
-      if (Array.isArray(procedures)) {
-        return {
-          ...current,
-          procedures: procedures.map((procedure, index) => index === 0
-            ? {
-                ...procedure,
-                patients: Array.isArray(procedure?.patients)
-                  ? procedure.patients.map((patient: any, patientIndex: number) => patientIndex === 0 ? updatePatient(patient) : patient)
-                  : updatePatient(procedure?.patients),
-              }
-            : procedure),
-        } as RoomAccess;
-      }
-      return {
-        ...current,
-        procedures: {
-          ...procedures,
-          patients: Array.isArray(procedures?.patients)
-            ? procedures.patients.map((patient: any, patientIndex: number) => patientIndex === 0 ? updatePatient(patient) : patient)
-            : updatePatient(procedures?.patients),
-        },
-      } as RoomAccess;
-    });
-  };
-  const savePatientPhone = async () => {
-    if (viewerType !== "patient" || patientPhoneSaving) return;
-    const raw = patientPhoneEdit.trim();
-    if (raw.replace(/\D/g, "").length < 7) {
-      setPatientPhoneFeedback(labels.invalidPhone);
-      return;
-    }
-    setPatientPhoneSaving(true);
-    setPatientPhoneFeedback("");
-    try {
-      const result = await postPatientRoomAction("updatePatientPhone", { phone: raw });
-      const nextPhone = `${result?.phone || raw}`.trim();
-      updateRoomPatientPhone(nextPhone);
-      setPatientPhoneEdit(nextPhone);
-      if (result?.message) {
-        setMessages((current) => current.some((message) => message.id === result.message.id) ? current : [...current, result.message as Message]);
-      }
-      if (result?.unchanged) {
-        setPatientPhoneFeedback(labels.phoneUnchanged);
-      } else {
-        setPatientPhoneFeedback(labels.phoneSaved);
-      }
-    } catch (error: any) {
-      setPatientPhoneFeedback(error?.message || labels.phoneSaveFailed);
-    } finally {
-      setPatientPhoneSaving(false);
-    }
-  };
   const prescriptionMessages = messages.filter((message) => `${message.file_name || ""}`.startsWith("[MED]"));
   const newPrescriptionCount = prescriptionMessages.filter((message) => !lastPrescriptionSeenAt || `${message.created_at || ""}` > lastPrescriptionSeenAt).length;
   const openPrescriptions = () => {
@@ -2217,6 +2071,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     setClinicalPdfViewerOpen(false);
     setDocumentFolderOpen(false);
   };
+  const clinicalPdfShareText = `${labels.clinicalHistoryFile}\n${latestClinicalPdfUrl}`;
   const showClinicalPdfShareBlocked = () => {
     alert(uiLang === "es"
       ? "Por privacidad, no se enviara un enlace del formulario. Usa Compartir desde un dispositivo que permita adjuntar el PDF."
@@ -2240,6 +2095,25 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       }
     } catch {}
     showClinicalPdfShareBlocked();
+  };
+  const printClinicalPdf = () => {
+    if (!latestClinicalPdfUrl) return;
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!printWindow) {
+      window.open(latestClinicalPdfUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    printWindow.document.write(`<!doctype html><html><head><title>${labels.clinicalHistoryFile}</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#f8fafc}iframe{width:100%;height:100vh;border:0}@media print{body{background:white}}</style></head><body><iframe src="${latestClinicalPdfUrl}" title="${labels.clinicalHistoryFile}"></iframe><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),700));</script></body></html>`);
+    printWindow.document.close();
+  };
+  const emailClinicalPdf = () => {
+    if (!latestClinicalPdfUrl) return;
+    window.location.href = `mailto:?subject=${encodeURIComponent(labels.clinicalHistoryFile)}&body=${encodeURIComponent(clinicalPdfShareText)}`;
+  };
+  const messageClinicalPdf = () => {
+    if (!latestClinicalPdfUrl) return;
+    const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
+    window.location.href = `sms:${separator}body=${encodeURIComponent(clinicalPdfShareText)}`;
   };
   const visibleChatMessages = messages.filter((message) => {
     const fileName = `${message.file_name || ""}`;
@@ -2308,7 +2182,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   }
 
   return (
-      <main className="patient-chat-app" data-text-size={textSize} style={{ height: "100dvh", minHeight: 0, maxHeight: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: chatFontFamily, overflow: "hidden", maxWidth: "100vw" }}>
+      <main className="patient-chat-app" style={{ height: "100dvh", minHeight: 0, maxHeight: "100dvh", display: "flex", flexDirection: "column", background: appBg, color: textPrimary, fontFamily: chatFontFamily, overflow: "hidden", maxWidth: "100vw" }}>
         <style>{`
         .patient-chat-app { --patient-ui-font-size: ${patientTextBase}px; --patient-ui-small-size: ${patientTextSmall}px; }
         html.native-platform { --drf-system-bar-bg: ${footerBg}; background: var(--drf-system-bar-bg); }
@@ -2322,17 +2196,18 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 	        input { transition: box-shadow 170ms ease, background-color 170ms ease; }
 	        input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
 	        .chat-composer:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
-	        .patient-action-tray { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); width: auto; max-width: min(560px, calc(100vw - 24px)); background: ${darkMode ? "rgba(31,44,52,0.98)" : "rgba(247,241,232,0.98)"}; border: 1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)"}; border-radius: 28px; padding: 18px 16px 16px; box-shadow: 0 18px 45px rgba(15,23,42,0.24); z-index: 5; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
+	        .patient-action-tray { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); width: auto; max-width: min(560px, calc(100vw - 24px)); background: linear-gradient(180deg, #0B4F7C, #073B61); border: 1px solid rgba(191,219,254,0.34); border-radius: 28px; padding: 18px 16px 16px; box-shadow: 0 18px 45px rgba(7,51,77,0.34); z-index: 5; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
 	        .patient-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-	        .patient-menu-back { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: none; border-radius: 50%; background: ${darkMode ? "#253244" : "#EEF4FA"}; color: ${darkMode ? "#F8FAFC" : "#111827"}; display: grid; place-items: center; }
+	        .patient-menu-back { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: 1px solid rgba(255,255,255,0.24); border-radius: 50%; background: rgba(255,255,255,0.16); color: #FFFFFF; display: grid; place-items: center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); }
 	        .patient-action-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 12px; }
-	        .patient-action-tile { position: relative; width: 100%; min-height: 102px; border: none; border-radius: 20px; background: transparent; color: ${darkMode ? "#F8FAFC" : "#111827"}; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; padding: 0; cursor: pointer; font-family: inherit; box-shadow: none; }
-	        .patient-action-icon-wrap { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; background: ${darkMode ? "#253244" : "#FFFFFF"}; color: ${darkMode ? "#E2E8F0" : "#0B3C5D"}; border: 1px solid ${darkMode ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)"}; box-shadow: ${darkMode ? "0 8px 18px rgba(0,0,0,0.18)" : "0 8px 20px rgba(15,23,42,0.10)"}; }
-	        .patient-action-tile svg { width: 31px; height: 31px; display: block; }
-	        .patient-action-label { width: 100%; min-height: 30px; display: flex; align-items: flex-start; justify-content: center; color: ${darkMode ? "#F8FAFC" : "#0F172A"}; font-size: 12.5px; line-height: 1.15; font-weight: 900; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
+	        .patient-action-tile { position: relative; width: 100%; min-height: 102px; border: none; border-radius: 20px; background: transparent; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; padding: 0; cursor: pointer; font-family: inherit; box-shadow: none; }
+	        .patient-action-icon-wrap { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; background: #FFFFFF; color: #0B5B8F; border: 1px solid rgba(219,234,254,0.72); box-shadow: 0 10px 24px rgba(2,14,28,0.22), inset 0 1px 0 rgba(255,255,255,0.85); }
+	        .patient-action-tile svg { width: 33px; height: 33px; display: block; filter: drop-shadow(0 1px 0 rgba(255,255,255,0.28)); }
+	        .patient-action-label { width: 100%; min-height: 30px; display: flex; align-items: flex-start; justify-content: center; color: #FFFFFF; text-shadow: 0 1px 2px rgba(2,14,28,0.34); font-size: 12.5px; line-height: 1.15; font-weight: 900; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
 	        .patient-action-tile.primary .patient-action-icon-wrap { background: #EAF3FF; color: #075EA8; border-color: #CFE4FA; }
 	        .patient-action-tile.success .patient-action-icon-wrap { background: #E9FBEF; color: #128C4A; border-color: #BFEFD0; }
 	        .patient-action-tile.warning .patient-action-icon-wrap { background: #FFF7E6; color: #B45309; border-color: #FDE1A7; }
+	        .patient-action-tile.info .patient-action-icon-wrap { background: #E0F2FE; color: #0369A1; border-color: #BAE6FD; }
 	        .patient-action-tile:disabled { cursor: not-allowed; }
 	        .patient-action-tile:disabled .patient-action-icon-wrap, .patient-action-tile:disabled .patient-action-label { opacity: 0.45; }
 	        .patient-action-dot { position: absolute; top: 3px; right: calc(50% - 34px); width: 12px; height: 12px; border-radius: 50%; background: #DC2626; border: 2px solid ${darkMode ? "#253244" : "#FFFFFF"}; box-shadow: 0 2px 6px rgba(220,38,38,0.35); }
@@ -2471,23 +2346,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 	            <div className="patient-action-grid">
 	              {patientMenuView === "main" ? (
 	                <>
-	                  <PatientActionTile label={uiLang === "es" ? "Cámara" : "Camera"} accent="primary" disabled={roomClosed} onClick={() => void openNativePhotoPicker("camera")}>
-	                    <PatientTrayIcon kind="camera" />
-	                  </PatientActionTile>
-	                  <PatientActionTile label={labels.photos} accent="primary" disabled={roomClosed} onClick={() => void openNativePhotoPicker("photos")}>
-	                    <PatientTrayIcon kind="photos" />
-	                  </PatientActionTile>
-	                  <PatientActionTile label={labels.video} accent="primary" disabled={roomClosed} onClick={() => { closePatientActionTray(); videoCaptureRef.current?.click(); }}>
-	                    <PatientTrayIcon kind="video" />
-	                  </PatientActionTile>
 	                  <PatientActionTile label={uiLang === "es" ? "Carpeta" : "Folder"} accent="success" dot={newPrescriptionCount > 0} onClick={() => setPatientMenuView("folder")}>
 	                    <PatientTrayIcon kind="folder" />
 	                  </PatientActionTile>
-                  <PatientActionTile label={labels.quickReplies} onClick={() => { closePatientActionTray(); setQuickRepliesOpen(true); requestAnimationFrame(() => composerRef.current?.focus()); }}>
-	                    <PatientTrayIcon kind="quick" />
-	                  </PatientActionTile>
-	                  <PatientActionTile label={labels.settings} onClick={() => { closePatientActionTray(); setSettingsOpen(true); }}>
-	                    <PatientTrayIcon kind="settings" />
+	                  <PatientActionTile label={labels.callClinic} accent="primary" onClick={() => { closePatientActionTray(); setCallSheetOpen(true); }}>
+	                    <PatientTrayIcon kind="call" />
 	                  </PatientActionTile>
 	                </>
 	              ) : (
@@ -2522,7 +2385,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             const next = event.currentTarget.textContent || "";
             setText(next);
             updatePatientTypingState(next);
-            setQuickRepliesOpen(next.startsWith("/"));
           }}
           onBlur={() => updatePatientTypingState("")}
           onKeyDown={(event) => {
@@ -2534,7 +2396,9 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
           style={{ minWidth: 0, flex: 1, minHeight: 58, maxHeight: 104, overflowY: "auto", border: "none", outline: "none", borderRadius: 29, background: inputPanelBg, color: darkMode ? "#f8fafc" : "#1f2937", padding: "16px 20px", fontSize: messageFontSize, fontWeight: 500, lineHeight: 1.42, WebkitUserSelect: "text", userSelect: "text" }}
         />
 
-        <button type="button" disabled={roomClosed} onClick={sendText} aria-label="Send" style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 20 }}>➤</button>
+        <button type="button" disabled={roomClosed} onClick={() => void openNativePhotoPicker("camera")} aria-label={uiLang === "es" ? "Cámara" : "Camera"} style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2" }}>
+          <PatientTrayIcon kind="camera" size={24} />
+        </button>
 
         <button type="button" onClick={() => setCallSheetOpen(true)} aria-label={labels.callClinic} style={{ ...roundButtonStyle, background: "#eef6ff", color: "#0b4ea2", fontSize: 26 }}>
           <Image src="/Phone_icon.png" alt="" width={30} height={30} style={{ width: 30, height: 30, objectFit: "contain" }} />
@@ -2583,16 +2447,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               <button onClick={cancelAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, fontSize: 16, fontWeight: 700 }}>{labels.cancel}</button>
               <button onClick={sendAudioPreview} style={{ height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800 }}>{labels.send}</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {quickRepliesOpen && (
-        <div style={{ position: "fixed", left: 10, right: 10, bottom: "calc(86px + env(safe-area-inset-bottom))", zIndex: 20, pointerEvents: "none" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, maxHeight: "min(42dvh, 260px)", overflowY: "auto", paddingBottom: 6 }}>
-              {quickReplies.map((reply, index) => (
-                <button key={`${reply}-${index}`} onClick={() => { setComposerText(reply); setQuickRepliesOpen(false); composerRef.current?.focus(); }} style={{ width: "fit-content", maxWidth: "calc(100vw - 20px)", border: "1px solid rgba(0,0,0,0.10)", background: panelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: 16, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", pointerEvents: "auto" }}>{reply}</button>
-              ))}
           </div>
         </div>
       )}
@@ -2662,8 +2516,11 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
               <div style={{ minWidth: 0, fontSize: patientTextBase, fontWeight: 900, lineHeight: 1.35, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{labels.clinicalHistoryFile}</div>
               <button type="button" onClick={closeClinicalPdfViewer} style={{ border: "none", borderRadius: 999, background: inputPanelBg, color: textPrimary, minWidth: 86, height: 44, padding: "0 14px", fontSize: patientTextSmall, fontWeight: 850, fontFamily: "inherit" }}>{labels.close}</button>
             </div>
-            <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
               <button type="button" onClick={() => void shareClinicalPdf()} style={{ border: "none", borderRadius: 12, background: "#DBEAFE", color: "#1D4ED8", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.share}</button>
+              <button type="button" onClick={messageClinicalPdf} style={{ border: "none", borderRadius: 12, background: "#DCFCE7", color: "#166534", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.messages}</button>
+              <button type="button" onClick={emailClinicalPdf} style={{ border: "none", borderRadius: 12, background: "#FDE68A", color: "#854D0E", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.email}</button>
+              <button type="button" onClick={printClinicalPdf} style={{ border: "none", borderRadius: 12, background: "#E0E7FF", color: "#3730A3", minHeight: 46, fontSize: patientTextBase, fontWeight: 850, fontFamily: "inherit" }}>{labels.print}</button>
             </div>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>
@@ -2766,28 +2623,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         </div>
       )}
 
-      {quickRepliesManageOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: "max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))", zIndex: 20, overflow: "hidden" }}>
-          <div style={{ width: "100%", maxWidth: 420, maxHeight: "calc(100dvh - 36px)", overflowY: "auto", overflowX: "hidden", background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <strong style={{ fontSize: patientTextBase, lineHeight: 1.35 }}>{labels.quickReplies}</strong>
-              <button onClick={() => setQuickRepliesManageOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-              {quickReplies.map((reply, index) => (
-                <div key={`${reply}-${index}`} style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap" }}>
-                  <button onClick={() => { setComposerText(reply); setQuickRepliesManageOpen(false); composerRef.current?.focus(); }} style={{ flex: "1 1 160px", border: "1px solid rgba(0,0,0,0.10)", background: inputPanelBg, color: textPrimary, borderRadius: 12, padding: "12px 14px", textAlign: "left", fontSize: patientTextBase, lineHeight: 1.45 }}>{reply}</button>
-                  <button onClick={() => { setReplyDraft(reply); setEditingReplyIndex(index); }} style={{ border: "none", background: "#e8f4ff", borderRadius: 12, padding: "12px 14px", fontSize: patientTextBase, fontWeight: 800 }}>{labels.edit}</button>
-                  <button onClick={() => { setQuickReplies((current) => current.filter((_, replyIndex) => replyIndex !== index)); if (editingReplyIndex === index) { setReplyDraft(""); setEditingReplyIndex(null); } }} style={{ border: "none", background: "#fee2e2", color: "#b91c1c", borderRadius: 12, padding: "12px 14px", fontSize: patientTextBase, fontWeight: 800 }}>{labels.delete}</button>
-                </div>
-              ))}
-            </div>
-            <input value={replyDraft} onChange={(event) => setReplyDraft(event.target.value)} placeholder={labels.createReply} style={{ width: "100%", height: 48, border: "1px solid rgba(0,0,0,0.12)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 14px", fontSize: 16, marginBottom: 10 }} />
-            <button onClick={saveQuickReply} style={{ width: "100%", height: 48, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 700 }}>{editingReplyIndex === null ? labels.saveReply : labels.saveChanges}</button>
-          </div>
-        </div>
-      )}
-
       {prescriptionsOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: "max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))", zIndex: 20, overflow: "hidden" }}>
           <div style={{ width: "100%", maxWidth: 420, maxHeight: "calc(100dvh - 36px)", overflowY: "auto", overflowX: "hidden", background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
@@ -2859,52 +2694,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
             <button onClick={updatePatientMessage} disabled={!editingMessageText.trim()} style={{ width: "100%", height: 50, border: "none", borderRadius: 14, background: "#075e54", color: "#fff", fontSize: 16, fontWeight: 800, opacity: editingMessageText.trim() ? 1 : 0.5 }}>
               {labels.saveChanges}
             </button>
-          </div>
-        </div>
-      )}
-
-      {settingsOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: "max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))", zIndex: 20, overflow: "hidden" }}>
-          <div style={{ width: "100%", maxWidth: 420, maxHeight: "calc(100dvh - 36px)", overflowY: "auto", overflowX: "hidden", background: panelBg, color: textPrimary, borderRadius: 18, padding: 18, boxShadow: "0 18px 50px rgba(0,0,0,0.25)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <strong style={{ fontSize: patientTextBase, lineHeight: 1.35 }}>{labels.settings}</strong>
-              <button onClick={() => setSettingsOpen(false)} style={{ border: "none", background: "transparent", color: textPrimary, fontSize: 28, lineHeight: 1 }}>×</button>
-            </div>
-            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, fontSize: patientTextBase, lineHeight: 1.45, marginBottom: 18 }}>
-              {labels.darkMode}
-              <input type="checkbox" checked={darkMode} onChange={(event) => setDarkMode(event.target.checked)} style={{ width: 24, height: 24 }} />
-            </label>
-            {viewerType === "patient" && (
-              <div style={{ display: "grid", gap: 8, marginBottom: 18 }}>
-                <div style={{ fontSize: patientTextBase, lineHeight: 1.45 }}>{labels.contactPhone}</div>
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    value={patientPhoneEdit}
-                    onChange={(event) => setPatientPhoneEdit(event.target.value)}
-                    placeholder={labels.contactPhonePlaceholder}
-                    style={{ minWidth: 0, height: 48, border: "1px solid rgba(148,163,184,0.28)", outline: "none", borderRadius: 14, background: inputPanelBg, color: textPrimary, padding: "0 12px", fontSize: 16, fontWeight: 750, fontFamily: "inherit" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void savePatientPhone()}
-                    disabled={patientPhoneSaving || !patientPhoneEdit.trim()}
-                    style={{ minHeight: 48, border: "none", borderRadius: 14, background: "#DBEAFE", color: "#1D4ED8", padding: "0 12px", fontSize: patientTextSmall, fontWeight: 900, fontFamily: "inherit", opacity: patientPhoneSaving || !patientPhoneEdit.trim() ? 0.55 : 1 }}
-                  >
-                    {patientPhoneSaving ? labels.savingPhone : labels.savePhone}
-                  </button>
-                </div>
-                <div style={{ fontSize: patientTextSmall, color: darkMode ? "#CBD5E1" : "#64748B", fontWeight: 700, lineHeight: 1.45 }}>
-                  {patientPhoneFeedback || labels.contactPhoneHint}
-                </div>
-              </div>
-            )}
-            <div style={{ fontSize: patientTextBase, lineHeight: 1.45, marginBottom: 10 }}>{labels.textSize}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button onClick={() => setTextSize("normal")} style={{ height: 48, border: "none", borderRadius: 14, background: textSize === "normal" ? "#075e54" : inputPanelBg, color: textSize === "normal" ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 800 }}>{labels.normal}</button>
-              <button onClick={() => setTextSize("large")} style={{ height: 48, border: "none", borderRadius: 14, background: textSize === "large" ? "#075e54" : inputPanelBg, color: textSize === "large" ? "#fff" : textPrimary, fontSize: patientTextBase, fontWeight: 800 }}>{labels.large}</button>
-            </div>
           </div>
         </div>
       )}

@@ -10,11 +10,15 @@ export default function Home() {
       redirected = true;
       window.location.replace(path);
     };
-    const fallback = window.setTimeout(() => redirectTo("/login"), 1800);
+    const fallback = window.setTimeout(() => redirectTo("/login"), 5000);
 
     const check = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        let { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          const refreshed = await supabase.auth.refreshSession().catch(() => null);
+          session = refreshed?.data?.session || null;
+        }
         window.clearTimeout(fallback);
         redirectTo(session ? "/inbox" : "/login");
       } catch {

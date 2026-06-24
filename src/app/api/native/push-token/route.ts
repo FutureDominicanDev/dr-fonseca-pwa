@@ -37,6 +37,9 @@ const upsertEntry = (entries: NativeTokenEntry[] | undefined, entry: NativeToken
   return next.slice(0, MAX_TOKENS_PER_TARGET);
 };
 
+const removeEntry = (entries: NativeTokenEntry[] | undefined, token: string) =>
+  (entries || []).filter((item) => item.token !== token);
+
 export async function POST(request: NextRequest) {
   try {
     if (!configured || !authClient || !adminClient) {
@@ -44,6 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
+    const action = body?.action === "unsubscribe" ? "unsubscribe" : "subscribe";
     const token = `${body?.token || ""}`.trim();
     const platform = `${body?.platform || "native"}`.trim().slice(0, 32) || "native";
     const userType = body?.userType === "patient" ? "patient" : body?.userType === "staff" ? "staff" : "";
@@ -86,7 +90,10 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     const entry = { token, platform, updatedAt: now };
     const bucket = targetKind === "staff" ? { ...(map.staff || {}) } : { ...(map.patientRooms || {}) };
-    bucket[targetId] = upsertEntry(bucket[targetId], entry);
+    bucket[targetId] = action === "unsubscribe"
+      ? removeEntry(bucket[targetId], token)
+      : upsertEntry(bucket[targetId], entry);
+    if (bucket[targetId].length === 0) delete bucket[targetId];
     const nextMap: NativePushTokenMap = {
       staff: targetKind === "staff" ? bucket : map.staff || {},
       patientRooms: targetKind === "patientRooms" ? bucket : map.patientRooms || {},
@@ -100,7 +107,7 @@ export async function POST(request: NextRequest) {
       );
     if (saveError) return NextResponse.json({ error: saveError.message || "Could not save native push token." }, { status: 500 });
 
-    return NextResponse.json({ ok: true, userType, targetId, platform });
+    return NextResponse.json({ ok: true, action, userType, targetId, platform });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Could not save native push token." }, { status: 500 });
   }

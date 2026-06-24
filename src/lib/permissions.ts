@@ -24,6 +24,7 @@ export type PermissionLang = "es" | "en";
 export type StaffPermissionMap = Record<string, StaffPermissionKey[]>;
 
 export const STAFF_PERMISSIONS_SETTING_KEY = "staff_permissions";
+const APPROVED_STAFF_BASELINE_PERMISSIONS: StaffPermissionKey[] = ["manage_labels"];
 
 export type PermissionProfile = {
   email?: string | null;
@@ -80,7 +81,7 @@ export const LEGACY_ROLE_PERMISSION_DEFAULTS: Record<string, StaffPermissionKey[
     "manage_labels",
     "access_settings_security",
   ],
-  none: ["view_patients", "create_patients", "view_upload_files", "manage_labels"],
+  none: ["view_patients", "view_upload_files", "manage_labels"],
 };
 
 export const permissionLabel = (key: StaffPermissionKey, lang: PermissionLang) =>
@@ -133,11 +134,14 @@ export const permissionsForProfile = (profile: PermissionProfile | null | undefi
   const explicit = normalizePermissionList(profile?.permissions);
   if (hasExplicitPermissionList(profile?.permissions)) {
     const merged = new Set(explicit);
+    APPROVED_STAFF_BASELINE_PERMISSIONS.forEach((permission) => merged.add(permission));
     if (level !== "none") levelDefaults.forEach((permission) => merged.add(permission));
     return merged;
   }
 
-  return new Set(levelDefaults);
+  const permissions = new Set(levelDefaults);
+  APPROVED_STAFF_BASELINE_PERMISSIONS.forEach((permission) => permissions.add(permission));
+  return permissions;
 };
 
 export const permissionPresetForAdminLevel = (level: string) =>

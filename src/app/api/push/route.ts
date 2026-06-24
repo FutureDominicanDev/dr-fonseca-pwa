@@ -237,6 +237,53 @@ async function storeSubscription(req: NextRequest, body: any) {
   return NextResponse.json({ ok: true });
 }
 
+async function removeSubscription(req: NextRequest, body: any) {
+  if (!supabase) return NextResponse.json({ error: "Push is not configured on server." }, { status: 503 });
+  const userType = body?.userType === "staff" ? "staff" : body?.userType === "patient" ? "patient" : null;
+  const subscription = body?.subscription;
+  const endpoint = subscriptionEndpoint(subscription);
+  if (!userType || !endpoint) {
+    return NextResponse.json({ error: "Invalid subscription payload" }, { status: 400 });
+  }
+
+  let roomId = "";
+  let staffId = "";
+  if (userType === "staff") {
+    const staff = await getAuthenticatedStaff(req);
+    if (!staff) return NextResponse.json({ error: "Missing or invalid staff session." }, { status: 401 });
+    staffId = staff.id;
+  } else {
+    const patientRoomAccess = await getPatientRoomAccess(body);
+    if (!patientRoomAccess) return NextResponse.json({ error: "Invalid patient room access." }, { status: 403 });
+    roomId = patientRoomAccess.roomId;
+  }
+
+  let query = supabase
+    .from("push_subscriptions")
+    .select("id, subscription")
+    .eq("user_type", userType);
+  if (userType === "patient") query = query.eq("room_id", roomId);
+
+  const { data: existingRows, error: fetchError } = await query;
+  if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
+
+  const deleteIds = (existingRows || [])
+    .filter((row: any) => {
+      if (subscriptionEndpoint(row.subscription) !== endpoint) return false;
+      if (userType === "staff") return `${row?.subscription?.portalUserId || ""}` === staffId;
+      return true;
+    })
+    .map((row: any) => row.id)
+    .filter(Boolean);
+
+  if (deleteIds.length > 0) {
+    const { error: deleteError } = await supabase.from("push_subscriptions").delete().in("id", deleteIds);
+    if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, removed: deleteIds.length });
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!supabaseConfigured || !supabase) {
@@ -246,6 +293,10 @@ export async function POST(req: NextRequest) {
 
     if (body?.action === "subscribe") {
       return await storeSubscription(req, body);
+    }
+
+    if (body?.action === "unsubscribe") {
+      return await removeSubscription(req, body);
     }
 
     if (!vapidConfigured) {

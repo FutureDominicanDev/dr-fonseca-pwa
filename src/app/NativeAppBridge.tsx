@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 const NATIVE_TOKEN_STORAGE_KEY = "drf_native_push_token";
 const NATIVE_PLATFORM_STORAGE_KEY = "drf_native_platform";
+const STAFF_SESSION_STORAGE_KEY = "drf_staff_session_v1";
 const LEGACY_DEVICE_ALERT_CHANNEL_ID = "portal_device_alerts";
 const DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v3";
 const PREVIOUS_DEVICE_ALERT_CHANNEL_ID = "portal_urgent_alerts_v2";
@@ -22,6 +23,11 @@ const patientRoomContext = () => {
   if (!match?.[1]) return null;
   const token = new URLSearchParams(window.location.search).get("token") || "";
   return token ? { roomId: decodeURIComponent(match[1]), roomToken: token } : null;
+};
+
+const staffSessionRestoreAllowed = () => {
+  if (typeof window === "undefined") return false;
+  return !/^\/chat\/[^/]+/.test(window.location.pathname) && !/^\/patient\/[^/]+/.test(window.location.pathname);
 };
 
 const notificationUrlFromData = (value: unknown) => {
@@ -110,14 +116,91 @@ export default function NativeAppBridge() {
         }
 
         const SecureStorage = (secureStorage as any).SecureStorage;
+        const KeychainAccess = (secureStorage as any).KeychainAccess;
+        const BiometricAuth = (biometricAuth as any).BiometricAuth;
+        const AndroidBiometryStrength = (biometricAuth as any).AndroidBiometryStrength;
+
+        const persistStaffSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
+          if (!SecureStorage?.set || !session?.access_token || !session.refresh_token) return;
+          await SecureStorage.set(STAFF_SESSION_STORAGE_KEY, {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+            user_id: session.user?.id || "",
+            email: session.user?.email || "",
+            saved_at: new Date().toISOString(),
+          }, true, false, KeychainAccess?.afterFirstUnlockThisDeviceOnly).catch(() => {});
+        };
+
+        const removeStoredStaffSession = async () => {
+          if (!SecureStorage?.remove) return;
+          await SecureStorage.remove(STAFF_SESSION_STORAGE_KEY, false).catch(() => {});
+        };
+
         if (SecureStorage?.set) {
-          await SecureStorage.set({ key: "drf_native_shell", value: "enabled" }).catch(() => {});
+          await SecureStorage.setKeyPrefix?.("drf_portal_").catch(() => {});
+          await SecureStorage.setDefaultKeychainAccess?.(KeychainAccess?.afterFirstUnlockThisDeviceOnly).catch(() => {});
+          await SecureStorage.set("native_shell", "enabled", true, false, KeychainAccess?.afterFirstUnlockThisDeviceOnly).catch(() => {});
         }
 
-        const BiometricAuth = (biometricAuth as any).BiometricAuth;
         if (BiometricAuth?.checkBiometry) {
           await BiometricAuth.checkBiometry().catch(() => {});
         }
+
+        const restoreStaffSessionWithBiometry = async () => {
+          if (!staffSessionRestoreAllowed() || !SecureStorage?.get || !BiometricAuth?.authenticate) return false;
+          const current = await supabase.auth.getSession().catch(() => null);
+          if (current?.data?.session) {
+            await persistStaffSession(current.data.session);
+            return true;
+          }
+
+          const stored = await SecureStorage.get(STAFF_SESSION_STORAGE_KEY, true, false).catch(() => null);
+          const storedSession = stored && typeof stored === "object" ? stored as Record<string, unknown> : null;
+          const accessToken = typeof storedSession?.access_token === "string" ? storedSession.access_token : "";
+          const refreshToken = typeof storedSession?.refresh_token === "string" ? storedSession.refresh_token : "";
+          if (!accessToken || !refreshToken) return false;
+
+          const biometry = await BiometricAuth.checkBiometry?.().catch(() => null);
+          if (!biometry?.isAvailable && !biometry?.deviceIsSecure) return false;
+
+          await BiometricAuth.authenticate({
+            reason: "Unlock Dr. Fonseca Portal",
+            cancelTitle: "Cancel",
+            allowDeviceCredential: true,
+            iosFallbackTitle: "Use passcode",
+            androidTitle: "Dr. Fonseca Portal",
+            androidSubtitle: "Unlock the medical portal",
+            androidConfirmationRequired: false,
+            androidBiometryStrength: AndroidBiometryStrength?.weak,
+          });
+
+          const restored = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          }).catch(() => null);
+          if (!restored?.data?.session) {
+            await removeStoredStaffSession();
+            return false;
+          }
+          await persistStaffSession(restored.data.session);
+          if (window.location.pathname === "/" || window.location.pathname === "/login") {
+            window.location.replace("/inbox");
+          }
+          return true;
+        };
+
+        const authSubscription = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === "SIGNED_OUT") {
+            void removeStoredStaffSession();
+            return;
+          }
+          if (session?.access_token && session.refresh_token) {
+            void persistStaffSession(session);
+          }
+        });
+        listeners.push({ remove: () => authSubscription.data.subscription.unsubscribe() });
+
+        await restoreStaffSessionWithBiometry().catch(() => false);
 
         if (platform === "android") {
           const deviceAlertChannels = [

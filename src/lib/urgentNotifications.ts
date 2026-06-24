@@ -49,6 +49,7 @@ const webPushTopic = (value?: string) =>
     ?.replace(/[^a-z0-9_-]/gi, "-")
     .replace(/-+/g, "-")
     .slice(0, 32) || undefined;
+const patientRoomUrl = (roomId: string) => `/inbox?roomId=${encodeURIComponent(roomId)}`;
 
 const cleanText = (value: unknown, fallback: string, maxLength: number) => {
   const clean = `${value || ""}`.trim();
@@ -225,7 +226,7 @@ export async function sendPatientMessageStaffAlert(
   return sendUrgentStaffNotification(supabase, staffIds, {
     title: cleanText(params.title, "Paciente", 120),
     body: cleanText(params.body, "Nuevo mensaje de paciente", 300),
-    url: "/inbox",
+    url: patientRoomUrl(params.roomId),
     tag: params.tag || params.roomId,
     urgency: "urgent",
   });

@@ -26,19 +26,18 @@ type PhoneCountryOption = { code: string; label: string };
 type MediaTab = "internal" | "media" | "audio" | "prescriptions" | "forms" | "docs";
 type CareTeamFilter = "all" | "guadalajara" | "tijuana" | "selected";
 type InternalNoteVisibility = "team" | "private";
-type StaffFontSizeLevel = "small" | "medium" | "large";
 
 const QUICK_EMOJIS = ["😀", "😂", "😍", "🙏", "👍", "👏", "❤️", "✅", "⚠️", "📎", "📸", "🎥"];
 const MAX_PATIENT_LABELS = 20;
 const LABEL_COLORS = ["#EF4444", "#F97316", "#F59E0B", "#10B981", "#14B8A6", "#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", "#64748B"];
-const STAFF_FONT_SIZE_STORAGE_KEY = "drf_staff_font_size_level";
 const STAFF_RECORD_PHOTO_PREFIX = "[STAFF_RECORD]";
-const ROOM_CANCEL_CONFIRM_PHRASE = "CANCEL ROOM";
+const NATIVE_TOKEN_STORAGE_KEY = "drf_native_push_token";
+const NATIVE_PLATFORM_STORAGE_KEY = "drf_native_platform";
 
 const deviceStaffLang = (): Lang => {
   if (typeof navigator === "undefined") return "es";
-  const languages = [navigator.language, ...(navigator.languages || [])];
-  return languages.some((entry) => `${entry || ""}`.toLowerCase().startsWith("en")) ? "en" : "es";
+  const primaryLanguage = navigator.languages?.[0] || navigator.language;
+  return `${primaryLanguage || ""}`.toLowerCase().startsWith("en") ? "en" : "es";
 };
 
 const readStaffLang = (): Lang => {
@@ -46,12 +45,6 @@ const readStaffLang = (): Lang => {
   const queryLang = new URLSearchParams(window.location.search).get("lang");
   if (queryLang === "en" || queryLang === "es") return queryLang;
   return deviceStaffLang();
-};
-
-const readStaffFontSizeLevel = (): StaffFontSizeLevel => {
-  if (typeof window === "undefined") return "large";
-  const stored = window.localStorage.getItem(STAFF_FONT_SIZE_STORAGE_KEY);
-  return stored === "small" || stored === "medium" || stored === "large" ? stored : "large";
 };
 
 const PHONE_COUNTRY_OPTIONS: PhoneCountryOption[] = [
@@ -265,7 +258,7 @@ const T = {
     invalidPhone: "El teléfono debe tener al menos 7 dígitos.",
     settings: "Ajustes", myProfile: "Mi Perfil",
     displayName: "Nombre a Mostrar",
-    darkMode: "Modo Oscuro", fontSize: "Tamaño de Texto",
+    darkMode: "Modo Oscuro",
     role: "Rol", fileCategory: "¿Cómo clasificar este archivo?",
     general: "💬 General", medication: "💊 Medicamento", beforePhoto: "📸 Foto Pre-Op",
     generalSub: "Solo aparece en el chat", medicationSub: "Carpeta de medicamentos",
@@ -463,7 +456,7 @@ const T = {
     invalidPhone: "Phone number must contain at least 7 digits.",
     settings: "Settings", myProfile: "My Profile",
     displayName: "Display Name",
-    darkMode: "Dark Mode", fontSize: "Font Size",
+    darkMode: "Dark Mode",
     role: "Role", fileCategory: "How to classify this file?",
     general: "💬 General", medication: "💊 Medication", beforePhoto: "📸 Pre-Op Photo",
     generalSub: "Appears in chat only", medicationSub: "Medication folder",
@@ -826,15 +819,6 @@ function PendingGuideIcon({ kind }: { kind: "staff" | "room" | "labels" | "setti
   );
 }
 
-function SendPlaneIcon({ size = 22 }: { size?: number }) {
-  return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 2 11 13" />
-      <path d="m22 2-7 20-4-9-9-4 20-7Z" />
-    </svg>
-  );
-}
-
 function MicrophoneLineIcon({ size = 22 }: { size?: number }) {
   return (
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -879,7 +863,7 @@ function QuickReplyIcon({ size = 22 }: { size?: number }) {
   );
 }
 
-function ChatActionIcon({ kind, size = 24 }: { kind: "camera" | "photos" | "video" | "file" | "folder" | "record" | "prescription" | "library" | "team" | "quick" | "patient"; size?: number }) {
+function ChatActionIcon({ kind, size = 24 }: { kind: "camera" | "photos" | "video" | "file" | "folder" | "record" | "prescription" | "library" | "team" | "quick" | "patient" | "labels"; size?: number }) {
   const commonProps = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.25, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   if (kind === "camera") {
     return (
@@ -958,6 +942,16 @@ function ChatActionIcon({ kind, size = 24 }: { kind: "camera" | "photos" | "vide
       </svg>
     );
   }
+  if (kind === "labels") {
+    return (
+      <svg {...commonProps}>
+        <path d="M20.2 13.2 13.2 20a2.1 2.1 0 0 1-3 0L3.8 13.6V4.8h8.8l7.6 7.6Z" />
+        <circle cx="8.2" cy="8.2" r="1.4" fill="currentColor" stroke="none" />
+        <path d="M12.2 8.4h4.2" />
+        <path d="M10.4 12h6" />
+      </svg>
+    );
+  }
   return (
     <svg {...commonProps}>
       <circle cx="12" cy="8.3" r="3.3" />
@@ -968,7 +962,7 @@ function ChatActionIcon({ kind, size = 24 }: { kind: "camera" | "photos" | "vide
   );
 }
 
-function ChatActionTile({ label, children, onClick, disabled = false, accent = "", dot = false }: { label: string; children: ReactNode; onClick: () => void; disabled?: boolean; accent?: "primary" | "success" | "warning" | ""; dot?: boolean }) {
+function ChatActionTile({ label, children, onClick, disabled = false, accent = "", dot = false }: { label: string; children: ReactNode; onClick: () => void; disabled?: boolean; accent?: "primary" | "success" | "warning" | "energy" | "people" | "info" | ""; dot?: boolean }) {
   return (
     <button
       type="button"
@@ -1056,17 +1050,16 @@ function QREditor({ show, onClose, quickReplies, onSave, savingQR, savedQR, dark
 export default function InboxPage() {
   const [lang, setLang] = useState<Lang>("es");
   const t = T[lang];
-  const [darkMode, setDarkMode] = useState(false);
+  const darkMode = false;
   const [showTopbarMenu, setShowTopbarMenu] = useState(false);
-  const [fontSizeLevel, setFontSizeLevel] = useState<StaffFontSizeLevel>(() => readStaffFontSizeLevel());
-  const fontSize = fontSizeLevel === "small" ? 17 : fontSizeLevel === "large" ? 22 : 20;
-  const uiBaseSize = fontSizeLevel === "small" ? 16 : fontSizeLevel === "large" ? 19 : 18;
-  const uiLabelSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 18 : 17;
-  const uiSmallSize = fontSizeLevel === "small" ? 15 : fontSizeLevel === "large" ? 17 : 16;
-  const settingsBaseSize = fontSizeLevel === "large" ? 17 : uiBaseSize;
-  const settingsLabelSize = fontSizeLevel === "large" ? 16 : uiLabelSize;
-  const settingsSmallSize = fontSizeLevel === "large" ? 15 : uiSmallSize;
-  const settingsTitleSize = fontSizeLevel === "large" ? 21 : 20;
+  const fontSize = 22;
+  const uiBaseSize = 19;
+  const uiLabelSize = 18;
+  const uiSmallSize = 17;
+  const settingsBaseSize = 17;
+  const settingsLabelSize = 16;
+  const settingsSmallSize = 15;
+  const settingsTitleSize = 21;
 
   const headerBg = "#07334D";
   const sidebarBg = darkMode ? "#2C2C2E" : "white";
@@ -1149,9 +1142,6 @@ export default function InboxPage() {
   const [savingInternalNote, setSavingInternalNote] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [newRoomError, setNewRoomError] = useState("");
-  const [roomLifecycleBusy, setRoomLifecycleBusy] = useState(false);
-  const [roomLifecycleConfirm, setRoomLifecycleConfirm] = useState<{ roomId: string; patientName: string; procedureName: string } | null>(null);
-  const [roomLifecycleConfirmText, setRoomLifecycleConfirmText] = useState("");
   const [createdRoomLink, setCreatedRoomLink] = useState<string|null>(null);
   const [createdPatientName, setCreatedPatientName] = useState("");
   const [createdPatientLanguage, setCreatedPatientLanguage] = useState<"es" | "en">("es");
@@ -1324,6 +1314,7 @@ export default function InboxPage() {
   const profilePicRef = useRef<HTMLInputElement>(null);
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
   const staffChatImageInputRef = useRef<HTMLInputElement>(null);
+  const staffChatCameraInputRef = useRef<HTMLInputElement>(null);
   const staffChatUploadTargetRef = useRef<"private" | "room" | null>(null);
   const staffVideoCaptureTargetRef = useRef<"private" | "room" | null>(null);
   const beforePhotosRef = useRef<HTMLInputElement>(null);
@@ -1370,6 +1361,7 @@ export default function InboxPage() {
   const activeStaffRoomIdRef = useRef<string | null>(null);
   const privateToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const createPatientDeepLinkHandledRef = useRef(false);
+  const internalRecordDeepLinkHandledRef = useRef(false);
 
   const ini = (n: string) => n ? n.split(" ").map((w: string) => w[0]).join("").substring(0,2).toUpperCase() : "P";
   const accessSignature = (profile: any) => JSON.stringify({
@@ -1911,7 +1903,6 @@ export default function InboxPage() {
       selectedRoomTeam.some((member) => member.id === currentUserId));
   const canUseStaffRecord = hasPermission(userProfile, currentUserEmail, "view_internal_notes") && (isSuperAdmin || currentUserAssignedToSelectedRoom);
   const canViewClinicalHistoryForms = hasPermission(userProfile, currentUserEmail, "view_clinical_history") && (currentUserIsOwner || currentUserAssignedToSelectedRoom);
-  const canCancelRestoreRoom = hasPermission(userProfile, currentUserEmail, "archive_rooms") || hasPermission(userProfile, currentUserEmail, "restore_rooms");
   const canManageLabels = hasPermission(userProfile, currentUserEmail, "manage_labels");
   const canViewUploadFiles = hasPermission(userProfile, currentUserEmail, "view_upload_files");
   const selectedRoomCancelled = `${selectedRoom?.procedures?.status || ""}`.toLowerCase() === "cancelled" || `${selectedRoom?.procedures?.patients?.record_status || "active"}`.toLowerCase() !== "active";
@@ -2206,6 +2197,13 @@ export default function InboxPage() {
     setShowSlashMenu(false);
     setSlashFilter("");
     staffChatImageInputRef.current?.click();
+  };
+
+  const openStaffChatCameraPicker = (target: "private" | "room") => {
+    staffChatUploadTargetRef.current = target;
+    setShowSlashMenu(false);
+    setSlashFilter("");
+    staffChatCameraInputRef.current?.click();
   };
 
   const openStaffChatVideoPicker = async (target: "private" | "room") => {
@@ -2584,18 +2582,6 @@ export default function InboxPage() {
           <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="settings" /></span>
           <span className="topbar-action-label">{lang === "es" ? "Ajustes" : "Settings"}</span>
         </button>
-        {canManageLabels && (
-          <button
-            type="button"
-            className="admin-inline-btn"
-            onClick={()=>{onAction?.();setShowLabelManager(true);}}
-            title={lang === "es" ? "Etiquetas" : "Labels"}
-            aria-label={lang === "es" ? "Etiquetas" : "Labels"}
-          >
-            <span className="admin-action-icon" aria-hidden="true"><TopbarActionIcon kind="labels" /></span>
-            <span className="topbar-action-label">{lang === "es" ? "Etiquetas" : "Labels"}</span>
-          </button>
-        )}
         {canOpenAdmin && (
           <button
             type="button"
@@ -2758,6 +2744,23 @@ export default function InboxPage() {
     const patient = patients.find((entry) => entry.rooms?.some((room: any) => room.id === roomId));
     return patient?.full_name || t.patientLabel;
   }, [patients, t.patientLabel]);
+  const patientRoomUrlForRoom = useCallback((roomId: string) => `/inbox?roomId=${encodeURIComponent(roomId)}`, []);
+  const internalRecordUrlForRoom = useCallback((roomId: string) => `/inbox?roomId=${encodeURIComponent(roomId)}&internalRecord=1`, []);
+  const internalRecordNotificationCopy = useCallback((kind: "note" | "photo", roomId: string, authorName?: string | null) => {
+    const patientName = roomPatientName(roomId);
+    const author = `${authorName || ""}`.trim() || (lang === "es" ? "Un integrante del equipo" : "A team member");
+    const item = kind === "photo"
+      ? (lang === "es" ? "una foto" : "a photo")
+      : (lang === "es" ? "una nota" : "a note");
+    return {
+      title: kind === "photo"
+        ? (lang === "es" ? "Foto interna agregada" : "Internal photo added")
+        : (lang === "es" ? "Nota interna agregada" : "Internal note added"),
+      body: lang === "es"
+        ? `${author} agregó ${item} al expediente de ${patientName}.`
+        : `${author} added ${item} to patient ${patientName}.`,
+    };
+  }, [lang, roomPatientName]);
   const translationKey = useCallback((messageId: string | number, targetLang: "es" | "en") => `incoming_translate_${String(messageId)}_${targetLang}`, []);
   const staffRoomStorageScope = useMemo(() => currentUserId ? safeStorageSegment(currentUserId) : "anonymous", [currentUserId]);
   const scopedRoomStorageKey = useCallback((prefix: string, roomId: string) => `${prefix}_${staffRoomStorageScope}_${roomId}`, [staffRoomStorageScope]);
@@ -2804,19 +2807,19 @@ export default function InboxPage() {
     messagesEndRef.current?.scrollIntoView({behavior:"smooth"});
   }, []);
 
-  const pushNotif = useCallback((title: string, body: string) => {
+  const pushNotif = useCallback((title: string, body: string, url = "/inbox", tag = "portal-alert") => {
     if (notifRef.current==="granted"&&"serviceWorker" in navigator) {
       navigator.serviceWorker.ready.then((registration) =>
         registration.showNotification(title,{
           body,
           icon:"/apple-touch-icon.png",
           badge:"/apple-touch-icon.png",
-          tag:"portal-alert",
+          tag,
           renotify:true,
           requireInteraction:true,
           silent:false,
           vibrate:[450,120,450,120,450],
-          data:{url:"/inbox"},
+          data:{url},
           actions:[{action:"open",title:"Abrir portal"}],
         } as any)
       );
@@ -2847,8 +2850,8 @@ export default function InboxPage() {
     setMediaUnreadCounts((current) => ({ ...current, [patientId]: (current[patientId] || 0) + 1 }));
     if (roomId) showToastAlert(roomId, patientName, toastBody);
     playPortalAlertTone();
-    pushNotif(patientName, body);
-  }, [lang, patientIdForRoom, patients, playPortalAlertTone, pushNotif, roomPatientName, showToastAlert, t.patientLabel]);
+    pushNotif(patientName, body, roomId ? patientRoomUrlForRoom(roomId) : "/inbox", roomId ? `room-${roomId}` : "portal-alert");
+  }, [lang, patientIdForRoom, patientRoomUrlForRoom, patients, playPortalAlertTone, pushNotif, roomPatientName, showToastAlert, t.patientLabel]);
 
   const fetchMediaNotificationCounts = useCallback(async () => {
     if (!currentUserId) return;
@@ -2909,6 +2912,28 @@ export default function InboxPage() {
     setToastAlert(null);
   }, [clearStaffRecordUnreadRoom, patients, toastAlert]);
 
+  useEffect(() => {
+    if (internalRecordDeepLinkHandledRef.current || loading || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const roomId = `${url.searchParams.get("roomId") || ""}`.trim();
+    if (!roomId) return;
+    const room = patients.flatMap((patient) => patient.rooms || []).find((entry: any) => entry.id === roomId);
+    if (!room) return;
+
+    internalRecordDeepLinkHandledRef.current = true;
+    setSelectedRoom(room);
+    setMobileView("chat");
+    if (url.searchParams.get("internalRecord") === "1") {
+      setMediaLibraryTab("internal");
+      setShowMediaLibrary(true);
+      setShowPatientInfo(false);
+      clearStaffRecordUnreadRoom(roomId);
+    }
+    url.searchParams.delete("roomId");
+    url.searchParams.delete("internalRecord");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [clearStaffRecordUnreadRoom, loading, patients]);
+
   const markRoomAsRead = useCallback((roomId: string) => {
     const now = new Date().toISOString();
     setRoomLastSeen(roomId, now);
@@ -2949,9 +2974,9 @@ export default function InboxPage() {
 
     if (!isActiveRoom || !isVisible) {
       showToastAlert(roomId, title, body);
-      pushNotif(title, body);
+      pushNotif(title, body, patientRoomUrlForRoom(roomId), `room-${roomId}`);
     }
-  }, [describeIncomingMessage, getRoomAlertedMessage, incomingMessageKey, playPortalAlertTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
+  }, [describeIncomingMessage, getRoomAlertedMessage, incomingMessageKey, patientRoomUrlForRoom, playPortalAlertTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
 
   const registerIncomingInternalNote = useCallback((message: any) => {
     const roomId = message.room_id;
@@ -2969,17 +2994,10 @@ export default function InboxPage() {
       setRoomLastAlert(roomId, message.created_at || new Date().toISOString());
     }
 
-    const patientName = roomPatientName(roomId);
     const author = message.sender_name || roleName(message.sender_role);
-    const title = isStaffPhoto
-      ? (lang === "es" ? `Foto interna · ${patientName}` : `Internal photo · ${patientName}`)
-      : (lang === "es" ? `Nota interna · ${patientName}` : `Internal note · ${patientName}`);
-    const rawBody = parsedNote.body.trim();
-    const body = isStaffPhoto
-      ? `${author}: ${lang === "es" ? "Nueva foto interna agregada al expediente." : "New internal photo added to the record."}`.slice(0, 120)
-      : rawBody
-      ? `${author}: ${rawBody}`.slice(0, 120)
-      : (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up.");
+    const copy = internalRecordNotificationCopy(isStaffPhoto ? "photo" : "note", roomId, author);
+    const recordUrl = internalRecordUrlForRoom(roomId);
+    const recordTag = `internal-record-${roomId}`;
     const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
     const isActiveRoom = selectedRoomRef.current?.id === roomId;
 
@@ -2987,11 +3005,11 @@ export default function InboxPage() {
     if (staffRecordAlertsMuted) return;
 
     playPortalAlertTone();
-    showToastAlert(roomId, title, body, isStaffPhoto ? "record" : "note");
+    showToastAlert(roomId, copy.title, copy.body, isStaffPhoto ? "record" : "note");
     if (!isVisible || !isActiveRoom) {
-      pushNotif(title, body);
+      pushNotif(copy.title, copy.body, recordUrl, recordTag);
     }
-  }, [currentUserId, getRoomAlertedMessage, incomingMessageKey, isSuperAdmin, lang, patients, playPortalAlertTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, showToastAlert, staffRecordAlertsMuted]);
+  }, [currentUserId, getRoomAlertedMessage, incomingMessageKey, internalRecordNotificationCopy, internalRecordUrlForRoom, isSuperAdmin, patients, playPortalAlertTone, pushNotif, setRoomAlertedMessage, setRoomLastAlert, showToastAlert, staffRecordAlertsMuted]);
 
   const sendTypingSignal = useCallback((isTyping: boolean, roomId: string, name: string) => {
     supabase.auth.getSession().then(({ data }) => {
@@ -3064,9 +3082,39 @@ export default function InboxPage() {
   }, [broadcastTypingState, selectedRoom?.id, sendTypingSignal, userProfile?.display_name, userProfile?.full_name]);
 
   useEffect(() => {
+    let missingSessionTimer: number | null = null;
+    const hydrateStaffSession = (session: NonNullable<Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]>) => {
+      setCurrentUserEmail(session.user.email?.toLowerCase() || "");
+      setCurrentUserId(session.user.id);
+      fetchRooms();
+      fetchProfile(session.user.id);
+      fetchAssignableStaff();
+    };
+    const confirmMissingSession = () => {
+      if (missingSessionTimer) window.clearTimeout(missingSessionTimer);
+      missingSessionTimer = window.setTimeout(async () => {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          hydrateStaffSession(data.session);
+          return;
+        }
+        window.location.href = "/login";
+      }, 1800);
+    };
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) { window.location.href = "/login"; return; }
-      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") { setCurrentUserEmail(session.user.email?.toLowerCase()||""); setCurrentUserId(session.user.id); fetchRooms(); fetchProfile(session.user.id); fetchAssignableStaff(); }
+      if (missingSessionTimer && session) {
+        window.clearTimeout(missingSessionTimer);
+        missingSessionTimer = null;
+      }
+      if (!session) {
+        if (event === "SIGNED_OUT") {
+          window.location.href = "/login";
+          return;
+        }
+        confirmMissingSession();
+        return;
+      }
+      if (event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED") hydrateStaffSession(session);
     });
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
     if ("Notification" in window) {
@@ -3076,7 +3124,10 @@ export default function InboxPage() {
     } else {
       setNotificationPermission("unsupported");
     }
-    return () => { subscription.unsubscribe(); };
+    return () => {
+      if (missingSessionTimer) window.clearTimeout(missingSessionTimer);
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -3102,11 +3153,6 @@ export default function InboxPage() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("inbox_auto_translate_incoming", autoTranslateIncoming ? "1" : "0");
   }, [autoTranslateIncoming]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STAFF_FONT_SIZE_STORAGE_KEY, fontSizeLevel);
-  }, [fontSizeLevel]);
 
   useEffect(() => {
     setTranslatedIncoming({});
@@ -3246,6 +3292,54 @@ export default function InboxPage() {
     } catch(_) {}
   };
 
+  const unregisterStaffPushDevice = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token || "";
+    const nativeToken = `${window.localStorage.getItem(NATIVE_TOKEN_STORAGE_KEY) || ""}`.trim();
+    const nativePlatform = `${window.localStorage.getItem(NATIVE_PLATFORM_STORAGE_KEY) || "native"}`.trim() || "native";
+
+    if ("serviceWorker" in navigator && "PushManager" in window && accessToken) {
+      const registration = await navigator.serviceWorker.ready.catch(() => null);
+      const subscription = await registration?.pushManager.getSubscription().catch(() => null);
+      if (subscription) {
+        await fetch("/api/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            action: "unsubscribe",
+            userType: "staff",
+            subscription: subscription.toJSON(),
+          }),
+        }).catch(() => {});
+        await subscription.unsubscribe().catch(() => false);
+      }
+    }
+
+    if (nativeToken && accessToken) {
+      await fetch("/api/native/push-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          action: "unsubscribe",
+          token: nativeToken,
+          platform: nativePlatform,
+          userType: "staff",
+        }),
+      }).catch(() => {});
+    }
+
+    window.localStorage.removeItem(NATIVE_TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem(NATIVE_PLATFORM_STORAGE_KEY);
+  }, []);
+
+  const signOutStaffFromDevice = useCallback(async () => {
+    setShowSettings(false);
+    await unregisterStaffPushDevice().catch(() => {});
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  }, [unregisterStaffPushDevice]);
+
   // --- Unread badge polling: check rooms for new patient messages ---
   // Uses per-staff localStorage timestamps so badges survive refresh without replaying old history.
   const checkUnreadBadges = useCallback(async () => {
@@ -3308,12 +3402,12 @@ export default function InboxPage() {
       if (latestCreatedAt > lastSeen && latestCreatedAt > lastAlert) {
         playPortalAlertTone();
         showToastAlert(roomId, roomPatientName(roomId), describeIncomingMessage(latestMessage));
-        pushNotif(roomPatientName(roomId), describeIncomingMessage(latestMessage));
+        pushNotif(roomPatientName(roomId), describeIncomingMessage(latestMessage), patientRoomUrlForRoom(roomId), `room-${roomId}`);
         setRoomLastAlert(roomId, latestCreatedAt);
         if (latestMessageKey) setRoomAlertedMessage(roomId, latestMessageKey);
       }
     }
-  }, [currentUserId, describeIncomingMessage, getRoomAlertedMessage, getRoomLastAlert, getRoomLastSeen, incomingMessageKey, playPortalAlertTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
+  }, [currentUserId, describeIncomingMessage, getRoomAlertedMessage, getRoomLastAlert, getRoomLastSeen, incomingMessageKey, patientRoomUrlForRoom, playPortalAlertTone, pushNotif, roomPatientName, setRoomAlertedMessage, setRoomLastAlert, setRoomLastSeen, showToastAlert]);
 
   const fetchProfile = async (id: string) => {
     const [profileRes, permissionsRes, avatarVisibilityRes] = await Promise.all([
@@ -4404,84 +4498,6 @@ export default function InboxPage() {
     window.location.href = `sms:?&body=${encodeURIComponent(link)}`;
   };
 
-  const closeRoomLifecycleConfirm = (force = false) => {
-    if (roomLifecycleBusy && !force) return;
-    setRoomLifecycleConfirm(null);
-    setRoomLifecycleConfirmText("");
-  };
-  const openRoomCancelConfirmation = () => {
-    if (!selectedRoom || roomLifecycleBusy) return;
-    setRoomLifecycleConfirm({
-      roomId: selectedRoom.id,
-      patientName: selectedRoom.procedures?.patients?.full_name || t.patientLabel,
-      procedureName: selectedRoom.procedures?.procedure_name || (lang === "es" ? "Sin procedimiento" : "No procedure"),
-    });
-    setRoomLifecycleConfirmText("");
-  };
-  const roomLifecycleConfirmMatches = roomLifecycleConfirmText.trim().toUpperCase() === ROOM_CANCEL_CONFIRM_PHRASE;
-  const changeSelectedRoomLifecycle = async (
-    action: "cancel" | "restore",
-    safety?: { confirmed?: boolean; confirmRoomId?: string; confirmPhrase?: string },
-  ) => {
-    if (!selectedRoom || roomLifecycleBusy) return;
-    if (action === "cancel" && !safety?.confirmed) {
-      openRoomCancelConfirmation();
-      return;
-    }
-    if (action === "cancel" && safety?.confirmRoomId !== selectedRoom.id) {
-      alert(t.roomLifecycleMismatch);
-      closeRoomLifecycleConfirm();
-      return;
-    }
-    if (action === "restore" && !window.confirm(t.restoreRoomConfirm)) return;
-
-    setRoomLifecycleBusy(true);
-    try {
-      const session = await supabase.auth.getSession();
-      const accessToken = session.data.session?.access_token || "";
-      const response = await fetch("/api/admin/room-lifecycle", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: JSON.stringify({
-          roomId: selectedRoom.id,
-          action,
-          confirmRoomId: safety?.confirmRoomId || "",
-          confirmPhrase: safety?.confirmPhrase || "",
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error || t.roomLifecycleError);
-
-      if (action === "cancel") {
-        setSelectedRoom((current:any) => current ? {
-          ...current,
-          procedures: {
-            ...current.procedures,
-            status: "cancelled",
-            patients: { ...current.procedures?.patients, record_status: "archived" },
-          },
-        } : current);
-        setPatients((current:any[]) => current.map((patient:any) => ({
-          ...patient,
-          rooms: (patient.rooms || []).filter((room:any) => room.id !== selectedRoom.id),
-        })).filter((patient:any) => (patient.rooms || []).length > 0));
-        closeRoomLifecycleConfirm(true);
-        alert(t.roomCancelled);
-      } else {
-        alert(t.roomRestored);
-        fetchRooms();
-      }
-      setShowPatientInfo(false);
-    } catch (error:any) {
-      alert(error?.message || t.roomLifecycleError);
-    } finally {
-      setRoomLifecycleBusy(false);
-    }
-  };
-
   const fetchMessages = async (roomId: string) => {
     if (!roomId || (!canSeeAllRoomsRef.current && !visibleRoomIdsRef.current.has(roomId))) {
       setMessages([]);
@@ -4882,7 +4898,7 @@ export default function InboxPage() {
             userType: "staff",
             title: patientName,
             body: notificationMessage.slice(0, 300),
-            url: "/inbox",
+            url: patientRoomUrlForRoom(selectedRoom.id),
             tag: `media-${selectedRoom.id}`,
           });
         }
@@ -4964,14 +4980,17 @@ export default function InboxPage() {
       setMessages((prev) => prev.map((entry) => entry.id === tempId ? data : entry));
       setInternalNoteDraft("");
       setMediaLibraryTab("internal");
-      if (effectiveVisibility === "team") sendPushNotification({
+      if (effectiveVisibility === "team") {
+        const copy = internalRecordNotificationCopy("note", selectedRoom.id, sName);
+        sendPushNotification({
           roomId:selectedRoom.id,
           userType:"staff",
-          title: lang === "es" ? `Nota interna · ${roomPatientName(selectedRoom.id)}` : `Internal note · ${roomPatientName(selectedRoom.id)}`,
-          body: noteBody.slice(0, 120) || (lang === "es" ? "Nuevo seguimiento interno del equipo." : "New internal care-team follow-up."),
-          url: window.location.href,
-          tag: `internal-note-${selectedRoom.id}`,
-      });
+          title: copy.title,
+          body: copy.body,
+          url: internalRecordUrlForRoom(selectedRoom.id),
+          tag: `internal-record-${selectedRoom.id}`,
+        });
+      }
       alert(t.noteSaved);
     }
 
@@ -5052,13 +5071,14 @@ export default function InboxPage() {
       setMessages((prev) => prev.map((entry) => entry.id === tempId ? signedMessage : entry));
       setMediaLibraryTab("internal");
       setShowMediaLibrary(true);
+      const copy = internalRecordNotificationCopy("photo", selectedRoom.id, sName);
       sendPushNotification({
         roomId: selectedRoom.id,
         userType: "staff",
-        title: lang === "es" ? `Foto interna · ${roomPatientName(selectedRoom.id)}` : `Internal photo · ${roomPatientName(selectedRoom.id)}`,
-        body: `${sName}: ${lang === "es" ? "Nueva foto interna agregada al expediente." : "New internal photo added to the record."}`,
-        url: window.location.href,
-        tag: `staff-record-${selectedRoom.id}`,
+        title: copy.title,
+        body: copy.body,
+        url: internalRecordUrlForRoom(selectedRoom.id),
+        tag: `internal-record-${selectedRoom.id}`,
       });
     }
 
@@ -6154,22 +6174,22 @@ export default function InboxPage() {
               </p>
             )}
           </div>
-          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14}}>
-            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:14,lineHeight:1.35}}>🎨 {lang==="es"?"Apariencia":"Appearance"}</p>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-              <span style={{fontSize:settingsBaseSize,color:textColor,fontWeight:650,lineHeight:1.4}}>🌙 {t.darkMode}</span>
-              <button onClick={()=>setDarkMode(d=>!d)} style={{width:52,height:30,borderRadius:99,background:darkMode?"#34C759":"#E5E5EA",border:"none",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
-                <div style={{width:26,height:26,borderRadius:"50%",background:"white",position:"absolute",top:2,left:darkMode?24:2,transition:"left 0.2s",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}}/>
-              </button>
-            </div>
-            <span style={{fontSize:settingsBaseSize,color:textColor,fontWeight:650,display:"block",marginBottom:10,lineHeight:1.4}}>🔤 {t.fontSize}</span>
-            <div style={{display:"flex",gap:8}}>
-              {(["small","medium","large"] as const).map(level=>(
-                <button key={level} onClick={()=>setFontSizeLevel(level)} style={{flex:1,padding:"11px 8px",minHeight:48,borderRadius:12,border:fontSizeLevel===level?"2px solid #007AFF":`2px solid ${borderColor}`,background:fontSizeLevel===level?"#EBF5FF":(darkMode?"#2C2C2E":"white"),color:fontSizeLevel===level?"#007AFF":textColor,fontWeight:800,cursor:"pointer",fontFamily:"inherit",fontSize:level==="large"?18:16,lineHeight:1.25}}>
-                  {t[level]}
-                </button>
-              ))}
-            </div>
+          <div style={{background:cardBg,borderRadius:16,padding:16,marginBottom:14,border:`1px solid ${borderColor}`}}>
+            <p style={{fontSize:settingsLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8,lineHeight:1.35}}>
+              {lang==="es"?"Sesión del dispositivo":"Device session"}
+            </p>
+            <p style={{fontSize:settingsSmallSize,color:subTextColor,fontWeight:650,lineHeight:1.45,marginBottom:12}}>
+              {lang==="es"
+                ? "Cierra sesión solo en este teléfono o navegador. Para volver a recibir alertas aquí, inicia sesión de nuevo."
+                : "Sign out only on this phone or browser. Sign in again here to receive alerts on this device."}
+            </p>
+            <button
+              type="button"
+              onClick={()=>void signOutStaffFromDevice()}
+              style={{width:"100%",height:50,border:"none",borderRadius:14,background:"#FEE2E2",color:"#B91C1C",fontSize:settingsBaseSize,fontWeight:900,cursor:"pointer",fontFamily:"inherit"}}
+            >
+              {lang==="es"?"Cerrar sesión en este dispositivo":"Sign out of this device"}
+            </button>
           </div>
         </div>
       </div>
@@ -6635,12 +6655,12 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-send-btn"
-                  disabled={activeRoom.currentUserStatus !== "accepted" || !staffRoomReply.trim() || savingStaffPrivateMessage || staffChatUploading}
-                  onClick={sendActiveStaffRoomReply}
-                  aria-label={t.send}
-                  title={t.send}
+                  disabled={activeRoom.currentUserStatus !== "accepted" || savingStaffPrivateMessage || staffChatUploading}
+                  onClick={()=>void openStaffChatCameraPicker("room")}
+                  aria-label={lang==="es" ? "Cámara" : "Camera"}
+                  title={lang==="es" ? "Cámara" : "Camera"}
                 >
-                  <SendPlaneIcon />
+                  <ChatActionIcon kind="camera" />
                 </button>
               </div>
             </div>
@@ -6777,12 +6797,12 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-send-btn"
-                  disabled={!staffPrivateReply.trim() || savingStaffPrivateMessage || staffChatUploading}
-                  onClick={sendStaffPrivateReply}
-                  aria-label={t.send}
-                  title={t.send}
+                  disabled={savingStaffPrivateMessage || staffChatUploading}
+                  onClick={()=>void openStaffChatCameraPicker("private")}
+                  aria-label={lang==="es" ? "Cámara" : "Camera"}
+                  title={lang==="es" ? "Cámara" : "Camera"}
                 >
-                  <SendPlaneIcon />
+                  <ChatActionIcon kind="camera" />
                 </button>
               </div>
             </div>
@@ -6833,26 +6853,79 @@ export default function InboxPage() {
               </div>
             </div>
 
-            {canCancelRestoreRoom && (
-              <div style={{background:selectedRoomCancelled ? (darkMode?"#3B1D1D":"#FFF1F2") : (darkMode?"#2C2414":"#FFFBEB"),border:`1px solid ${selectedRoomCancelled ? "#FCA5A5" : "#FCD34D"}`,borderRadius:18,padding:16}}>
-                <p style={{fontSize:uiLabelSize,fontWeight:900,color:selectedRoomCancelled ? "#B91C1C" : "#92400E",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,lineHeight:1.35}}>
-                  {selectedRoomCancelled ? t.roomCancelledBadge : (lang==="es" ? "Estado de sala" : "Room status")}
-                </p>
-                <p style={{fontSize:uiSmallSize,color:subTextColor,marginBottom:12,lineHeight:1.45}}>
-                  {selectedRoomCancelled
-                    ? (lang==="es" ? "La sala esta fuera del flujo activo. Puedes restaurarla sin perder mensajes, archivos, recetas ni formularios." : "This room is outside the active workflow. You can restore it without losing messages, files, prescriptions, or forms.")
-                    : (lang==="es" ? "Cancela la sala si el enlace ya no debe funcionar como tratamiento activo. Todo queda guardado." : "Cancel the room if the link should no longer work as an active treatment room. Everything stays saved.")}
-                </p>
-                <button
-                  type="button"
-                  disabled={roomLifecycleBusy}
-                  onClick={()=>void changeSelectedRoomLifecycle(selectedRoomCancelled ? "restore" : "cancel")}
-                  style={{width:"100%",minHeight:46,border:"none",borderRadius:14,background:selectedRoomCancelled ? "#16A34A" : "#B91C1C",color:"white",fontFamily:"inherit",fontSize:uiBaseSize,fontWeight:900,cursor:roomLifecycleBusy?"not-allowed":"pointer",opacity:roomLifecycleBusy?0.55:1}}
-                >
-                  {roomLifecycleBusy ? (lang==="es" ? "Guardando..." : "Saving...") : selectedRoomCancelled ? t.restoreRoom : t.cancelRoom}
-                </button>
-              </div>
-            )}
+            <div style={{background:cardBg,borderRadius:18,padding:16}}>
+              <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,lineHeight:1.35}}>{t.internalNotes}</p>
+              <p style={{fontSize:uiSmallSize,color:subTextColor,margin:"0 0 12px",lineHeight:1.45}}>{t.internalNotesHint}</p>
+              {!canUseStaffRecord ? (
+                <p style={{fontSize:uiBaseSize,color:subTextColor,lineHeight:1.45}}>{lang==="es" ? "Solo el equipo asignado puede abrir y agregar seguimiento interno a este expediente." : "Only the assigned care team can open and add internal follow-up to this record."}</p>
+              ) : (
+                <>
+                  {internalNotes.length===0 ? (
+                    <p style={{fontSize:uiBaseSize,color:subTextColor,marginBottom:12,lineHeight:1.45}}>{t.noInternalNotes}</p>
+                  ) : (
+                    <div style={{display:"grid",gap:10,marginBottom:12}}>
+                      {internalNotes.map((note)=>(
+                        <div key={note.id} style={{padding:"12px 14px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
+                          <div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:6}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0}}>
+                              <strong style={{color:textColor,fontSize:uiSmallSize,lineHeight:1.35,overflowWrap:"anywhere"}}>{note.sender_name && note.sender_name !== "Sistema" ? note.sender_name : roleName(note.sender_role)}</strong>
+                              <span style={{padding:"4px 8px",borderRadius:999,background:internalNoteVisibilityFor(note)==="private"?"#FEF3C7":"#DBEAFE",color:internalNoteVisibilityFor(note)==="private"?"#92400E":"#1D4ED8",fontSize:Math.max(uiSmallSize - 2, 11),fontWeight:900,lineHeight:1}}>
+                                {internalNoteVisibilityFor(note)==="private" ? t.privateNoteBadge : t.teamNoteBadge}
+                              </span>
+                            </div>
+                            <span style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.35,whiteSpace:"nowrap"}}>{fmtTime(note.created_at)} · {new Date(note.created_at).toLocaleDateString(locale)}</span>
+                          </div>
+                          <div style={{fontSize:uiBaseSize,color:textColor,lineHeight:1.55,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{internalNoteText(note)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                    {(["team","private"] as InternalNoteVisibility[]).map((option)=>(
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={()=>setInternalNoteVisibility(option)}
+                        style={{minHeight:44,border:`1px solid ${internalNoteVisibility===option?"#2563EB":borderColor}`,borderRadius:14,background:internalNoteVisibility===option?"#DBEAFE":(darkMode?"#0F172A":"white"),color:internalNoteVisibility===option?"#1D4ED8":textColor,fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer"}}
+                      >
+                        {option === "team" ? t.noteVisibleTeam : t.notePrivate}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea ref={internalNoteInputRef} value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:16,resize:"vertical",marginBottom:10,lineHeight:1.5}} />
+                  <button onClick={()=>void saveInternalNote()} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{width:"100%",padding:12,minHeight:48,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingInternalNote || !internalNoteDraft.trim()?0.5:1}}>
+                    {savingInternalNote ? (lang==="es" ? "Guardando..." : "Saving...") : t.addInternalNote}
+                  </button>
+                  <div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${borderColor}`,display:"grid",gap:10}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+                      <div>
+                        <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,lineHeight:1.35}}>{t.staffRecordPhotos}</p>
+                        <p style={{fontSize:uiSmallSize,color:subTextColor,fontWeight:700,marginTop:3,lineHeight:1.35}}>{roomStaffRecordPhotoEntries.length} {lang==="es" ? "foto(s)" : "photo(s)"}</p>
+                      </div>
+                      <button type="button" onClick={()=>staffRecordPhotoInputRef.current?.click()} disabled={uploadingStaffRecordPhoto} style={{minHeight:42,border:"none",borderRadius:12,background:"#DCFCE7",color:"#166534",fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer",padding:"0 14px",opacity:uploadingStaffRecordPhoto?0.6:1}}>
+                        {uploadingStaffRecordPhoto ? t.staffRecordUploading : t.staffRecordUploadPhoto}
+                      </button>
+                    </div>
+                    {roomStaffRecordPhotoEntries.length===0 ? (
+                      <p style={{fontSize:uiBaseSize,color:subTextColor,lineHeight:1.45}}>{t.staffRecordNoPhotos}</p>
+                    ) : (
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(138px,1fr))",gap:10}}>
+                        {roomStaffRecordPhotoEntries.map((entry:any)=>(
+                          <a key={entry.id} href={entry.content} target="_blank" rel="noopener noreferrer" style={{display:"block",borderRadius:14,overflow:"hidden",textDecoration:"none",background:darkMode?"#111827":"#FFFFFF",border:`1px solid ${borderColor}`}}>
+                            <img src={entry.content} alt="" style={{width:"100%",height:120,objectFit:"cover",display:"block"}} />
+                            <div style={{padding:"8px 10px",display:"grid",gap:3}}>
+                              <div style={{fontSize:12,color:textColor,fontWeight:900,overflowWrap:"anywhere"}}>{staffRecordPhotoName(entry, t.staffRecordPhotos)}</div>
+                              <div style={{fontSize:12,color:subTextColor,fontWeight:800,overflowWrap:"anywhere"}}>{t.uploadedBy}: {mediaUploaderName(entry)}</div>
+                              <div style={{fontSize:12,color:subTextColor,fontWeight:700}}>{fmtDateLabel(entry.created_at || "")}</div>
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
 
             <div style={{background:cardBg,borderRadius:18,padding:16,display:"grid",gridTemplateColumns:"88px 1fr",gap:14,alignItems:"center"}}>
               <div style={{width:88,height:88,borderRadius:20,overflow:"hidden",background:"linear-gradient(135deg,#0F172A,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:28,fontWeight:800}}>
@@ -7010,47 +7083,6 @@ export default function InboxPage() {
               )}
             </div>
 
-            <div style={{background:cardBg,borderRadius:18,padding:16}}>
-              <p style={{fontSize:uiLabelSize,fontWeight:800,color:subTextColor,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,lineHeight:1.35}}>{t.internalNotes}</p>
-              <p style={{fontSize:uiSmallSize,color:subTextColor,margin:"0 0 12px",lineHeight:1.45}}>{t.internalNotesHint}</p>
-              {internalNotes.length===0 ? (
-                <p style={{fontSize:uiBaseSize,color:subTextColor,marginBottom:12,lineHeight:1.45}}>{t.noInternalNotes}</p>
-              ) : (
-                <div style={{display:"grid",gap:10,marginBottom:12}}>
-                  {internalNotes.map((note)=>(
-                    <div key={note.id} style={{padding:"12px 14px",borderRadius:14,background:darkMode?"#2C2C2E":"white",border:`1px solid ${borderColor}`}}>
-                      <div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:6}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0}}>
-	                        <strong style={{color:textColor,fontSize:uiSmallSize,lineHeight:1.35,overflowWrap:"anywhere"}}>{note.sender_name && note.sender_name !== "Sistema" ? note.sender_name : roleName(note.sender_role)}</strong>
-                          <span style={{padding:"4px 8px",borderRadius:999,background:internalNoteVisibilityFor(note)==="private"?"#FEF3C7":"#DBEAFE",color:internalNoteVisibilityFor(note)==="private"?"#92400E":"#1D4ED8",fontSize:Math.max(uiSmallSize - 2, 11),fontWeight:900,lineHeight:1}}>
-                            {internalNoteVisibilityFor(note)==="private" ? t.privateNoteBadge : t.teamNoteBadge}
-                          </span>
-                        </div>
-                        <span style={{fontSize:uiSmallSize,color:subTextColor,lineHeight:1.35,whiteSpace:"nowrap"}}>{fmtTime(note.created_at)} · {new Date(note.created_at).toLocaleDateString(locale)}</span>
-                      </div>
-	                      <div style={{fontSize:uiBaseSize,color:textColor,lineHeight:1.55,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{internalNoteText(note)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                {(["team","private"] as InternalNoteVisibility[]).map((option)=>(
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={()=>setInternalNoteVisibility(option)}
-                    style={{minHeight:44,border:`1px solid ${internalNoteVisibility===option?"#2563EB":borderColor}`,borderRadius:14,background:internalNoteVisibility===option?"#DBEAFE":(darkMode?"#0F172A":"white"),color:internalNoteVisibility===option?"#1D4ED8":textColor,fontFamily:"inherit",fontSize:uiSmallSize,fontWeight:900,cursor:"pointer"}}
-                  >
-                    {option === "team" ? t.noteVisibleTeam : t.notePrivate}
-                  </button>
-                ))}
-              </div>
-              <textarea ref={internalNoteInputRef} value={internalNoteDraft} onChange={(event)=>setInternalNoteDraft(event.target.value)} rows={3} placeholder={t.internalNotePH} style={{width:"100%",padding:"12px 14px",borderRadius:14,border:`1px solid ${borderColor}`,background:darkMode?"#0F172A":"white",color:textColor,fontFamily:"inherit",fontSize:16,resize:"vertical",marginBottom:10,lineHeight:1.5}} />
-              <button onClick={()=>void saveInternalNote()} disabled={savingInternalNote || !internalNoteDraft.trim()} style={{width:"100%",padding:12,minHeight:48,borderRadius:14,border:"none",background:"#2563EB",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit",opacity:savingInternalNote || !internalNoteDraft.trim()?0.5:1}}>
-                {savingInternalNote ? (lang==="es" ? "Guardando..." : "Saving...") : t.addInternalNote}
-              </button>
-            </div>
-
             {canOpenAdmin && patient?.id && (
               <button onClick={()=>window.location.href=`/admin/paciente/${patient.id}`} style={{width:"100%",padding:14,minHeight:48,borderRadius:14,border:"none",background:"#0F172A",color:"white",fontSize:uiBaseSize,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
                 {t.openFullRecord}
@@ -7115,10 +7147,6 @@ export default function InboxPage() {
 
   if (userProfile?.role === "pending_staff") {
     const pendingName = userProfile.full_name || userProfile.display_name || (lang === "es" ? "Personal" : "Team member");
-    const signOutPending = async () => {
-      await supabase.auth.signOut();
-      window.location.href = "/login";
-    };
     const staffGuideItems = [
       {
         kind: "room" as const,
@@ -7235,7 +7263,7 @@ export default function InboxPage() {
               <button type="button" onClick={()=>window.location.reload()} style={{flex:"1 1 190px",minHeight:44,border:"none",borderRadius:13,background:"#2563EB",color:"#FFFFFF",fontFamily:"inherit",fontSize:15,fontWeight:900,cursor:"pointer"}}>
                 {lang === "es" ? "Revisar aprobación" : "Check approval"}
               </button>
-              <button type="button" onClick={signOutPending} style={{flex:"1 1 190px",minHeight:44,border:`1px solid ${borderColor}`,borderRadius:13,background:darkMode?"#1F2937":"#FFFFFF",color:textColor,fontFamily:"inherit",fontSize:15,fontWeight:850,cursor:"pointer"}}>
+              <button type="button" onClick={()=>void signOutStaffFromDevice()} style={{flex:"1 1 190px",minHeight:44,border:`1px solid ${borderColor}`,borderRadius:13,background:darkMode?"#1F2937":"#FFFFFF",color:textColor,fontFamily:"inherit",fontSize:15,fontWeight:850,cursor:"pointer"}}>
                 {lang === "es" ? "Salir" : "Sign out"}
               </button>
             </div>
@@ -7357,17 +7385,21 @@ export default function InboxPage() {
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
         .plus-btn { position: relative; width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
         .staff-record-dot { position: absolute; top: -2px; right: -2px; width: 11px; height: 11px; border-radius: 50%; background: #EF4444; border: 2px solid ${darkMode ? "#111B21" : "#F0F2F5"}; box-shadow: 0 2px 6px rgba(239,68,68,0.35); }
-        .staff-menu-popup { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); width: auto; max-width: min(560px, calc(100vw - 24px)); background: ${darkMode?"rgba(31,44,52,0.98)":"rgba(247,241,232,0.98)"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.12)":"rgba(15,23,42,0.10)"}; border-radius: 28px; padding: 18px 16px 16px; box-shadow: 0 18px 45px rgba(15,23,42,0.24); z-index: 40; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
+        .staff-menu-popup { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); width: auto; max-width: min(560px, calc(100vw - 24px)); background: ${darkMode?"linear-gradient(180deg, rgba(8,54,83,0.99), rgba(5,35,56,0.99))":"linear-gradient(180deg, #0B4F7C, #073B61)"}; border: 1px solid ${darkMode?"rgba(191,219,254,0.22)":"rgba(191,219,254,0.34)"}; border-radius: 28px; padding: 18px 16px 16px; box-shadow: 0 18px 45px rgba(7,51,77,0.34); z-index: 40; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
         .staff-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-        .staff-menu-back { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: none; border-radius: 50%; background: ${darkMode?"#253244":"#EEF4FA"}; color: ${textColor}; display: grid; place-items: center; cursor: pointer; }
+        .staff-menu-back { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: 1px solid rgba(255,255,255,0.24); border-radius: 50%; background: rgba(255,255,255,0.16); color: #FFFFFF; display: grid; place-items: center; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); }
         .staff-menu-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 12px; }
-        .staff-action-tile { position: relative; min-width: 0; width: 100%; min-height: 102px; border: none; border-radius: 20px; background: transparent; color: ${darkMode?"#F8FAFC":"#111827"}; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; padding: 0; cursor: pointer; font-family: inherit; box-shadow: none; }
-        .staff-action-icon-wrap { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; background: ${darkMode?"#253244":"#FFFFFF"}; color: ${darkMode?"#E2E8F0":"#0B3C5D"}; border: 1px solid ${darkMode?"rgba(255,255,255,0.08)":"rgba(15,23,42,0.06)"}; box-shadow: ${darkMode?"0 8px 18px rgba(0,0,0,0.18)":"0 8px 20px rgba(15,23,42,0.10)"}; }
-        .staff-action-tile svg { width: 31px; height: 31px; display: block; }
-        .staff-action-label { width: 100%; min-height: 30px; display: flex; align-items: flex-start; justify-content: center; color: ${darkMode?"#F8FAFC":"#0F172A"}; font-size: 12.5px; line-height: 1.15; font-weight: 900; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
+        .staff-menu-grid.main-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .staff-action-tile { position: relative; min-width: 0; width: 100%; min-height: 102px; border: none; border-radius: 20px; background: transparent; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; padding: 0; cursor: pointer; font-family: inherit; box-shadow: none; }
+        .staff-action-icon-wrap { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; background: #FFFFFF; color: #0B5B8F; border: 1px solid rgba(219,234,254,0.72); box-shadow: 0 10px 24px rgba(2,14,28,0.22), inset 0 1px 0 rgba(255,255,255,0.85); }
+        .staff-action-tile svg { width: 33px; height: 33px; display: block; filter: drop-shadow(0 1px 0 rgba(255,255,255,0.28)); }
+        .staff-action-label { width: 100%; min-height: 30px; display: flex; align-items: flex-start; justify-content: center; color: #FFFFFF; text-shadow: 0 1px 2px rgba(2,14,28,0.34); font-size: 12.5px; line-height: 1.15; font-weight: 900; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
         .staff-action-tile.primary .staff-action-icon-wrap { background: #EAF3FF; color: #075EA8; border-color: #CFE4FA; }
         .staff-action-tile.success .staff-action-icon-wrap { background: #E9FBEF; color: #128C4A; border-color: #BFEFD0; }
         .staff-action-tile.warning .staff-action-icon-wrap { background: #FFF7E6; color: #B45309; border-color: #FDE1A7; }
+        .staff-action-tile.energy .staff-action-icon-wrap { background: #FFF8E1; color: #D97706; border-color: #FDE68A; }
+        .staff-action-tile.people .staff-action-icon-wrap { background: #EEF2FF; color: #4F46E5; border-color: #C7D2FE; }
+        .staff-action-tile.info .staff-action-icon-wrap { background: #E0F2FE; color: #0369A1; border-color: #BAE6FD; }
         .staff-action-tile:disabled { cursor: not-allowed; }
         .staff-action-tile:disabled .staff-action-icon-wrap, .staff-action-tile:disabled .staff-action-label { opacity: 0.45; }
         .staff-action-dot { position: absolute; top: 3px; right: calc(50% - 34px); width: 12px; height: 12px; border-radius: 50%; background: #EF4444; border: 2px solid ${darkMode ? "#253244" : "#FFFFFF"}; box-shadow: 0 2px 6px rgba(239,68,68,0.35); }
@@ -7546,6 +7578,7 @@ export default function InboxPage() {
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={staffChatImageInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.heic,.heif" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
+      <input ref={staffChatCameraInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
       <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>
@@ -8248,51 +8281,6 @@ export default function InboxPage() {
       {showSettings && SettingsPanel()}
       {showStaffChats && StaffChatsPanel()}
       {showPatientInfo&&selectedRoom&&PatientInfoPanel()}
-      {roomLifecycleConfirm && selectedRoom && (
-        <div className="modal-overlay" onClick={() => closeRoomLifecycleConfirm()}>
-          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:520}}>
-            <p className="modal-title" style={{color:"#991B1B"}}>{t.cancelRoomSafetyTitle}</p>
-            <div style={{display:"grid",gap:10,marginTop:10}}>
-              <div style={{padding:12,borderRadius:14,background:"#FFF7ED",border:"1px solid #FDBA74",color:"#7C2D12",fontSize:uiSmallSize,fontWeight:800,lineHeight:1.45}}>
-                {t.cancelRoomSafetyCopy}
-              </div>
-              <div style={{padding:12,borderRadius:14,background:darkMode?"#111827":"#F8FAFC",border:`1px solid ${borderColor}`,display:"grid",gap:4}}>
-                <div style={{fontSize:uiBaseSize,fontWeight:900,color:textColor,overflowWrap:"anywhere"}}>{roomLifecycleConfirm.patientName}</div>
-                <div style={{fontSize:uiSmallSize,fontWeight:800,color:subTextColor,overflowWrap:"anywhere"}}>{roomLifecycleConfirm.procedureName}</div>
-              </div>
-              <label style={{display:"grid",gap:8}}>
-                <span style={{fontSize:uiSmallSize,fontWeight:900,color:textColor}}>{t.cancelRoomSafetyType}</span>
-                <input
-                  className="finput"
-                  autoFocus
-                  value={roomLifecycleConfirmText}
-                  onChange={event=>setRoomLifecycleConfirmText(event.target.value)}
-                  placeholder={t.cancelRoomSafetyInput}
-                  style={{textTransform:"uppercase"}}
-                />
-              </label>
-              {roomLifecycleConfirmText.trim() && !roomLifecycleConfirmMatches && (
-                <div style={{fontSize:uiSmallSize,fontWeight:800,color:"#B91C1C"}}>{t.cancelRoomSafetyMismatch}</div>
-              )}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <button className="sbtn" disabled={roomLifecycleBusy} onClick={() => closeRoomLifecycleConfirm()}>{t.cancel}</button>
-                <button
-                  className="pbtn"
-                  disabled={roomLifecycleBusy || !roomLifecycleConfirmMatches || roomLifecycleConfirm.roomId !== selectedRoom.id}
-                  onClick={() => void changeSelectedRoomLifecycle("cancel", {
-                    confirmed: true,
-                    confirmRoomId: roomLifecycleConfirm.roomId,
-                    confirmPhrase: ROOM_CANCEL_CONFIRM_PHRASE,
-                  })}
-                  style={{background:"#B91C1C",opacity:roomLifecycleBusy || !roomLifecycleConfirmMatches || roomLifecycleConfirm.roomId !== selectedRoom.id ? 0.55 : 1}}
-                >
-                  {roomLifecycleBusy ? (lang==="es" ? "Guardando..." : "Saving...") : t.cancelRoomSafetyAction}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       {activeMessageAction && (
         <div className="modal-overlay" onClick={closeMessageActions}>
           <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
@@ -8514,6 +8502,19 @@ export default function InboxPage() {
                 </label>
               ))}
             </div>
+            <button
+              type="button"
+              className="sbtn"
+              onClick={()=>{
+                setShowLabelSelector(false);
+                setLabelTargetPatient(null);
+                setLabelDraftIds([]);
+                setShowLabelManager(true);
+              }}
+              style={{width:"100%",marginBottom:14}}
+            >
+              {lang === "es" ? "Administrar etiquetas" : "Manage labels"}
+            </button>
             <div style={{borderTop:`1px solid ${borderColor}`,paddingTop:16}}>
               <label className="flabel">{lang === "es" ? "Crear etiqueta" : "Create label"}</label>
               <input
@@ -8553,7 +8554,7 @@ export default function InboxPage() {
         </div>
       )}
 
-	      <div className="shell" data-text-size={fontSizeLevel} onClick={()=>{closeMessageActions();setShowSlashMenu(false);setShowTopbarMenu(false);}}>
+	      <div className="shell" onClick={()=>{closeMessageActions();setShowSlashMenu(false);setShowTopbarMenu(false);}}>
         <div className="topbar" onClick={e=>e.stopPropagation()}>
           <img className="topbar-logo" src="/fonseca_blue.png" alt="Dr. Fonseca"/>
 	          <div className={`topbar-actions${mobileView === "chat" ? " chat-open" : ""}`}>
@@ -8860,43 +8861,30 @@ export default function InboxPage() {
 	                            </button>
 	                          </div>
 	                        )}
-	                        <div className="staff-menu-grid">
+	                        <div className={`staff-menu-grid${mediaMenuView === "main" ? " main-grid" : ""}`}>
 	                          {mediaMenuView === "main" ? (
 	                            <>
-	                              <ChatActionTile label={lang==="es" ? "Cámara" : "Camera"} accent="primary" disabled={selectedRoomCancelled} onClick={()=>{
-	                                closeMediaActionTray();
-	                                void openNativePhotoPicker("camera");
-	                              }}>
-	                                <ChatActionIcon kind="camera" />
+	                              <ChatActionTile label={lang==="es" ? "Carpeta del paciente" : "Patient folder"} accent="success" dot={staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread} onClick={()=>setMediaMenuView("patientFiles")}>
+	                                <ChatActionIcon kind="folder" />
 	                              </ChatActionTile>
-	                              <ChatActionTile label={lang==="es" ? "Fotos" : "Photos"} accent="primary" disabled={selectedRoomCancelled} onClick={()=>{
-	                                closeMediaActionTray();
-	                                void openNativePhotoPicker("photos");
-	                              }}>
-	                                <ChatActionIcon kind="photos" />
-	                              </ChatActionTile>
-	                              <ChatActionTile label={lang==="es" ? "Video" : "Video"} accent="primary" disabled={selectedRoomCancelled} onClick={()=>{
-	                                if (selectedRoomCancelled) return;
-	                                void openNativeVideoCapture();
-	                              }}>
-	                                <ChatActionIcon kind="video" />
-	                              </ChatActionTile>
-	                              <ChatActionTile label={lang==="es" ? "Archivo" : "File"} disabled={selectedRoomCancelled} onClick={()=>{
+	                              <ChatActionTile label={lang==="es" ? "Archivo" : "File"} accent="info" disabled={selectedRoomCancelled} onClick={()=>{
 	                                closeMediaActionTray();
 	                                chatMediaInputRef.current?.click();
 	                              }}>
 	                                <ChatActionIcon kind="file" />
 	                              </ChatActionTile>
-	                              <ChatActionTile label={lang==="es" ? "Carpeta del paciente" : "Patient folder"} accent="success" dot={staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread} onClick={()=>setMediaMenuView("patientFiles")}>
-	                                <ChatActionIcon kind="folder" />
-	                              </ChatActionTile>
-	                              <ChatActionTile label={t.quickReplies} onClick={openPatientQuickReplies}>
+	                              <ChatActionTile label={t.quickReplies} accent="energy" onClick={openPatientQuickReplies}>
 	                                <ChatActionIcon kind="quick" />
 	                              </ChatActionTile>
-	                              <ChatActionTile label={t.addCareStaff} onClick={()=>{closeMediaActionTray();setCareStaffInviteIds([]);setShowCareStaffInvite(true);}}>
+	                              {canManageLabels && (
+	                                <ChatActionTile label={lang==="es" ? "Editar etiquetas" : "Edit labels"} accent="warning" onClick={()=>{closeMediaActionTray();setShowLabelManager(true);}}>
+	                                  <ChatActionIcon kind="labels" />
+	                                </ChatActionTile>
+	                              )}
+	                              <ChatActionTile label={t.addCareStaff} accent="people" onClick={()=>{closeMediaActionTray();setCareStaffInviteIds([]);setShowCareStaffInvite(true);}}>
 	                                <ChatActionIcon kind="team" />
 	                              </ChatActionTile>
-	                              <ChatActionTile label={t.patientInfo} onClick={()=>{closeMediaActionTray();setShowPatientInfo(true);}}>
+	                              <ChatActionTile label={t.patientInfo} accent="info" onClick={()=>{closeMediaActionTray();setShowPatientInfo(true);}}>
 	                                <ChatActionIcon kind="patient" />
 	                              </ChatActionTile>
 	                            </>
@@ -8908,10 +8896,10 @@ export default function InboxPage() {
 	                              <ChatActionTile label={lang==="es" ? "Recetas" : "Prescriptions"} accent="warning" disabled={selectedRoomCancelled} onClick={()=>{closeMediaActionTray();fileInputRef.current?.click();}}>
 	                                <ChatActionIcon kind="prescription" />
 	                              </ChatActionTile>
-	                              <ChatActionTile label={t.mediaLibrary} onClick={()=>{closeMediaActionTray();setShowMediaLibrary(true);}}>
+	                              <ChatActionTile label={t.mediaLibrary} accent="info" onClick={()=>{closeMediaActionTray();setShowMediaLibrary(true);}}>
 	                                <ChatActionIcon kind="library" />
 	                              </ChatActionTile>
-	                              <ChatActionTile label={t.patientInfo} onClick={()=>{closeMediaActionTray();setShowPatientInfo(true);}}>
+	                              <ChatActionTile label={t.patientInfo} accent="info" onClick={()=>{closeMediaActionTray();setShowPatientInfo(true);}}>
 	                                <ChatActionIcon kind="patient" />
 	                              </ChatActionTile>
 	                            </>
@@ -8962,8 +8950,8 @@ export default function InboxPage() {
                         if(e.key==="Escape")setShowSlashMenu(false);
                       }}
                     />
-                    <button className="send-btn" onClick={()=>sendMessage()} disabled={selectedRoomCancelled || sending || !newMessage.trim()} aria-label={t.send}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    <button className="send-btn" onClick={()=>{ if (!selectedRoomCancelled) void openNativePhotoPicker("camera"); }} disabled={selectedRoomCancelled} aria-label={lang==="es" ? "Cámara" : "Camera"} title={lang==="es" ? "Cámara" : "Camera"}>
+                      <ChatActionIcon kind="camera" />
                     </button>
                     {selectedRoom.procedures?.patients?.phone && (
                       <a className="phone-btn" href={`tel:${selectedRoom.procedures.patients.phone}`} title={t.callPatient} aria-label={t.callPatient}>
