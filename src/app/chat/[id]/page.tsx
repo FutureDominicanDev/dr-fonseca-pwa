@@ -2201,22 +2201,26 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 	        input { transition: box-shadow 170ms ease, background-color 170ms ease; }
 	        input:focus { box-shadow: 0 0 0 3px rgba(30,136,229,0.18); }
 	        .chat-composer:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
-	        .patient-action-tray { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); width: auto; max-width: min(560px, calc(100vw - 24px)); background: linear-gradient(180deg, #0B4F7C, #073B61); border: 1px solid rgba(191,219,254,0.34); border-radius: 28px; padding: 18px 16px 16px; box-shadow: 0 18px 45px rgba(7,51,77,0.34); z-index: 5; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
-	        .patient-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-	        .patient-menu-back { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: 1px solid rgba(255,255,255,0.24); border-radius: 50%; background: rgba(255,255,255,0.16); color: #FFFFFF; display: grid; place-items: center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); }
-	        .patient-action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 92px)); justify-content: center; gap: 16px 12px; }
-	        .patient-action-tile { position: relative; width: 100%; min-height: 102px; border: none; border-radius: 20px; background: transparent; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; padding: 0; cursor: pointer; font-family: inherit; box-shadow: none; }
-	        .patient-action-icon-wrap { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; background: #FFFFFF; color: #0B5B8F; border: 1px solid rgba(219,234,254,0.72); box-shadow: 0 10px 24px rgba(2,14,28,0.22), inset 0 1px 0 rgba(255,255,255,0.85); }
-	        .patient-action-tile svg { width: 33px; height: 33px; display: block; filter: drop-shadow(0 1px 0 rgba(255,255,255,0.28)); }
-	        .patient-action-label { width: 100%; min-height: 30px; display: flex; align-items: flex-start; justify-content: center; color: #FFFFFF; text-shadow: 0 1px 2px rgba(2,14,28,0.34); font-size: 12.5px; line-height: 1.15; font-weight: 900; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
+	        .patient-action-tray { position: absolute; left: max(12px, env(safe-area-inset-left)); right: auto; bottom: calc(78px + env(safe-area-inset-bottom)); width: max-content; max-width: calc(100vw - 24px); background: linear-gradient(180deg, #0B4F7C, #073B61); border: 1px solid rgba(191,219,254,0.34); border-radius: 22px; padding: 10px 12px; box-shadow: 0 18px 45px rgba(7,51,77,0.34); z-index: 5; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
+	        .patient-action-tray.main-view { min-width: 96px; }
+	        .patient-action-tray.folder-view { min-width: min(236px, calc(100vw - 24px)); }
+	        .patient-menu-head { display: flex; align-items: center; justify-content: flex-start; gap: 8px; margin-bottom: 6px; }
+	        .patient-menu-back { width: 36px; height: 36px; min-width: 36px; min-height: 36px; border: 1px solid rgba(255,255,255,0.24); border-radius: 50%; background: rgba(255,255,255,0.16); color: #FFFFFF; display: grid; place-items: center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); }
+	        .patient-action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(66px, 74px)); justify-content: center; gap: 8px 12px; }
+	        .patient-action-tray.main-view .patient-action-grid { grid-template-columns: 74px; }
+	        .patient-action-tray.folder-view .patient-action-grid { grid-template-columns: repeat(2, 74px); }
+	        .patient-action-tile { position: relative; width: 100%; min-height: 72px; border: none; border-radius: 16px; background: transparent; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 5px; padding: 0; cursor: pointer; font-family: inherit; box-shadow: none; }
+	        .patient-action-icon-wrap { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: #FFFFFF; color: #0B5B8F; border: 1px solid rgba(219,234,254,0.72); box-shadow: 0 7px 16px rgba(2,14,28,0.18), inset 0 1px 0 rgba(255,255,255,0.85); }
+	        .patient-action-tile svg { width: 26px; height: 26px; display: block; filter: drop-shadow(0 1px 0 rgba(255,255,255,0.28)); }
+	        .patient-action-label { width: 100%; min-height: 20px; display: flex; align-items: flex-start; justify-content: center; color: #FFFFFF; text-shadow: 0 1px 2px rgba(2,14,28,0.34); font-size: 11.5px; line-height: 1.08; font-weight: 900; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
 	        .patient-action-tile.primary .patient-action-icon-wrap { background: #EAF3FF; color: #075EA8; border-color: #CFE4FA; }
 	        .patient-action-tile.success .patient-action-icon-wrap { background: #E9FBEF; color: #128C4A; border-color: #BFEFD0; }
 	        .patient-action-tile.warning .patient-action-icon-wrap { background: #FFF7E6; color: #B45309; border-color: #FDE1A7; }
 	        .patient-action-tile.info .patient-action-icon-wrap { background: #E0F2FE; color: #0369A1; border-color: #BAE6FD; }
 	        .patient-action-tile:disabled { cursor: not-allowed; }
 	        .patient-action-tile:disabled .patient-action-icon-wrap, .patient-action-tile:disabled .patient-action-label { opacity: 0.45; }
-	        .patient-action-dot { position: absolute; top: 3px; right: calc(50% - 34px); width: 12px; height: 12px; border-radius: 50%; background: #DC2626; border: 2px solid ${darkMode ? "#253244" : "#FFFFFF"}; box-shadow: 0 2px 6px rgba(220,38,38,0.35); }
-	        @media (max-width: 520px) { .patient-action-tray { max-width: none; padding: 16px 12px 14px; } .patient-action-grid { gap: 14px 8px; } .patient-action-tile { min-height: 98px; } .patient-action-icon-wrap { width: 62px; height: 62px; } .patient-action-label { font-size: 12px; } }
+	        .patient-action-dot { position: absolute; top: 1px; right: calc(50% - 26px); width: 10px; height: 10px; border-radius: 50%; background: #DC2626; border: 2px solid ${darkMode ? "#253244" : "#FFFFFF"}; box-shadow: 0 2px 6px rgba(220,38,38,0.35); }
+	        @media (max-width: 520px) { .patient-action-tray { padding: 10px 12px; border-radius: 22px; } .patient-action-tray.main-view { min-width: 96px; } .patient-action-tray.folder-view { min-width: min(236px, calc(100vw - 24px)); } }
 	        .typing-dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 7px; vertical-align: middle; }
         .typing-dots span { width: 5px; height: 5px; border-radius: 999px; background: currentColor; opacity: 0.42; animation: typingDot 1.15s ease-in-out infinite; }
         .typing-dots span:nth-child(2) { animation-delay: 0.16s; }
@@ -2334,7 +2338,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
       )}
 	      <footer onClick={() => setDeleteMenuMessageId(null)} style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))", background: footerBg, borderTop: "1px solid rgba(0,0,0,0.08)", maxWidth: "100vw", opacity: roomClosed ? 0.72 : 1 }}>
 	        {menuOpen && (
-	          <div className="patient-action-tray">
+	          <div className={`patient-action-tray ${patientMenuView === "folder" ? "folder-view" : "main-view"}`}>
 	            {patientMenuView === "folder" && (
 	              <div className="patient-menu-head">
 	                <button
