@@ -1,6 +1,6 @@
 # Google Play v20 Readiness Checklist
 
-Updated June 22, 2026.
+Updated June 24, 2026.
 
 ## Build Identity
 
@@ -26,6 +26,21 @@ Updated June 22, 2026.
 - Support URL: `https://portal.drfonsecacirujanoplastico.com/support`
 - Account deletion URL: `https://portal.drfonsecacirujanoplastico.com/account-deletion`
 - Short description suggestion: `Secure clinic messaging and patient care coordination for Dr. Fonseca.`
+
+## Closed Testing Track State
+
+- Track: Closed testing / `Alpha`.
+- Release candidate: v20 AAB uploaded, release name `20 (1.0.19)`.
+- Previous v19 release was removed from the track.
+- Release notes saved:
+  `<es-419>Prueba cerrada inicial del portal medico Dr. Fonseca.</es-419>`
+- Store listing was saved with the white launcher icon, feature graphic, and phone/tablet screenshots.
+- Countries/regions selected: 177.
+- Tester list selected: `Fonseca tester`.
+- Tester list count after the latest additions: 18 users.
+- `Select countries`, `Select testers`, and `Create a new release` are complete.
+- Google Publishing overview is at the final `Submit changes for review` step.
+- Tester opt-in links are not available until Google review/publishing completes.
 
 ## Screenshots
 
@@ -65,3 +80,7 @@ Recommended format:
 - Notifications request permission and deliver expected alert sound on real Android devices.
 - Room cancellation requires typed confirmation and preserves patient records.
 - No real patient data appears in Play Store screenshots.
+
+## Do Not Submit Yet
+
+- Ask for explicit final confirmation immediately before clicking Google Play's final `Submit changes for review` / review-submission button.

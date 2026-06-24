@@ -1,6 +1,7 @@
 # Apple iOS v20 Readiness
 
 Prepared June 23, 2026.
+Updated June 24, 2026.
 
 ## Native Build Identity
 
@@ -67,6 +68,14 @@ Prepared June 23, 2026.
   - Sexual Content or Nudity: Infrequent, for possible clinical plastic-surgery photos
   - Violence/chance-based/gambling/ads/public UGC: No or None as applicable
   - Calculated rating: 16+ in most regions, A16 Brazil, 15+ Korea, and older-OS global 17+ with regional exceptions.
+- Content Rights saved.
+- Regulated Medical Device declaration saved.
+- App Privacy labels saved.
+- App Accessibility saved.
+- Pricing and Availability saved.
+- App Review contact information saved.
+- Apple review credentials saved for the synthetic/training-only review account.
+- iOS version `1.0.19` build `20` was added for review and is now at the final draft submission step.
 
 ## App Store Connect Metadata Draft
 
@@ -91,15 +100,10 @@ Provide Apple with a temporary review account that contains synthetic or trainin
 
 ## Remaining Before App Review
 
-- Content Rights: pending explicit legal confirmation before saving. Conservative answer is likely "Yes, it contains, shows, or accesses third-party content, and I have the necessary rights" because patients/staff can upload content and the clinic is expected to have rights/permission to use it in the portal workflow.
-- Regulated Medical Device declaration: likely "No" because the app is a private communication and care-coordination portal, not a diagnosis, treatment, monitoring, dosing, or device-control product.
-- App Privacy labels: still need to be completed carefully for contact info, health/medical data, user content, identifiers, and any diagnostics/security logs actually collected by the app.
-- App Accessibility: still needs completion.
-- Pricing and Availability: still needs review/save.
-- Digital Services Act: App Store Connect still shows a Business setup notice.
-- App Review contact information and review credentials still need exact safe values.
-- Do not expose real patient data to Apple review accounts. Use a synthetic/training-only account.
+- The final `Submit for Review` button in the App Store Connect draft submission has not been clicked.
+- Do not expose real patient data to Apple review accounts. Keep using the synthetic/training-only account.
+- The uploaded native build loads `https://portal.drfonsecacirujanoplastico.com`, so the latest deployed web UI is what reviewers see when they open the app.
 
 ## Do Not Submit Yet
 
-- Ask for explicit final confirmation immediately before submitting the app for App Review.
+- Ask for explicit final confirmation immediately before clicking `Submit for Review`.
