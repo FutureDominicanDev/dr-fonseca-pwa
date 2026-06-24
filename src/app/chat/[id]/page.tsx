@@ -1336,20 +1336,25 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   const openNativePhotoPicker = async (source: "camera" | "photos") => {
     closePatientActionTray();
+    if (source === "camera") {
+      openPicker("image/*,video/*", "environment");
+      return;
+    }
+
     try {
       const [{ Capacitor }, { Camera, CameraResultType, CameraSource }] = await Promise.all([
         import("@capacitor/core"),
         import("@capacitor/camera"),
       ]);
       if (!Capacitor.isNativePlatform()) {
-        openPicker("image/*", source === "camera" ? "environment" : undefined);
+        openPicker("image/*");
         return;
       }
       const photo = await Camera.getPhoto({
         quality: 88,
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
-        source: source === "camera" ? CameraSource.Camera : CameraSource.Photos,
+        source: CameraSource.Photos,
         promptLabelHeader: uiLang === "es" ? "Enviar foto" : "Send photo",
         promptLabelPhoto: uiLang === "es" ? "Elegir de fotos" : "Choose from photos",
         promptLabelPicture: uiLang === "es" ? "Tomar foto" : "Take photo",
@@ -1363,7 +1368,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     } catch (error: any) {
       const message = `${error?.message || ""}`.toLowerCase();
       if (message.includes("cancel")) return;
-      openPicker("image/*", source === "camera" ? "environment" : undefined);
+      openPicker("image/*");
     }
   };
 
@@ -2199,7 +2204,7 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 	        .patient-action-tray { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); width: auto; max-width: min(560px, calc(100vw - 24px)); background: linear-gradient(180deg, #0B4F7C, #073B61); border: 1px solid rgba(191,219,254,0.34); border-radius: 28px; padding: 18px 16px 16px; box-shadow: 0 18px 45px rgba(7,51,77,0.34); z-index: 5; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
 	        .patient-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 	        .patient-menu-back { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: 1px solid rgba(255,255,255,0.24); border-radius: 50%; background: rgba(255,255,255,0.16); color: #FFFFFF; display: grid; place-items: center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); }
-	        .patient-action-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 12px; }
+	        .patient-action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 92px)); justify-content: center; gap: 16px 12px; }
 	        .patient-action-tile { position: relative; width: 100%; min-height: 102px; border: none; border-radius: 20px; background: transparent; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; padding: 0; cursor: pointer; font-family: inherit; box-shadow: none; }
 	        .patient-action-icon-wrap { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; background: #FFFFFF; color: #0B5B8F; border: 1px solid rgba(219,234,254,0.72); box-shadow: 0 10px 24px rgba(2,14,28,0.22), inset 0 1px 0 rgba(255,255,255,0.85); }
 	        .patient-action-tile svg { width: 33px; height: 33px; display: block; filter: drop-shadow(0 1px 0 rgba(255,255,255,0.28)); }
@@ -2348,9 +2353,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 	                <>
 	                  <PatientActionTile label={uiLang === "es" ? "Carpeta" : "Folder"} accent="success" dot={newPrescriptionCount > 0} onClick={() => setPatientMenuView("folder")}>
 	                    <PatientTrayIcon kind="folder" />
-	                  </PatientActionTile>
-	                  <PatientActionTile label={labels.callClinic} accent="primary" onClick={() => { closePatientActionTray(); setCallSheetOpen(true); }}>
-	                    <PatientTrayIcon kind="call" />
 	                  </PatientActionTile>
 	                </>
 	              ) : (

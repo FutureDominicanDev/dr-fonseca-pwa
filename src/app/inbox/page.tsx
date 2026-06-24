@@ -5505,16 +5505,19 @@ export default function InboxPage() {
     }
   };
   const openNativePhotoPicker = async (source: "camera" | "photos") => {
+    if (source === "camera") {
+      setShowMediaMenu(false);
+      setMediaMenuView("main");
+      cameraInputRef.current?.click();
+      return;
+    }
+
     try {
       const [{ Capacitor }, { Camera, CameraResultType, CameraSource }] = await Promise.all([
         import("@capacitor/core"),
         import("@capacitor/camera"),
       ]);
       if (!Capacitor.isNativePlatform()) {
-        if (source === "camera") {
-          await openCapture("photo");
-          return;
-        }
         galleryInputRef.current?.click();
         return;
       }
@@ -5522,18 +5525,14 @@ export default function InboxPage() {
         quality: 88,
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
-        source: source === "camera" ? CameraSource.Camera : CameraSource.Photos,
+        source: CameraSource.Photos,
       });
       const dataUrl = photo.dataUrl || "";
       const fallbackExt = photo.format || "jpg";
       const safeExt = fallbackExt === "jpeg" ? "jpg" : fallbackExt;
-      const file = dataUrl ? fileFromDataUrl(dataUrl, `${source === "camera" ? "photo" : "device-photo"}-${Date.now()}.${safeExt}`, `image/${safeExt === "jpg" ? "jpeg" : safeExt}`) : null;
+      const file = dataUrl ? fileFromDataUrl(dataUrl, `device-photo-${Date.now()}.${safeExt}`, `image/${safeExt === "jpg" ? "jpeg" : safeExt}`) : null;
       if (file) stagePreview(file);
     } catch {
-      if (source === "camera") {
-        await openCapture("photo");
-        return;
-      }
       galleryInputRef.current?.click();
     }
   };
@@ -7574,11 +7573,11 @@ export default function InboxPage() {
       <input ref={fileInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f){setPendingPrescriptionFile(f);setPrescriptionLabel("");setPrescriptionInstructions("");closeMediaActionTray();}e.target.value="";}}/>
       <input ref={chatMediaInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.heic,.heif" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={galleryInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
+      <input ref={cameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={staffChatImageInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.heic,.heif" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
-      <input ref={staffChatCameraInputRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
+      <input ref={staffChatCameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
       <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>
