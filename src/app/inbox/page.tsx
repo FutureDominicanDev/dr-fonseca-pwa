@@ -1314,9 +1314,7 @@ export default function InboxPage() {
   const profilePicRef = useRef<HTMLInputElement>(null);
   const profilePicSettingsRef = useRef<HTMLInputElement>(null);
   const staffChatImageInputRef = useRef<HTMLInputElement>(null);
-  const staffChatCameraInputRef = useRef<HTMLInputElement>(null);
   const staffChatUploadTargetRef = useRef<"private" | "room" | null>(null);
-  const staffVideoCaptureTargetRef = useRef<"private" | "room" | null>(null);
   const beforePhotosRef = useRef<HTMLInputElement>(null);
   const staffRecordPhotoInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder|null>(null);
@@ -1839,8 +1837,14 @@ export default function InboxPage() {
     updateStaffChatTypingState(value, "private");
     updateSlashMenuState(value, "private");
   };
+  const openQuickReplyEditor = () => {
+    closeMediaActionTray();
+    setShowSlashMenu(false);
+    setSlashFilter("");
+    setShowQREditor(true);
+  };
   const openStaffQuickReplies = (target: "room" | "private") => {
-    const shouldClose = showSlashMenu && staffSlashTarget === target && slashFilter === "";
+    const shouldClose = showSlashMenu && staffSlashTarget === target;
     setStaffSlashTarget(target);
     setSlashFilter("");
     setShowSlashMenu(!shouldClose);
@@ -2197,26 +2201,6 @@ export default function InboxPage() {
     setShowSlashMenu(false);
     setSlashFilter("");
     staffChatImageInputRef.current?.click();
-  };
-
-  const openStaffChatCameraPicker = (target: "private" | "room") => {
-    staffChatUploadTargetRef.current = target;
-    setShowSlashMenu(false);
-    setSlashFilter("");
-    staffChatCameraInputRef.current?.click();
-  };
-
-  const openStaffChatVideoPicker = async (target: "private" | "room") => {
-    if (staffChatUploading || savingStaffPrivateMessage || captureMode || preparingCapture) return;
-    if (target === "room" && activeStaffRoomConversation?.currentUserStatus !== "accepted") return;
-    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      alert(lang === "es" ? "Este dispositivo no permite grabar video dentro del portal." : "This device cannot record video inside the portal.");
-      return;
-    }
-    staffVideoCaptureTargetRef.current = target;
-    setShowSlashMenu(false);
-    setSlashFilter("");
-    await openCapture("video");
   };
 
   const sendStaffChatAttachment = async (file: File, target: "private" | "room") => {
@@ -5452,12 +5436,7 @@ export default function InboxPage() {
           if (!shouldDiscard && blob.size > 0) {
             const ext = extensionForMimeType(finalMimeType, "webm");
             const videoFile = new File([blob], `video-${Date.now()}.${ext}`, { type: blob.type || finalMimeType });
-            const staffTarget = staffVideoCaptureTargetRef.current;
-            staffVideoCaptureTargetRef.current = null;
-            if (staffTarget) void sendStaffChatAttachment(videoFile, staffTarget);
-            else stagePreview(videoFile);
-          } else {
-            staffVideoCaptureTargetRef.current = null;
+            stagePreview(videoFile);
           }
         };
         recorder.start();
@@ -5465,7 +5444,6 @@ export default function InboxPage() {
       }
     } catch {
       stopCaptureStream();
-      staffVideoCaptureTargetRef.current = null;
       alert(lang==="es" ? "No se pudo abrir la cámara." : "I could not open the camera.");
     } finally {
       setPreparingCapture(false);
@@ -5478,7 +5456,6 @@ export default function InboxPage() {
       return;
     }
     stopCaptureStream();
-    staffVideoCaptureTargetRef.current = null;
     setCaptureMode(null);
     setRecordingVideo(false);
   };
@@ -5559,12 +5536,12 @@ export default function InboxPage() {
     setShowMediaMenu((open) => !open);
   };
   const openPatientQuickReplies = () => {
+    const shouldClose = showSlashMenu && staffSlashTarget === "patient";
     closeMediaActionTray();
-    const shouldClose = showSlashMenu && staffSlashTarget === "patient" && slashFilter === "";
     setStaffSlashTarget("patient");
     setSlashFilter("");
     setShowSlashMenu(!shouldClose);
-    requestAnimationFrame(() => composerRef.current?.focus());
+    if (!shouldClose) requestAnimationFrame(() => composerRef.current?.focus());
   };
 
   const isPrescriptionEntry = (entry: any) => `${entry?.file_name || ""}`.startsWith("[MED]");
@@ -5580,7 +5557,16 @@ export default function InboxPage() {
       `${entry?.content || ""}`.includes("patient-photos/")
     );
   };
-  const slashFiltered = quickReplies.filter(r=>slashFilter===""||r.shortcut.toLowerCase().includes(slashFilter.toLowerCase())||r.message.toLowerCase().includes(slashFilter.toLowerCase()));
+  const usableQuickReplies = quickReplies.filter((reply) => reply.message.trim().length > 0);
+  const quickReplyShortcutLabel = (shortcut: string) => {
+    const trimmed = shortcut.trim();
+    return trimmed ? `/${trimmed}` : "";
+  };
+  const slashFiltered = usableQuickReplies.filter((reply) => {
+    const filter = slashFilter.trim().toLowerCase();
+    if (!filter) return true;
+    return reply.shortcut.toLowerCase().includes(filter) || reply.message.toLowerCase().includes(filter);
+  });
   const visibleSlashReplies = slashFiltered.slice(0, 6);
   const roomMediaEntries = messages
     .filter((entry) => !entry.deleted_by_staff && !entry.deleted_by_patient && !entry.is_internal)
@@ -5769,8 +5755,13 @@ export default function InboxPage() {
       staffPrivateComposerRef.current?.focus();
       return;
     }
-    setComposerText(reply.message);
+    setNewMessage(reply.message);
+    if (composerRef.current && composerRef.current.textContent !== reply.message) {
+      composerRef.current.textContent = reply.message;
+    }
     updateTypingState(reply.message);
+    closeMediaActionTray();
+    setShowEmojiMenu(false);
     setShowSlashMenu(false);
     setSlashFilter("");
     composerRef.current?.focus();
@@ -6238,7 +6229,7 @@ export default function InboxPage() {
           {visibleSlashReplies.length > 0 ? visibleSlashReplies.map((r,i)=>(
             <button key={`${target}-${r.shortcut}-${i}`} className="slash-item" onClick={()=>selectQuickReply(r)}>
               <span>{r.message}</span>
-              <small>/{r.shortcut}</small>
+              {quickReplyShortcutLabel(r.shortcut) && <small>{quickReplyShortcutLabel(r.shortcut)}</small>}
             </button>
           )) : (
             <div className="slash-empty">{t.noReplies}</div>
@@ -6615,16 +6606,6 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-quick-btn"
-                  disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading || savingStaffPrivateMessage || !!captureMode || preparingCapture}
-                  onClick={()=>void openStaffChatVideoPicker("room")}
-                  aria-label={lang==="es" ? "Enviar video" : "Send video"}
-                  title={lang==="es" ? "Enviar video" : "Send video"}
-                >
-                  <VideoCameraIcon />
-                </button>
-                <button
-                  type="button"
-                  className="staff-quick-btn"
                   disabled={activeRoom.currentUserStatus !== "accepted" || staffChatUploading || savingStaffPrivateMessage || !!staffRecordingTarget || !!staffAudioPreview}
                   onClick={()=>void startStaffAudioRecording("room")}
                   aria-label={lang==="es" ? "Enviar audio" : "Send audio"}
@@ -6651,16 +6632,6 @@ export default function InboxPage() {
                   placeholder={lang==="es"?"Mensaje":"Message"}
                   disabled={activeRoom.currentUserStatus !== "accepted"}
                 />
-                <button
-                  type="button"
-                  className="staff-send-btn"
-                  disabled={activeRoom.currentUserStatus !== "accepted" || savingStaffPrivateMessage || staffChatUploading}
-                  onClick={()=>void openStaffChatCameraPicker("room")}
-                  aria-label={lang==="es" ? "Cámara" : "Camera"}
-                  title={lang==="es" ? "Cámara" : "Camera"}
-                >
-                  <ChatActionIcon kind="camera" />
-                </button>
               </div>
             </div>
           ) : (
@@ -6758,16 +6729,6 @@ export default function InboxPage() {
                 <button
                   type="button"
                   className="staff-quick-btn"
-                  disabled={staffChatUploading || savingStaffPrivateMessage || !!captureMode || preparingCapture}
-                  onClick={()=>void openStaffChatVideoPicker("private")}
-                  aria-label={lang==="es" ? "Enviar video" : "Send video"}
-                  title={lang==="es" ? "Enviar video" : "Send video"}
-                >
-                  <VideoCameraIcon />
-                </button>
-                <button
-                  type="button"
-                  className="staff-quick-btn"
                   disabled={staffChatUploading || savingStaffPrivateMessage || !!staffRecordingTarget || !!staffAudioPreview}
                   onClick={()=>void startStaffAudioRecording("private")}
                   aria-label={lang==="es" ? "Enviar audio" : "Send audio"}
@@ -6793,16 +6754,6 @@ export default function InboxPage() {
                   }}
                   placeholder={lang==="es"?"Mensaje":"Message"}
                 />
-                <button
-                  type="button"
-                  className="staff-send-btn"
-                  disabled={savingStaffPrivateMessage || staffChatUploading}
-                  onClick={()=>void openStaffChatCameraPicker("private")}
-                  aria-label={lang==="es" ? "Cámara" : "Camera"}
-                  title={lang==="es" ? "Cámara" : "Camera"}
-                >
-                  <ChatActionIcon kind="camera" />
-                </button>
               </div>
             </div>
           )}
@@ -7417,8 +7368,11 @@ export default function InboxPage() {
         .staff-slash-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 4px 8px; background: inherit; color: ${subTextColor}; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
         .staff-slash-manage { min-height: 34px; border: none; border-radius: 999px; padding: 0 11px; background: ${darkMode?"rgba(255,255,255,0.10)":"#EAF3FF"}; color: #075EA8; font-size: 12px; font-weight: 900; cursor: pointer; font-family: inherit; }
         .slash-item { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; width: 100%; min-height: 42px; border: none; border-radius: 12px; background: transparent; color: ${textColor}; padding: 10px 12px; text-align: left; font-size: 15px; line-height: 1.28; font-weight: 750; overflow: hidden; overflow-wrap: anywhere; white-space: normal; cursor: pointer; font-family: inherit; }
+        .slash-popup .slash-item,
         .staff-slash-popup .slash-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+        .slash-popup .slash-item span,
         .staff-slash-popup .slash-item span { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .slash-popup .slash-item small,
         .staff-slash-popup .slash-item small { color: ${subTextColor}; font-size: 12px; font-weight: 900; white-space: nowrap; }
         .slash-empty { padding: 12px; color: ${subTextColor}; font-size: 14px; line-height: 1.35; font-weight: 750; }
         .slash-item + .slash-item { margin-top: 3px; }
@@ -7446,7 +7400,7 @@ export default function InboxPage() {
         .staff-audio-btn.danger { border-color: #FECACA; background: #FEE2E2; color: #B91C1C; }
         .staff-audio-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .staff-chat-typing { justify-self: start; max-width: min(84%, 360px); display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 4px; padding: 7px 10px; border-radius: 14px 14px 14px 5px; background: ${darkMode?"#253244":"#FFFFFF"}; border: 1px solid ${borderColor}; color: ${subTextColor}; box-shadow: 0 1px 3px rgba(15,23,42,0.08); font-size: 12px; font-weight: 850; line-height: 1.25; }
-        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(4, 40px) minmax(0, 1fr) 42px; gap: 6px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 8px max(18px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
+        .staff-chat-composer { position: sticky; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 40px) minmax(0, 1fr); gap: 6px; align-items: end; margin: 2px calc(-1 * max(18px, env(safe-area-inset-right))) 0 calc(-1 * max(18px, env(safe-area-inset-left))); padding: 8px max(18px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: ${darkMode?sidebarBg:"#FFFFFF"}; border-top: 1px solid ${borderColor}; box-shadow: 0 -8px 20px rgba(15,23,42,0.08); }
         .staff-chat-composer .finput { min-width: 0; width: 100%; margin-bottom: 0; min-height: 42px; height: 42px; max-height: 22dvh; resize: none !important; padding: 9px 11px; font-size: 13px; line-height: 1.25; overflow-wrap: normal; word-break: normal; border-radius: 12px; }
         .staff-chat-composer .finput::placeholder { font-size: 13px; }
         .staff-quick-btn,
@@ -7554,7 +7508,7 @@ export default function InboxPage() {
           .mic-btn img { width: 36px; height: 36px; }
           .msg-input { padding: 15px 18px; }
 	          .modal, .modal-scroll, .settings-sheet, .patient-info-sheet { width: 100%; max-width: 100vw; }
-          .staff-chat-composer { grid-template-columns: repeat(4, 34px) minmax(0, 1fr) 38px; gap: 5px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); padding-top: 7px; }
+          .staff-chat-composer { grid-template-columns: repeat(3, 34px) minmax(0, 1fr); gap: 5px; margin-left: calc(-1 * max(18px, env(safe-area-inset-left))); margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); padding-top: 7px; }
           .staff-quick-btn,
           .staff-send-btn { width: 34px; min-width: 34px; height: 40px; min-height: 40px; border-radius: 11px; }
           .staff-send-btn { width: 38px; min-width: 38px; }
@@ -7577,7 +7531,6 @@ export default function InboxPage() {
       <input ref={audioInputRef} type="file" accept="audio/*" capture style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={videoInputRef} type="file" accept="video/*" capture="environment" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)stagePreview(f);e.target.value="";}}/>
       <input ref={staffChatImageInputRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.heic,.heif" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
-      <input ref={staffChatCameraInputRef} type="file" accept="image/*,video/*" capture="environment" style={{display:"none"}} onChange={e=>{void handleStaffChatFileInput(e.target.files?.[0]);e.target.value="";}}/>
       <input ref={profilePicRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)setProfilePicFile(f);}}/>
       <input ref={beforePhotosRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>setBeforePhotosFiles(p=>[...p,...Array.from(e.target.files||[])])}/>
       <input ref={staffRecordPhotoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)void uploadStaffRecordPhoto(f);e.target.value="";}}/>
@@ -8827,9 +8780,20 @@ export default function InboxPage() {
                 </div>
                 {showSlashMenu&&staffSlashTarget==="patient"&&(
                   <div className="slash-popup" onClick={e=>e.stopPropagation()}>
+                    <div className="staff-slash-head">
+                      <span>{t.quickReplies}</span>
+                      <button
+                        type="button"
+                        className="staff-slash-manage"
+                        onClick={openQuickReplyEditor}
+                      >
+                        {quickReplies.length ? t.edit : t.addReply}
+                      </button>
+                    </div>
                     {visibleSlashReplies.length>0?visibleSlashReplies.map((r,i)=>(
                       <button key={`${r.shortcut}-${i}`} className="slash-item" onClick={()=>selectQuickReply(r)}>
-                        {r.message}
+                        <span>{r.message}</span>
+                        {quickReplyShortcutLabel(r.shortcut) && <small>{quickReplyShortcutLabel(r.shortcut)}</small>}
                       </button>
                     )):<div className="slash-empty">{lang==="es" ? "No hay respuestas rápidas con ese atajo." : "No quick replies match that shortcut."}</div>}
                   </div>
