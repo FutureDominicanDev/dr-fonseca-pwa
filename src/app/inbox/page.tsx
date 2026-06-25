@@ -5533,6 +5533,13 @@ export default function InboxPage() {
     setShowTopbarMenu(false);
     setShowEmojiMenu(false);
     setMediaMenuView("main");
+    if (showSlashMenu && staffSlashTarget === "patient") {
+      setShowSlashMenu(false);
+      setSlashFilter("");
+      return;
+    }
+    setShowSlashMenu(false);
+    setSlashFilter("");
     setShowMediaMenu((open) => !open);
   };
   const openPatientQuickReplies = () => {
@@ -7333,7 +7340,7 @@ export default function InboxPage() {
         .typing-dots span:nth-child(3) { animation-delay: 0.32s; }
         .icon-btn { width: 64px; height: 64px; border-radius: 50%; background: ${darkMode?"#253244":"#EAF3FF"}; color: #075EA8; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 28px; transition: background 0.15s, transform 0.15s; box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
         .icon-btn:hover { background: ${darkMode?"#30415A":"#DCEEFF"}; transform: translateY(-1px); }
-        .plus-btn { position: relative; width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: ${showMediaMenu ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
+        .plus-btn { position: relative; width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; background: ${showMediaMenu || (showSlashMenu && staffSlashTarget === "patient") ? "#007064" : darkMode ? "#253244" : "#E1E3E7"}; color: ${showMediaMenu || (showSlashMenu && staffSlashTarget === "patient") ? "white" : "#111827"}; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 25px; line-height: 1; box-shadow: 0 3px 12px rgba(15,23,42,0.10); }
         .staff-record-dot { position: absolute; top: -2px; right: -2px; width: 11px; height: 11px; border-radius: 50%; background: #EF4444; border: 2px solid ${darkMode ? "#111B21" : "#F0F2F5"}; box-shadow: 0 2px 6px rgba(239,68,68,0.35); }
         .staff-menu-popup { position: absolute; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: calc(92px + env(safe-area-inset-bottom) + var(--native-keyboard-overlay-height, 0px)); width: auto; max-width: min(560px, calc(100vw - 24px)); background: ${darkMode?"linear-gradient(180deg, rgba(8,54,83,0.99), rgba(5,35,56,0.99))":"linear-gradient(180deg, #0B4F7C, #073B61)"}; border: 1px solid ${darkMode?"rgba(191,219,254,0.22)":"rgba(191,219,254,0.34)"}; border-radius: 28px; padding: 18px 16px 16px; box-shadow: 0 18px 45px rgba(7,51,77,0.34); z-index: 40; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: menuIn 150ms ease-out; transform-origin: left bottom; }
         .staff-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
@@ -8881,11 +8888,11 @@ export default function InboxPage() {
                         </div>
                       </div>
                     )}
-	                    <button className="plus-btn" onClick={toggleMediaActionTray} aria-label={showMediaMenu ? t.cancel : t.attachmentOptions}>
-	                      {showMediaMenu ? "×" : <PatientRoomToolsIcon />}
-	                      {staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread && <span className="staff-record-dot" aria-hidden="true" />}
-	                    </button>
-	                    <div
+                    <button className="plus-btn" onClick={toggleMediaActionTray} aria-label={showMediaMenu || (showSlashMenu && staffSlashTarget === "patient") ? t.cancel : t.attachmentOptions}>
+                      {showMediaMenu || (showSlashMenu && staffSlashTarget === "patient") ? "×" : <PatientRoomToolsIcon />}
+                      {staffRecordAlertsMuted && selectedRoomHasStaffRecordUnread && <span className="staff-record-dot" aria-hidden="true" />}
+                    </button>
+                    <div
                       ref={setComposerNode}
                       className="msg-input"
                       contentEditable={!selectedRoomCancelled}
