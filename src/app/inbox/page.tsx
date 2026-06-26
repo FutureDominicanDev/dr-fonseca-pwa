@@ -537,6 +537,30 @@ const staffRecordPhotoName = (entry: any, fallback: string) =>
   `${entry?.file_name || ""}`.replace(STAFF_RECORD_PHOTO_PREFIX, "").trim() || fallback;
 
 interface QuickReply { shortcut: string; message: string; }
+
+const normalizeQuickReply = (reply: unknown): QuickReply | null => {
+  if (typeof reply === "string") {
+    const message = reply.trim();
+    return message ? { shortcut: "", message } : null;
+  }
+
+  if (!reply || typeof reply !== "object") return null;
+  const source = reply as Record<string, unknown>;
+  const shortcut = typeof source.shortcut === "string" ? source.shortcut.trim() : "";
+  const rawMessage =
+    typeof source.message === "string" ? source.message :
+    typeof source.text === "string" ? source.text :
+    typeof source.body === "string" ? source.body :
+    "";
+  const message = rawMessage.trim();
+  return message ? { shortcut, message } : null;
+};
+
+const normalizeQuickReplies = (replies: unknown): QuickReply[] => (
+  Array.isArray(replies)
+    ? replies.map(normalizeQuickReply).filter((reply): reply is QuickReply => Boolean(reply))
+    : []
+);
 type PortalAudioRecorderPlugin = {
   start: () => Promise<{ started?: boolean }>;
   stop: () => Promise<{ dataUrl?: string; mimeType?: string; fileName?: string }>;
@@ -3418,7 +3442,8 @@ export default function InboxPage() {
       setDisplayNameEdit(data.full_name||data.display_name||"");
       setPhoneEdit(data.phone || "");
       setEmailEdit(data.email || (!isStaffAliasEmail(currentUserEmail) ? currentUserEmail : ""));
-      if (data.quick_replies?.length) setQuickReplies(data.quick_replies);
+      const savedQuickReplies = normalizeQuickReplies(data.quick_replies);
+      if (savedQuickReplies.length) setQuickReplies(savedQuickReplies);
     }
   };
 
@@ -3716,10 +3741,11 @@ export default function InboxPage() {
   };
 
   const saveQuickReplies = useCallback(async (replies: QuickReply[]) => {
-    setQuickReplies(replies);
+    const safeReplies = normalizeQuickReplies(replies);
+    setQuickReplies(safeReplies);
     if (userProfile?.id) {
       setSavingQR(true);
-      await supabase.from("profiles").update({ quick_replies: replies }).eq("id",userProfile.id);
+      await supabase.from("profiles").update({ quick_replies: safeReplies }).eq("id",userProfile.id);
       setSavingQR(false); setSavedQR(true); setTimeout(()=>setSavedQR(false),2000);
     }
   }, [userProfile?.id]);
@@ -5564,7 +5590,7 @@ export default function InboxPage() {
       `${entry?.content || ""}`.includes("patient-photos/")
     );
   };
-  const usableQuickReplies = quickReplies.filter((reply) => reply.message.trim().length > 0);
+  const usableQuickReplies = normalizeQuickReplies(quickReplies);
   const quickReplyShortcutLabel = (shortcut: string) => {
     const trimmed = shortcut.trim();
     return trimmed ? `/${trimmed}` : "";
